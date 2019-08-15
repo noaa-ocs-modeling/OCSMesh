@@ -4,6 +4,7 @@ import subprocess
 import setuptools.command.build_py
 import distutils.cmd
 import distutils.util
+import shutil
 from pathlib import Path
 import sys
 import os
@@ -19,18 +20,17 @@ class InstallDepsCommand(distutils.cmd.Command):
         """Set default values for options."""
         self.include_gdal = 'False'
         self.work_dir = os.getcwd()
-        self.cmake_prefix = "/".join(sys.executable.split('/')[:-2])
+        self.pyenv_prefix = "/".join(sys.executable.split('/')[:-2])
 
     def finalize_options(self):
         """Post-process options."""
         self.include_gdal = distutils.util.strtobool(self.include_gdal)
         self.work_dir = str(Path(self.work_dir))
-        self.cmake_prefix = str(Path(self.cmake_prefix))
+        self.pyenv_prefix = Path(self.pyenv_prefix)
 
     def run(self):
-        self._install_pymesh()
-        self._install_jigsaw()
         self._install_jigsawpy()
+        self._install_jigsaw()
         if self.include_gdal:
             self._install_proj()
             self._install_gdal()
@@ -43,26 +43,28 @@ class InstallDepsCommand(distutils.cmd.Command):
         return decorator
 
     @_setup_step
-    def _install_pymesh(self):
-        subprocess.check_call(["git", "submodule", "update", "--init",
-                               "--recursive", "PyMesh"])
-        os.chdir("PyMesh")
-        subprocess.check_call(["./setup.py", "build"])
-        subprocess.check_call(["./setup.py", "install"])
-        subprocess.check_call(["git", "submodule", "deinit", "-f", "PyMesh"])
+    def _install_jigsawpy(self):
+        subprocess.check_call(
+            ["git", "submodule", "update", "--init", "jigsawpy"])
+        os.chdir(str(Path("jigsawpy")))
+        subprocess.check_call(["python", "setup.py", "install"])
 
     @_setup_step
     def _install_jigsaw(self):
-        subprocess.check_call(
-            ["git", "submodule", "update", "--init", "jigsawpy"])
         os.chdir(str(Path("jigsawpy/_ext_/jigsaw")))
         os.makedirs("build", exist_ok=True)
         os.chdir(str(Path("build")))
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
-             "-DCMAKE_INSTALL_PREFIX={}".format(self.cmake_prefix)])
+             "-DCMAKE_INSTALL_PREFIX={}".format(self.pyenv_prefix)])
         subprocess.check_call(["make", "install"])
+        libsaw_prefix = str(
+            list(self.pyenv_prefix.glob("**/*jigsawpy")).pop()) + '/_lib'
+        os.makedirs(libsaw_prefix, exist_ok=True)
+        for libsaw in self.pyenv_prefix.glob("lib/*jigsaw*"):
+            shutil.copy(libsaw, libsaw_prefix)
+        os.chdir(self.work_dir + '/third_party')
         subprocess.check_call(["git", "submodule", "deinit", "-f", "jigsawpy"])
 
     @_setup_step
@@ -72,8 +74,9 @@ class InstallDepsCommand(distutils.cmd.Command):
         os.chdir("PROJ")
         subprocess.check_call("./autogen.sh")
         subprocess.check_call(
-            ["./configure", "--prefix={}".format(self.cmake_prefix)])
+            ["./configure", "--prefix={}".format(self.pyenv_prefix)])
         subprocess.check_call(["make", "install"])
+        os.chdir(self.work_dir + '/third_party')
         subprocess.check_call(["git", "submodule", "deinit", "-f", "PROJ"])
 
     @_setup_step
@@ -83,17 +86,14 @@ class InstallDepsCommand(distutils.cmd.Command):
         os.chdir(str(Path("gdal/gdal")))
         subprocess.check_call("./autogen.sh")
         subprocess.check_call(
-            ["./configure", "--prefix={}".format(self.cmake_prefix)])
+            ["./configure", "--prefix={}".format(self.pyenv_prefix)])
         subprocess.check_call(["make", "install"])
-        os.chdir(str(Path("../..")))
+        os.chdir(self.work_dir + '/third_party')
         subprocess.check_call(["git", "submodule", "deinit", "-f", "gdal"])
 
-    @_setup_step
-    def _install_jigsawpy(self):
-        os.chdir(str(Path("jigsawpy")))
-        subprocess.check_call(["python", "setup.py", "install"])
 
-
+gdal_version = subprocess.check_output(
+    ["gdal-config", "--version"]).decode('utf8').strip('\n')
 conf = setuptools.config.read_configuration('./setup.cfg')
 meta = conf['metadata']
 setuptools.setup(
@@ -108,9 +108,12 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     cmdclass={'install_deps': InstallDepsCommand},
     python_requires='>3.6',
-    install_requires=["jigsawpy",
+    setup_requires=['numpy'],
+    install_requires=[
+                      "jigsawpy",
                       "matplotlib",
                       "netCDF4",
-                      "gdal",
-                      "scipy"],
+                      "scipy",
+                      "gdal=={}".format(gdal_version)
+                      ],
     )
