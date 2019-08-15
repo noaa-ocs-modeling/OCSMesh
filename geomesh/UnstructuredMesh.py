@@ -9,7 +9,7 @@ from osgeo import osr, gdal, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
-from geomesh.gdal_tools import gdal_tools
+from geomesh.lib.gdal_tools import gdal_tools
 from geomesh.PlanarStraightLineGraph import PlanarStraightLineGraph \
     as _PlanarStraightLineGraph
 

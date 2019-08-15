@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.path import Path as _Path
 from osgeo import osr, gdal
-from geomesh.gdal_tools import gdal_tools
+from geomesh.lib.gdal_tools import gdal_tools
 from geomesh.lib._SpatialReference import _SpatialReference
 
 
