@@ -20,11 +20,10 @@ def main():
     jigsaw.opts.verbosity = 1
     mesh = jigsaw.run()
     mesh.interpolate(ds)
-    # ax = mesh.make_plot()
-    # ax.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
-    # plt.show()
+    ax = mesh.make_plot()
+    ax.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
+    plt.show()
     mesh.write_gr3('./PR_1s.gr3')
-    # os.remove('./PR_1s.gr3')
 
 
 if __name__ == "__main__":
