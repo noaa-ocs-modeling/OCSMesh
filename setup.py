@@ -92,8 +92,12 @@ class InstallDepsCommand(distutils.cmd.Command):
         subprocess.check_call(["git", "submodule", "deinit", "-f", "gdal"])
 
 
-gdal_version = subprocess.check_output(
-    ["gdal-config", "--version"]).decode('utf8').strip('\n')
+try:
+    gdal = "gdal=={}".format(subprocess.check_output(
+        ["gdal-config", "--version"]).decode('utf8').strip('\n'))
+except FileNotFoundError:
+    gdal = "gdal"
+
 conf = setuptools.config.read_configuration('./setup.cfg')
 meta = conf['metadata']
 setuptools.setup(
@@ -108,12 +112,12 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     cmdclass={'install_deps': InstallDepsCommand},
     python_requires='>3.6',
-    setup_requires=['numpy'],
+    setup_requires=['numpy', 'cmake'],
     install_requires=[
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
                       "scipy",
-                      "gdal=={}".format(gdal_version)
+                      gdal
                       ],
     )
