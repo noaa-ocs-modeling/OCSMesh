@@ -2,6 +2,7 @@
 import os
 import numpy as np
 from osgeo import gdal
+import matplotlib.pyplot as plt
 from geomesh import PlanarStraightLineGraph, Jigsaw
 
 
@@ -19,7 +20,11 @@ def main():
     jigsaw.opts.verbosity = 1
     mesh = jigsaw.run()
     mesh.interpolate(ds)
-    mesh.write_gr3('./PR_1s.gr3', overwrite=True)
+    # ax = mesh.make_plot()
+    # ax.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
+    # plt.show()
+    mesh.write_gr3('./PR_1s.gr3')
+    # os.remove('./PR_1s.gr3')
 
 
 if __name__ == "__main__":

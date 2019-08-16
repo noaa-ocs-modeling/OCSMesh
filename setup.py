@@ -96,7 +96,14 @@ try:
     gdal = "gdal=={}".format(subprocess.check_output(
         ["gdal-config", "--version"]).decode('utf8').strip('\n'))
 except FileNotFoundError:
-    gdal = "gdal"
+    if "--include-gdal=True" not in sys.argv:
+        msg = 'GDAL was not found in the system.\n'
+        msg += 'Run `setup.py install_deps --include-gdal=True` to build '
+        msg += 'GDAL or alternatively install GDAL using your system\'s '
+        msg += 'package manager.'
+        raise Exception(msg)
+    else:
+        gdal = "gdal"
 
 conf = setuptools.config.read_configuration('./setup.cfg')
 meta = conf['metadata']
@@ -112,7 +119,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     cmdclass={'install_deps': InstallDepsCommand},
     python_requires='>3.6',
-    setup_requires=['numpy', 'cmake'],
+    setup_requires=['numpy'],
     install_requires=[
                       "jigsawpy",
                       "matplotlib",
