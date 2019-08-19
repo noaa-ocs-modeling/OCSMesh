@@ -7,7 +7,9 @@ from osgeo import gdal
 import matplotlib.pyplot as plt
 from geomesh import PlanarStraightLineGraph, Jigsaw
 
-subprocess.check_call(["git", "submodule", "update", "--init", "data"])
+# initialize demo data
+data = os.path.dirname(os.path.abspath(__file__)) + '/data'
+subprocess.check_call(["git", "submodule", "update", "--init", data])
 
 def main():
     ds = gdal.Open(str(Path('data/PR_1s')))
