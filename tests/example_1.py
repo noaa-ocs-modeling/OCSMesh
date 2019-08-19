@@ -10,8 +10,9 @@ from geomesh import PlanarStraightLineGraph, Jigsaw
 data = os.path.dirname(os.path.abspath(__file__)) + '/data'
 subprocess.check_call(["git", "submodule", "update", "--init", data])
 
+
 def main():
-    ds = gdal.Open(os.path.abspath('data/PR_1s'))
+    ds = gdal.Open(os.path.abspath('data/PR_1s.tif'))
     h0 = 500.
     res = h0/np.sqrt(2.)
     ds = gdal.Warp('', ds, format='VRT', xRes=res, yRes=res)
