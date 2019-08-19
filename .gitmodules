@@ -7,3 +7,6 @@
 [submodule "third_party/gdal"]
 	path = third_party/gdal
 	url = https://github.com/OSGeo/gdal.git
+[submodule "tests/geomesh_test_data"]
+	path = tests/geomesh_test_data
+	url = git@gitlab.com:jreniel/geomesh_test_data.git
