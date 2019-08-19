@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 import os
+import subprocess
+from pathlib import Path
 import numpy as np
 from osgeo import gdal
 import matplotlib.pyplot as plt
 from geomesh import PlanarStraightLineGraph, Jigsaw
 
+subprocess.check_call(["git", "submodule", "update", "--init", "data"])
 
 def main():
-    ds = gdal.Open(os.getenv('PR_1s'))
+    ds = gdal.Open(str(Path('data/PR_1s')))
     h0 = 500.
     res = h0/np.sqrt(2.)
     ds = gdal.Warp('', ds, format='VRT', xRes=res, yRes=res)
