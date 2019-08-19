@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import subprocess
-from pathlib import Path
 import numpy as np
 from osgeo import gdal
 import matplotlib.pyplot as plt
@@ -12,7 +11,7 @@ data = os.path.dirname(os.path.abspath(__file__)) + '/data'
 subprocess.check_call(["git", "submodule", "update", "--init", data])
 
 def main():
-    ds = gdal.Open(str(Path('data/PR_1s')))
+    ds = gdal.Open(os.path.abspath('data/PR_1s'))
     h0 = 500.
     res = h0/np.sqrt(2.)
     ds = gdal.Warp('', ds, format='VRT', xRes=res, yRes=res)
