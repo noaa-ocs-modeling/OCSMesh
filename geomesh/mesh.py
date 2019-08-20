@@ -9,12 +9,12 @@ from osgeo import osr, gdal, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
-from geomesh.lib.gdal_tools import gdal_tools
-from geomesh.PlanarStraightLineGraph import PlanarStraightLineGraph \
+from geomesh import gdal_tools
+from geomesh.pslg import PlanarStraightLineGraph \
     as _PlanarStraightLineGraph
 
 
-class UnstructuredMesh(object):
+class UnstructuredMesh:
 
     def __init__(self, vertices, elements, values=None, SpatialReference=None):
         self._vertices = vertices
@@ -255,16 +255,20 @@ class UnstructuredMesh(object):
 
     @property
     def planar_straight_line_graph(self):
-        if not hasattr(self, "__planar_straight_line_graph"):
+        try:
+            return self.__planar_straight_line_graph
+        except AttributeError:
             self.__planar_straight_line_graph \
                 = self.compute_planar_straight_line_graph()
-        return self.__planar_straight_line_graph
+            return self.__planar_straight_line_graph
 
     @property
     def mpl_tri(self):
-        if not hasattr(self, "__mpl_tri"):
+        try:
+            return self.__mpl_tri
+        except AttributeError:
             self.__mpl_tri = Triangulation(self.x, self.y, self.elements)
-        return self.__mpl_tri
+            return self.__mpl_tri
 
     @property
     def SpatialReference(self):

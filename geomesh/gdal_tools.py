@@ -4,7 +4,7 @@ from matplotlib.transforms import Bbox
 from osgeo import osr, gdal
 
 
-class gdal_tools(object):
+class _GdalTools(object):
     """
     From gdal docs:
         adfGeoTransform[0] /* top left x */
@@ -115,11 +115,11 @@ class gdal_tools(object):
         return osr.SpatialReference(wkt=Dataset.GetProjection())
 
 
-resample = gdal_tools.Warp
-get_Bbox = gdal_tools.get_Bbox
-get_xyz = gdal_tools.get_xyz
-get_arrays = gdal_tools.get_arrays
-get_resolution = gdal_tools.get_resolution
-get_GeoTransform = gdal_tools.get_GeoTransform
-bbox_to_Path = gdal_tools.bbox_to_Path
-get_SpatialReference = gdal_tools.get_SpatialReference
+resample = _GdalTools.Warp
+get_Bbox = _GdalTools.get_Bbox
+get_xyz = _GdalTools.get_xyz
+get_arrays = _GdalTools.get_arrays
+get_resolution = _GdalTools.get_resolution
+get_GeoTransform = _GdalTools.get_GeoTransform
+bbox_to_Path = _GdalTools.bbox_to_Path
+get_SpatialReference = _GdalTools.get_SpatialReference

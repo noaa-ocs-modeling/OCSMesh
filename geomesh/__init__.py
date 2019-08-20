@@ -1,8 +1,8 @@
-from geomesh.lib.gdal_tools import gdal_tools
-from geomesh.UnstructuredMesh import UnstructuredMesh
-from geomesh.PlanarStraightLineGraph import PlanarStraightLineGraph
-from geomesh.Jigsaw import Jigsaw
+from geomesh import gdal_tools
+from geomesh.mesh import UnstructuredMesh
+from geomesh.pslg import PlanarStraightLineGraph
+from geomesh.driver import Jigsaw
 __all__ = ["UnstructuredMesh",
            "PlanarStraightLineGraph",
-           "gdal_tools",
-           "Jigsaw"]
+           "Jigsaw",
+           "gdal_tools"]

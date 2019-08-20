@@ -118,7 +118,7 @@ setuptools.setup(
     url=meta['url'],
     packages=setuptools.find_packages(),
     cmdclass={'install_deps': InstallDepsCommand},
-    python_requires='>3.6',
+    python_requires='>=3.7',
     setup_requires=['numpy'],
     install_requires=[
                       "jigsawpy",
