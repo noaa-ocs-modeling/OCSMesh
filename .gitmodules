@@ -10,3 +10,6 @@
 [submodule "tests/data"]
 	path = tests/data
 	url = https://gitlab.com/jreniel/geomesh_test_data.git
+[submodule "examples/data"]
+	path = examples/data
+	url = https://gitlab.com/jreniel/geomesh_test_data.git
