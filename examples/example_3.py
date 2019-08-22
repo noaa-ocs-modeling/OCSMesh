@@ -4,7 +4,7 @@ import subprocess
 # import numpy as np
 # from osgeo import gdal
 # import matplotlib.pyplot as plt
-from geomesh import PlanarStraightLineGraph , Jigsaw
+from geomesh import PlanarStraightLineGraph, Jigsaw
 
 # initialize demo data
 data = os.path.dirname(os.path.abspath(__file__)) + '/data'
@@ -18,8 +18,14 @@ def main():
     pslg.zmin = -1500.
     pslg.zmax = 15.
     pslg.add_Dataset(os.path.abspath(data + '/PR_1s.tif'))
-    pslg.make_plot(show=True)
-    # jigsaw = Jigsaw(pslg)
+    file = os.getenv('COASTAL_ACT_POST_SANDY_DEM_DIR')
+    file1 = '/zip19/ncei19_n41x00_w074x00_2015v1.tif'
+    pslg.add_Dataset(os.path.abspath(file + file1))
+    file2 = '/zip19/ncei19_n41x00_w073x75_2015v1.tif'
+    pslg.add_Dataset(os.path.abspath(file + file2))
+    # pslg.make_plot(show=True)
+    jigsaw = Jigsaw(pslg)
+    jigsaw.run()
     # jigsaw.opts.hfun_hmax = h0
     # jigsaw.opts.hfun_scal = 'absolute'
     # jigsaw.opts.mesh_top1 = True

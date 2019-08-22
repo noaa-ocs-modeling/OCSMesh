@@ -9,8 +9,8 @@ class Jigsaw(object):
         self._Geom = Geom
         self._Hfun = Hfun
         self._Mesh = Mesh
-        self.__init_opts()  # opts must be initialized at init
-        self.__init_output_mesh()  # output_mesh must be initialized at init
+        self.__init_opts()
+        self.__init_output_mesh()
 
     def run(self):
         self.jigsaw(self._opts, self._geom, self._output_mesh,
@@ -70,16 +70,18 @@ class Jigsaw(object):
     @property
     def _geom(self):
         geom = jigsawpy.jigsaw_msh_t()
-        geom.mshID = "euclidean-mesh"
-        assert self.Geom.ndim == 2
-        vert2 = list()
-        for i, (x, y) in enumerate(self.Geom.vert2):
-            vert2.append(((x, y), 0))   # why 0?
-        geom.vert2 = np.asarray(vert2, dtype=jigsawpy.jigsaw_msh_t.VERT2_t)
-        edge2 = list()
-        for i, (e0, e1) in enumerate(self.Geom.edge2):
-            edge2.append(((e0, e1), 0))   # why 0?
-        geom.edge2 = np.asarray(edge2, dtype=jigsawpy.jigsaw_msh_t.EDGE2_t)
+        geom.mshID = self.Geom.mshID
+        if self.Geom.ndim == 2:
+            vert2 = list()
+            for i, (x, y) in enumerate(self.Geom.vert2):
+                vert2.append(((x, y), 0))   # why 0?
+            geom.vert2 = np.asarray(vert2, dtype=jigsawpy.jigsaw_msh_t.VERT2_t)
+            edge2 = list()
+            for i, (e0, e1) in enumerate(self.Geom.edge2):
+                edge2.append(((e0, e1), 0))   # why 0?
+            geom.edge2 = np.asarray(edge2, dtype=jigsawpy.jigsaw_msh_t.EDGE2_t)
+        else:
+            raise NotImplementedError('Only 2D is supported at this point.')
         return geom
 
     @property
