@@ -32,7 +32,7 @@ class InstallDepsCommand(distutils.cmd.Command):
         self.pyenv_prefix = Path(self.pyenv_prefix)
 
     def run(self):
-        self._install_topex()
+        # self._install_topex()
         self._install_jigsawpy()
         self._install_jigsaw()
         if self.include_gdal:
