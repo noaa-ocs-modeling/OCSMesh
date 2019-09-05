@@ -9,4 +9,7 @@
 	url = https://github.com/OSGeo/gdal.git
 [submodule "tests/data"]
 	path = tests/data
-	url = https://github.com/jreniel/geomesh_test_data.git
+	url = https://gitlab.com/jreniel/geomesh_test_data.git
+[submodule "examples/data"]
+	path = examples/data
+	url = https://gitlab.com/jreniel/geomesh_test_data.git

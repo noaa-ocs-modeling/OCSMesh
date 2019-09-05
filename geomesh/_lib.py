@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from matplotlib.colors import Normalize
 
@@ -30,3 +31,13 @@ class _FixPointNormalize(Normalize):
         if np.ma.is_masked(value)is False:
             value = np.ma.masked_invalid(value)
         return np.ma.masked_where(value.mask, np.interp(value, x, y))
+
+
+def _get_cache_dir():
+    cachedir = os.getenv('LOCALAPPDATA')
+    if cachedir is None:
+        cachedir = os.getenv('HOME')+'/.cache/geomesh'
+    else:
+        cachedir += '/geomesh'
+    os.makedirs(cachedir, exist_ok=True)
+    return cachedir
