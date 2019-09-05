@@ -1,298 +1,54 @@
 #!/usr/bin/env python
-"""
-Example file to demostrate the composition of two DEM's into
-"""
-from geomesh import PlanarStraightLineGraph
-
-# initialize demo data
-# prefix = 'https://www.ngdc.noaa.gov/mgg/inundation/sandy/data/tiles/'
-# urls = [
-#         "zip19/ncei19_n41x00_w074x00_2015v1.tif",
-#         "zip19/ncei19_n39x25_w075x00_2014v1.tif",
-#         "zip19/ncei19_n41x50_w074x00_2015v1.tif",
-#         "zip19/ncei19_n39x00_w075x50_2014v1.tif",
-#         "zip19/ncei19_n41x00_w072x75_2015v1.tif",
-#         "zip19/ncei19_n41x00_w073x75_2015v1.tif",
-#         "zip19/ncei19_n40x00_w074x25_2014v1.tif",
-#         "zip19/ncei19_n41x00_w072x25_2015v1.tif",
-#         "zip19/ncei19_n39x50_w075x75_2014v1.tif",
-#         "zip19/ncei19_n41x50_w073x00_2016v1.tif",
-#         "zip19/ncei19_n41x00_w073x00_2015v1.tif",
-#         "zip19/ncei19_n39x75_w075x50_2014v1.tif",
-#         "zip19/ncei19_n40x00_w075x50_2014v1.tif",
-#         "zip19/ncei19_n41x25_w072x00_2015v1.tif",
-#         "zip19/ncei19_n39x75_w074x25_2014v1.tif",
-#         "zip19/ncei19_n39x00_w075x00_2014v1.tif",
-#         "zip19/ncei19_n41x25_w073x75_2015v1.tif",
-#         "zip19/ncei19_n41x50_w072x75_2016v1.tif",
-#         "zip19/ncei19_n39x50_w074x75_2014v1.tif",
-#         "zip19/ncei19_n41x00_w073x25_2015v1.tif",
-#         "zip19/ncei19_n41x50_w072x50_2016v1.tif",
-#         "zip19/ncei19_n39x50_w075x25_2014v1.tif",
-#         "zip19/ncei19_n39x50_w075x50_2014v1.tif",
-#         "zip19/ncei19_n41x00_w073x50_2015v1.tif",
-#         "zip19/ncei19_n39x75_w075x75_2014v1.tif",
-#         "zip19/ncei19_n41x25_w073x00_2016v1.tif",
-#         "zip19/ncei19_n39x75_w074x50_2014v1.tif",
-#         "zip19/ncei19_n39x25_w074x75_2014v1.tif",
-#         "zip19/ncei19_n41x25_w072x25_2015v1.tif",
-#         "zip19/ncei19_n41x25_w072x50_2015v1.tif",
-#         "zip19/ncei19_n41x25_w072x75_2015v1.tif",
-#         "zip19/ncei19_n39x25_w075x25_2014v1.tif",
-#         "zip19/ncei19_n40x00_w075x25_2014v1.tif",
-#         "zip19/ncei19_n41x25_w074x00_2015v1.tif",
-#         "zip19/ncei19_n41x25_w073x50_2015v1.tif",
-#         "zip19/ncei19_n39x00_w075x25_2014v1.tif",
-#         "zip19/ncei19_n40x25_w074x25_2014v1.tif",
-#         "zip19/ncei19_n40x25_w074x75_2014v1.tif",
-#         "zip19/ncei19_n39x50_w074x50_2014v1.tif",
-#         "zip19/ncei19_n40x75_w073x25_2015v1.tif",
-#         "zip19/ncei19_n40x50_w074x00_2015v1.tif",
-#         "zip19/ncei19_n39x25_w075x50_2014v1.tif",
-#         "zip19/ncei19_n41x00_w074x25_2015v1.tif",
-#         "zip19/ncei19_n40x50_w074x25_2015v1.tif",
-#         "zip19/ncei19_n40x75_w073x75_2015v1.tif",
-#         "zip19/ncei19_n40x75_w074x00_2015v1.tif",
-#         "zip19/ncei19_n40x25_w075x25_2014v1.tif",
-#         "zip19/ncei19_n40x75_w074x25_2015v1.tif",
-#         "zip19/ncei19_n40x25_w075x00_2014v1.tif",
-#         "zip19/ncei19_n40x75_w073x50_2015v1.tif",
-#         "zip19/ncei19_n41x50_w072x25_2016v1.tif",
-#         "zip19/ncei19_n41x50_w072x00_2016v1.tif",
-#         "zip19/ncei19_n41x00_w072x50_2015v1.tif",
-#         "zip19/ncei19_n40x25_w074x00_2014v1.tif",
-#         "zip19/ncei19_n41x50_w074x25_2015v1.tif",
-#         "zip19/ncei19_n40x75_w073x00_2015v1.tif",
-#         "zip13/ncei13_n38x75_w074x75_2014v1.tif",
-#         "zip13/ncei13_n38x75_w075x00_2014v1.tif",
-#         "zip13/ncei13_n39x00_w074x50_2014v1.tif",
-#         "zip13/ncei13_n39x00_w074x75_2014v1.tif",
-#         "zip13/ncei13_n39x25_w074x25_2014v1.tif",
-#         "zip13/ncei13_n39x25_w074x50_2014v1.tif",
-#         "zip13/ncei13_n39x50_w074x00_2014v1.tif",
-#         "zip13/ncei13_n39x50_w074x25_2014v1.tif",
-#         "zip13/ncei13_n39x75_w073x75_2014v1.tif",
-#         "zip13/ncei13_n39x75_w074x00_2014v1.tif",
-#         "zip13/ncei13_n40x00_w073x75_2014v1.tif",
-#         "zip13/ncei13_n40x00_w074x00_2014v1.tif",
-#         "zip13/ncei13_n40x25_w073x00_2015v1.tif",
-#         "zip13/ncei13_n40x25_w073x25_2015v1.tif",
-#         "zip13/ncei13_n40x25_w073x50_2015v1.tif",
-#         "zip13/ncei13_n40x25_w073x75_2014v1.tif",
-#         "zip13/ncei13_n40x50_w072x25_2015v1.tif",
-#         "zip13/ncei13_n40x50_w072x50_2015v1.tif",
-#         "zip13/ncei13_n40x50_w072x75_2015v1.tif",
-#         "zip13/ncei13_n40x50_w073x00_2015v1.tif",
-#         "zip13/ncei13_n40x50_w073x25_2015v1.tif",
-#         "zip13/ncei13_n40x50_w073x50_2015v1.tif",
-#         "zip13/ncei13_n40x50_w073x75_2015v1.tif",
-#         "zip13/ncei13_n40x75_w071x75_2015v1.tif",
-#         "zip13/ncei13_n40x75_w072x00_2015v1.tif",
-#         "zip13/ncei13_n40x75_w072x25_2015v1.tif",
-#         "zip13/ncei13_n40x75_w072x50_2015v1.tif",
-#         "zip13/ncei13_n40x75_w072x75_2015v1.tif",
-#         "zip13/ncei13_n41x00_w072x00_2015v1.tif",
-#         "zip3/ncei3_n36x75_w071x50_2015v1.tif",
-#         "zip3/ncei3_n36x75_w071x75_2015v1.tif",
-#         "zip3/ncei3_n36x75_w072x00_2015v1.tif",
-#         "zip3/ncei3_n37x00_w071x25_2015v1.tif",
-#         "zip3/ncei3_n37x00_w071x50_2015v1.tif",
-#         "zip3/ncei3_n37x00_w071x75_2015v1.tif",
-#         "zip3/ncei3_n37x00_w072x00_2015v1.tif",
-#         "zip3/ncei3_n37x00_w072x25_2015v1.tif",
-#         "zip3/ncei3_n37x25_w071x25_2015v1.tif",
-#         "zip3/ncei3_n37x25_w071x50_2015v1.tif",
-#         "zip3/ncei3_n37x25_w071x75_2015v1.tif",
-#         "zip3/ncei3_n37x25_w072x00_2015v1.tif",
-#         "zip3/ncei3_n37x25_w072x25_2015v1.tif",
-#         "zip3/ncei3_n37x25_w072x50_2015v1.tif",
-#         "zip3/ncei3_n37x25_w072x75_2015v1.tif",
-#         "zip3/ncei3_n37x50_w071x00_2015v1.tif",
-#         "zip3/ncei3_n37x50_w071x25_2015v1.tif",
-#         "zip3/ncei3_n37x50_w071x50_2015v1.tif",
-#         "zip3/ncei3_n37x50_w071x75_2015v1.tif",
-#         "zip3/ncei3_n37x50_w072x00_2015v1.tif",
-#         "zip3/ncei3_n37x50_w072x25_2015v1.tif",
-#         "zip3/ncei3_n37x50_w072x50_2015v1.tif",
-#         "zip3/ncei3_n37x50_w072x75_2015v1.tif",
-#         "zip3/ncei3_n37x50_w073x00_2015v1.tif",
-#         "zip3/ncei3_n37x75_w070x75_2015v1.tif",
-#         "zip3/ncei3_n37x75_w071x00_2015v1.tif",
-#         "zip3/ncei3_n37x75_w071x25_2015v1.tif",
-#         "zip3/ncei3_n37x75_w071x50_2015v1.tif",
-#         "zip3/ncei3_n37x75_w071x75_2015v1.tif",
-#         "zip3/ncei3_n37x75_w072x00_2015v1.tif",
-#         "zip3/ncei3_n37x75_w072x25_2015v1.tif",
-#         "zip3/ncei3_n37x75_w072x50_2015v1.tif",
-#         "zip3/ncei3_n37x75_w072x75_2015v1.tif",
-#         "zip3/ncei3_n37x75_w073x00_2015v1.tif",
-#         "zip3/ncei3_n37x75_w073x25_2015v1.tif",
-#         "zip3/ncei3_n37x75_w073x50_2015v1.tif",
-#         "zip3/ncei3_n38x00_w070x50_2015v1.tif",
-#         "zip3/ncei3_n38x00_w070x75_2015v1.tif",
-#         "zip3/ncei3_n38x00_w071x00_2015v1.tif",
-#         "zip3/ncei3_n38x00_w071x25_2015v1.tif",
-#         "zip3/ncei3_n38x00_w071x50_2015v1.tif",
-#         "zip3/ncei3_n38x00_w071x75_2015v1.tif",
-#         "zip3/ncei3_n38x00_w072x00_2015v1.tif",
-#         "zip3/ncei3_n38x00_w072x25_2015v1.tif",
-#         "zip3/ncei3_n38x00_w072x50_2015v1.tif",
-#         "zip3/ncei3_n38x00_w072x75_2015v1.tif",
-#         "zip3/ncei3_n38x00_w073x00_2015v1.tif",
-#         "zip3/ncei3_n38x00_w073x25_2015v1.tif",
-#         "zip3/ncei3_n38x00_w073x50_2015v1.tif",
-#         "zip3/ncei3_n38x00_w073x75_2015v1.tif",
-#         "zip3/ncei3_n38x25_w070x50_2015v1.tif",
-#         "zip3/ncei3_n38x25_w070x75_2015v1.tif",
-#         "zip3/ncei3_n38x25_w071x00_2015v1.tif",
-#         "zip3/ncei3_n38x25_w071x25_2015v1.tif",
-#         "zip3/ncei3_n38x25_w071x50_2015v1.tif",
-#         "zip3/ncei3_n38x25_w071x75_2015v1.tif",
-#         "zip3/ncei3_n38x25_w072x00_2015v1.tif",
-#         "zip3/ncei3_n38x25_w072x25_2015v1.tif",
-#         "zip3/ncei3_n38x25_w072x50_2015v1.tif",
-#         "zip3/ncei3_n38x25_w072x75_2015v1.tif",
-#         "zip3/ncei3_n38x25_w073x00_2015v1.tif",
-#         "zip3/ncei3_n38x25_w073x25_2015v1.tif",
-#         "zip3/ncei3_n38x25_w073x50_2015v1.tif",
-#         "zip3/ncei3_n38x50_w070x75_2015v1.tif",
-#         "zip3/ncei3_n38x50_w071x00_2015v1.tif",
-#         "zip3/ncei3_n38x50_w071x25_2015v1.tif",
-#         "zip3/ncei3_n38x50_w071x50_2015v1.tif",
-#         "zip3/ncei3_n38x50_w071x75_2015v1.tif",
-#         "zip3/ncei3_n38x50_w072x00_2015v1.tif",
-#         "zip3/ncei3_n38x50_w072x25_2015v1.tif",
-#         "zip3/ncei3_n38x50_w072x50_2015v1.tif",
-#         "zip3/ncei3_n38x50_w072x75_2015v1.tif",
-#         "zip3/ncei3_n38x50_w073x00_2015v1.tif",
-#         "zip3/ncei3_n38x50_w073x25_2015v1.tif",
-#         "zip3/ncei3_n38x75_w070x75_2015v1.tif",
-#         "zip3/ncei3_n38x75_w071x00_2015v1.tif",
-#         "zip3/ncei3_n38x75_w071x25_2015v1.tif",
-#         "zip3/ncei3_n38x75_w071x50_2015v1.tif",
-#         "zip3/ncei3_n38x75_w071x75_2015v1.tif",
-#         "zip3/ncei3_n38x75_w072x00_2015v1.tif",
-#         "zip3/ncei3_n38x75_w072x25_2015v1.tif",
-#         "zip3/ncei3_n38x75_w072x50_2015v1.tif",
-#         "zip3/ncei3_n38x75_w072x75_2015v1.tif",
-#         "zip3/ncei3_n38x75_w073x00_2015v1.tif",
-#         "zip3/ncei3_n39x00_w070x75_2015v1.tif",
-#         "zip3/ncei3_n39x00_w071x00_2015v1.tif",
-#         "zip3/ncei3_n39x00_w071x25_2015v1.tif",
-#         "zip3/ncei3_n39x00_w071x50_2015v1.tif",
-#         "zip3/ncei3_n39x00_w071x75_2015v1.tif",
-#         "zip3/ncei3_n39x00_w072x00_2015v1.tif",
-#         "zip3/ncei3_n39x00_w072x25_2015v1.tif",
-#         "zip3/ncei3_n39x00_w072x50_2015v1.tif",
-#         "zip3/ncei3_n39x00_w072x75_2015v1.tif",
-#         "zip3/ncei3_n39x25_w071x00_2015v1.tif",
-#         "zip3/ncei3_n39x25_w071x25_2015v1.tif",
-#         "zip3/ncei3_n39x25_w071x50_2015v1.tif",
-#         "zip3/ncei3_n39x25_w071x75_2015v1.tif",
-#         "zip3/ncei3_n39x25_w072x00_2015v1.tif",
-#         "zip3/ncei3_n39x25_w072x25_2015v1.tif",
-#         "zip3/ncei3_n39x50_w071x00_2015v1.tif",
-#         "zip3/ncei3_n39x50_w071x25_2015v1.tif",
-#         "zip3/ncei3_n39x50_w071x50_2015v1.tif",
-#         "zip3/ncei3_n39x50_w071x75_2015v1.tif",
-#         "zip3/ncei3_n39x50_w072x00_2015v1.tif",
-#         "zip3/ncei3_n39x75_w071x25_2015v1.tif",
-#         "zip3/ncei3_n39x75_w071x50_2015v1.tif",
-#         "zip3/ncei3_n39x75_w071x75_2015v1.tif",
-#         "zip1/ncei1_n38x25_w073x75_2015v1.tif",
-#         "zip1/ncei1_n38x25_w074x00_2015v1.tif",
-#         "zip1/ncei1_n38x25_w074x25_2015v1.tif",
-#         "zip1/ncei1_n38x50_w073x50_2015v1.tif",
-#         "zip1/ncei1_n38x50_w073x75_2015v1.tif",
-#         "zip1/ncei1_n38x50_w074x00_2015v1.tif",
-#         "zip1/ncei1_n38x50_w074x25_2015v1.tif",
-#         "zip1/ncei1_n38x50_w074x50_2015v1.tif",
-#         "zip1/ncei1_n38x75_w073x25_2015v1.tif",
-#         "zip1/ncei1_n38x75_w073x50_2015v1.tif",
-#         "zip1/ncei1_n38x75_w073x75_2015v1.tif",
-#         "zip1/ncei1_n38x75_w074x00_2015v1.tif",
-#         "zip1/ncei1_n38x75_w074x25_2015v1.tif",
-#         "zip1/ncei1_n38x75_w074x50_2015v1.tif",
-#         "zip1/ncei1_n39x00_w073x00_2015v1.tif",
-#         "zip1/ncei1_n39x00_w073x25_2015v1.tif",
-#         "zip1/ncei1_n39x00_w073x50_2015v1.tif",
-#         "zip1/ncei1_n39x00_w073x75_2015v1.tif",
-#         "zip1/ncei1_n39x00_w074x00_2015v1.tif",
-#         "zip1/ncei1_n39x00_w074x25_2015v1.tif",
-#         "zip1/ncei1_n39x25_w072x50_2015v1.tif",
-#         "zip1/ncei1_n39x25_w072x75_2015v1.tif",
-#         "zip1/ncei1_n39x25_w073x00_2015v1.tif",
-#         "zip1/ncei1_n39x25_w073x25_2015v1.tif",
-#         "zip1/ncei1_n39x25_w073x50_2015v1.tif",
-#         "zip1/ncei1_n39x25_w073x75_2015v1.tif",
-#         "zip1/ncei1_n39x25_w074x00_2015v1.tif",
-#         "zip1/ncei1_n39x50_w072x25_2015v1.tif",
-#         "zip1/ncei1_n39x50_w072x50_2015v1.tif",
-#         "zip1/ncei1_n39x50_w072x75_2015v1.tif",
-#         "zip1/ncei1_n39x50_w073x00_2015v1.tif",
-#         "zip1/ncei1_n39x50_w073x25_2015v1.tif",
-#         "zip1/ncei1_n39x50_w073x50_2015v1.tif",
-#         "zip1/ncei1_n39x50_w073x75_2015v1.tif",
-#         "zip1/ncei1_n39x75_w072x00_2015v1.tif",
-#         "zip1/ncei1_n39x75_w072x25_2015v1.tif",
-#         "zip1/ncei1_n39x75_w072x50_2015v1.tif",
-#         "zip1/ncei1_n39x75_w072x75_2015v1.tif",
-#         "zip1/ncei1_n39x75_w073x00_2015v1.tif",
-#         "zip1/ncei1_n39x75_w073x25_2015v1.tif",
-#         "zip1/ncei1_n39x75_w073x50_2015v1.tif",
-#         "zip1/ncei1_n40x00_w071x25_2015v1.tif",
-#         "zip1/ncei1_n40x00_w071x50_2015v1.tif",
-#         "zip1/ncei1_n40x00_w071x75_2015v1.tif",
-#         "zip1/ncei1_n40x00_w072x00_2015v1.tif",
-#         "zip1/ncei1_n40x00_w072x25_2015v1.tif",
-#         "zip1/ncei1_n40x00_w072x50_2015v1.tif",
-#         "zip1/ncei1_n40x00_w072x75_2015v1.tif",
-#         "zip1/ncei1_n40x00_w073x00_2015v1.tif",
-#         "zip1/ncei1_n40x00_w073x25_2015v1.tif",
-#         "zip1/ncei1_n40x00_w073x50_2015v1.tif",
-#         "zip1/ncei1_n40x25_w071x50_2015v1.tif",
-#         "zip1/ncei1_n40x25_w071x75_2015v1.tif",
-#         "zip1/ncei1_n40x25_w072x00_2015v1.tif",
-#         "zip1/ncei1_n40x25_w072x25_2015v1.tif",
-#         "zip1/ncei1_n40x25_w072x50_2015v1.tif",
-#         "zip1/ncei1_n40x25_w072x75_2015v1.tif",
-#         "zip1/ncei1_n40x50_w071x50_2015v1.tif",
-#         "zip1/ncei1_n40x50_w071x75_2015v1.tif",
-#         "zip1/ncei1_n40x50_w072x00_2015v1.tif"
-#         ]
-# urls = [prefix + url for url in urls]
 import os
-from pathlib import Path
-
-urls = Path(os.getenv('COASTAL_ACT_POST_SANDY_DEM_DIR')).glob('**/*.tif')
+import subprocess
+import matplotlib.pyplot as plt
+from geomesh import DatasetCollection, \
+                    PlanarStraightLineGraph, \
+                    SizeFunction, \
+                    Jigsaw
 
 
 def main():
-    pslg = PlanarStraightLineGraph()
-    pslg.h0 = 500.
-    pslg.zmin = -1500.
-    pslg.zmax = 20.
-    for dataset in urls:
-        pslg.add_Dataset(str(dataset))
-        break
-    pslg.make_plot()
+
+    # ------- init test DEM files
+    data = os.path.dirname(os.path.abspath(__file__)) + '/data'
+    subprocess.check_call(["git", "submodule", "update", "--init", data])
+    file1 = os.path.abspath(data + '/ncei19_n41x00_w074x00_2015v1.tif')
+    file2 = os.path.abspath(data + '/ncei19_n41x00_w073x75_2015v1.tif')
+
+    # ------- init test DatasetCollection object
+    dsc = DatasetCollection()
+    dsc.add_dataset(file1)
+    dsc.add_dataset(file2)
+
+    # ------- generate PSLG
+    pslg = PlanarStraightLineGraph(zmin=-1500, zmax=15.)
     # pslg.make_plot(show=True)
 
-    # # hfun = SizeFunction()
-    # # hfun.add_Dataset(os.getenv('PR_1s'))
+    # ------- generate size function
+    # hfun = SizeFunction()
 
-    # jigsaw = Jigsaw(pslg)
-    # jigsaw.opts.hfun_hmax = h0
-    # jigsaw.opts.hfun_scal = 'absolute'
-    # jigsaw.opts.mesh_top1 = True
-    # jigsaw.opts.optm_qlim = .95
-    # jigsaw.opts.verbosity = 1
-    # mesh = jigsaw.run()
-    # mesh.interpolate(ds)
-    # ax = mesh.make_plot()
-    # ax.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
-    # plt.show()
-    # mesh.write_gr3('./PR_1s.gr3')
+    # ------- init jigsaw and set options
+    jigsaw = Jigsaw(
+        pslg,
+        # hfun
+    )
+    jigsaw.verbosity = 1
+    jigsaw._opts.hfun_hmax = 50.
+    jigsaw._opts.hfun_scal = 'absolute'
+    # jigsaw._opts.mesh_top1 = True
+    jigsaw._opts.optm_qlim = .95
+
+    # ------- run jigsaw, get mesh
+    mesh = jigsaw.run()
+
+    # ------- interpolate bathymtery to output mesh
+    mesh.interpolate(fix_invalid=True)
+    fig = plt.figure()
+    axes = fig.add_subplot(111)
+    mesh.make_plot(axes=axes)
+    axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
+    plt.show()
 
 
 if __name__ == "__main__":
