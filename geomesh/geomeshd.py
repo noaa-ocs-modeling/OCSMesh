@@ -4,6 +4,7 @@ import os
 import time
 import atexit
 import signal
+from pathlib import Path
 
 
 class geomeshd:
@@ -12,7 +13,8 @@ class geomeshd:
     https://web.archive.org/web/20131017130434/http://www.jejik.com/articles/2007/02/a_simple_unix_linux_daemon_in_python/
     """
 
-    def __init__(self, pidfile): self.pidfile = pidfile
+    def __init__(self, pidfile):
+        self.pidfile = pidfile
 
     def daemonize(self):
         """Deamonize class. UNIX double fork mechanism."""
@@ -69,7 +71,6 @@ class geomeshd:
         # Check for a pidfile to see if the daemon already runs
         try:
             with open(self.pidfile, 'r') as pf:
-
                 pid = int(pf.read().strip())
         except IOError:
             pid = None
@@ -124,7 +125,8 @@ class geomeshd:
 
 
 def main():
-    daemon = geomeshd('/tmp/geomeshd.pid')
+    daemon = geomeshd(
+        str(Path("/".join(sys.executable.split('/')[:-2]) + '/geomeshd.pid')))
     if len(sys.argv) == 2:
         if 'start' == sys.argv[1]:
             daemon.start()

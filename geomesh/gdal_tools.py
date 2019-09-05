@@ -4,7 +4,7 @@ from matplotlib.transforms import Bbox
 from osgeo import osr, gdal
 
 
-class _GdalTools(object):
+class GdalTools:
     """
     From gdal docs:
         adfGeoTransform[0] /* top left x */
@@ -15,12 +15,18 @@ class _GdalTools(object):
         adfGeoTransform[5] /* n-s pixel resolution (negative value) */
     """
 
+    @staticmethod
+    def Open(path, **kwargs):
+        if isinstance(path, gdal.Dataset):
+            return path
+        return gdal.Open(path, **kwargs)
+
     @classmethod
     def Warp(cls, Dataset, filename='', format='VRT', **kwargs):
         return gdal.Warp(filename, Dataset, format=format, **kwargs)
 
     @classmethod
-    def get_Bbox(cls, Dataset, SpatialReference=None, Path=False):
+    def get_bbox(cls, Dataset, SpatialReference=None, Path=False):
         gt = Dataset.GetGeoTransform()
         cols = Dataset.RasterXSize
         rows = Dataset.RasterYSize
@@ -75,6 +81,10 @@ class _GdalTools(object):
         return xyz
 
     @classmethod
+    def get_xy(cls, Dataset, SpatialReference=None, bbox=None):
+        return cls.get_xyz(Dataset, SpatialReference, bbox)[:, :-1]
+
+    @classmethod
     def get_arrays(cls, Dataset, SpatialReference=None):
         xmin, dx, _, ymax, _, dy = cls.get_GeoTransform(Dataset,
                                                         SpatialReference)
@@ -94,7 +104,8 @@ class _GdalTools(object):
     def get_GeoTransform(cls, Dataset, SpatialReference=None):
         xmin, xres, A, ymax, B, yres = Dataset.GetGeoTransform()
         if SpatialReference is not None:
-            bbox = cls.get_Bbox(Dataset, SpatialReference)
+            SpatialReference = cls.sanitize_SpatialReference(SpatialReference)
+            bbox = cls.get_bbox(Dataset, SpatialReference)
             xmin = bbox.xmin
             xres = (bbox.xmax-xmin)/Dataset.RasterXSize
             ymax = bbox.ymax
@@ -114,12 +125,24 @@ class _GdalTools(object):
     def get_SpatialReference(Dataset):
         return osr.SpatialReference(wkt=Dataset.GetProjection())
 
+    @staticmethod
+    def sanitize_SpatialReference(SpatialReference):
+        if isinstance(SpatialReference, int):
+            EPSG = SpatialReference
+            SpatialReference = osr.SpatialReference()
+            SpatialReference.ImportFromEPSG(EPSG)
+        return SpatialReference
 
-resample = _GdalTools.Warp
-get_Bbox = _GdalTools.get_Bbox
-get_xyz = _GdalTools.get_xyz
-get_arrays = _GdalTools.get_arrays
-get_resolution = _GdalTools.get_resolution
-get_GeoTransform = _GdalTools.get_GeoTransform
-bbox_to_Path = _GdalTools.bbox_to_Path
-get_SpatialReference = _GdalTools.get_SpatialReference
+
+resample = GdalTools.Warp
+get_bbox = GdalTools.get_bbox
+get_xyz = GdalTools.get_xyz
+get_arrays = GdalTools.get_arrays
+get_resolution = GdalTools.get_resolution
+get_GeoTransform = GdalTools.get_GeoTransform
+bbox_to_Path = GdalTools.bbox_to_Path
+get_SpatialReference = GdalTools.get_SpatialReference
+Open = GdalTools.Open
+Warp = GdalTools.Warp
+sanitize_SpatialReference = GdalTools.sanitize_SpatialReference
+get_xy = GdalTools.get_xy

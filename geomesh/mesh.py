@@ -9,6 +9,11 @@ from osgeo import osr, gdal, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
+from geomesh._lib import _FixPointNormalize
+from matplotlib.cm import ScalarMappable
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.colors import LinearSegmentedColormap
+from geomesh.gdal_dataset_collection import GdalDatasetCollection
 from geomesh import gdal_tools
 from geomesh.pslg import PlanarStraightLineGraph \
     as _PlanarStraightLineGraph
@@ -28,6 +33,8 @@ class UnstructuredMesh:
         self.__outflow_boundaries = OrderedDict()
         self.__weir_boundaries = OrderedDict()
         self.__culvert_boundaries = OrderedDict()
+        self.__attributes = dict()
+        self.__dataset_collection = GdalDatasetCollection()
 
     def get_x(self, SpatialReference=None):
         """ """
@@ -119,27 +126,26 @@ class UnstructuredMesh:
             vertices = np.asarray([(x, y) for x, y, _ in vertices])
         return vertices
 
-    def interpolate(self, Dataset):
-        assert isinstance(Dataset, gdal.Dataset)
-        if not self.SpatialReference.IsSame(
-                    gdal_tools.get_SpatialReference(Dataset)):
-            Dataset = gdal_tools.Warp(Dataset, dstSRS=self.SpatialReference)
-        x, y, z = gdal_tools.get_arrays(Dataset)
-        bbox = gdal_tools.get_Bbox(Dataset)
-        f = RectBivariateSpline(x, y, z.T, bbox=[bbox.xmin, bbox.xmax,
-                                                 bbox.ymin, bbox.ymax])
-        idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= self.vertices[:, 0],
-                                bbox.xmax >= self.vertices[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= self.vertices[:, 1],
-                                bbox.ymax >= self.vertices[:, 1])))[0]
-        values = f.ev(self.vertices[idxs, 0], self.vertices[idxs, 1])
-        new_values = self.values.copy()
-        for i, idx in enumerate(idxs):
-            new_values[idx] = values[i]
-        self._values = new_values
+    def interpolate(self, fix_invalid=False):
+        for dataset in self.__dataset_collection:
+            x, y, z = dataset.get_arrays(self.SpatialReference)
+            bbox = dataset.get_bbox(self.SpatialReference)
+            f = RectBivariateSpline(x, y, z.T, bbox=[bbox.xmin, bbox.xmax,
+                                                     bbox.ymin, bbox.ymax])
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= self.vertices[:, 0],
+                                    bbox.xmax >= self.vertices[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= self.vertices[:, 1],
+                                    bbox.ymax >= self.vertices[:, 1])))[0]
+            values = f.ev(self.vertices[idxs, 0], self.vertices[idxs, 1])
+            new_values = self.values.copy()
+            for i, idx in enumerate(idxs):
+                new_values[idx] = values[i]
+            self._values = new_values
+        if fix_invalid:
+            self.fix_invalid()
 
     def compute_planar_straight_line_graph(self):
         unique_edges = list()
@@ -207,18 +213,98 @@ class UnstructuredMesh:
         else:
             print(self.gr3)
 
-    def make_plot(self, show=False, levels=256):
-        z = np.ma.masked_invalid(self.values)
-        vmin, vmax = z.min(), z.max()
-        z = z.filled(fill_value=-99999.)
-        if isinstance(levels, int):
-            levels = np.linspace(vmin, vmax, levels)
-        plt.tricontourf(self.mpl_tri, z, levels=levels)
-        plt.gca().axis('scaled')
-        if show:
+    def make_plot(
+        self,
+        axes=None,
+        vmin=None,
+        vmax=None,
+        cmap='topobathy',
+        levels=None,
+        show=False,
+        title=None,
+        figsize=None,
+        colors=256,
+        extent=None,
+        cbar_label=None,
+        norm=None,
+        **kwargs
+    ):
+        if axes is None:
+            axes = plt.figure(figsize=figsize).add_subplot(111)
+        if vmin is None:
+            vmin = np.min(self.values)
+        if vmax is None:
+            vmax = np.max(self.values)
+        cmap, norm, levels, col_val = self.__get_cmap(
+            vmin, vmax, cmap, levels, colors, norm)
+        axes.tricontourf(
+            self.x, self.y, self.elements, self.values, levels=levels,
+            cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, **kwargs)
+        axes.axis('scaled')
+        if extent is not None:
+            axes.axis(extent)
+        if title is not None:
+            axes.set_title(title)
+        mappable = ScalarMappable(cmap=cmap)
+        mappable.set_array([])
+        mappable.set_clim(vmin, vmax)
+        divider = make_axes_locatable(axes)
+        cax = divider.append_axes("bottom", size="2%", pad=0.5)
+        cbar = plt.colorbar(mappable, cax=cax,  # extend=cmap_extend,
+                            orientation='horizontal')
+        if col_val != 0:
+            cbar.set_ticks([vmin, vmin + col_val * (vmax-vmin), vmax])
+            cbar.set_ticklabels([np.around(vmin, 2), 0.0, np.around(vmax, 2)])
+        else:
+            cbar.set_ticks([vmin, vmax])
+            cbar.set_ticklabels([np.around(vmin, 2), np.around(vmax, 2)])
+        if cbar_label is not None:
+            cbar.set_label(cbar_label)
+        if show is True:
             plt.show()
-        plt.gca().axis('scaled')
-        return plt.gca()
+        return axes
+
+    def __get_cmap(
+        self,
+        vmin,
+        vmax,
+        cmap=None,
+        levels=None,
+        colors=256,
+        norm=None
+    ):
+        colors = int(colors)
+        if cmap is None:
+            cmap = plt.cm.get_cmap('jet')
+            if levels is None:
+                levels = np.linspace(vmin, vmax, colors)
+            col_val = 0.
+        elif cmap == 'topobathy':
+            if vmax <= 0.:
+                cmap = plt.cm.seismic
+                col_val = 0.
+                levels = np.linspace(vmin, vmax, colors)
+            else:
+                wet_count = int(np.floor(colors*(float((self.values < 0.).sum())
+                                                 / float(self.values.size))))
+                col_val = float(wet_count)/colors
+                dry_count = colors - wet_count
+                colors_undersea = plt.cm.bwr(np.linspace(1., 0., wet_count))
+                colors_land = plt.cm.terrain(np.linspace(0.25, 1., dry_count))
+                colors = np.vstack((colors_undersea, colors_land))
+                cmap = LinearSegmentedColormap.from_list('cut_terrain', colors)
+                wlevels = np.linspace(vmin, 0.0, wet_count, endpoint=False)
+                dlevels = np.linspace(0.0, vmax, dry_count)
+                levels = np.hstack((wlevels, dlevels))
+        else:
+            cmap = plt.cm.get_cmap(cmap)
+            levels = np.linspace(vmin, vmax, colors)
+            col_val = 0.
+        if vmax > 0:
+            if norm is None:
+                norm = _FixPointNormalize(sealevel=0.0, vmax=vmax, vmin=vmin,
+                                          col_val=col_val)
+        return cmap, norm, levels, col_val
 
     @property
     def vertices(self):
@@ -230,12 +316,7 @@ class UnstructuredMesh:
 
     @property
     def values(self):
-        if not hasattr(self, "__attributes"):
-            self.__attributes = dict()
-        if not self.has_attribute("__values"):
-            self.add_attribute("__values")
-            self.set_attribute("__values", self.__values)
-        return self.__attributes["__values"]
+        return self.__values
 
     @property
     def x(self):
