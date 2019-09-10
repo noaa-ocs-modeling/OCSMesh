@@ -3,14 +3,14 @@ from geomesh.mesh import UnstructuredMesh
 from geomesh.pslg import PlanarStraightLineGraph
 from geomesh.size_function import SizeFunction
 from geomesh.driver import Jigsaw
-from geomesh.gdal_dataset_collection import GdalDatasetCollection
-from geomesh.gdal_dataset_collection import DatasetCollection
+from geomesh.gdal_dataset import GdalDataset
+from geomesh.dataset_collection import DatasetCollection
 __all__ = ["UnstructuredMesh",
            "PlanarStraightLineGraph",
            "Jigsaw",
            "SizeFunction",
+           "GdalDataset",
            "DatasetCollection",
-           "GdalDatasetCollection",
            "gdal_tools"]
 from osgeo import ogr, gdal
 gdal.UseExceptions()

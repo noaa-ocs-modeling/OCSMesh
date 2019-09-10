@@ -1,31 +1,22 @@
 import numpy as np
-from osgeo import ogr, osr
+from osgeo import ogr
+from scipy.interpolate import RectBivariateSpline
 import matplotlib.pyplot as plt
-from matplotlib.path import Path
+from matplotlib.path import Path as mpl_Path
 from geomesh import gdal_tools
 
 
 class GdalDataset:
 
-    def __init__(self, path):
-        self.__path = path
-
-    def downsample(self, xRes, yRes):
-        dx, dy = self.get_resolution(self.Dataset)
-        if xRes >= dx or yRes >= dy:
-            raise Exception('Cannot upsample DEM.')
-        self.__Dataset = self.Warp(self.__Dataset, xRes=xRes, yRes=yRes)
-
-    def reset(self):
-        self.reopen()
-        self.zmin = None
-        self.zmax = None
-
-    def close(self):
-        del self.__Dataset
-
-    def reopen(self):
-        self.__Dataset = self.__original
+    def __init__(
+        self,
+        path,
+        SpatialReference=3395,
+        feature_size=None,
+    ):
+        self._path = path
+        self._SpatialReference = SpatialReference
+        self._feature_size = feature_size
 
     def get_arrays(self, SpatialReference=None):
         return gdal_tools.get_arrays(self.Dataset, SpatialReference)
@@ -44,6 +35,33 @@ class GdalDataset:
 
     def get_resolution(self, SpatialReference=None):
         return gdal_tools.get_resolution(self.Dataset, SpatialReference)
+
+    def get_dx(self, SpatialReference=None):
+        return gdal_tools.get_dx(self.Dataset, SpatialReference)
+
+    def get_dy(self, SpatialReference=None):
+        return gdal_tools.get_dy(self.Dataset, SpatialReference)
+
+    def get_SpatialReference(self):
+        return gdal_tools.get_SpatialReference(self.Dataset)
+
+    def get_value(self, x, y):
+        return self._RectBivariateSpline.ev(x, y)
+
+    def __get_empty_Polygon(self):
+        _Polygon = ogr.Geometry(ogr.wkbPolygon)
+        _Polygon.AssignSpatialReference(self.SpatialReference)
+        return _Polygon
+
+    def __get_empty_LinearRing(self):
+        _LinearRing = ogr.Geometry(ogr.wkbLinearRing)
+        _LinearRing.AssignSpatialReference(self.SpatialReference)
+        return _LinearRing
+
+    def __get_empty_MultiPolygon(self):
+        _MultiPolygon = ogr.Geometry(ogr.wkbMultiPolygon)
+        _MultiPolygon.AssignSpatialReference(self.SpatialReference)
+        return _MultiPolygon
 
     @property
     def xyz(self):
@@ -67,7 +85,7 @@ class GdalDataset:
         try:
             return self.__zmin
         except AttributeError:
-            raise AttributeError('Must set attribute zmin.')
+            raise AttributeError('Must set attribute zmax.')
 
     @property
     def zmax(self):
@@ -77,79 +95,121 @@ class GdalDataset:
             raise AttributeError('Must set attribute zmax.')
 
     @property
+    def hmin(self):
+        try:
+            return self.__hmin
+        except AttributeError:
+            pass
+
+    @property
+    def hmax(self):
+        try:
+            return self.__hmax
+        except AttributeError:
+            pass
+
+    @property
     def Dataset(self):
         try:
             return self.__Dataset
         except AttributeError:
-            # keep copy of original to avoid calling Open since it can take
-            # a long time for internet residing DEMs, but it takes + memory
-            try:
-                self.__Dataset = self.__original
-            except AttributeError:
-                self.__Dataset = gdal_tools.Open(self.path)
-                self.__original = self.__Dataset
-            return self.__Dataset
-
-    @property
-    def MultiLineString(self):
-        _QuadContourSet = plt.contour(
-            self.x, self.y, self.values, levels=[self.zmin, self.zmax])
-        plt.close(plt.gcf())
-        for _PathCollection in _QuadContourSet.collections:
-            _MultiLineString = ogr.Geometry(ogr.wkbMultiLineString)
-            for _Path in _PathCollection.get_paths():
-                _LineString = ogr.Geometry(ogr.wkbLineString)
-                for x, y in _Path.vertices:
-                    _LineString.AddPoint_2D(x, y)
-                _LineString.CloseRings()
-                _MultiLineString.AddGeometry(_LineString)
-            yield _MultiLineString
+            pass
+        srcSRS = gdal_tools.get_SpatialReference(self._original)
+        dstSRS = self._SpatialReference
+        xRes, yRes = gdal_tools.get_resolution(self._original, dstSRS)
+        if srcSRS.IsSame(dstSRS):
+            dstSRS = None
+        h0 = self._h0
+        if xRes < h0:
+            xRes = h0
+        else:
+            xRes = None
+        if yRes < h0:
+            yRes = h0
+        else:
+            yRes = None
+        if all(_ is None for _ in [dstSRS, xRes, yRes]):
+            Dataset = self._original
+        else:
+            Dataset = gdal_tools.Warp(
+                self._original, xRes=xRes, yRes=yRes, dstSRS=dstSRS)
+        self.__Dataset = Dataset
+        return self.__Dataset
 
     @property
     def MultiPolygon(self):
+        try:
+            return self.__MultiPolygon
+        except AttributeError:
+            pass
+
+        # fully external tile.
+        if np.all(self.values > self.zmax) or np.all(self.values < self.zmin):
+            self.__MultiPolygon = self.__get_empty_MultiPolygon()
+            return self.__MultiPolygon
+
+        # fully internal tile
+        elif np.min(self.values) > self.zmin \
+                and np.max(self.values) < self.zmax:
+            _LinearRing = self.__get_empty_LinearRing()
+            bbox = self.bbox.get_points()
+            x0, y0 = float(bbox[0][0]), float(bbox[0][1])
+            x1, y1 = float(bbox[1][0]), float(bbox[1][1])
+            _LinearRing.AddPoint(x0, y0, float(self.get_value(x0, y0)))
+            _LinearRing.AddPoint(x1, y0, float(self.get_value(x1, y0)))
+            _LinearRing.AddPoint(x1, y1, float(self.get_value(x1, y1)))
+            _LinearRing.AddPoint(x0, y1, float(self.get_value(x0, y1)))
+            _LinearRing.AddPoint(*_LinearRing.GetPoint(0))
+            _Polygon = self.__get_empty_Polygon()
+            _Polygon.AddGeometry(_LinearRing)
+            _MultiPolygon = self.__get_empty_MultiPolygon()
+            _MultiPolygon.AddGeometry(_Polygon)
+            self.__MultiPolygon = _MultiPolygon
+            return self.__MultiPolygon
+
+        # tile containing boundary
         _QuadContourSet = plt.contourf(
             self.x, self.y, self.values, levels=[self.zmin, self.zmax])
         plt.close(plt.gcf())
-        paths = list()
         for _PathCollection in _QuadContourSet.collections:
+            _LinearRings = list()
             for _Path in _PathCollection.get_paths():
-                polygons = _Path.to_polygons(closed_only=True)
-                for polygon in polygons:
-                    paths.append(Path(polygon, closed=True))
-        # now we need to sort into separate polygons/holes.
-        rings = list()
-        for path in paths:
-            _LinearRing = ogr.Geometry(ogr.wkbLinearRing)
-            _LinearRing.AssignSpatialReference(self.SpatialReference)
-            for x, y in path.vertices:
-                _LinearRing.AddPoint_2D(x, y)
-            _LinearRing.CloseRings()
-            rings.append(_LinearRing)
-        # with the areas we can take the largest and find the inner ones
-        areas = [_.GetArea() for _ in rings]
-        multipolygon = list()
-        while len(rings) > 0:
-            _idx = np.where(np.max(areas) == areas)[0]
-            path = paths[_idx[0]]
-            _idxs = np.where([
-                path.contains_point(_.vertices[0, :]) for _ in paths])[0]
-            _idxs = np.hstack([_idx, _idxs])
-            polygon = list()
-            for _idx in np.flip(_idxs):
-                polygon.insert(0, rings.pop(_idx))
-                paths.pop(_idx)
-                areas.pop(_idx)
-            multipolygon.append(polygon)
-
+                linear_rings = _Path.to_polygons(closed_only=True)
+                for linear_ring in linear_rings:
+                    _LinearRing = ogr.Geometry(ogr.wkbLinearRing)
+                    _LinearRing.AssignSpatialReference(self.SpatialReference)
+                    for x, y in linear_ring:
+                        _LinearRing.AddPoint(
+                            float(x), float(y), float(self.get_value(x, y)))
+                    _LinearRing.CloseRings()
+                    _LinearRings.append(_LinearRing)
+        # create output object
         _MultiPolygon = ogr.Geometry(ogr.wkbMultiPolygon)
         _MultiPolygon.AssignSpatialReference(self.SpatialReference)
-        for _LinearRings in multipolygon:
-            _Polygon = ogr.Geometry(ogr.wkbPolygon)
-            _Polygon.AssignSpatialReference(self.SpatialReference)
-            for _LinearRing in _LinearRings:
-                _Polygon.AddGeometry(_LinearRing)
+        # sort list of linear rings into polygons
+        areas = [_LinearRing.GetArea() for _LinearRing in _LinearRings]
+        idx = np.where(areas == np.max(areas))[0][0]
+        _Polygon = ogr.Geometry(ogr.wkbPolygon)
+        _Polygon.AssignSpatialReference(self.SpatialReference)
+        _Polygon.AddGeometry(_LinearRings.pop(idx))
+        while len(_LinearRings) > 0:
+            _Path = mpl_Path(np.asarray(
+                _Polygon.GetGeometryRef(0).GetPoints())[:, :2], closed=True)
+            for i, _LinearRing in reversed(list(enumerate(_LinearRings))):
+                x = _LinearRing.GetX(0)
+                y = _LinearRing.GetY(0)
+                if _Path.contains_point((x, y)):
+                    _Polygon.AddGeometry(_LinearRings.pop(i))
+            _Polygon.CloseRings()
             _MultiPolygon.AddGeometry(_Polygon)
-        return _MultiPolygon
+            if len(_LinearRings) > 0:
+                areas = [_LinearRing.GetArea() for _LinearRing in _LinearRings]
+                idx = np.where(areas == np.max(areas))[0][0]
+                _Polygon = ogr.Geometry(ogr.wkbPolygon)
+                _Polygon.AssignSpatialReference(self.SpatialReference)
+                _Polygon.AddGeometry(_LinearRings.pop(idx))
+        self.__MultiPolygon = _MultiPolygon
+        return self.__MultiPolygon
 
     @property
     def path(self):
@@ -161,112 +221,120 @@ class GdalDataset:
 
     @property
     def SpatialReference(self):
-        return gdal_tools.get_SpatialReference(self.Dataset)
+        return self.get_SpatialReference()
 
-    @zmin.setter
-    def zmin(self, zmin):
-        if zmin is None:
-            del(self.zmin)
-        else:
-            self.__zmin = float(zmin)
+    @property
+    def feature_size(self):
+        return self.__h0
 
-    @zmax.setter
-    def zmax(self, zmax):
-        if zmax is None:
-            del(self.zmax)
-        else:
-            self.__zmax = float(zmax)
+    @property
+    def _RectBivariateSpline(self):
+        try:
+            return self.__RectBivariateSpline
+        except AttributeError:
+            pass
+        _RectBivariateSpline = RectBivariateSpline(
+            self.x, self.y, self.values.T)
+        self.__RectBivariateSpline = _RectBivariateSpline
+        return self.__RectBivariateSpline
+
+    @property
+    def _SpatialReference(self):
+        return self.__SpatialReference
+
+    @property
+    def _path(self):
+        return self.__path
+
+    @property
+    def _feature_size(self):
+        return self.__feature_size
+
+    @property
+    def _h0(self):
+        return 0.5*(self.feature_size / np.sqrt(2))
+
+    @property
+    def _Dataset(self):
+        return self.__Dataset
+
+    @property
+    def _MultiPolygon(self):
+        return self.__MultiPolygon
+
+    @property
+    def _original(self):
+        try:
+            return self.__original
+        except AttributeError:
+            self.__original = gdal_tools.Open(self.path)
+            return self.__original
 
     @SpatialReference.setter
     def SpatialReference(self, SpatialReference):
-        SpatialReference = gdal_tools.sanitize_SpatialReference(
-            SpatialReference)
-        self.__Dataset = gdal_tools.Warp(self.Dataset, dstSRS=SpatialReference)
+        curSRS = self.__SpatialReference
+        dstSRS = gdal_tools.sanitize_SpatialReference(SpatialReference)
+        if not curSRS.IsSame(dstSRS):
+            del(self._Dataset)
+        self.__SpatialReference = dstSRS
 
-    @zmin.deleter
-    def zmin(self):
+    @zmin.setter
+    def zmin(self, zmin):
+        zmin = float(zmin)
         try:
-            del(self.__zmin)
+            if not self.__zmin == zmin:
+                del(self._MultiPolygon)
         except AttributeError:
             pass
+        self.__zmin = zmin
 
-    @zmax.deleter
-    def zmax(self):
+    @zmax.setter
+    def zmax(self, zmax):
+        zmax = float(zmax)
         try:
-            del(self.__zmax)
+            if not self.__zmax == zmax:
+                del(self._MultiPolygon)
         except AttributeError:
             pass
+        self.__zmax = zmax
 
-    @property
-    def _pslg(self):
+    @feature_size.setter
+    def feature_size(self, feature_size):
+        self._feature_size = feature_size
+
+    @_path.setter
+    def _path(self, path):
+        self.__path = str(path)
+
+    @_SpatialReference.setter
+    def _SpatialReference(self, SpatialReference):
+        srcSRS = gdal_tools.get_SpatialReference(self._original)
+        dstSRS = gdal_tools.sanitize_SpatialReference(SpatialReference)
+        if not srcSRS.IsSame(dstSRS):
+            del(self._Dataset)
+        self.__SpatialReference = dstSRS
+
+    @_feature_size.setter
+    def _feature_size(self, feature_size):
+        assert isinstance(feature_size, (float, type(None)))
         try:
-            return self.__pslg
+            if self.__h0 != feature_size:
+                del(self._Dataset)
         except AttributeError:
-            return False
+            pass
+        self.__h0 = feature_size
 
-    @property
-    def _hfun(self):
+    @_Dataset.deleter
+    def _Dataset(self):
         try:
-            return self.__hfun
+            del(self.__Dataset)
         except AttributeError:
-            return False
+            pass
+        del(self._MultiPolygon)
 
-    @_pslg.setter
-    def _pslg(self, pslg):
-        assert isinstance(pslg, bool)
-        self.__pslg = pslg
-
-    @_hfun.setter
-    def _hfun(self, hfun):
-        assert isinstance(hfun, bool)
-        self.__hfun = hfun
-
-# return empty polygon if tile is fully internal/external
-# if np.all(np.logical_and(z >= self.zmin, z <= self.zmax)) \
-#         or (np.all(z >= self.zmax) or np.all(z <= self.zmin)):
-#     return _Polygon
-# compute polygon using matplotlib
-
-
-    # def __get_polygon_bbox(self):
-    #     bbox = self.get_bbox()
-    #     _LinearRing = ogr.Geometry(ogr.wkbLinearRing)
-    #     _LinearRing.AssignSpatialReference(self.SpatialReference)
-    #     _LinearRing.AddPoint_2D(bbox.xmin, bbox.ymin)
-    #     _LinearRing.AddPoint_2D(bbox.xmax, bbox.ymin)
-    #     _LinearRing.AddPoint_2D(bbox.xmax, bbox.ymax)
-    #     _LinearRing.AddPoint_2D(bbox.xmin, bbox.ymax)
-    #     _LinearRing.AddPoint_2D(bbox.xmin, bbox.ymin)
-    #     _Polygon = ogr.Geometry(ogr.wkbPolygon)
-    #     _Polygon.AssignSpatialReference(self.SpatialReference)
-    #     _Polygon.AddGeometry(_LinearRing)
-    #     _Polygon.CloseRings()
-    #     return _Polygon
-
-    # def check_overlap(self, other):
-    #     # using 32-bit precision (~7 decimal digits).
-    #     self_polygon = self.__get_polygon_bbox()
-    #     other_polygon = other.__get_polygon_bbox()
-    #     # print(self_polygon.Overlaps(other_polygon))
-    #     intersection = self_polygon.Intersection(other_polygon)
-    #     # print(self_polygon)
-    #     # print()
-    #     # mercator = osr.SpatialReference()
-    #     # mercator.ImportFromEPSG(3395)
-    #     # intersection.TransformTo(mercator)
-
-    #     # plt.plot(self_polygon.GetGeometryRef(0).GetPoints())
-    #     xy = np.asarray(self_polygon.GetGeometryRef(0).GetPoints())
-    #     plt.plot(xy[:, 0], xy[:, 1])
-    #     xy = np.asarray(other_polygon.GetGeometryRef(0).GetPoints())
-    #     plt.plot(xy[:, 0], xy[:, 1])
-    #     xy = np.asarray(intersection.GetGeometryRef(0).GetPoints())
-    #     plt.plot(xy[:, 0], xy[:, 1])
-    #     # plt.plot(intersection.GetGeometryRef(0).GetPoints())
-    #     plt.show()
-    #     print(self_polygon)
-    #     print(other_polygon)
-    #     print(intersection)
-    #     print(intersection.GetArea())
-
-    #     BREAKEM
+    @_MultiPolygon.deleter
+    def _MultiPolygon(self):
+        try:
+            del(self.__MultiPolygon)
+        except AttributeError:
+            pass

@@ -5,7 +5,7 @@ from copy import deepcopy
 from pathlib import Path
 from collections import OrderedDict
 from scipy.interpolate import griddata
-from osgeo import osr, gdal, ogr
+from osgeo import osr, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
@@ -13,8 +13,7 @@ from geomesh._lib import _FixPointNormalize
 from matplotlib.cm import ScalarMappable
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.colors import LinearSegmentedColormap
-from geomesh.gdal_dataset_collection import GdalDatasetCollection
-from geomesh import gdal_tools
+from geomesh.dataset_collection import DatasetCollection as _DatasetCollection
 from geomesh.pslg import PlanarStraightLineGraph \
     as _PlanarStraightLineGraph
 
@@ -34,14 +33,11 @@ class UnstructuredMesh:
         self.__weir_boundaries = OrderedDict()
         self.__culvert_boundaries = OrderedDict()
         self.__attributes = dict()
-        self.__dataset_collection = GdalDatasetCollection()
 
     def get_x(self, SpatialReference=None):
-        """ """
         return self.get_xy(SpatialReference)[:, 0]
 
     def get_y(self, SpatialReference=None):
-        """ """
         return self.get_xy(SpatialReference)[:, 1]
 
     def get_xy(self, SpatialReference=None):
@@ -115,7 +111,9 @@ class UnstructuredMesh:
             if self.SpatialReference is not None:
                 output_SpatialReference = self.SpatialReference
             else:
-                raise Exception('Cannot transform vertices, mesh has not spatial reference!')
+                raise Exception(
+                    'Cannot transform vertices, mesh has no spatial '
+                    + 'reference.')
         assert isinstance(output_SpatialReference, osr.SpatialReference)
         if not output_SpatialReference.IsSame(input_SpatialReference):
             CoordinateTransform = osr.CoordinateTransformation(
@@ -126,8 +124,9 @@ class UnstructuredMesh:
             vertices = np.asarray([(x, y) for x, y, _ in vertices])
         return vertices
 
-    def interpolate(self, fix_invalid=False):
-        for dataset in self.__dataset_collection:
+    def interpolate(self, DatasetCollection, fix_invalid=False):
+        assert isinstance(DatasetCollection, _DatasetCollection)
+        for dataset in DatasetCollection:
             x, y, z = dataset.get_arrays(self.SpatialReference)
             bbox = dataset.get_bbox(self.SpatialReference)
             f = RectBivariateSpline(x, y, z.T, bbox=[bbox.xmin, bbox.xmax,
@@ -142,7 +141,7 @@ class UnstructuredMesh:
             values = f.ev(self.vertices[idxs, 0], self.vertices[idxs, 1])
             new_values = self.values.copy()
             for i, idx in enumerate(idxs):
-                new_values[idx] = values[i]
+                new_values[idx] = np.nanmean([new_values[idx], values[i]])
             self._values = new_values
         if fix_invalid:
             self.fix_invalid()

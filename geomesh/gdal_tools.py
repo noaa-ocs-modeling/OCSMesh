@@ -17,8 +17,6 @@ class GdalTools:
 
     @staticmethod
     def Open(path, **kwargs):
-        if isinstance(path, gdal.Dataset):
-            return path
         return gdal.Open(path, **kwargs)
 
     @classmethod
