@@ -59,37 +59,19 @@ class PlanarStraightLineGraph(GdalTools):
             for _Polygon in __MultiPolygon:
                 _MultiPolygon.AddGeometry(_Polygon)
         _MultiPolygon = _MultiPolygon.Buffer(self._buffer)
-        # _FinalMultiPolygon = ogr.Geometry(ogr.wkbMultiPolygon)
-        # _FinalMultiPolygon.AssignSpatialReference(self.SpatialReference)
-        # for _Polygon in _MultiPolygon:
-        #     _FinalPolygon = ogr.Geometry(ogr.wkbPolygon)
-        #     _FinalPolygon.AssignSpatialReference(self.SpatialReference)
-        #     for i in range(_Polygon.GetGeometryCount(), 0, -1):
-        #         _LineString = _Polygon.GetGeometryRef(i)
-        #         if _LineString is not None:
-        #             _LineString = _LineString.Clone()
-        #             if _LineString.GetPointCount() != 5:
-        #                 _FinalPolygon.AddGeometry(_LineString)
-        #     if _FinalPolygon.GetGeometryCount() > 0:
-        #         _FinalMultiPolygon.AddGeometry(_FinalPolygon)
-        # _MultiPolygon = _FinalMultiPolygon
         self.__MultiPolygon = _MultiPolygon
         return self.__MultiPolygon
 
     @property
     def MultiPolygons(self):
-        try:
-            return self.__MultiPolygons
-        except AttributeError:
-            pass
         _MultiPolygons = list()
         for gdal_dataset in self._DatasetCollection:
             gdal_dataset.zmin = self.zmin
             gdal_dataset.zmax = self.zmax
-            gdal_dataset.SpatialReference = self.SpatialReference
+            _MultiPolygon = gdal_dataset.MultiPolygon
+            _MultiPolygon.TransformTo(self.SpatialReference)
             _MultiPolygons.append(gdal_dataset.MultiPolygon)
-        self.__MultiPolygons = _MultiPolygons
-        return self.__MultiPolygons
+        return _MultiPolygons
 
     @property
     def zmin(self):
@@ -163,26 +145,54 @@ class PlanarStraightLineGraph(GdalTools):
         raise NotImplementedError
 
     @property
+    def mshID(self):
+        return self._mshID
+
+    @property
+    def ndim(self):
+        return self._ndim
+
+    @property
     def vert2(self):
-        vert2 = list()
-        for _Polygon in self.MultiPolygon:
-            for _LinearRing in _Polygon:
-                _vert2 = np.asarray(_LinearRing.GetPoints()[:-1])[:, :2]
-                vert2 = [*vert2, *_vert2.tolist()]
-        return vert2
+        try:
+            return self.__vert2
+        except AttributeError:
+            vert2 = list()
+            for _Polygon in self.MultiPolygon:
+                for _LinearRing in _Polygon:
+                    _vert2 = list()
+                    for x, y in np.asarray(_LinearRing.GetPoints())[:-1, :2]:
+                        _vert2.append(((x, y), 0))  # always 0?
+                    vert2 = [*vert2, *_vert2]
+            self.__vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
+            return self.__vert2
 
     @property
     def edge2(self):
-        edge2 = list()
-        for _Polygon in self.MultiPolygon:
-            for _LinearRing in _Polygon:
-                _edge2 = list()
-                for i in range(_LinearRing.GetPointCount()-2):
-                    _edge2.append((i, i+1))
-                _edge2.append((_edge2[-1][1], _edge2[0][0]))
-                _edge2 = np.asarray(_edge2) + len(edge2)
-                edge2 = [*edge2, *_edge2.tolist()]
-        return edge2
+        try:
+            return self.__edge2
+        except AttributeError:
+            edge2 = list()
+            for _Polygon in self.MultiPolygon:
+                for _LinearRing in _Polygon:
+                    _edge2 = list()
+                    for i in range(_LinearRing.GetPointCount()-2):
+                        _edge2.append((i, i+1))
+                    _edge2.append((_edge2[-1][1], _edge2[0][0]))
+                    _edge2 = np.asarray(_edge2) + len(edge2)
+                    edge2 = [*edge2, *_edge2.tolist()]
+            edge2 = [((x, y), 0) for x, y in edge2]
+            self.__edge2 = np.asarray(edge2, dtype=jigsaw_msh_t.EDGE2_t)
+            return self.__edge2
+
+    @property
+    def geom(self):
+        geom = jigsaw_msh_t()
+        geom.vert2 = self.vert2
+        geom.edge2 = self.edge2
+        geom.ndim = self.ndim
+        geom.mshID = self.mshID
+        return geom
 
     @property
     def _MultiPolygon(self):
@@ -209,21 +219,7 @@ class PlanarStraightLineGraph(GdalTools):
 
     @property
     def _mshID(self):
-        return "euclidean-mesh"
-
-    @property
-    def _geom(self):
-        geom = jigsaw_msh_t()
-        geom.mshID = self._mshID
-        vert2 = list()
-        for i, (x, y) in enumerate(self.vert2):
-            vert2.append(((x, y), 0))   # why 0?
-        geom.vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
-        edge2 = list()
-        for i, (e0, e1) in enumerate(self.edge2):
-            edge2.append(((e0, e1), 0))   # why 0?
-        geom.edge2 = np.asarray(edge2, dtype=jigsaw_msh_t.EDGE2_t)
-        return geom
+        return 'euclidean-mesh'
 
     @property
     def _SpatialReference(self):
@@ -234,7 +230,6 @@ class PlanarStraightLineGraph(GdalTools):
         for gdal_dataset in self.__DatasetCollection:
             gdal_dataset.zmin = self.zmin
             gdal_dataset.zmax = self.zmax
-            gdal_dataset.SpatialReference = self.SpatialReference
         return self.__DatasetCollection
 
     @SpatialReference.setter
@@ -265,10 +260,12 @@ class PlanarStraightLineGraph(GdalTools):
 
     @_zmin.setter
     def _zmin(self, zmin):
+        del(self._MultiPolygon)
         self.__zmin = float(zmin)
 
     @_zmax.setter
     def _zmax(self, zmax):
+        del(self._MultiPolygon)
         self.__zmax = float(zmax)
 
     @_MultiPolygon.deleter

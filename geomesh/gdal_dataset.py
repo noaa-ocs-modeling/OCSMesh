@@ -1,5 +1,5 @@
 import numpy as np
-from osgeo import ogr
+from osgeo import gdal, ogr
 from scipy.interpolate import RectBivariateSpline
 import matplotlib.pyplot as plt
 from matplotlib.path import Path as mpl_Path
@@ -8,15 +8,8 @@ from geomesh import gdal_tools
 
 class GdalDataset:
 
-    def __init__(
-        self,
-        path,
-        SpatialReference=3395,
-        feature_size=None,
-    ):
+    def __init__(self, path):
         self._path = path
-        self._SpatialReference = SpatialReference
-        self._feature_size = feature_size
 
     def get_arrays(self, SpatialReference=None):
         return gdal_tools.get_arrays(self.Dataset, SpatialReference)
@@ -47,6 +40,16 @@ class GdalDataset:
 
     def get_value(self, x, y):
         return self._RectBivariateSpline.ev(x, y)
+
+    def get_MultiPolygon(self, SpatialReference=None):
+        _MultiPolygon = self._MultiPolygon
+        if SpatialReference is None:
+            return _MultiPolygon
+        else:
+            SpatialReference = gdal_tools.sanitize_SpatialReference(
+                SpatialReference)
+            _MultiPolygon.TransformTo(SpatialReference)
+            return _MultiPolygon
 
     def __get_empty_Polygon(self):
         _Polygon = ogr.Geometry(ogr.wkbPolygon)
@@ -95,49 +98,17 @@ class GdalDataset:
             raise AttributeError('Must set attribute zmax.')
 
     @property
-    def hmin(self):
-        try:
-            return self.__hmin
-        except AttributeError:
-            pass
-
-    @property
-    def hmax(self):
-        try:
-            return self.__hmax
-        except AttributeError:
-            pass
-
-    @property
     def Dataset(self):
         try:
             return self.__Dataset
         except AttributeError:
-            pass
-        srcSRS = gdal_tools.get_SpatialReference(self._original)
-        dstSRS = self._SpatialReference
-        xRes, yRes = gdal_tools.get_resolution(self._original, dstSRS)
-        if srcSRS.IsSame(dstSRS):
-            dstSRS = None
-        h0 = self._h0
-        if xRes < h0:
-            xRes = h0
-        else:
-            xRes = None
-        if yRes < h0:
-            yRes = h0
-        else:
-            yRes = None
-        if all(_ is None for _ in [dstSRS, xRes, yRes]):
-            Dataset = self._original
-        else:
-            Dataset = gdal_tools.Warp(
-                self._original, xRes=xRes, yRes=yRes, dstSRS=dstSRS)
-        self.__Dataset = Dataset
-        return self.__Dataset
+            self.__Dataset = gdal_tools.Open(self.path)
+            return self.__Dataset
 
     @property
     def MultiPolygon(self):
+        # not used here but might be relevant:
+        # https://stackoverflow.com/questions/22100453/gdal-python-creating-contourlines
         try:
             return self.__MultiPolygon
         except AttributeError:
@@ -224,10 +195,6 @@ class GdalDataset:
         return self.get_SpatialReference()
 
     @property
-    def feature_size(self):
-        return self.__h0
-
-    @property
     def _RectBivariateSpline(self):
         try:
             return self.__RectBivariateSpline
@@ -239,44 +206,12 @@ class GdalDataset:
         return self.__RectBivariateSpline
 
     @property
-    def _SpatialReference(self):
-        return self.__SpatialReference
-
-    @property
     def _path(self):
         return self.__path
 
     @property
-    def _feature_size(self):
-        return self.__feature_size
-
-    @property
-    def _h0(self):
-        return 0.5*(self.feature_size / np.sqrt(2))
-
-    @property
-    def _Dataset(self):
-        return self.__Dataset
-
-    @property
     def _MultiPolygon(self):
         return self.__MultiPolygon
-
-    @property
-    def _original(self):
-        try:
-            return self.__original
-        except AttributeError:
-            self.__original = gdal_tools.Open(self.path)
-            return self.__original
-
-    @SpatialReference.setter
-    def SpatialReference(self, SpatialReference):
-        curSRS = self.__SpatialReference
-        dstSRS = gdal_tools.sanitize_SpatialReference(SpatialReference)
-        if not curSRS.IsSame(dstSRS):
-            del(self._Dataset)
-        self.__SpatialReference = dstSRS
 
     @zmin.setter
     def zmin(self, zmin):
@@ -298,39 +233,9 @@ class GdalDataset:
             pass
         self.__zmax = zmax
 
-    @feature_size.setter
-    def feature_size(self, feature_size):
-        self._feature_size = feature_size
-
     @_path.setter
     def _path(self, path):
         self.__path = str(path)
-
-    @_SpatialReference.setter
-    def _SpatialReference(self, SpatialReference):
-        srcSRS = gdal_tools.get_SpatialReference(self._original)
-        dstSRS = gdal_tools.sanitize_SpatialReference(SpatialReference)
-        if not srcSRS.IsSame(dstSRS):
-            del(self._Dataset)
-        self.__SpatialReference = dstSRS
-
-    @_feature_size.setter
-    def _feature_size(self, feature_size):
-        assert isinstance(feature_size, (float, type(None)))
-        try:
-            if self.__h0 != feature_size:
-                del(self._Dataset)
-        except AttributeError:
-            pass
-        self.__h0 = feature_size
-
-    @_Dataset.deleter
-    def _Dataset(self):
-        try:
-            del(self.__Dataset)
-        except AttributeError:
-            pass
-        del(self._MultiPolygon)
 
     @_MultiPolygon.deleter
     def _MultiPolygon(self):

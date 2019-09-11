@@ -4,8 +4,7 @@
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
-from geomesh import GdalDataset, \
-                    DatasetCollection, \
+from geomesh import DatasetCollection, \
                     PlanarStraightLineGraph, \
                     SizeFunction, \
                     Jigsaw
@@ -16,23 +15,24 @@ colored_traceback.add_hook(always=True)
 def main():
 
     # ------- global options
-    hmin = 1.
-    h0 = 50.
-    hmax = 500.
+    hmax = 100.
     zmin = -3000.
     zmax = 15.
 
     # ------- init DatasetCollection
-    path = Path(str(Path.home()) + '/postSandyDEM')
     dsc = DatasetCollection()
-    for file in path.glob('**/*.tif'):
-        ds = GdalDataset(file, feature_size=h0)
-        dsc.add_dataset(ds)
+    # i = 0
+    for file in Path(str(Path.home()) + '/postSandyDEM').glob('**/*.tif'):
+        # if 'zip19' in str(file):
+            dsc.add_dataset(file)
+        # if i == 3:
+        #     break
+        # i += 1
 
     # ------- generate PSLG
     pslg = PlanarStraightLineGraph(dsc, zmin, zmax)
     # pslg.SpatialReference = 4326
-    pslg.make_plot(show=True)
+    # pslg.make_plot(show=True)
 
     # ------- generate size function
     # hfun = SizeFunction(pslg)
@@ -57,7 +57,10 @@ def main():
     jigsaw._opts.optm_qlim = .95
 
     # ------- run jigsaw, get mesh
+    import time
+    start = time.time()
     mesh = jigsaw.run()
+    print('took: {}'.format(time.time() - start))
 
     # ------- interpolate bathymtery to output mesh
     mesh.interpolate(dsc, fix_invalid=True)

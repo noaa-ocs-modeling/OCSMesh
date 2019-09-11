@@ -1,3 +1,4 @@
+from pathlib import Path
 from geomesh.gdal_dataset import GdalDataset
 from geomesh import gdal_tools
 
@@ -10,12 +11,11 @@ class DatasetCollection:
 
     def __iter__(self):
         for gdal_dataset in self.__container:
-            gdal_dataset.SpatialReference = self.SpatialReference
             yield gdal_dataset
 
     def add_dataset(self, gdal_dataset):
-        if isinstance(gdal_dataset, str):
-            gdal_dataset = GdalDataset(GdalDataset)
+        if isinstance(gdal_dataset, (str, Path)):
+            gdal_dataset = GdalDataset(gdal_dataset)
         else:
             assert isinstance(gdal_dataset, GdalDataset)
         exist = False

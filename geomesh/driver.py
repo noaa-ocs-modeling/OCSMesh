@@ -54,7 +54,7 @@ class Jigsaw:
 
     @property
     def _geom(self):
-        return self._Geom._geom
+        return self._Geom.geom
 
     @property
     def _input_mesh(self):
