@@ -2,6 +2,7 @@
 """
 DEM dataset used in this examples can be downloaded from:
 https://www.ngdc.noaa.gov/mgg/inundation/sandy/sandy_geoc.html
+This example requires about 40Gb of virtual memory to run.
 """
 from pathlib import Path
 import matplotlib.pyplot as plt
