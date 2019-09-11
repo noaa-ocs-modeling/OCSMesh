@@ -4,8 +4,12 @@ import subprocess
 import matplotlib.pyplot as plt
 from geomesh import DatasetCollection, \
                     PlanarStraightLineGraph, \
-                    SizeFunction, \
-                    Jigsaw
+                    Jigsaw  # SizeFunction, \
+try:
+    import colored_traceback
+    colored_traceback.add_hook(always=True)
+except ModuleNotFoundError:
+    pass
 
 
 def main():

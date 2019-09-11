@@ -1,73 +1,57 @@
 #!/usr/bin/env python
-# import os
-# import subprocess
-import numpy as np
-from pathlib import Path
+import os
+import subprocess
 import matplotlib.pyplot as plt
 from geomesh import DatasetCollection, \
                     PlanarStraightLineGraph, \
-                    SizeFunction, \
-                    Jigsaw
-import colored_traceback
-colored_traceback.add_hook(always=True)
+                    Jigsaw  # SizeFunction, \
+try:
+    import colored_traceback
+    colored_traceback.add_hook(always=True)
+except ModuleNotFoundError:
+    pass
 
 
 def main():
 
-    # ------- global options
-    hmax = 100.
-    zmin = -3000.
-    zmax = 15.
+    # ------- init test DEM files
+    data = os.path.dirname(os.path.abspath(__file__)) + '/data'
+    subprocess.check_call(["git", "submodule", "update", "--init", data])
+    file1 = os.path.abspath(data + '/ncei19_n41x00_w074x00_2015v1.tif')
+    file2 = os.path.abspath(data + '/ncei19_n41x00_w073x75_2015v1.tif')
 
-    # ------- init DatasetCollection
+    # ------- init test DatasetCollection object
     dsc = DatasetCollection()
-    # i = 0
-    for file in Path(str(Path.home()) + '/postSandyDEM').glob('**/*.tif'):
-        # if 'zip19' in str(file):
-            dsc.add_dataset(file)
-        # if i == 3:
-        #     break
-        # i += 1
+    dsc.add_dataset(file1)
+    dsc.add_dataset(file2)
 
     # ------- generate PSLG
-    pslg = PlanarStraightLineGraph(dsc, zmin, zmax)
-    # pslg.SpatialReference = 4326
+    pslg = PlanarStraightLineGraph(zmin=-1500, zmax=15.)
     # pslg.make_plot(show=True)
 
     # ------- generate size function
-    # hfun = SizeFunction(pslg)
-    # print(hfun.values)
-    # print(hfun.ocean_boundaries)
-    # BREAKME
-    # hfun.make_plot(show=True)
-
-    # ------- input mesh
-    #
+    # hfun = SizeFunction()
 
     # ------- init jigsaw and set options
     jigsaw = Jigsaw(
         pslg,
-        # hfun,
+        # hfun
     )
     jigsaw.verbosity = 1
-    # jigsaw._opts.hfun_hmin = hmin
-    jigsaw._opts.hfun_hmax = hmax
+    jigsaw._opts.hfun_hmax = 50.
     jigsaw._opts.hfun_scal = 'absolute'
     # jigsaw._opts.mesh_top1 = True
     jigsaw._opts.optm_qlim = .95
 
     # ------- run jigsaw, get mesh
-    import time
-    start = time.time()
     mesh = jigsaw.run()
-    print('took: {}'.format(time.time() - start))
 
     # ------- interpolate bathymtery to output mesh
-    mesh.interpolate(dsc, fix_invalid=True)
+    mesh.interpolate(fix_invalid=True)
     fig = plt.figure()
     axes = fig.add_subplot(111)
     mesh.make_plot(axes=axes)
-    axes.triplot(mesh.mpl_tri, linewidth=0.05, color='k')
+    axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
     plt.show()
 
 
