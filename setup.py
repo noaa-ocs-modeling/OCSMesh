@@ -22,7 +22,7 @@ class InstallDepsCommand(distutils.cmd.Command):
     def initialize_options(self):
         """Set default values for options."""
         self.include_gdal = 'False'
-        self.work_dir = os.getcwd()
+        self.work_dir = Path(__file__).parent.absolute()
         self.pyenv_prefix = "/".join(sys.executable.split('/')[:-2])
 
     def finalize_options(self):
@@ -41,7 +41,7 @@ class InstallDepsCommand(distutils.cmd.Command):
 
     def _setup_step(f):
         def decorator(self):
-            os.chdir(str(Path("third_party")))
+            os.chdir(str(Path(str(self.work_dir) + "/third_party")))
             f(self)
             os.chdir(self.work_dir)
         return decorator
@@ -187,7 +187,8 @@ except FileNotFoundError:
     else:
         gdal = "gdal"
 
-conf = setuptools.config.read_configuration('./setup.cfg')
+conf = setuptools.config.read_configuration(
+    str(Path(__file__).parent.absolute()) + '/setup.cfg')
 meta = conf['metadata']
 setuptools.setup(
     name=meta['name'],

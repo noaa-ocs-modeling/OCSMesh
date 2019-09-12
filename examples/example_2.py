@@ -26,7 +26,7 @@ def main():
     dsc.add_dataset(file2)
 
     # ------- generate PSLG
-    pslg = PlanarStraightLineGraph(zmin=-1500, zmax=15.)
+    pslg = PlanarStraightLineGraph(dsc, zmin=-1500, zmax=15.)
     # pslg.make_plot(show=True)
 
     # ------- generate size function
