@@ -19,9 +19,7 @@ Vagrant.configure("2") do |config|
   config.vm.provider "virtualbox" do |v|
     v.name = "geomesh"
     v.memory = 16384
-    v.cpus = 8
   end
-  config.ssh.forward_agent = true
   config.ssh.forward_x11 = true
   config.vm.provision :shell, privileged: true,
     inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools tk gdal systemd-swap xorg --noconfirm"
@@ -33,6 +31,6 @@ Vagrant.configure("2") do |config|
     inline: "sed -i 's/#X11Forwarding no/X11Forwarding yes/g' /etc/ssh/sshd_config"
   config.vm.provision :shell, privileged: true, inline: "systemctl restart sshd"
   config.vm.provision :shell, privileged: false,
-    inline: "echo \"" << $bootstrap <<"\" >> /tmp/bootstrap.sh"
+    inline: "echo \"" << $bootstrap << "\" >> /tmp/bootstrap.sh"
   config.vm.provision :shell, privileged: false, inline: "/bin/bash --login /tmp/bootstrap.sh"
 end
