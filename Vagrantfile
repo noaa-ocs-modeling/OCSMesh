@@ -21,7 +21,9 @@ Vagrant.configure("2") do |config|
     v.memory = 16384
   end
   config.ssh.forward_x11 = true
-  config.vm.synced_folder "~/postSandyDEM", "/home/vagrant/"
+  if File.directory?(File.expand_path("~/postSandyDEM"))
+    config.vm.synced_folder "~/postSandyDEM", "/home/vagrant/"
+  end
   config.vm.provision :shell, privileged: true,
     inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools tk gdal systemd-swap xorg --noconfirm"
   config.vm.provision :shell, privileged: true,
