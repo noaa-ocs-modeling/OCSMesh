@@ -28,6 +28,9 @@ Vagrant.configure("2") do |config|
     inline: "systemctl enable --now systemd-swap"
   config.vm.provision :shell, privileged: true,
     inline: "chsh -s /bin/zsh vagrant"
+  config.vm.provision :shell, privileged: true,
+    inline: "sed 's/#X11Forwarding no/X11Forwarding yes/g' /etc/ssh/sshd_config > /etc/ssh/sshd_config"
+  config.vm.provision :shell, privileged: true, inline: "systemctl restart sshd"
   config.vm.provision :shell, privileged: false,
     inline: "echo \"" << $bootstrap <<"\" >> /tmp/bootstrap.sh"
   config.vm.provision :shell, privileged: false, inline: "/bin/bash --login /tmp/bootstrap.sh"
