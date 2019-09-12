@@ -12,6 +12,8 @@ __all__ = ["UnstructuredMesh",
            "GdalDataset",
            "DatasetCollection",
            "gdal_tools"]
+import matplotlib as mpl
 from osgeo import ogr, gdal
 gdal.UseExceptions()
 ogr.UseExceptions()
+mpl.rcParams['agg.path.chunksize'] = 10000

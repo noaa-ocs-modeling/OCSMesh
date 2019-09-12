@@ -1,12 +1,10 @@
 from pathlib import Path
 from geomesh.gdal_dataset import GdalDataset
-from geomesh import gdal_tools
 
 
 class DatasetCollection:
 
-    def __init__(self, SpatialReference=3395):
-        self._SpatialReference = SpatialReference
+    def __init__(self):
         self.__container = list()
 
     def __iter__(self):
@@ -25,16 +23,3 @@ class DatasetCollection:
                 break
         if not exist:
             self.__container.append(gdal_dataset)
-
-    @property
-    def SpatialReference(self):
-        return self.__SpatialReference
-
-    @property
-    def _SpatialReference(self):
-        return self.__SpatialReference
-
-    @_SpatialReference.setter
-    def _SpatialReference(self, SpatialReference):
-        self.__SpatialReference = gdal_tools.sanitize_SpatialReference(
-            SpatialReference)

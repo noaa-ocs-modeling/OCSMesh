@@ -1,5 +1,5 @@
 import numpy as np
-from osgeo import gdal, ogr
+from osgeo import ogr
 from scipy.interpolate import RectBivariateSpline
 import matplotlib.pyplot as plt
 from matplotlib.path import Path as mpl_Path
