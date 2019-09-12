@@ -20,6 +20,7 @@ Vagrant.configure("2") do |config|
     v.memory = 16384
     v.cpus = 8
   end
+  config.ssh.forward_agent = true
   config.ssh.forward_x11 = true
   config.vm.provision :shell, privileged: true,
     inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools gdal systemd-swap --noconfirm"
@@ -27,7 +28,6 @@ Vagrant.configure("2") do |config|
     inline: "systemctl enable --now systemd-swap"
   config.vm.provision :shell, privileged: true,
     inline: "chsh -s /bin/zsh vagrant"
-  # config.vm.provision :shell, privileged: true, inline: ""
   config.vm.provision :shell, privileged: false,
     inline: "echo \"" << $bootstrap <<"\" >> /tmp/bootstrap.sh"
   config.vm.provision :shell, privileged: false, inline: "/bin/bash --login /tmp/bootstrap.sh"

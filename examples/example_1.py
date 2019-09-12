@@ -45,7 +45,7 @@ def main():
     mesh = jigsaw.run()
 
     # ------- interpolate bathymtery to output mesh
-    mesh.interpolate(fix_invalid=True)
+    mesh.interpolate(dsc, fix_invalid=True)
     fig = plt.figure()
     axes = fig.add_subplot(111)
     mesh.make_plot(axes=axes)
