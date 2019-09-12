@@ -23,7 +23,7 @@ Vagrant.configure("2") do |config|
   config.ssh.forward_agent = true
   config.ssh.forward_x11 = true
   config.vm.provision :shell, privileged: true,
-    inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools gdal systemd-swap --noconfirm"
+    inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools gdal systemd-swap xorg-xauth --noconfirm"
   config.vm.provision :shell, privileged: true,
     inline: "systemctl enable --now systemd-swap"
   config.vm.provision :shell, privileged: true,
