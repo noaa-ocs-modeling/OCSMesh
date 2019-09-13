@@ -3,7 +3,7 @@
 
 $bootstrap = <<END
 #!/bin/bash --login
-ln -s /vagrant ~/geomesh
+ln -sf /vagrant ~/geomesh
 cd ~/geomesh
 git lfs install
 python -m venv .vagrant_env
