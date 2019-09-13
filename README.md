@@ -2,8 +2,8 @@
 
 ## Requirements:
 Python 3.7
+GDAL (and development headers).
 
-GDAL
 
 ## Installation on Linux
 Compile dependencies and install:
