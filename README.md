@@ -1,10 +1,10 @@
-# geomesh
+#geomesh
 
-## Requirements:
+##Requirements:
 Python 3.7
 GDAL
 
-## Installation on Linux
+##Installation on Linux
 Compile dependencies and install:
 ```bash
 ./setup.py install_deps # --include-gdal=True 
@@ -16,30 +16,44 @@ You may use the --include-gdal=True to compile GDAL if it's not available on the
 Install the Windows Subsystem for Linux using any distro of your choice. Follow the Linux installation above.
 Alternatively you can use Vagrant. See instructions below.
 
-## MacOSX installation
+##MacOSX installation
 Only through Vagrant. See instructions below.
 
-## What is Vagrant:
-Vagrant is a way of deploying the app across as long as Vagrant is properly installed.
-To use the Vagrant method, you must have [Vagrant](https://www.vagrantup.com/downloads.html) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads) installed in your Operating System. You must also have an XServer installed on the Host machine, that is XMing (Windows) or XQuartz(MacOSX).
+##Using the software through Vagrant:
+Vagrant is a way of deploying apps across all major platforms as long as Vagrant is installed on the OS.
+The Vagrantfile on this project is configured to provide an enviroment where you can test and develop this software. It is recommended to use a native installation, but this is provided as an alternative so that the software can be accessible accross most platforms.
+To use the Vagrant method, you must have [Vagrant](https://www.vagrantup.com/downloads.html) and [VirtualBox](https://www.virtualbox.org/wiki/Downloads) installed in your Operating System. You must also have an XServer installed on the Host machine (XMing on Windows or XQuartz on MacOSX).
 
-Once you have met the Vagrant dependencies, `cd` into the cloned directory and run:
+Before bringing Vagrant up, the jigsawpy submodule has to be manually initialized or the vagrant provisionsing will fail. You only need to do this step once in your repo.
 
 ```bash
-vagrant up --provision && vagrant ssh
+git submodule update --init third_party/jigsawpy
 ```
-Once this is finished, you will be on a Vagrant developer shell. You may edit the source code in the host machine and rerun/debug the code using the vagrant shell.
 
+You should also initialize the example data as described in [Setting up the example data](#setting-up-the-example-data) section.
 
-## External data sources:
-If you are running from Vagrant skip this part and go directly to run the examples.
-If you installed natively you must run at least once:
+Once you have met these Vagrant dependencies, you may initialize the vagrant box and ssh into it:
+
+```bash
+vagrant up --provision
+```
+Once this is finished, you can ssh into the vagrant developer shell by running:
+
+```bash
+vagrant ssh
+```
+
+The source code on the host machine and on the vagrant shell is in real-time sync. This means you can do file editing on the host machine and run the program in the vagrant shell in order to do development/debbugging.
+
+##Setting up the example data
+In order to bring to bring up the example data you must run:
 ```bash
 git lfs install  # example data is a git-lfs repo
 git submodule update --init examples/data  # example data is provided as submodule
 ```
+If you are using Vagrant, you must run this steps in the host machine (not in the vagrant shell).
 
-## Running the examples:
+## Running the examples
 To run the examples you may execute:
 ```bash
 examples/example_1.py
@@ -48,4 +62,4 @@ and
 ```bash
 examples/example_2.py
 ```
-The example_3.py requires external files and is not supported in the Vagrant demo.
+The example_3.py requires external files. See [example_3.py](examples/example_3.py) header comments for a link to the files. Example 3 can take more than 7 hours to run and is computationally expensive. It is provided here as a demos of the capability to bulk process DEM's into meshes.

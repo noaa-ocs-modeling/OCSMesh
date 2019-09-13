@@ -3,14 +3,14 @@
 
 $bootstrap = <<END
 #!/bin/bash --login
-ln -s /vagrant ~/geomesh
+ln -sf /vagrant ~/geomesh
 cd ~/geomesh
 git lfs install
-python -m venv .geomesh_env
-source .geomesh_env/bin/activate
+python -m venv .vagrant_env
+source .vagrant_env/bin/activate
 ./setup.py install_deps
 ./setup.py develop
-echo "source ~/geomesh/.geomesh_env/bin/activate" >> ~/.zshrc
+echo "source ~/geomesh/.vagrant_env/bin/activate" >> ~/.zshrc
 echo "cd ~/geomesh" >> ~/.zshrc
 END
 
@@ -21,6 +21,11 @@ Vagrant.configure("2") do |config|
     v.memory = 16384
   end
   config.ssh.forward_x11 = true
+  if File.directory?(File.expand_path("~/postSandyDEM"))
+    config.vm.synced_folder "~/postSandyDEM", "/vagrant_data"
+    config.vm.provision :shell, privileged: false,
+    inline: "ln -sf /vagrant_data /home/vagrant/postSandyDEM"
+  end
   config.vm.provision :shell, privileged: true,
     inline: "pacman -Syu git git-lfs zsh grml-zsh-config base-devel cmake python python-setuptools tk gdal systemd-swap xorg --noconfirm"
   config.vm.provision :shell, privileged: true,
