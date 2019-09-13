@@ -2,12 +2,14 @@
 # vi: set ft=ruby :
 
 $bootstrap = <<END
-#!/bin/bash --login
 ln -sf /vagrant ~/geomesh
 cd ~/geomesh
 git lfs install
 python -m venv .vagrant_env
 source .vagrant_env/bin/activate
+export TempDir=/tmp
+git submodule update --init examples/data
+./setup.py install_deps
 ./setup.py install_deps
 ./setup.py develop
 echo "source ~/geomesh/.vagrant_env/bin/activate" >> ~/.zshrc
