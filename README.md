@@ -10,6 +10,10 @@ This package has been tested on the Windows Subsystem for Linux (Ubuntu) and Arc
 
 ## Installation instructions
 This software is written in Python 3.7 and it should be installable on most systems. It has been tested on Ubuntu, Arch Linux and on the Windows Subsystem for Linux (Ubuntu version). MacOSX is currently not supported. See the [Running on Vagrant](#running-on-vagrant)
+=======
+Python 3.7
+GDAL (and development headers).
+
 
 Compile dependencies and install:
 ```bash
