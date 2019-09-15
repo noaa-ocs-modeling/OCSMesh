@@ -58,7 +58,7 @@ class PlanarStraightLineGraph(GdalTools):
         for __MultiPolygon in list(self.MultiPolygons):
             for _Polygon in __MultiPolygon:
                 _MultiPolygon.AddGeometry(_Polygon)
-        _MultiPolygon = _MultiPolygon.Buffer(self._buffer)
+        _MultiPolygon = _MultiPolygon.Buffer(0)
         self.__MultiPolygon = _MultiPolygon
         return self.__MultiPolygon
 
@@ -199,13 +199,6 @@ class PlanarStraightLineGraph(GdalTools):
         return self.__MultiPolygon
 
     @property
-    def _buffer(self):
-        try:
-            return self.__buffer
-        except AttributeError:
-            return 0
-
-    @property
     def _zmin(self):
         return self.__zmin
 
@@ -242,11 +235,6 @@ class PlanarStraightLineGraph(GdalTools):
                     (curSRS.IsGeographic() and dstSRS.IsProjected()):
                 self.MultiPolygon.SwapXY()
             self.__SpatialReference = dstSRS
-
-    @_buffer.setter
-    def _buffer(self, buffer):
-        del(self._MultiPolygon)
-        self.__buffer = float(np.abs(buffer))
 
     @_SpatialReference.setter
     def _SpatialReference(self, SpatialReference):
