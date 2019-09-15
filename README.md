@@ -1,19 +1,14 @@
 # geomesh
 
-## Requirements:
-CMake>=
-Python 3.7 (and development headers)
-GDAL (and development headers).
-
+## Requirements
+CMake>= <br/>
+Python 3.7 (and development headers)<br/>
+GDAL (and development headers).<br/>
 This package has been tested on the Windows Subsystem for Linux (Ubuntu) and Arch Linux. There is not Mac support at this time. See the Vagrant section below for a simple method for running this software on a mac computer.
 
 
 ## Installation instructions
 This software is written in Python 3.7 and it should be installable on most systems. It has been tested on Ubuntu, Arch Linux and on the Windows Subsystem for Linux (Ubuntu version). MacOSX is currently not supported. See the [Running on Vagrant](#running-on-vagrant)
-=======
-Python 3.7
-GDAL (and development headers).
-
 
 Compile dependencies and install:
 ```bash
