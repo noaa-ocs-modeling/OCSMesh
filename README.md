@@ -4,11 +4,11 @@
 CMake>= <br/>
 Python 3.7 (and development headers)<br/>
 GDAL (and development headers).<br/>
-This package has been tested on the Windows Subsystem for Linux (Ubuntu) and Arch Linux. There is no MacOSX support at this time. See the [Running on Vagrant](#running-on-vagrant) section below for a simple method for running this software on a MacOSX computer.
+This package has been tested on the Windows Subsystem for Linux (Ubuntu) and Arch Linux. There is no MacOSX support at this time. See the [Vagrant](#using-the-software-through-vagrant) section below for a simple method for running this software on a MacOSX computer.
 
 
 ## Installation instructions
-This software is written in Python 3.7 and it should be installable on most systems. It has been tested on Ubuntu, Arch Linux and on the Windows Subsystem for Linux (Ubuntu version). MacOSX is currently not supported. See the [Running on Vagrant](#running-on-vagrant)
+This software is written in Python 3.7 and it should be installable on most systems. It has been tested on Ubuntu, Arch Linux and on the Windows Subsystem for Linux (Ubuntu version). MacOSX is currently not supported. See the [Vagrant](#using-the-software-through-vagrant)
 
 Compile dependencies and install:
 ```bash
