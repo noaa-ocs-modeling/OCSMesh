@@ -135,9 +135,7 @@ make_alias() {
             echo "$PYENV_ALIAS" >> ~/.bashrc
         fi
     fi
-
 }
-
 
 exit_msg() {
     local MSG="\n"
