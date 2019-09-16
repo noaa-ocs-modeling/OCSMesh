@@ -17,7 +17,7 @@ MacOSX is not supported. If you wish to test the software on MacOSX, use the [Va
 Processing DEM datasets can be a memory expensive operation. The amount of memory required will depend on the resolution and quantity of the input datasets. It is recommended to use [systemd-swap](https://github.com/Nefelim4ag/systemd-swap) or create a large swap partition when processing large or very high resolution datasets if the physical memory is running out.
 
 
-### Installation instructions
+## Installation instructions
 To install, just run
 ```bash
 ./install.sh
@@ -41,7 +41,7 @@ If you plan to do development on the code, after running the normal installation
 ```
 This will allow you to make changes to the source code and be able to test them immediately without having to rerun the installer.
 
-### Vagrant
+## Vagrant
 ```sh
 sh -c "$(curl -fsSL https://gist.github.com/jreniel/397df26f8b0c4aa71ea18e4a6baa012c/raw)"
 cd geomesh
