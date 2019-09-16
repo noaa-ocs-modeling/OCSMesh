@@ -11,17 +11,6 @@ check_python_version() {
     fi
 }
 
-check_git_lfs() {
-    printf "Checking for git lfs... "
-    if ! [ -x "$(command -v git-lfs)" ]; then
-        printf "Will be installed.\n"
-        GIT_LFS=false
-    else
-        printf "OK!\n"
-        GIT_LFS=true
-    fi
-}
-
 check_python_header() {
     printf "Checking for Python.h (python3.7-dev)... "
     # first, makes sure distutils.sysconfig usable
@@ -37,6 +26,29 @@ check_python_header() {
         exit 4
     else
         printf "OK!\n"
+    fi
+}
+
+check_git_lfs() {
+    printf "Checking for git lfs... "
+    if ! [ -x "$(command -v git-lfs)" ]; then
+        printf "Will be installed.\n"
+        BOOTSTRAP_GIT_LFS=true
+    else
+        printf "OK!\n"
+        BOOTSTRAP_GIT_LFS=false
+    fi
+}
+
+
+check_cmake(){
+    printf "Checking for cmake... "
+    if ! [ -x "$(command -v cmake)" ]; then
+        printf "Will be installed.\n"
+        BOOTSTRAP_CMAKE=true
+    else
+        printf "OK!\n"
+        BOOTSTRAP_CMAKE=false
     fi
 }
 
@@ -77,16 +89,37 @@ check_gdal_config() {
     fi
 }
 
-bootstrap() {
-    python3.7 -m venv .geomesh_env
+make_virtual_env() {
+   python3.7 -m venv .geomesh_env 
+}
+
+source_virtual_env() {
     source .geomesh_env/bin/activate
-    ./setup.py install_deps $INCLUDE_GDAL
-    ./setup.py install
-    # bootstrap git-lfs to python environment
-    if [ GIT_LFS=false ]; then
+}
+
+upgrade_pip() {
+    pip install --upgrade pip
+}
+
+bootstrap_git_lfs() {
+    if [ BOOTSTRAP_GIT_LFS=true ]; then
         curl -L https://github.com/git-lfs/git-lfs/releases/download/v2.8.0/git-lfs-linux-amd64-v2.8.0.tar.gz | tar xz -C .geomesh_env/bin "git-lfs"
     fi
     git lfs install
+}
+
+bootstrap_cmake() {
+    if [ BOOTSTRAP_CMAKE=true ]; then
+        pip install cmake
+    fi
+}
+
+bootstrap_deps() {
+    ./setup.py install_deps $INCLUDE_GDAL
+}
+
+bootstrap_install() {
+    ./setup.py install
 }
 
 make_alias() {
@@ -122,8 +155,15 @@ main() {
     check_python_version
     check_python_header
     check_git_lfs
+    check_cmake
     check_gdal_config "$@"
-    bootstrap
+    make_virtual_env
+    source_virtual_env
+    upgrade_pip
+    bootstrap_git_lfs
+    bootstrap_cmake
+    bootstrap_deps
+    bootstrap_install
     make_alias
     exit_msg
 }
