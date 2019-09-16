@@ -18,11 +18,13 @@ Processing DEM datasets can be a memory expensive operation. The amount of memor
 
 
 ## Installation instructions
+To install, just run
 ```bash
 ./install.sh
 ```
+You may optionally pass the `--include-gdal` flag to include the installation of gdal from source to the Python environment.
 
-## For developers
+## Notes for developers
 If you plan to do development on the code, after running the normal installation you should execute
 ```bash
 ./setup.py develop
