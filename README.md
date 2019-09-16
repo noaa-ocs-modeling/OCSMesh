@@ -14,6 +14,13 @@ MacOSX is not supported. If you wish to test the softare on MacOSX, use the [Vag
 ./install.sh
 ```
 
+## For developers
+If you plan to do development on the code, after running the normal installation you should execute
+```bash
+./setup.py develop
+```
+This will allow you to make changes to the source code and be able to test them immediately without having to rerun the installer.
+
 ## Vagrant
 ```sh
 sh -c "$(curl -fsSL https://gist.github.com/jreniel/397df26f8b0c4aa71ea18e4a6baa012c/raw)" && cd geomesh && vagrant ssh
