@@ -1,12 +1,20 @@
 # geomesh
 
 ## Requirements
-CMake>=<br/>
+A working C/CXX compiler <br/>
 Python 3.7 (and development headers)<br/>
-GDAL (and development headers).<br/>
+[GDAL (and development headers)](#notes-on-gdal)
+
+### Notes on GDAL
+It is recommended to use the system's package manager to satisfy this dependency, however, one can optionally pass the `--include-gdal` flag to the installation script, and it will build/install GDAL for you. This flag can also be used to compile a local version of GDAL that overrides the system's version inside the geomesh Python environment.<br/>
+
+### Notes on operating system requirements
 This package is intended to run on Linux.<br/>
 It is compatible with the Windows Subsystem for Linux.<br/>
-MacOSX is not supported. If you wish to test the softare on MacOSX, use the [Vagrant](#vagrant) installation.
+MacOSX is not supported. If you wish to test the software on MacOSX, use the [Vagrant](#vagrant) installation.
+
+### Virtual memory requirements
+Processing DEM datasets can be a memory expensive operation. The amount of memory required will depend on the resolution and quantity of the input datasets. It is recommended to use [systemd-swap](https://github.com/Nefelim4ag/systemd-swap) or create a large swap partition for processing large or very high resolution datasets if the physical memory is running out.
 
 
 ## Installation instructions
