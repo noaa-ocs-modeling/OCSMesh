@@ -42,7 +42,7 @@ If you plan to do development on the code, after running the normal installation
 This will allow you to make changes to the source code and be able to test them immediately without having to rerun the installer.
 
 ## Vagrant
-The Vagrant bootstrapping is provided here as a convenience. It should only be used as a demo in case that the installation script fails for some reason (if it does, please report it). In particular, this is most useful to test the program from a MacOSX computer. On Windows and Linux, you should use the regular installer.
+The Vagrant bootstrapping is provided here as a convenience. It should only be used as a demo, and only if the installation script fails for some reason (if it does, please report it!). In particular, this is most useful to test the program from a MacOSX computer. On Windows and Linux, please use the regular installer (via [WSL](https://docs.microsoft.com/en-us/windows/wsl/install-win10) on Windows).
 ```sh
 sh -c "$(curl -fsSL https://gist.github.com/jreniel/397df26f8b0c4aa71ea18e4a6baa012c/raw)"
 cd geomesh
