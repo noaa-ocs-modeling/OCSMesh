@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/bin/sh
 set -e
 
 check_python_version() {
@@ -14,7 +14,7 @@ check_python_version() {
 check_python_header() {
     printf "Checking for Python.h (python3.7-dev)... "
     # first, makes sure distutils.sysconfig usable
-    if ! $(python -c "import distutils.sysconfig" &> /dev/null); then
+    if ! $(python3.7 -c "import distutils.sysconfig" &> /dev/null); then
         printf "\nERROR: distutils.sysconfig not usable\n" >&2
         exit 3
     fi
@@ -72,7 +72,6 @@ check_gdal_config() {
             if [ "$2" = "--no-confirm" ] || [ "$2" = "--noconfirm" ]; then
                 INCLUDE_GDAL="--include-gdal=True"
             else
-                local CONFIM_GDAL=false
                 echo
                 local MSG=""
                 MSG+="gdal-config was found on the system but you passed the --include-gdal option."
