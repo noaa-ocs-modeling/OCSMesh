@@ -11,14 +11,24 @@ check_python_version() {
     fi
 }
 
+check_python3_7_pip() {
+    printf "Checking for python3.7 pip..."
+    # first, makes sure distutils.sysconfig usable
+    if ! $(python3.7 -m pip &> /dev/null); then
+        printf "\nERROR: pip for python3.7 is was not found. Please install pip for Python3.7\n" >&2
+        exit 2
+    else
+        printf "OK\n"
+    fi  
+}
+
 check_python_header() {
     printf "Checking for Python.h (python3.7-dev)... "
-    # first, makes sure distutils.sysconfig usable
+    # get include path for this python version
     if ! $(python3.7 -c "from distutils import sysconfig" &> /dev/null); then
         printf "\nERROR: distutils.sysconfig not usable\n" >&2
         exit 3
-    fi
-    # get include path for this python version
+    fi  
     INCLUDEPY=$(python3.7 -c "from distutils import sysconfig as s; print(s.get_config_var('INCLUDEPY'))")
     if [ ! -f "${INCLUDEPY}/Python.h" ]; then
         printf "Not found!\n"
