@@ -98,16 +98,16 @@ check_gdal_config() {
     fi
 }
 
+upgrade_pip() {
+    python3.7 -m pip install pip
+}
+
 make_virtual_env() {
    python3.7 -m venv .geomesh_env 
 }
 
 source_virtual_env() {
     source .geomesh_env/bin/activate
-}
-
-upgrade_pip() {
-    python3.7 -m pip install pip
 }
 
 bootstrap_git_lfs() {
@@ -165,9 +165,9 @@ main() {
     check_git_lfs
     check_cmake
     check_gdal_config "$@"
+    upgrade_pip
     make_virtual_env
     source_virtual_env
-    upgrade_pip
     bootstrap_git_lfs
     bootstrap_cmake
     bootstrap_deps
