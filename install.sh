@@ -107,7 +107,7 @@ source_virtual_env() {
 }
 
 upgrade_pip() {
-    pip install --upgrade pip
+    python3.7 -m pip install pip
 }
 
 bootstrap_git_lfs() {
