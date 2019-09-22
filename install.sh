@@ -11,14 +11,14 @@ check_python_version() {
     fi
 }
 
-check_python3_7_pip() {
+check_python3.7_pip() {
     printf "Checking for python3.7 pip..."
     # first, makes sure distutils.sysconfig usable
     if ! $(python3.7 -m pip &> /dev/null); then
         printf "\nERROR: pip for python3.7 is was not found. Please install pip for Python3.7\n" >&2
         exit 2
     else
-        printf "OK\n"
+        printf "OK!\n"
     fi  
 }
 
@@ -160,6 +160,7 @@ exit_msg() {
 
 main() {
     check_python_version
+    check_python3.7_pip
     check_python_header
     check_git_lfs
     check_cmake
