@@ -9,3 +9,6 @@
 	active = false
 	path = third_party/gdal
 	url = https://github.com/OSGeo/gdal.git
+[submodule "third_party/jigsawpy"]
+	path = third_party/jigsawpy
+	url = https://github.com/jreniel/jigsaw-geo-python
