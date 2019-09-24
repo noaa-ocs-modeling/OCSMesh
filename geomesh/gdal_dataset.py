@@ -20,6 +20,12 @@ class GdalDataset:
     def get_xy(self, SpatialReference=None):
         return gdal_tools.get_xy(self.Dataset, SpatialReference)
 
+    def get_x(self, SpatialReference=None):
+        return gdal_tools.get_x(self.Dataset, SpatialReference)
+
+    def get_y(self, SpatialReference=None):
+        return gdal_tools.get_y(self.Dataset, SpatialReference)
+
     def get_bbox(self, SpatialReference=None, Path=False):
         return gdal_tools.get_bbox(self.Dataset, SpatialReference, Path)
 
@@ -39,10 +45,10 @@ class GdalDataset:
         return gdal_tools.get_SpatialReference(self.Dataset)
 
     def get_value(self, x, y):
-        return self._RectBivariateSpline.ev(x, y)
+        return float(self._RectBivariateSpline.ev(x, y))
 
     def get_MultiPolygon(self, SpatialReference=None):
-        _MultiPolygon = self._MultiPolygon
+        _MultiPolygon = self.MultiPolygon
         if SpatialReference is None:
             return _MultiPolygon
         else:
@@ -77,6 +83,10 @@ class GdalDataset:
     @property
     def y(self):
         return self.get_arrays(self.SpatialReference)[1]
+
+    @property
+    def elevation(self):
+        return self.values
 
     @property
     def values(self):

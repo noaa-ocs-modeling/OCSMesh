@@ -83,6 +83,14 @@ class GdalTools:
         return cls.get_xyz(Dataset, SpatialReference, bbox)[:, :-1]
 
     @classmethod
+    def get_x(cls, Dataset, SpatialReference=None):
+        return cls.get_xyz(Dataset, SpatialReference)[:, 0]
+
+    @classmethod
+    def get_y(cls, Dataset, SpatialReference=None):
+        return cls.get_xyz(Dataset, SpatialReference)[:, 1]
+
+    @classmethod
     def get_arrays(cls, Dataset, SpatialReference=None):
         xmin, dx, _, ymax, _, dy = cls.get_GeoTransform(Dataset,
                                                         SpatialReference)
@@ -144,3 +152,5 @@ Open = GdalTools.Open
 Warp = GdalTools.Warp
 sanitize_SpatialReference = GdalTools.sanitize_SpatialReference
 get_xy = GdalTools.get_xy
+get_x = GdalTools.get_x
+get_y = GdalTools.get_y

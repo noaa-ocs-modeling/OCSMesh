@@ -4,7 +4,8 @@ import subprocess
 import matplotlib.pyplot as plt
 from geomesh import DatasetCollection, \
                     PlanarStraightLineGraph, \
-                    Jigsaw  # SizeFunction, \
+                    SizeFunction, \
+                    Jigsaw
 try:
     import colored_traceback
     colored_traceback.add_hook(always=True)
@@ -28,23 +29,19 @@ def main():
     # pslg.make_plot(show=True)
 
     # ------- generate size function
-    # hfun = SizeFunction()
-
+    hfun = SizeFunction(pslg)
+    hfun.set_shoreline(25.)
+    hfun.set_ocean_boundaries(1000.)
+    hfun.set_land_boundaries(100.)
+    hfun.set_inner_boundaries(50.)
     # ------- init jigsaw and set options
-    jigsaw = Jigsaw(
-        pslg,
-        # hfun
-    )
+    jigsaw = Jigsaw(pslg, hfun)
     jigsaw.verbosity = 1
-    jigsaw._opts.hfun_hmax = 150.
-    jigsaw._opts.hfun_scal = 'absolute'
-    # jigsaw._opts.mesh_top1 = True
-    jigsaw._opts.optm_qlim = .95
 
     # ------- run jigsaw, get mesh
     mesh = jigsaw.run()
 
-    # ------- interpolate bathymtery to output mesh
+    # ------- interpolate bathymetry to output mesh
     mesh.interpolate(dsc, fix_invalid=True)
     fig = plt.figure()
     axes = fig.add_subplot(111)

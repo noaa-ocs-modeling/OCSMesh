@@ -1,3 +1,4 @@
+import numpy as np
 import jigsawpy
 import geomesh
 
@@ -19,15 +20,15 @@ class Jigsaw:
 
     @property
     def Geom(self):
-        return self.__Geom
+        return self._Geom
 
     @property
     def Hfun(self):
-        return self.__Hfun
+        return self._Hfun
 
     @property
     def Mesh(self):
-        return self.__Mesh
+        return self._Mesh
 
     @property
     def jigsaw(self):
@@ -38,18 +39,11 @@ class Jigsaw:
         return self._opts.verbosity
 
     @property
-    def mesh_dims(self):
-        return self._opts.mesh_dims
-
-    @property
     def _opts(self):
         try:
             return self.__opts
         except AttributeError:
-            self.__opts = jigsawpy.jigsaw_jig_t()
-            self.__opts.mesh_dims = self.Geom._ndim
-            if self.Hfun is not None:
-                self.__opts.hfun_scal = self.Hfun._hfun_scal
+            self._opts = jigsawpy.jigsaw_jig_t()
             return self.__opts
 
     @property
@@ -105,3 +99,14 @@ class Jigsaw:
     def _Mesh(self, Mesh):
         assert isinstance(Mesh, (geomesh.UnstructuredMesh, type(None)))
         self.__Mesh = Mesh
+
+    @_opts.setter
+    def _opts(self, jigsaw_jig_t):
+        jigsaw_jig_t.mesh_dims = self.Geom._ndim
+        if self.Hfun is not None:
+            jigsaw_jig_t.hfun_scal = self.Hfun.scaling
+            # jigsaw_jig_t.hfun_hmin = np.min(self.Hfun.values)
+            jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
+        else:
+            jigsaw_jig_t.hfun_scal = "absolute"
+        self.__opts = jigsaw_jig_t

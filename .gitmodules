@@ -1,6 +1,7 @@
 [submodule "third_party/jigsawpy"]
 	path = third_party/jigsawpy
-	url = https://github.com/dengwirda/jigsaw-geo-python
+	url = https://github.com/jreniel/jigsaw-geo-python
+        branch = dev
 [submodule "examples/data"]
 	path = examples/data
 	url = https://gitlab.com/jreniel/geomesh_test_data.git

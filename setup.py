@@ -208,6 +208,7 @@ setuptools.setup(
                       "matplotlib",
                       "netCDF4",
                       "scipy",
-                      gdal
+                      gdal,
+                      "pysheds"
                       ],
     )
