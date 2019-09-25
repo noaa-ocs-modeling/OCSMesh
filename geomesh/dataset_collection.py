@@ -11,6 +11,9 @@ class DatasetCollection:
         for gdal_dataset in self.__container:
             yield gdal_dataset
 
+    def __getitem__(self, i):
+        return self.__container[i]
+
     def add_dataset(self, gdal_dataset):
         if isinstance(gdal_dataset, (str, Path)):
             gdal_dataset = GdalDataset(gdal_dataset)

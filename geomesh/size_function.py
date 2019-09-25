@@ -28,51 +28,38 @@ class SizeFunction:
         self._hmax = hmax
         self._SpatialReference = SpatialReference
 
-    def set_shoreline(self, target_size):
-        """
-        shoreline is defined as the countour line at the zero level.
-        """
-        self.add_contour(target_size, 0)
+    def __iter__(self):
+        for level, target_size, MultiLineString in self.features:
+            yield {
+                "level": level,
+                "target_size": target_size,
+                "MultiLineString": MultiLineString}
 
-    def set_ocean_boundary(self, i, target_size):
-        """
-        ocean boundary is defined as any point lying that lies on any of the
-        outer rings of the multipolygon defining the planar straight line
-        graph, and that has an elevation < 0.
-        """
-        ocean_boundary = (float(target_size), self.ocean_boundaries[i][1])
-        self._ocean_boundaries[i] = ocean_boundary
+    def add_contour(self, level, target_size):
+        self.add_contours([float(level)], [float(target_size)])
 
-    def set_land_boundary(self, i, target_size):
-        """
-        land boundary is defined as any point lying that lies on any of the
-        outer rings of the multipolygon defining the pslg, and that has an
-        elevation > 0.
-        """
-        land_boundary = (float(target_size), self.land_boundaries[i][1])
-        self._land_boundaries[i] = land_boundary
-
-    def set_inner_boundary(self, i, j, target_size):
-        """
-        An inner boundary is defined as any ring contained inside of of the
-        outer rings of the multipolygon that defines the pslg. Inner rings
-        do not contain other inner rings on the current implementation.
-        """
-        inner_boundary = (float(target_size), self.inner_boundaries[i][j][1])
-        self._inner_boundaries[i][j] = inner_boundary
-
-    def set_ocean_boundaries(self, target_size):
-        for i, _ in enumerate(self.ocean_boundaries):
-            self.set_ocean_boundary(i, target_size)
-
-    def set_land_boundaries(self, target_size):
-        for i, _ in enumerate(self.land_boundaries):
-            self.set_land_boundary(i, target_size)
-
-    def set_inner_boundaries(self, target_size):
-        for i, inner_boundaries in enumerate(self.inner_boundaries):
-            for j, inner_boundary in enumerate(inner_boundaries):
-                self.set_inner_boundary(i, j, target_size)
+    def add_contours(self, levels, target_sizes):
+        levels = np.asarray(levels)
+        target_sizes = np.asarray(target_sizes)
+        for ds in self.pslg:
+            x, y, elevation = ds.get_arrays(self.SpatialReference)
+            ax = plt.contour(x, y, elevation, levels=levels)
+            plt.close(plt.gcf())
+            for i, line_collection in enumerate(ax.collections):
+                _MultiLineString = ogr.Geometry(ogr.wkbMultiLineString)
+                _MultiLineString.AssignSpatialReference(self.SpatialReference)
+                for path in line_collection.get_paths():
+                    _LineString = ogr.Geometry(ogr.wkbLineString)
+                    _LineString.AssignSpatialReference(self.SpatialReference)
+                    for (x, y), _ in path.iter_segments():
+                        if self.SpatialReference.IsProjected():
+                            _LineString.AddPoint(x, y, ds.get_value(x, y))
+                        elif self.SpatialReference.IsGeographic():
+                            _LineString.AddPoint(y, x, ds.get_value(x, y))
+                        else:
+                            raise Exception('duck-typing error.')
+                    _MultiLineString.AddGeometry(_LineString)
+                self._add_feature(target_sizes[i], _MultiLineString)
 
     def add_watershed(self, target_size, pour_point, **kwargs):
         # default dirmap = (64, 128, 1, 2, 4, 8, 16, 32)
@@ -121,97 +108,15 @@ class SizeFunction:
             plt.show()
         self._add_feature()
 
-    def add_contour(self, target_size, level):
-        self.add_contours(target_size, levels=[float(level)])
-
-    def add_contours(self, target_size, levels):
-        _MultiLineString = ogr.Geometry(ogr.wkbMultiLineString)
-        _MultiLineString.AssignSpatialReference(self.SpatialReference)
-        for ds in self.pslg:
-            x, y, elevation = ds.get_arrays(self.SpatialReference)
-            ax = plt.contour(x, y, elevation, levels=levels)
-            plt.close(plt.gcf())
-            for line_collection in ax.collections:
-                for path in line_collection.get_paths():
-                    _LineString = ogr.Geometry(ogr.wkbLineString)
-                    _LineString.AssignSpatialReference(self.SpatialReference)
-                    for (x, y), _ in path.iter_segments():
-                        if self.SpatialReference.IsProjected():
-                            _LineString.AddPoint(x, y, ds.get_value(x, y))
-                        elif self.SpatialReference.IsGeographic():
-                            _LineString.AddPoint(y, x, ds.get_value(x, y))
-                        else:
-                            raise Exception('duck-typing error.')
-                    _MultiLineString.AddGeometry(_LineString)
-        self._add_feature(target_size, _MultiLineString)
-
-    def set_mpl_tri_mask(self):
-        self.mpl_tri.set_mask(self.mpl_tri_mask)
-
-    def make_plot(self, axes=None, show=False, masked=True):
-        if axes is None:
-            axes = plt.figure().add_subplot(111)
-        if masked:
-            self.set_mpl_tri_mask()
-        ax = axes.tricontourf(self.mpl_tri, self.values)
-        plt.colorbar(ax)
-        axes.axis('scaled')
+    def make_plot(self, show=False):
+        plt.tricontourf(self.mpl_tri, self.values)
+        plt.gca().axis('scaled')
         if show:
             plt.show()
 
-    def _add_feature(self, feature_size, MultiLineString):
+    def _add_feature(self, target_size, MultiLineString):
         del(self._points)
-        self._features.append((feature_size, MultiLineString))
-
-    def _check_ocean_boundaries(self):
-        sizes = [target_size for target_size, _ in self.ocean_boundaries]
-        if np.all(sizes is None):
-            raise AttributeError('Ocean boundary target sizes not set.')
-        for i, size in enumerate(sizes):
-            if size is None:
-                msg = ('Target size for ocean boundary {} '.format(i))
-                msg += 'not set.'
-                raise AttributeError(msg)
-
-    def _check_land_boundaries(self):
-        sizes = [target_size for target_size, _ in self.land_boundaries]
-        if np.all(sizes is None):
-            raise AttributeError('land boundary target sizes not set.')
-        for i, size in enumerate(sizes):
-            if size is None:
-                msg = ('Target size for land boundary {} '.format(i))
-                msg += 'not set.'
-                raise AttributeError(msg)
-
-    def _check_inner_boundaries(self):
-        sizes = list()
-        for inner_boundaries in self.inner_boundaries:
-            _inner_sizes = list()
-            for target_size, _ in inner_boundaries:
-                _inner_sizes.append(target_size)
-            sizes.append(_inner_sizes)
-        _target_size_flat = np.asarray(sizes).flatten()
-        if np.all(_target_size_flat) is None:
-            raise AttributeError('Target size for inner boundaries not set.')
-        elif np.any(_target_size_flat) is None:
-            for i, _ in enumerate(self.inner_boundaries):
-                for j, (target_size, _) in enumerate(_):
-                    if target_size is None:
-                        msg = 'Must set target size for land boundary '
-                        msg += '({}, {})'.format(i, j)
-                        raise AttributeError(msg)
-
-    @property
-    def ocean_boundaries(self):
-        return tuple(self._ocean_boundaries)
-
-    @property
-    def land_boundaries(self):
-        return tuple(self._land_boundaries)
-
-    @property
-    def inner_boundaries(self):
-        return tuple(self._inner_boundaries)
+        self._features.append((target_size, MultiLineString))
 
     @property
     def planar_straight_line_graph(self):
@@ -341,16 +246,6 @@ class SizeFunction:
             return self.__values
         except AttributeError:
             values = np.full((self.elevation.size,), np.nan)
-            self._check_ocean_boundaries()
-            self._check_land_boundaries()
-            self._check_inner_boundaries()
-            for target_size, idxs in self.ocean_boundaries:
-                values[idxs] = target_size
-            for target_size, idxs in self.land_boundaries:
-                values[idxs] = target_size
-            for inner_boundaries in self.inner_boundaries:
-                for target_size, idxs in inner_boundaries:
-                    values[idxs] = target_size
             initial_i = self.pslg.values.size
             for target_size, _MultiLineString in self.features:
                 final_i = initial_i
@@ -391,6 +286,7 @@ class SizeFunction:
             return self.__mpl_tri
         except AttributeError:
             self._mpl_tri = self.points
+            self.__mpl_tri.set_mask(self.mpl_tri_mask)
             return self.__mpl_tri
 
     @property
@@ -401,30 +297,6 @@ class SizeFunction:
             self._mpl_tri_mask = np.full(
                 (self.mpl_tri.triangles.shape[0],), True)
             return self.__mpl_tri_mask
-
-    @property
-    def _ocean_boundaries(self):
-        try:
-            return self.__ocean_boundaries
-        except AttributeError:
-            self._ocean_boundaries = list()
-            return self.__ocean_boundaries
-
-    @property
-    def _land_boundaries(self):
-        try:
-            return self.__land_boundaries
-        except AttributeError:
-            self._land_boundaries = list()
-            return self.__land_boundaries
-
-    @property
-    def _inner_boundaries(self):
-        try:
-            return self.__inner_boundaries
-        except AttributeError:
-            self._inner_boundaries = list()
-            return self.__inner_boundaries
 
     @property
     def _features(self):
@@ -492,6 +364,7 @@ class SizeFunction:
 
     @_values.setter
     def _values(self, values):
+        del(self._points)
         self.__values = values
 
     @_mpl_tri_mask.setter
@@ -513,27 +386,6 @@ class SizeFunction:
                     mask = np.logical_or(
                         mask, mpl_path.contains_points(centroids))
         self.__mpl_tri_mask = mask
-
-    @_ocean_boundaries.setter
-    def _ocean_boundaries(self, ocean_boundaries):
-        for boundary in self.pslg.ocean_boundaries:
-            ocean_boundaries.append((None, boundary))
-        self.__ocean_boundaries = ocean_boundaries
-
-    @_land_boundaries.setter
-    def _land_boundaries(self, land_boundaries):
-        for boundary in self.pslg.land_boundaries:
-            land_boundaries.append((None, boundary))
-        self.__land_boundaries = land_boundaries
-
-    @_inner_boundaries.setter
-    def _inner_boundaries(self, inner_boundaries):
-        for inner_boundaries in self.pslg.inner_boundaries:
-            _inner_boundaries = list()
-            for inner_boundary in inner_boundaries:
-                _inner_boundaries.append((None, inner_boundary))
-            inner_boundaries.append(_inner_boundaries)
-        self.__inner_boundaries = inner_boundaries
 
     @_SpatialReference.setter
     def _SpatialReference(self, SpatialReference):

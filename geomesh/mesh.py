@@ -200,7 +200,7 @@ class UnstructuredMesh:
             else:
                 raise NotImplementedError
 
-    def write_gr3(self, path, overwrite=False):
+    def dump(self, path, overwrite=False):
         if path is not None:
             path = str(Path(path))
             if os.path.isfile(path) and not overwrite:
