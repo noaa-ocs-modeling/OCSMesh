@@ -17,18 +17,15 @@ class InstallJigsawCommand(distutils.cmd.Command):
 
     def initialize_options(self):
         """Set default values for options."""
-        self.include_gdal = 'False'
         self.work_dir = Path(__file__).parent.absolute()
         self.pyenv_prefix = "/".join(sys.executable.split('/')[:-2])
 
     def finalize_options(self):
         """Post-process options."""
-        self.include_gdal = distutils.util.strtobool(self.include_gdal)
         self.work_dir = str(Path(self.work_dir))
         self.pyenv_prefix = Path(self.pyenv_prefix)
 
     def run(self):
-        # self._install_topex()
         self._install_jigsawpy()
         self._install_jigsaw()
 
