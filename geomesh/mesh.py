@@ -5,7 +5,6 @@ from copy import deepcopy
 from pathlib import Path
 from collections import OrderedDict
 from scipy.interpolate import griddata
-from osgeo import osr, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
