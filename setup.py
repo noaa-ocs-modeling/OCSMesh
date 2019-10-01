@@ -89,7 +89,7 @@ setuptools.setup(
                       "pyproj",
                       "fiona",
                       "rasterio",
-                      "pysheds"
+                      "pysheds",
                       "shapely"
                       ],
     )
