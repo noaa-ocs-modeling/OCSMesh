@@ -10,8 +10,10 @@ import sys
 import os
 
 
-class InstallDepsCommand(distutils.cmd.Command):
+class InstallJigsawCommand(distutils.cmd.Command):
     """Custom build command."""
+
+    user_options = []
 
     def initialize_options(self):
         """Set default values for options."""
@@ -76,8 +78,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url=meta['url'],
     packages=setuptools.find_packages(),
-    cmdclass={'install_deps': InstallDepsCommand},
-    python_requires='>=3.7',
+    cmdclass={'install_jigsaw': InstallJigsawCommand},
+    python_requires='==3.7',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
                       "jigsawpy",
