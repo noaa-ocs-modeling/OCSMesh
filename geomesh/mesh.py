@@ -9,11 +9,11 @@ from osgeo import osr, ogr
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 from scipy.interpolate import RectBivariateSpline
-from geomesh._lib import _FixPointNormalize
+from geomesh.fix_point_normalize import FixPointNormalize
 from matplotlib.cm import ScalarMappable
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.colors import LinearSegmentedColormap
-from geomesh.dataset_collection import DatasetCollection as _DatasetCollection
+from geomesh.raster_collection import RasterCollection
 from geomesh.pslg import PlanarStraightLineGraph \
     as _PlanarStraightLineGraph
 
@@ -124,9 +124,9 @@ class UnstructuredMesh:
             vertices = np.asarray([(x, y) for x, y, _ in vertices])
         return vertices
 
-    def interpolate(self, DatasetCollection, fix_invalid=False):
-        assert isinstance(DatasetCollection, _DatasetCollection)
-        for dataset in DatasetCollection:
+    def interpolate(self, dataset_collection, fix_invalid=False):
+        assert isinstance(dataset_collection, RasterCollection)
+        for dataset in dataset_collection:
             x, y, z = dataset.get_arrays(self.SpatialReference)
             bbox = dataset.get_bbox(self.SpatialReference)
             f = RectBivariateSpline(x, y, z.T, bbox=[bbox.xmin, bbox.xmax,
@@ -301,8 +301,8 @@ class UnstructuredMesh:
             col_val = 0.
         if vmax > 0:
             if norm is None:
-                norm = _FixPointNormalize(sealevel=0.0, vmax=vmax, vmin=vmin,
-                                          col_val=col_val)
+                norm = FixPointNormalize(sealevel=0.0, vmax=vmax, vmin=vmin,
+                                         col_val=col_val)
         return cmap, norm, levels, col_val
 
     @property

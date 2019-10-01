@@ -18,12 +18,12 @@ def main():
     # ------- init test DEM files
     data = os.path.dirname(os.path.abspath(__file__)) + '/data'
     file1 = os.path.abspath(data + '/ncei19_n41x00_w074x00_2015v1.tif')
-    # file2 = os.path.abspath(data + '/ncei19_n41x00_w073x75_2015v1.tif')
+    file2 = os.path.abspath(data + '/ncei19_n41x00_w073x75_2015v1.tif')
 
     # ------- init test RasterCollection object
     dsc = RasterCollection()
     dsc.add_dataset(file1)
-    # dsc.add_dataset(file2)
+    dsc.add_dataset(file2)
 
     # ------- generate PSLG
     pslg = PlanarStraightLineGraph(dsc, -1500., 20.)
@@ -33,33 +33,33 @@ def main():
     hfun = SizeFunction(pslg)
     hfun.add_contour(0., 50., 0.001, hmax=1500.)
     hfun.add_subtidal_flow_limiter(hmax=1500.)
-    print(hfun.values)
+    # hfun.make_plot(show=True)
 
     # ------- init jigsaw and set options
-    # jigsaw = Jigsaw(
-    #     pslg,
-    #     hfun
-    #     )
-    # jigsaw.verbosity = 1
-    # jigsaw._opts.mesh_iter = int(1e6)
-    # jigsaw._opts.optm_tria = False
+    jigsaw = Jigsaw(
+        pslg,
+        hfun
+        )
+    jigsaw.verbosity = 1
+    jigsaw._opts.mesh_iter = int(1e6)
+    jigsaw._opts.optm_tria = False
     # ------- run jigsaw, get mesh
-    # mesh = jigsaw.run()
+    mesh = jigsaw.run()
 
     # ------- interpolate bathymtery to output mesh
-    # mesh.interpolate(dsc, fix_invalid=True)
-    # fig = plt.figure()
-    # axes = fig.add_subplot(111)
-    # mesh.make_plot(axes=axes)
-    # axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
-    # plt.show()
-    # print("NP={}".format(mesh.values.size))
-    # print("elements={}".format(mesh.elements.shape[0]))
+    mesh.interpolate(dsc, fix_invalid=True)
+    fig = plt.figure()
+    axes = fig.add_subplot(111)
+    mesh.make_plot(axes=axes)
+    axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
+    plt.show()
+    print("NP={}".format(mesh.values.size))
+    print("elements={}".format(mesh.elements.shape[0]))
 
     # -------- write to disk
-    # mesh.dump(
-    #     os.path.dirname(os.path.abspath(__file__)) + '/example_2.gr3',
-    #     overwrite=True)
+    mesh.dump(
+        os.path.dirname(os.path.abspath(__file__)) + '/example_2.gr3',
+        overwrite=True)
 
 
 if __name__ == "__main__":

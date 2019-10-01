@@ -105,8 +105,14 @@ class Jigsaw:
         jigsaw_jig_t.mesh_dims = self.Geom._ndim
         if self.Hfun is not None:
             jigsaw_jig_t.hfun_scal = self.Hfun.scaling
-            # jigsaw_jig_t.hfun_hmin = np.min(self.Hfun.values)
-            jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
+            if np.min(self.Hfun.values) == np.max(self.Hfun.values):
+                # For a constant size function is better to use built-in
+                jigsaw_jig_t.hfun_hmin = 0.
+                jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
+                self.__Hfun = None
+            else:
+                # jigsaw_jig_t.hfun_hmin = 0.
+                jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
         else:
             jigsaw_jig_t.hfun_scal = "absolute"
         self.__opts = jigsaw_jig_t
