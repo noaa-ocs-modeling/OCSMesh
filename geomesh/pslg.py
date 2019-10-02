@@ -30,12 +30,13 @@ class PlanarStraightLineGraph:
 
     def plot_pslg(self, show=False):
         for feature in self.collection:
-            polygon = shape(feature["geometry"])
-            xy = np.asarray(polygon.exterior.coords)
-            plt.plot(xy[:, 0], xy[:, 1], color='k')
-            for inner_ring in polygon.interiors:
-                xy = np.asarray(inner_ring.coords)
-                plt.plot(xy[:, 0], xy[:, 1], color='r')
+            multipolygon = shape(feature["geometry"])
+            for polygon in multipolygon:
+                xy = np.asarray(polygon.exterior.coords)
+                plt.plot(xy[:, 0], xy[:, 1], color='k')
+                for inner_ring in polygon.interiors:
+                    xy = np.asarray(inner_ring.coords)
+                    plt.plot(xy[:, 0], xy[:, 1], color='r')
         if show:
             plt.show()
 
@@ -84,13 +85,15 @@ class PlanarStraightLineGraph:
         try:
             return self.__collection
         except AttributeError:
-            multipolygon_collection = list()
+            polygon_collection = list()
             for raster in self.raster_collection:
                 raster.zmin = self.zmin
                 raster.zmax = self.zmax
                 for feature in raster.collection:
-                    multipolygon_collection.append(shape(feature["geometry"]))
-            polygon = MultiPolygon(multipolygon_collection).buffer(0)
+                    multipolygon = shape(feature["geometry"])
+                    for polygon in multipolygon:
+                        polygon_collection.append(polygon)
+            polygon = MultiPolygon(polygon_collection).buffer(0)
             collection = fiona.open(
                 self.shp.name,
                 'w',

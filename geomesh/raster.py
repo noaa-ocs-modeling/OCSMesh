@@ -20,7 +20,6 @@ class Raster:
         self._dst_crs = dst_crs
 
     def __call__(self, zmin, zmax):
-
         if np.all(self.values > zmax) or np.all(self.values < zmin):
             # fully external tile.
             return MultiPolygon()
@@ -29,21 +28,21 @@ class Raster:
               and np.max(self.values) < zmax):
             # fully internal tile
             raise NotImplementedError
-        #     _LinearRing = self.__get_empty_LinearRing()
-        #     bbox = self.bbox.get_points()
-        #     x0, y0 = float(bbox[0][0]), float(bbox[0][1])
-        #     x1, y1 = float(bbox[1][0]), float(bbox[1][1])
-        #     _LinearRing.AddPoint(x0, y0, float(self.get_value(x0, y0)))
-        #     _LinearRing.AddPoint(x1, y0, float(self.get_value(x1, y0)))
-        #     _LinearRing.AddPoint(x1, y1, float(self.get_value(x1, y1)))
-        #     _LinearRing.AddPoint(x0, y1, float(self.get_value(x0, y1)))
-        #     _LinearRing.AddPoint(*_LinearRing.GetPoint(0))
-        #     _Polygon = self.__get_empty_Polygon()
-        #     _Polygon.AddGeometry(_LinearRing)
-        #     _MultiPolygon = self.__get_empty_MultiPolygon()
-        #     _MultiPolygon.AddGeometry(_Polygon)
-        #     self.__MultiPolygon = _MultiPolygon
-        #     return self.__MultiPolygon
+            # _LinearRing = self.__get_empty_LinearRing()
+            # bbox = self.bbox.get_points()
+            # x0, y0 = float(bbox[0][0]), float(bbox[0][1])
+            # x1, y1 = float(bbox[1][0]), float(bbox[1][1])
+            # _LinearRing.AddPoint(x0, y0, float(self.get_value(x0, y0)))
+            # _LinearRing.AddPoint(x1, y0, float(self.get_value(x1, y0)))
+            # _LinearRing.AddPoint(x1, y1, float(self.get_value(x1, y1)))
+            # _LinearRing.AddPoint(x0, y1, float(self.get_value(x0, y1)))
+            # _LinearRing.AddPoint(*_LinearRing.GetPoint(0))
+            # _Polygon = self.__get_empty_Polygon()
+            # _Polygon.AddGeometry(_LinearRing)
+            # _MultiPolygon = self.__get_empty_MultiPolygon()
+            # _MultiPolygon.AddGeometry(_Polygon)
+            # self.__MultiPolygon = _MultiPolygon
+            # return self.__MultiPolygon
         else:
             # tile containing boundary
             ax = plt.contourf(
@@ -93,28 +92,6 @@ class Raster:
 
     def close(self):
         del(self._src)
-
-    def make_plot(self, view, **kwargs):
-        assert view in ['topobathy', 'pslg']
-        if view == 'topobathy':
-            self.plot_topobathy(**kwargs)
-        elif view == 'pslg':
-            self.plot_pslg(**kwargs)
-
-    def plot_topobathy(self, show=False):
-        raise NotImplementedError
-
-    def plot_pslg(self, show=False):
-        for feature in self.collection:
-            multipolygon = shape(feature["geometry"])
-            for polygon in multipolygon:
-                xy = np.asarray(polygon.exterior.coords)
-                plt.plot(xy[:, 0], xy[:, 1], color='k')
-                for inner_ring in polygon.interiors:
-                    xy = np.asarray(inner_ring.coords)
-                    plt.plot(xy[:, 0], xy[:, 1], color='r')
-        if show:
-            plt.show()
 
     def add_band(self,  band_type, values):
         kwargs = self.src.meta.copy()
