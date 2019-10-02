@@ -38,6 +38,7 @@ class PlanarStraightLineGraph:
                     xy = np.asarray(inner_ring.coords)
                     plt.plot(xy[:, 0], xy[:, 1], color='r')
         if show:
+            plt.gca().axis('scaled')
             plt.show()
 
     @property

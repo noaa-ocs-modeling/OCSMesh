@@ -124,6 +124,19 @@ class Raster:
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
 
+    def plot_pslg(self, show=False):
+        for feature in self.collection:
+            multipolygon = shape(feature["geometry"])
+            for polygon in multipolygon:
+                xy = np.asarray(polygon.exterior.coords)
+                plt.plot(xy[:, 0], xy[:, 1], color='k')
+                for inner_ring in polygon.interiors:
+                    xy = np.asarray(inner_ring.coords)
+                    plt.plot(xy[:, 0], xy[:, 1], color='r')
+        if show:
+            plt.gca().axis('scaled')
+            plt.show()
+
     @property
     def path(self):
         return self._path
