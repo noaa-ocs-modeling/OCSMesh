@@ -2,9 +2,11 @@ import numpy as np
 import pathlib
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
+from matplotlib.transforms import Bbox
 import rasterio
 from rasterio import warp
 from rasterio.mask import mask
+from rasterio.enums import Resampling
 import multiprocessing
 from shapely.geometry import Polygon, LinearRing, MultiPolygon, mapping, shape
 import fiona
@@ -84,8 +86,11 @@ class Raster:
         else:
             return self.src.tags(i)
 
-    def read(self, i):
-        return self.src.read(i)
+    def read(self, i, **kwargs):
+        return self.src.read(i, **kwargs)
+
+    def dtype(self, i):
+        return self.src.dtypes[i-1]
 
     def nodataval(self, i):
         return self.src.nodatavals[i-1]
@@ -137,6 +142,33 @@ class Raster:
             plt.gca().axis('scaled')
             plt.show()
 
+    def resampled(self, i, xres, yres, method='bilinear'):
+        method_dict = {
+            'bilinear': Resampling.bilinear,
+            'nearest': Resampling.nearest,
+            'cubic': Resampling.cubic,
+            'average': Resampling.average
+        }
+        if method in method_dict.keys():
+            method = method_dict[method]
+        else:
+            msg = 'Method must be one of {} '.format(method_dict.keys())
+            msg += 'or instance of type rasterio.enums.Resampling'
+            assert isinstance(method, Resampling), msg
+        transform, width, height = warp.aligned_target(
+            self.transform, self.width, self.height, (xres, yres))
+        x0, y0, x1, y1 = rasterio.transform.array_bounds(
+            height, width, transform)
+        band = self.read(
+            i,
+            out_shape=(height, width),
+            resampling=method)
+        x0, y0, x1, y1 = rasterio.transform.array_bounds(
+            height, width, transform)
+        x = np.linspace(x0, x1, width)
+        y = np.linspace(y1, y0, height)
+        return x, y, band
+
     @property
     def path(self):
         return self._path
@@ -154,12 +186,42 @@ class Raster:
         return self.src.shape
 
     @property
+    def height(self):
+        return self.src.height
+
+    @property
+    def bbox(self):
+        x0, y0, x1, y1 = rasterio.transform.array_bounds(
+            self.height, self.width, self.transform)
+        return Bbox([[x0, y0], [x1, y1]])
+
+    @property
+    def width(self):
+        return self.src.width
+
+    @property
+    def dx(self):
+        return self.src.transform[0]
+
+    @property
+    def dy(self):
+        return -self.src.transform[4]
+
+    @property
     def crs(self):
         return self.src.crs
 
     @property
     def nodatavals(self):
         return self.src.nodatavals
+
+    @property
+    def transform(self):
+        return self.src.transform
+
+    @property
+    def dtypes(self):
+        return self.src.dtypes
 
     @property
     def x(self):

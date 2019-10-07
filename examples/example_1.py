@@ -28,12 +28,12 @@ def main():
 
     # ------- generate PSLG
     pslg = PlanarStraightLineGraph(dsc, -1500., 15.)
-    # pslg.make_plot(show=True)
+    pslg.make_plot(show=True)
 
     # ------- generate size function
     hfun = SizeFunction(pslg)
-    hfun.add_contour(0., 50., 0.001, hmax=1500.)
-    hfun.add_subtidal_flow_limiter(hmax=1500.)
+    hfun.add_contour(0., 50., 0.2, hmax=1500.)
+    hfun.add_subtidal_flow_limiter(hmin=50., hmax=1500.)
     # print(hfun.values)
     hfun.make_plot(show=True)
 

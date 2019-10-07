@@ -1,16 +1,19 @@
 import matplotlib.pyplot as plt
-from matplotlib.tri import Triangulation
-# from matplotlib.path import Path
+from matplotlib import tri
+# from matplotlib import Path
 import numpy as np
-# from scipy.interpolate import griddata, interp1d
+from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import griddata
 # from scipy.ndimage import gaussian_filter
 from scipy.spatial import cKDTree
 # from osgeo import ogr
 # from jigsawpy import jigsaw_msh_t
 # from pysheds.grid import Grid
 # import tempfile
-# from shapely.geometry import LineString
-import rasterio
+# from shapely import geometry
+# import fiona
+# import rasterio
+# from geomesh.mesh import TriMesh
 from geomesh.pslg import PlanarStraightLineGraph
 # from geomesh.dataset_collection import DatasetCollection
 # from geomesh import gdal_tools
@@ -62,19 +65,106 @@ class SizeFunction:
             raster.add_band("SIZE_FUNCTION", values)
 
     def add_subtidal_flow_limiter(self, hmin=None, hmax=None):
+        """
+        https://wiki.fvcom.pml.ac.uk/doku.php?id=configuration%3Agrid_scale_considerations
+        """
         for i, raster in enumerate(self.raster_collection):
             dx = np.abs(raster.src.transform[0])
             dy = np.abs(raster.src.transform[4])
             dx, dy = np.gradient(raster.values, dx, dy)
             dh = np.sqrt(dx**2 + dy**2)
             dh = np.ma.masked_equal(dh, 0.)
-            values = np.abs(0.33*(raster.values/dh))
+            values = np.abs((1./3.)*(raster.values/dh))
             values = values.filled(np.max(values))
             if hmin is not None:
                 values[np.where(values < hmin)] = hmin
             if hmax is not None:
                 values[np.where(values > hmax)] = hmax
             raster.add_band("SIZE_FUNCTION", values)
+
+    def _set_triangulation(self):
+        vertices = np.empty((0, 2), float)
+        minval = float("inf")
+        for raster in self.raster_collection:
+            band = np.full(raster.shape, float("inf"))
+            for i in range(1, raster.count + 1):
+                if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
+                    band = np.minimum(band, raster.read(i))
+            raster.add_band("SIZE_FUNCTION_FINALIZED", band)
+            minval = np.min([minval, np.min(band)])
+            band_id = raster.count
+            target_res = np.min(band)
+            if raster.dx < target_res or raster.dy < target_res:
+                x, y, band = raster.resampled(band_id, target_res, target_res)
+            else:
+                x, y = raster.x, raster.y
+            band = np.ma.masked_equal(
+                band.astype(raster.dtype(band_id)),
+                raster.nodataval(band_id))
+            ax = plt.contour(x, y, band, levels=self.levels)
+            plt.close(plt.gcf())
+            for i, path_collection in enumerate(ax.collections):
+                for path in path_collection.get_paths():
+                    if ax.levels[i] not in [self.pslg.zmin, self.pslg.zmax]:
+                        vertices = np.vstack([vertices, path.vertices])
+        vertices = np.vstack([vertices, self.pslg.coords])
+        mpl_tri = tri.Triangulation(vertices[:, 0], vertices[:, 1])
+        # mask option 1,
+        mask = np.full(
+            (1, mpl_tri.triangles.shape[0]),
+            raster.nodataval(band_id)).flatten()
+        centroids = np.vstack(
+            [np.sum(mpl_tri.x[mpl_tri.triangles], axis=1) / 3,
+             np.sum(mpl_tri.y[mpl_tri.triangles], axis=1) / 3]).T
+        values = np.full(
+            (1, vertices.shape[0]),
+            raster.nodataval(band_id)).flatten()
+        for raster in self.raster_collection:
+            raster.mask(self.pslg.multipolygon)
+            bbox = raster.bbox
+            f = RectBivariateSpline(
+                raster.x,
+                np.flip(raster.y),
+                np.flipud(raster.read(band_id)).T,
+                bbox=[bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax],
+                kx=1, ky=1)
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+            mask[idxs] = f.ev(centroids[idxs, 0], centroids[idxs, 1])
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= vertices[:, 0],
+                                    bbox.xmax >= vertices[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= vertices[:, 1],
+                                    bbox.ymax >= vertices[:, 1])))[0]
+            values[idxs] = f.ev(vertices[idxs, 0], vertices[idxs, 1])
+        condition = values >= minval
+        idx = np.where(condition)
+        _idx = np.where(~condition)
+        values[_idx] = griddata(
+                    (mpl_tri.x[idx], mpl_tri.y[idx]),
+                    values[idx],
+                    (mpl_tri.x[_idx], mpl_tri.y[_idx]),
+                    method='nearest')
+        mask = np.ma.masked_equal(
+            mask.astype(raster.dtype(band_id)),
+            raster.nodataval(band_id)).mask
+        mpl_tri = tri.Triangulation(
+            vertices[:, 0], vertices[:, 1], triangles=mpl_tri.triangles[~mask])
+        # plt.tripcolor(mpl_tri, values, vmin=50, vmax=250.)
+        # plt.colorbar()
+        # plt.triplot(mpl_tri, linewidth=0.07, color='k', alpha=0.5)
+        # plt.gca().axis("scaled")
+        # plt.show(block=False)
+        # breakpoint()
+        self.__mpl_tri = mpl_tri
+        self.__values = values
 
     @property
     def pslg(self):
@@ -84,85 +174,29 @@ class SizeFunction:
     def raster_collection(self):
         return self.pslg._raster_collection
 
-    # @property
-    # def x(self):
-    #     return np.linspace(
-    #         self.dataset.bounds.left,
-    #         self.dataset.bounds.right,
-    #         self.dataset.width)
-
-    # @property
-    # def y(self):
-    #     return np.linspace(
-    #         self.dataset.bounds.top,
-    #         self.dataset.bounds.bottom,
-    #         self.dataset.height)
+    @property
+    def schema(self):
+        return self._schema
 
     @property
     def values(self):
-        # values = list()
-        features = [feature["geometry"] for feature in self.pslg.collection]
-        for raster in self.raster_collection:
-            min_values = np.full(
-                raster.shape, float("inf"),
-                # dtype=np.float32
-                )
-            for i in range(1, raster.count + 1):
-                if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
-                    min_values = np.minimum(min_values, raster.read(i))
-            raster.add_band("SIZE_FUNCTION_FINALIZED", min_values)
-            raster.mask(features)
-            band_id = raster.count
-            band = np.ma.masked_equal(
-                raster.read(band_id), raster.nodataval(band_id))
-            # ax = plt.pcolormesh(raster.x, raster.y, band, vmin=50, vmax=250)
-            # plt.gca().axis('scaled')
-            # plt.colorbar()
-            # plt.show()
-            shapes = rasterio.features.shapes(band, mask=band.mask)
-            for item in shapes:
-                print(item)
-            exit()
-
-            # 
-
-            # ax = plt.pcolormesh(raster.x, raster.y, _values)
-            # plt.show()
-            # results = (
-            #     {'properties': {'raster_val': v},
-            #      'geometry': s}
-            #     for i, (s, v) in enumerate(
-            #         rasterio.features.shapes(
-            #             min_values,
-            #             mask=features[0],
-            #             transform=raster.src.transform)))
-            # for _feature in results:
-            #     print(_feature["geometry"])
-            # exit()
-
-            # 
-
-            # del(features)
-            # .flatten()
-            # x, y = np.meshgrid(raster.x, raster.y)
-            # x = x.flatten()[~_values.mask]
-            # y = y.flatten()[~_values.mask]
-            # _values = _values[~_values.mask]
-            # tri = Triangulation(x, y)
-            # plt.tricontourf(tri, _values)
-            # plt.show()
+        try:
+            return self.__values
+        except AttributeError:
+            self._set_triangulation()
+            return self.__values
 
     @property
     def scaling(self):
         return self._scaling
 
-    # @property
-    # def size_function_collection(self):
-    #     return tuple(self._size_function_collection)
-
     @property
     def dst_crs(self):
         return self._dst_crs
+
+    @property
+    def levels(self):
+        return self._levels
 
     @property
     def _pslg(self):
@@ -175,6 +209,13 @@ class SizeFunction:
         except AttributeError:
             self._scaling = "absolute"
             return self.__scaling
+
+    @property
+    def _levels(self):
+        try:
+            return self.__levels
+        except AttributeError:
+            return 256
 
     @property
     def _dst_crs(self):
@@ -230,6 +271,10 @@ class SizeFunction:
     def scaling(self, scaling):
         self._scaling = scaling
 
+    @levels.setter
+    def levels(self, levels):
+        self._levels = levels
+
     @dst_crs.setter
     def dst_crs(self, dst_crs):
         self._dst_crs = dst_crs
@@ -248,6 +293,12 @@ class SizeFunction:
     def _pslg(self, pslg):
         assert isinstance(pslg, PlanarStraightLineGraph)
         self.__pslg = pslg
+
+    @_levels.setter
+    def _levels(self, levels):
+        assert isinstance(levels, int)
+        assert levels > 3
+        self.__levels = levels
     # @_dataset.setter
     # def _dataset(self, dataset):
     #     self.__dataset = dataset

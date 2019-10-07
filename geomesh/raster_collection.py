@@ -14,6 +14,10 @@ class RasterCollection:
     def __getitem__(self, i):
         return self.container[i]
 
+    def iter_downsampled(self, xres, yres):
+        for raster in self:
+            yield raster.get_downsampled(xres, yres)
+
     def add_dataset(self, raster):
         # TODO: hacky way of avoiding repeats
         if isinstance(raster, (str, Path)):

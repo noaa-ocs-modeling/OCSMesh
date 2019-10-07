@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import tri
 import tempfile
 import fiona
 from shapely.geometry import shape, mapping, MultiPolygon
@@ -29,14 +30,12 @@ class PlanarStraightLineGraph:
         raise NotImplementedError
 
     def plot_pslg(self, show=False):
-        for feature in self.collection:
-            multipolygon = shape(feature["geometry"])
-            for polygon in multipolygon:
-                xy = np.asarray(polygon.exterior.coords)
-                plt.plot(xy[:, 0], xy[:, 1], color='k')
-                for inner_ring in polygon.interiors:
-                    xy = np.asarray(inner_ring.coords)
-                    plt.plot(xy[:, 0], xy[:, 1], color='r')
+        for polygon in self.multipolygon:
+            xy = np.asarray(polygon.exterior.coords)
+            plt.plot(xy[:, 0], xy[:, 1], color='k')
+            for inner_ring in polygon.interiors:
+                xy = np.asarray(inner_ring.coords)
+                plt.plot(xy[:, 0], xy[:, 1], color='r')
         if show:
             plt.gca().axis('scaled')
             plt.show()
@@ -58,8 +57,33 @@ class PlanarStraightLineGraph:
         return self._zmax
 
     @property
+    def multipolygon(self):
+        return shape(self._feature)
+
+    @property
     def collection(self):
         return self._collection
+
+    @property
+    def coords(self):
+        try:
+            return self.__coords
+        except AttributeError:
+            coords = np.empty((0, 2), dtype=float)
+            for polygon in self.multipolygon:
+                coords = np.vstack([coords, polygon.exterior.coords])
+                for interior in polygon.interiors:
+                    coords = np.vstack([coords, interior.coords])
+            self.__coords = coords
+            return self.__coords
+
+    @property
+    def x(self):
+        return self.coords[:, 0]
+
+    @property
+    def y(self):
+        return self.coords[:, 1]
 
     @property
     def shp(self):
@@ -70,12 +94,10 @@ class PlanarStraightLineGraph:
         return self._dst_crs
 
     @property
-    def schema(self):
-        return {
-            'geometry': 'Polygon',
-            'properties': {
-                'zmin': 'float',
-                'zmax': 'float'}}
+    def mpl_tri(self):
+        mpl_tri = tri.Triangulation(self.x, self.y)
+        plt.triplot(mpl_tri)
+        plt.show()
 
     @property
     def _raster_collection(self):
@@ -95,18 +117,21 @@ class PlanarStraightLineGraph:
                     for polygon in multipolygon:
                         polygon_collection.append(polygon)
             polygon = MultiPolygon(polygon_collection).buffer(0)
-            collection = fiona.open(
-                self.shp.name,
-                'w',
-                driver='ESRI Shapefile',
-                crs=self.dst_crs,
-                schema=self.schema)
-            collection.write({
-                "geometry": mapping(polygon),
-                "properties": {
-                    "zmin": self.zmin,
-                    "zmax": self.zmax}})
-            collection.close()
+            with fiona.open(
+                    self.shp.name,
+                    'w',
+                    driver='ESRI Shapefile',
+                    crs=self.dst_crs,
+                    schema={
+                        'geometry': 'Polygon',
+                        'properties': {
+                            'zmin': 'float',
+                            'zmax': 'float'}}) as dst:
+                dst.write({
+                    "geometry": mapping(polygon),
+                    "properties": {
+                        "zmin": self.zmin,
+                        "zmax": self.zmax}})
             self.__collection = fiona.open(self.shp.name)
             return self.__collection
 
@@ -129,6 +154,10 @@ class PlanarStraightLineGraph:
         except AttributeError:
             self.__shp = tempfile.TemporaryDirectory()
             return self.__shp
+
+    @property
+    def _feature(self):
+        return self.collection[0]["geometry"]
 
     @dst_crs.setter
     def dst_crs(self, dst_crs):
