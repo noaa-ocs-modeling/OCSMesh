@@ -1,13 +1,13 @@
 import matplotlib.pyplot as plt
-from matplotlib import tri
-# from matplotlib import Path
+from matplotlib.tri import Triangulation
+from matplotlib.path import Path
 import numpy as np
-from scipy.interpolate import RectBivariateSpline
-from scipy.interpolate import griddata
+# from scipy.interpolate import RectBivariateSpline
+# from scipy.interpolate import griddata
 # from scipy.ndimage import gaussian_filter
 from scipy.spatial import cKDTree
 # from osgeo import ogr
-# from jigsawpy import jigsaw_msh_t
+from jigsawpy import jigsaw_msh_t
 # from pysheds.grid import Grid
 # import tempfile
 # from shapely import geometry
@@ -26,11 +26,19 @@ class SizeFunction:
         self._dst_crs = dst_crs
 
     def make_plot(self, show=False):
-        plt.tricontourf(self.mpl_tri, self.values)
+        plt.tricontourf(
+            self.triangulation,
+            self.values,
+            levels=256,
+            vmin=np.min(self.values),
+            vmax=np.max(self.values)
+        )
+        plt.triplot(self.triangulation, linewidth=0.07, color='k', alpha=0.5)
         plt.gca().axis('scaled')
         plt.colorbar()
         if show:
-            plt.show()
+            plt.show(block=False)
+        breakpoint()
 
     def add_contour(
         self,
@@ -43,18 +51,19 @@ class SizeFunction:
         level = float(level)
         target_size = float(target_size)
         expansion_rate = float(expansion_rate)
+        vertices = np.empty((0, 2), float)
         for i, raster in enumerate(self.raster_collection):
             ax = plt.contour(raster.x, raster.y, raster.values, levels=[level])
             plt.close(plt.gcf())
-            xy = list()
             for path_collection in ax.collections:
                 for path in path_collection.get_paths():
-                    xy = [*xy, *path.vertices.tolist()]
+                    vertices = np.vstack([vertices, path.vertices])
+        tree = cKDTree(vertices)
+        for i, raster in enumerate(self.raster_collection):
             xt, yt = np.meshgrid(raster.x, raster.y)
             xt = xt.flatten()
             yt = yt.flatten()
             xy_target = np.vstack([xt, yt]).T
-            tree = cKDTree(np.asarray(xy))
             values, _ = tree.query(xy_target, n_jobs=-1)
             values = expansion_rate*target_size*values + target_size
             values = values.reshape(raster.values.shape)
@@ -83,15 +92,14 @@ class SizeFunction:
             raster.add_band("SIZE_FUNCTION", values)
 
     def _set_triangulation(self):
-        vertices = np.empty((0, 2), float)
-        minval = float("inf")
+        points = np.empty((0, 3), float)
         for raster in self.raster_collection:
             band = np.full(raster.shape, float("inf"))
             for i in range(1, raster.count + 1):
                 if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
                     band = np.minimum(band, raster.read(i))
             raster.add_band("SIZE_FUNCTION_FINALIZED", band)
-            minval = np.min([minval, np.min(band)])
+            raster.mask(self.pslg.multipolygon)
             band_id = raster.count
             target_res = np.min(band)
             if raster.dx < target_res or raster.dy < target_res:
@@ -101,33 +109,25 @@ class SizeFunction:
             band = np.ma.masked_equal(
                 band.astype(raster.dtype(band_id)),
                 raster.nodataval(band_id))
-            ax = plt.contour(x, y, band, levels=self.levels)
-            plt.close(plt.gcf())
-            for i, path_collection in enumerate(ax.collections):
-                for path in path_collection.get_paths():
-                    if ax.levels[i] not in [self.pslg.zmin, self.pslg.zmax]:
-                        vertices = np.vstack([vertices, path.vertices])
-        vertices = np.vstack([vertices, self.pslg.coords])
-        mpl_tri = tri.Triangulation(vertices[:, 0], vertices[:, 1])
-        # mask option 1,
-        mask = np.full(
-            (1, mpl_tri.triangles.shape[0]),
-            raster.nodataval(band_id)).flatten()
+            x, y = np.meshgrid(x, y)
+            x = x.flatten()
+            y = y.flatten()
+            band = band.flatten()
+            x = x[~band.mask]
+            y = y[~band.mask]
+            band = band[~band.mask].data
+            points = np.vstack([points, np.vstack([x, y, band]).T])
+        mpl_tri = Triangulation(points[:, 0], points[:, 1])
+        # generate mask
+        # TODO: Looking for options to speed-up this part, maybe using
+        # parallelization. This is the main bottleneck of the program.
+        mask = np.full((1, mpl_tri.triangles.shape[0]), True).flatten()
         centroids = np.vstack(
             [np.sum(mpl_tri.x[mpl_tri.triangles], axis=1) / 3,
              np.sum(mpl_tri.y[mpl_tri.triangles], axis=1) / 3]).T
-        values = np.full(
-            (1, vertices.shape[0]),
-            raster.nodataval(band_id)).flatten()
-        for raster in self.raster_collection:
-            raster.mask(self.pslg.multipolygon)
-            bbox = raster.bbox
-            f = RectBivariateSpline(
-                raster.x,
-                np.flip(raster.y),
-                np.flipud(raster.read(band_id)).T,
-                bbox=[bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax],
-                kx=1, ky=1)
+        for polygon in self.pslg.multipolygon:
+            path = Path(polygon.exterior.coords, closed=True)
+            bbox = path.get_extents()
             idxs = np.where(np.logical_and(
                                 np.logical_and(
                                     bbox.xmin <= centroids[:, 0],
@@ -135,36 +135,23 @@ class SizeFunction:
                                 np.logical_and(
                                     bbox.ymin <= centroids[:, 1],
                                     bbox.ymax >= centroids[:, 1])))[0]
-            mask[idxs] = f.ev(centroids[idxs, 0], centroids[idxs, 1])
-            idxs = np.where(np.logical_and(
+            mask[idxs] = np.logical_and(
+                mask[idxs], ~path.contains_points(centroids[idxs]))
+            for interior in polygon.interiors:
+                path = Path(interior.coords, closed=True)
+                bbox = path.get_extents()
+                idxs = np.where(np.logical_and(
                                 np.logical_and(
-                                    bbox.xmin <= vertices[:, 0],
-                                    bbox.xmax >= vertices[:, 0]),
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
                                 np.logical_and(
-                                    bbox.ymin <= vertices[:, 1],
-                                    bbox.ymax >= vertices[:, 1])))[0]
-            values[idxs] = f.ev(vertices[idxs, 0], vertices[idxs, 1])
-        condition = values >= minval
-        idx = np.where(condition)
-        _idx = np.where(~condition)
-        values[_idx] = griddata(
-                    (mpl_tri.x[idx], mpl_tri.y[idx]),
-                    values[idx],
-                    (mpl_tri.x[_idx], mpl_tri.y[_idx]),
-                    method='nearest')
-        mask = np.ma.masked_equal(
-            mask.astype(raster.dtype(band_id)),
-            raster.nodataval(band_id)).mask
-        mpl_tri = tri.Triangulation(
-            vertices[:, 0], vertices[:, 1], triangles=mpl_tri.triangles[~mask])
-        # plt.tripcolor(mpl_tri, values, vmin=50, vmax=250.)
-        # plt.colorbar()
-        # plt.triplot(mpl_tri, linewidth=0.07, color='k', alpha=0.5)
-        # plt.gca().axis("scaled")
-        # plt.show(block=False)
-        # breakpoint()
-        self.__mpl_tri = mpl_tri
-        self.__values = values
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+                mask[idxs] = np.logical_or(
+                    mask[idxs], path.contains_points(centroids[idxs]))
+        self._triangulation = Triangulation(
+            points[:, 0], points[:, 1], triangles=mpl_tri.triangles[~mask])
+        self._values = points[:, 2]
 
     @property
     def pslg(self):
@@ -175,16 +162,16 @@ class SizeFunction:
         return self.pslg._raster_collection
 
     @property
-    def schema(self):
-        return self._schema
+    def triangulation(self):
+        return self._triangulation
+
+    @property
+    def points(self):
+        return np.vstack([self.triangulation.x, self.triangulation.y]).T
 
     @property
     def values(self):
-        try:
-            return self.__values
-        except AttributeError:
-            self._set_triangulation()
-            return self.__values
+        return self._values
 
     @property
     def scaling(self):
@@ -195,12 +182,46 @@ class SizeFunction:
         return self._dst_crs
 
     @property
-    def levels(self):
-        return self._levels
+    def hmin(self):
+        return np.min(self.values)
+
+    @property
+    def hmax(self):
+        return np.max(self.values)
+
+    @property
+    def hfun(self):
+        hfun = jigsaw_msh_t()
+        hfun.vert2 = self.vert2
+        hfun.tria3 = self.tria3
+        hfun.value = self.hfun_value
+        hfun.ndim = 2
+        hfun.mshID = "euclidean-mesh"
+        return hfun
+
+    @property
+    def vert2(self):
+        return np.asarray(
+            [([x, y], 0) for x, y in self.points[:, :2]],
+            dtype=jigsaw_msh_t.VERT2_t)
+
+    @property
+    def tria3(self):
+        return np.asarray(
+            [(tuple(indices), 0) for indices in self.triangulation.triangles],
+            dtype=jigsaw_msh_t.TRIA3_t)
+
+    @property
+    def hfun_value(self):
+        return np.asarray(self.values.tolist(), dtype=jigsaw_msh_t.REALS_t)
 
     @property
     def _pslg(self):
         return self.__pslg
+
+    @property
+    def _mesh(self):
+        return self.__mesh
 
     @property
     def _scaling(self):
@@ -211,69 +232,28 @@ class SizeFunction:
             return self.__scaling
 
     @property
-    def _levels(self):
+    def _triangulation(self):
         try:
-            return self.__levels
+            return self.__triangulation
         except AttributeError:
-            return 256
+            self._set_triangulation()
+            return self.__triangulation
+
+    @property
+    def _values(self):
+        try:
+            return self.__values
+        except AttributeError:
+            self._set_triangulation()
+            return self.__values
 
     @property
     def _dst_crs(self):
         return self.__dst_crs
 
-    # @property
-    # def _size_function_collection(self):
-    #     try:
-    #         return self.__size_function_collection
-    #     except AttributeError:
-    #         self.__size_function_collection = list()
-    #         return self.__size_function_collection
-
-    # @property
-    # def _dataset(self):
-    #     try:
-    #         return self.__dataset
-    #     except AttributeError:
-    #         transform, width, height = warp.calculate_default_transform(
-    #             src.crs, self.dst_crs, src.width, src.height, *src.bounds)
-    #         kwargs = src.meta.copy()
-    #         kwargs.update({
-    #             'crs': self.dst_crs,
-    #             'transform': transform,
-    #             'width': width,
-    #             'height': height
-    #         })
-    #         fname = self.tiff.name
-    #         dst = rasterio.open(fname, 'w', **kwargs)
-    #         for i in range(1, src.count + 1):
-    #             rasterio.warp.reproject(
-    #                 source=rasterio.band(src, i),
-    #                 destination=rasterio.band(dst, i),
-    #                 src_transform=src.transform,
-    #                 src_crs=src.crs,
-    #                 dst_transform=transform,
-    #                 dst_crs=dst_crs,
-    #                 # resampling=<Resampling.nearest: 0>,
-    #                 num_threads=multiprocessing.cpu_count()-1,
-    #                 )
-    #         self._dataset = rasterio.open(fname)
-    #         return self.__dataset
-
-    # @property
-    # def _tiff(self):
-    #     try:
-    #         return self.__tiff
-    #     except AttributeError:
-    #         self.__tiff = tempfile.NamedTemporaryFile()
-    #         return self.__tiff
-
     @scaling.setter
     def scaling(self, scaling):
         self._scaling = scaling
-
-    @levels.setter
-    def levels(self, levels):
-        self._levels = levels
 
     @dst_crs.setter
     def dst_crs(self, dst_crs):
@@ -284,6 +264,14 @@ class SizeFunction:
         assert scaling in ["absolute", "relative"]
         self.__scaling = scaling
 
+    @_triangulation.setter
+    def _triangulation(self, triangulation):
+        self.__triangulation = triangulation
+
+    @_values.setter
+    def _values(self, values):
+        self.__values = values
+
     @_dst_crs.setter
     def _dst_crs(self, dst_crs):
         self.pslg.dst_crs = dst_crs
@@ -293,20 +281,6 @@ class SizeFunction:
     def _pslg(self, pslg):
         assert isinstance(pslg, PlanarStraightLineGraph)
         self.__pslg = pslg
-
-    @_levels.setter
-    def _levels(self, levels):
-        assert isinstance(levels, int)
-        assert levels > 3
-        self.__levels = levels
-    # @_dataset.setter
-    # def _dataset(self, dataset):
-    #     self.__dataset = dataset
-
-
-
-    
-
 
 
 

@@ -15,7 +15,7 @@ from matplotlib.colors import LinearSegmentedColormap
 # from geomesh.pslg import PlanarStraightLineGraph
 
 
-class TriMesh:
+class TriangularMesh:
 
     def __init__(self, vertices, elements, crs, values=None):
         self._vertices = vertices
@@ -235,6 +235,8 @@ class TriMesh:
     def _crs(self, crs):
         self.__crs = crs
 
+
+Mesh = TriangularMesh
 
 # class UnstructuredMesh:
 

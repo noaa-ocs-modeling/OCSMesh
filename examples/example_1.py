@@ -28,19 +28,22 @@ def main():
 
     # ------- generate PSLG
     pslg = PlanarStraightLineGraph(dsc, -1500., 15.)
-    pslg.make_plot(show=True)
+    # pslg.make_plot(show=True)
 
     # ------- generate size function
     hfun = SizeFunction(pslg)
-    hfun.add_contour(0., 50., 0.2, hmax=1500.)
+    hfun.add_contour(0., 50., 0.001, hmax=1500.)
     hfun.add_subtidal_flow_limiter(hmin=50., hmax=1500.)
     # print(hfun.values)
-    hfun.make_plot(show=True)
+    # hfun.make_plot(show=True)
 
     # ------- init jigsaw and set options
-    jigsaw = Jigsaw(pslg, hfun)
+    jigsaw = Jigsaw(
+        pslg,
+        hfun
+    )
     jigsaw.verbosity = 1
-    jigsaw._opts.optm_qlim = .95
+    # jigsaw._opts.optm_qlim = .95
 
     # ------- run jigsaw, get mesh
     mesh = jigsaw.run()

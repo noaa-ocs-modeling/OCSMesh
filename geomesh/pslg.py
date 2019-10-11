@@ -1,9 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import tri
+from matplotlib.path import Path
+from matplotlib.tri import Triangulation
 import tempfile
 import fiona
 from shapely.geometry import shape, mapping, MultiPolygon
+from jigsawpy import jigsaw_msh_t
 from geomesh.raster_collection import RasterCollection
 
 
@@ -86,6 +88,10 @@ class PlanarStraightLineGraph:
         return self.coords[:, 1]
 
     @property
+    def triangulation(self):
+        return self._triangulation
+
+    @property
     def shp(self):
         return self._shp
 
@@ -94,10 +100,35 @@ class PlanarStraightLineGraph:
         return self._dst_crs
 
     @property
-    def mpl_tri(self):
-        mpl_tri = tri.Triangulation(self.x, self.y)
-        plt.triplot(mpl_tri)
-        plt.show()
+    def ndim(self):
+        return self.coords.shape[1]
+
+    @property
+    def mshID(self):
+        return 'euclidean-mesh'
+
+    @property
+    def geom(self):
+        geom = jigsaw_msh_t()
+        geom.vert2 = self.vert2
+        geom.edge2 = self.edge2
+        geom.ndim = self.ndim
+        geom.mshID = self.mshID
+        return geom
+
+    @property
+    def vert2(self):
+        coords = np.vstack([self.triangulation.x, self.triangulation.y]).T
+        coords = [([x, y], 0) for x, y in coords]
+        return np.asarray(coords, dtype=jigsaw_msh_t.VERT2_t)
+
+    @property
+    def edge2(self):
+        idxs = np.vstack(list(np.where(self.triangulation.neighbors == -1))).T
+        edge2 = [
+            ([self.triangulation.triangles[i, j],
+              self.triangulation.triangles[i, (j+1) % 3]], 0) for i, j in idxs]
+        return np.asarray(edge2, dtype=jigsaw_msh_t.EDGE2_t)
 
     @property
     def _raster_collection(self):
@@ -146,6 +177,44 @@ class PlanarStraightLineGraph:
     @property
     def _zmax(self):
         return self.__zmax
+
+    @property
+    def _triangulation(self):
+        try:
+            return self.__triangulation
+        except AttributeError:
+            tri = Triangulation(self.x, self.y)
+            mask = np.full((1, tri.triangles.shape[0]), True).flatten()
+            centroids = np.vstack(
+                [np.sum(tri.x[tri.triangles], axis=1) / 3,
+                 np.sum(tri.y[tri.triangles], axis=1) / 3]).T
+            for polygon in self.multipolygon:
+                path = Path(polygon.exterior.coords, closed=True)
+                bbox = path.get_extents()
+                idxs = np.where(np.logical_and(
+                                    np.logical_and(
+                                        bbox.xmin <= centroids[:, 0],
+                                        bbox.xmax >= centroids[:, 0]),
+                                    np.logical_and(
+                                        bbox.ymin <= centroids[:, 1],
+                                        bbox.ymax >= centroids[:, 1])))[0]
+                mask[idxs] = np.logical_and(
+                    mask[idxs], ~path.contains_points(centroids[idxs]))
+                for interior in polygon.interiors:
+                    path = Path(interior.coords, closed=True)
+                    bbox = path.get_extents()
+                    idxs = np.where(np.logical_and(
+                                    np.logical_and(
+                                        bbox.xmin <= centroids[:, 0],
+                                        bbox.xmax >= centroids[:, 0]),
+                                    np.logical_and(
+                                        bbox.ymin <= centroids[:, 1],
+                                        bbox.ymax >= centroids[:, 1])))[0]
+                    mask[idxs] = np.logical_or(
+                        mask[idxs], path.contains_points(centroids[idxs]))
+            self.__triangulation = Triangulation(
+                self.x, self.y, triangles=tri.triangles[~mask])
+            return self.__triangulation
 
     @property
     def _shp(self):
@@ -204,6 +273,7 @@ class PlanarStraightLineGraph:
     def _collection(self):
         try:
             del(self.__collection)
+            del(self._triangulation)
         except AttributeError:
             pass
 
@@ -223,9 +293,12 @@ class PlanarStraightLineGraph:
         except AttributeError:
             pass
 
-
-
-
+    @_triangulation.deleter
+    def _triangulation(self):
+        try:
+            del(self.__triangulation)
+        except AttributeError:
+            pass
 
     # @property
     # def MultiPolygon(self):
@@ -301,12 +374,12 @@ class PlanarStraightLineGraph:
     #     return self._ndim
 
     # @property
-    # def mpl_tri(self):
-    #     return self._mpl_tri
+    # def triangulation(self):
+    #     return self._triangulation
 
     # @property
-    # def mpl_tri_mask(self):
-    #     return self._mpl_tri_mask
+    # def triangulation_mask(self):
+    #     return self._triangulation_mask
 
     # @property
     # def vert2(self):
@@ -360,12 +433,12 @@ class PlanarStraightLineGraph:
     #     return self.__zmax
 
     # @property
-    # def _mpl_tri(self):
+    # def _triangulation(self):
     #     try:
-    #         return self.__mpl_tri
+    #         return self.__triangulation
     #     except AttributeError:
-    #         self._mpl_tri = self.points
-    #         return self.__mpl_tri
+    #         self._triangulation = self.points
+    #         return self.__triangulation
 
     # @property
     # def _points(self):
@@ -395,13 +468,7 @@ class PlanarStraightLineGraph:
     #         self._edge2 = list()
     #         return self.__edge2
 
-    # @property
-    # def _geometry_type(self):
-    #     try:
-    #         return self.__geometry_type
-    #     except AttributeError:
-    #         self._geometry_type = 'euclidean-mesh'
-    #         return self.__geometry_type
+
 
     # @property
     # def _ocean_boundaries(self):
@@ -492,9 +559,9 @@ class PlanarStraightLineGraph:
     #             points = [*points, *_LinearRing.GetPoints()]
     #     self.__points = np.asarray(points)
 
-    # @_mpl_tri.setter
-    # def _mpl_tri(self, points):
-    #     self.__mpl_tri = Triangulation(points[:, 0], points[:, 1])
+    # @_triangulation.setter
+    # def _triangulation(self, points):
+    #     self.__triangulation = Triangulation(points[:, 0], points[:, 1])
 
     # @_ocean_boundaries.setter
     # def _ocean_boundaries(self, ocean_boundaries):
@@ -599,7 +666,7 @@ class PlanarStraightLineGraph:
     # def _points(self):
     #     try:
     #         del(self.__points)
-    #         del(self._mpl_tri)
+    #         del(self._triangulation)
     #     except AttributeError:
     #         pass
 
@@ -611,10 +678,10 @@ class PlanarStraightLineGraph:
     #     except AttributeError:
     #         pass
 
-    # @_mpl_tri.deleter
-    # def _mpl_tri(self):
+    # @_triangulation.deleter
+    # def _triangulation(self):
     #     try:
-    #         del(self.__mpl_tri)
+    #         del(self.__triangulation)
     #     except AttributeError:
     #         pass
 
