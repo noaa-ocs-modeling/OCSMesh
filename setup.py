@@ -31,7 +31,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
 
     def _setup_step(f):
         def decorator(self):
-            os.chdir(str(Path(str(self.work_dir) + "/third_party")))
+            os.chdir(str(Path(str(self.work_dir) + "/contrib")))
             f(self)
             os.chdir(self.work_dir)
         return decorator
@@ -60,7 +60,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.makedirs(libsaw_prefix, exist_ok=True)
         for libsaw in self.pyenv_prefix.glob("lib/*jigsaw*"):
             shutil.copy(libsaw, libsaw_prefix)
-        os.chdir(self.work_dir + '/third_party')
+        os.chdir(self.work_dir + '/contrib')
         subprocess.check_call(["git", "submodule", "deinit", "-f", "jigsawpy"])
 
 
