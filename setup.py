@@ -78,7 +78,7 @@ setuptools.setup(
     url=meta['url'],
     packages=setuptools.find_packages(),
     cmdclass={'install_jigsaw': InstallJigsawCommand},
-    python_requires='==3.7',
+    python_requires='>=3.7',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
                       "jigsawpy",

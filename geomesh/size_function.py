@@ -4,16 +4,9 @@ from matplotlib.tri import Triangulation
 import numpy as np
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
-from geomesh.pslg import PlanarStraightLineGraph
-
-#  ----------- multiprocessing imports and functions
 from multiprocessing import Pool, cpu_count
-from matplotlib.path import Path
-
-
-def path_contains_point_parallel_wrapper(coord):
-    global path
-    return path.contains_point(coord)
+from geomesh.pslg import PlanarStraightLineGraph
+from geomesh.parallel_processing import pool_initializer, pool_worker
 
 
 class SizeFunction:
@@ -114,7 +107,6 @@ class SizeFunction:
             raster.add_band("SIZE_FUNCTION", values)
 
     def _set_triangulation(self):
-        global path
         points = np.empty((0, 3), np.float32)
         for raster in self.raster_collection:
             band = np.full(raster.shape, np.float32(float("inf")))
@@ -139,8 +131,6 @@ class SizeFunction:
             y = y[~band.mask]
             band = band[~band.mask].data
             points = np.vstack([points, np.vstack([x, y, band]).T])
-        self._values = points[:, 2]
-        points = points[:, :2]
         del(x)
         del(y)
         del(band)
@@ -151,37 +141,8 @@ class SizeFunction:
             [np.sum(points[:, 0][elements], axis=1) / 3,
              np.sum(points[:, 1][elements], axis=1) / 3]).T
         mask = np.full((1, elements.shape[0]), True).flatten()
-        path = Path(self.pslg.polygon.exterior.coords, closed=True)
-        bbox = path.get_extents()
-        idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= centroids[:, 0],
-                                bbox.xmax >= centroids[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= centroids[:, 1],
-                                bbox.ymax >= centroids[:, 1])))[0]
-        if self.nproc == 1:
-            mask[idxs] = np.logical_and(
-                mask[idxs], ~path.contains_points(centroids[idxs]))
-        else:
-            pool = Pool(
-                processes=self.nproc,
-                # maxtasksperchild=1
-                )
-            results = pool.map_async(
-                path_contains_point_parallel_wrapper,
-                [centroid for centroid in centroids[idxs]],
-                chunksize=1
-                )
-            results = results.get()
-            pool.close()
-            pool.join()
-            mask[idxs] = np.logical_and(
-                mask[idxs], ~np.asarray(results))
-
-        for interior in self.pslg.polygon.interiors:
-            path = Path(interior.coords, closed=True)
-            bbox = path.get_extents()
+        for raster in self.raster_collection:
+            bbox = raster.bbox
             idxs = np.where(np.logical_and(
                             np.logical_and(
                                 bbox.xmin <= centroids[:, 0],
@@ -189,25 +150,26 @@ class SizeFunction:
                             np.logical_and(
                                 bbox.ymin <= centroids[:, 1],
                                 bbox.ymax >= centroids[:, 1])))[0]
+            # ----serial version
             if self.nproc == 1:
-                mask[idxs] = np.logical_or(
-                    mask[idxs], path.contains_points(centroids[idxs]))
+                results = raster.sample(centroids[idxs], raster.count)
+                mask[idxs] = np.ma.masked_equal(
+                    np.asarray([value for value in results]),
+                    raster.nodataval(raster.count)).mask.flatten()
+            # ----parallel version
             else:
-                pool = Pool(
-                    processes=self.nproc,
-                    # maxtasksperchild=1
-                    )
+                pool = Pool(self.nproc, pool_initializer, (raster,))
                 results = pool.map_async(
-                    path_contains_point_parallel_wrapper,
-                    [centroid for centroid in centroids[idxs]],
-                    chunksize=1
-                    )
+                        pool_worker,
+                        ([centroid] for centroid in centroids[idxs]),
+                        )
                 results = results.get()
                 pool.close()
                 pool.join()
-                mask[idxs] = np.logical_or(mask[idxs], np.asarray(results))
+                mask[idxs] = results
         self._triangulation = Triangulation(
             points[:, 0], points[:, 1], triangles=elements[~mask])
+        self._values = points[:, 2]
 
     @property
     def pslg(self):

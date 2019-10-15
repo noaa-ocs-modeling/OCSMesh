@@ -4,8 +4,10 @@ from geomesh.raster import Raster
 
 class RasterCollection:
 
-    def __init__(self, dst_crs=None):
+    def __init__(self, files=[], dst_crs="EPSG:3395"):
         self._dst_crs = dst_crs
+        for file in files:
+            self.append(file)
 
     def __iter__(self):
         for raster in self.container:
@@ -14,24 +16,16 @@ class RasterCollection:
     def __getitem__(self, i):
         return self.container[i]
 
-    def iter_downsampled(self, xres, yres):
-        for raster in self:
-            yield raster.get_downsampled(xres, yres)
-
-    def add_dataset(self, raster):
-        # TODO: hacky way of avoiding repeats
+    def append(self, raster):
         if isinstance(raster, (str, Path)):
             raster = Raster(raster)
         else:
             assert isinstance(raster, Raster)
-        exist = False
-        for _ in self.container:
-            if raster.path == _.path:
-                exist = True
-                break
-        if not exist:
-            raster.dst_crs = self.dst_crs
-            self._container.append(raster)
+        for item in self.container:
+            if raster.path == item.path:
+                return
+        raster.dst_crs = self.dst_crs
+        self._container.append(raster)
 
     @property
     def dst_crs(self):

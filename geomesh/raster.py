@@ -11,6 +11,7 @@ import multiprocessing
 from shapely.geometry import Polygon, LinearRing, MultiPolygon, mapping, shape
 import fiona
 import tempfile
+from pyproj import Proj
 
 
 class Raster:
@@ -95,6 +96,9 @@ class Raster:
     def nodataval(self, i):
         return self.src.nodatavals[i-1]
 
+    def sample(self, xy, i):
+        return self.src.sample(xy, i)
+
     def close(self):
         del(self._src)
 
@@ -112,15 +116,25 @@ class Raster:
             dst.update_tags(band_id, BAND_TYPE=band_type)
         self._tmpfile = tmpfile
 
-    def mask(self, features):
+    def mask(self, features, i=None, nodata=-99999.):
         kwargs = self.src.meta.copy()
+        kwargs.update({'nodata': nodata})
         out_images, out_transform = mask(self.src, features)
         tmpfile = tempfile.NamedTemporaryFile()
         fname = tmpfile.name
         with rasterio.open(fname, 'w', **kwargs) as dst:
-            for i in range(1, self.src.count + 1):
-                dst.write_band(i, out_images[i-1])
-                dst.update_tags(i, **self.src.tags(i))
+            if i is None:
+                for j in range(1, self.src.count + 1):
+                    dst.write_band(j, out_images[j-1])
+                    dst.update_tags(j, **self.src.tags(j))
+            else:
+                for j in range(1, self.src.count + 1):
+                    if i == j:
+                        dst.write_band(j, out_images[j-1])
+                        dst.update_tags(j, **self.src.tags(j))
+                    else:
+                        dst.write_band(j, self.src.read(j))
+                        dst.update_tags(j, **self.src.tags(j))
         self._tmpfile = tmpfile
 
     def save(self, path):
@@ -210,6 +224,14 @@ class Raster:
     @property
     def crs(self):
         return self.src.crs
+
+    @property
+    def srs(self):
+        return self.proj.srs
+
+    @property
+    def proj(self):
+        return Proj(init=str(self.crs))
 
     @property
     def nodatavals(self):

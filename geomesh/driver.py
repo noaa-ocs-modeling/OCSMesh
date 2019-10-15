@@ -1,58 +1,28 @@
-import numpy as np
 import jigsawpy
 import geomesh
 
 
 class Jigsaw:
 
-    def __init__(self, geom, hfun=None, initial_mesh=None):
+    def __init__(self, geom, initial_mesh=None):
+        """
+        geom can be SizeFunction or PlanarStraightLineGraph instance.
+        """
         self._geom = geom
-        self._hfun = hfun
         self._initial_mesh = initial_mesh
 
     def run(self):
-
-        # set jigsaw hfun scaling
-        hfun = self.hfun
-        if hfun is not None:
-            self.opts.hfun_scal = hfun.scaling
-            self.opts.hfun_hmin = hfun.hmin
-            self.opts.hfun_hmax = hfun.hmax
-            hfun = hfun.hfun
-        else:
-            self.opts.hfun_scal = "absolute"
-
-        # set initial mesh as init or None
-        init = self.initial_mesh
-        if init is not None:
-            init = init.mesh
-
-        # set jigsaw mesh dims
-        self.opts.mesh_dims = self.geom.ndim
-
-        # set additional jigsaw options
-        # self.opts.mesh_top1 = True  # locally 1-manifold
-        # self.opts.geom_feat = True  # for sharp feat's
-
-        # call jigsaw
         self.jigsaw(
-            opts=self.opts,
-            geom=self.geom.geom,  # geom/pslg
-            mesh=self.output_mesh,  # output mesh
-            init=init,  # initial mesh
-            hfun=hfun   # hfun
+            self.opts,
+            self.geom,
+            self.output_mesh,
+            self.initial_mesh,
+            self.hfun
         )
-        from matplotlib.pyplot import plt
-        plt.triplot(
-            self.output_mesh.vert2['coord'][:, 0],
-            self.output_mesh.vert2['coord'][:, 1],
-            self.output_mesh.tria3['index'])
-        plt.show(block=False)
-        breakpoint()
-        return geomesh.TriMesh(
+        return geomesh.Mesh(
             self.output_mesh.vert2['coord'],
             self.output_mesh.tria3['index'],
-            crs=self.pslg.crs)
+            crs=self.crs)
 
     @property
     def geom(self):
@@ -87,6 +57,22 @@ class Jigsaw:
         return self.opts.verbosity
 
     @property
+    def hfun_hmin(self):
+        return self.opts.hfun_hmin
+
+    @property
+    def hfun_hmax(self):
+        return self.opts.hfun_hmax
+
+    @property
+    def hfun_scal(self):
+        return self.opts.hfun_scal
+
+    @property
+    def crs(self):
+        return self._crs
+
+    @property
     def _jigsaw_jig_t(self):
         try:
             return self.__jigsaw_jig_t
@@ -107,6 +93,10 @@ class Jigsaw:
         return self.__initial_mesh
 
     @property
+    def _crs(self):
+        return self.__crs
+
+    @property
     def _output_mesh(self):
         try:
             return self.__output_mesh
@@ -119,22 +109,50 @@ class Jigsaw:
         assert verbosity in [0, 1, 2, 3]
         self.opts.verbosity = verbosity
 
+    @hfun_hmin.setter
+    def hfun_hmin(self, hfun_hmin):
+        self.opts.hfun_hmin = float(hfun_hmin)
+
+    @hfun_hmax.setter
+    def hfun_hmax(self, hfun_hmax):
+        self.opts.hfun_hmax = float(hfun_hmax)
+
+    @hfun_scal.setter
+    def hfun_scal(self, hfun_scal):
+        assert hfun_scal in ["absolute", "relative"]
+        self.opts.hfun_scal = hfun_scal
+
     @_geom.setter
     def _geom(self, geom):
-        assert isinstance(geom, geomesh.PlanarStraightLineGraph)
-        self.__geom = geom
+        if isinstance(geom, geomesh.SizeFunction):
+            self._hfun = geom
+            geom = geom.geom
+        elif isinstance(geom, geomesh.PlanarStraightLineGraph):
+            self._hfun = None
+        self.opts.mesh_dims = geom.ndim
+        self._crs = geom.crs
+        self.__geom = geom.geom
 
     @_hfun.setter
     def _hfun(self, hfun):
         if hfun is not None:
             assert isinstance(hfun, geomesh.SizeFunction)
+            self.hfun_scal = hfun.scaling
+            self.hfun_hmin = hfun.hmin
+            self.hfun_hmax = hfun.hmax
+            hfun = hfun.hfun
         self.__hfun = hfun
 
     @_initial_mesh.setter
     def _initial_mesh(self, initial_mesh):
         if initial_mesh is not None:
             assert isinstance(initial_mesh, geomesh.Mesh)
+            initial_mesh = initial_mesh.mesh
         self.__initial_mesh = initial_mesh
+
+    @_crs.setter
+    def _crs(self, crs):
+        self.__crs = crs
 
 
 

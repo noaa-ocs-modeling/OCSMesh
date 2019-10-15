@@ -6,6 +6,7 @@ import tempfile
 import fiona
 from shapely.geometry import shape, mapping, MultiPolygon
 from jigsawpy import jigsaw_msh_t
+from geomesh.raster import Raster
 from geomesh.raster_collection import RasterCollection
 
 
@@ -21,26 +22,16 @@ class PlanarStraightLineGraph:
         for raster in self.raster_collection:
             yield raster
 
-    def make_plot(self, view='pslg', **kwargs):
-        assert view in ['topobathy', 'pslg']
-        if view == 'topobathy':
-            self.plot_topobathy(**kwargs)
-        elif view == 'pslg':
-            self.plot_pslg(**kwargs)
-
-    def plot_topobathy(self, show=False):
-        raise NotImplementedError
-
-    def plot_pslg(self, show=False):
-        for polygon in self.multipolygon:
-            xy = np.asarray(polygon.exterior.coords)
-            plt.plot(xy[:, 0], xy[:, 1], color='k')
-            for inner_ring in polygon.interiors:
-                xy = np.asarray(inner_ring.coords)
-                plt.plot(xy[:, 0], xy[:, 1], color='r')
+    def plot(self, show=False):
+        xy = np.asarray(self.polygon.exterior.coords)
+        plt.plot(xy[:, 0], xy[:, 1], color='k')
+        for inner_ring in self.polygon.interiors:
+            xy = np.asarray(inner_ring.coords)
+            plt.plot(xy[:, 0], xy[:, 1], color='r')
+        plt.gca().axis('scaled')
         if show:
-            plt.gca().axis('scaled')
             plt.show()
+        return plt.gca()
 
     @property
     def raster_collection(self):
@@ -48,7 +39,7 @@ class PlanarStraightLineGraph:
 
     @property
     def crs(self):
-        return self.collection.crs
+        return self.raster_collection.dst_crs
 
     @property
     def zmin(self):
@@ -63,29 +54,31 @@ class PlanarStraightLineGraph:
         return shape(self._feature)
 
     @property
+    def polygon(self):
+        areas = [polygon.area for polygon in self.multipolygon]
+        idx = np.where(areas == np.max(areas))[0][0]
+        return self.multipolygon[idx]
+
+    @property
     def collection(self):
         return self._collection
 
     @property
     def coords(self):
-        try:
-            return self.__coords
-        except AttributeError:
-            coords = np.empty((0, 2), dtype=float)
-            for polygon in self.multipolygon:
-                coords = np.vstack([coords, polygon.exterior.coords])
-                for interior in polygon.interiors:
-                    coords = np.vstack([coords, interior.coords])
-            self.__coords = coords
-            return self.__coords
+        coords = np.empty((0, 2), dtype=np.float32)
+        for polygon in self.multipolygon:
+            coords = np.vstack([coords, polygon.exterior.coords])
+            for interior in polygon.interiors:
+                coords = np.vstack([coords, interior.coords])
+        return coords
 
     @property
     def x(self):
-        return self.coords[:, 0]
+        return self.triangulation.x
 
     @property
     def y(self):
-        return self.coords[:, 1]
+        return self.triangulation.y
 
     @property
     def triangulation(self):
@@ -101,7 +94,7 @@ class PlanarStraightLineGraph:
 
     @property
     def ndim(self):
-        return self.coords.shape[1]
+        return 2
 
     @property
     def mshID(self):
@@ -147,19 +140,19 @@ class PlanarStraightLineGraph:
                     multipolygon = shape(feature["geometry"])
                     for polygon in multipolygon:
                         polygon_collection.append(polygon)
-            polygon = MultiPolygon(polygon_collection).buffer(0)
+            multipolygon = MultiPolygon(polygon_collection).buffer(0)
             with fiona.open(
                     self.shp.name,
                     'w',
                     driver='ESRI Shapefile',
                     crs=self.dst_crs,
                     schema={
-                        'geometry': 'Polygon',
+                        'geometry': 'MultiPolygon',
                         'properties': {
                             'zmin': 'float',
                             'zmax': 'float'}}) as dst:
                 dst.write({
-                    "geometry": mapping(polygon),
+                    "geometry": mapping(multipolygon),
                     "properties": {
                         "zmin": self.zmin,
                         "zmax": self.zmax}})
@@ -183,37 +176,37 @@ class PlanarStraightLineGraph:
         try:
             return self.__triangulation
         except AttributeError:
-            tri = Triangulation(self.x, self.y)
+            coords = self.coords
+            tri = Triangulation(coords[:, 0], coords[:, 1])
             mask = np.full((1, tri.triangles.shape[0]), True).flatten()
             centroids = np.vstack(
                 [np.sum(tri.x[tri.triangles], axis=1) / 3,
                  np.sum(tri.y[tri.triangles], axis=1) / 3]).T
-            for polygon in self.multipolygon:
-                path = Path(polygon.exterior.coords, closed=True)
+            path = Path(self.polygon.exterior.coords, closed=True)
+            bbox = path.get_extents()
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+            mask[idxs] = np.logical_and(
+                mask[idxs], ~path.contains_points(centroids[idxs]))
+            for interior in self.polygon.interiors:
+                path = Path(interior.coords, closed=True)
                 bbox = path.get_extents()
                 idxs = np.where(np.logical_and(
-                                    np.logical_and(
-                                        bbox.xmin <= centroids[:, 0],
-                                        bbox.xmax >= centroids[:, 0]),
-                                    np.logical_and(
-                                        bbox.ymin <= centroids[:, 1],
-                                        bbox.ymax >= centroids[:, 1])))[0]
-                mask[idxs] = np.logical_and(
-                    mask[idxs], ~path.contains_points(centroids[idxs]))
-                for interior in polygon.interiors:
-                    path = Path(interior.coords, closed=True)
-                    bbox = path.get_extents()
-                    idxs = np.where(np.logical_and(
-                                    np.logical_and(
-                                        bbox.xmin <= centroids[:, 0],
-                                        bbox.xmax >= centroids[:, 0]),
-                                    np.logical_and(
-                                        bbox.ymin <= centroids[:, 1],
-                                        bbox.ymax >= centroids[:, 1])))[0]
-                    mask[idxs] = np.logical_or(
-                        mask[idxs], path.contains_points(centroids[idxs]))
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+                mask[idxs] = np.logical_or(
+                    mask[idxs], path.contains_points(centroids[idxs]))
             self.__triangulation = Triangulation(
-                self.x, self.y, triangles=tri.triangles[~mask])
+                coords[:, 0], coords[:, 1], triangles=tri.triangles[~mask])
             return self.__triangulation
 
     @property
@@ -234,7 +227,13 @@ class PlanarStraightLineGraph:
 
     @_raster_collection.setter
     def _raster_collection(self, raster_collection):
-        assert isinstance(raster_collection, RasterCollection)
+        # accept additional data types as input
+        if not isinstance(raster_collection, RasterCollection):
+            raster = raster_collection
+            raster_collection = RasterCollection()
+            # accepts geomesh.Raster or str object
+            if isinstance(raster, (Raster, str)):
+                raster_collection.append(raster)
         self.__raster_collection = raster_collection
 
     @_dst_crs.setter

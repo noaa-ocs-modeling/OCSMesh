@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 import os
 import subprocess
-import numpy as np
-from pathlib import Path
+# import numpy as np
+# from pathlib import Path
 import matplotlib.pyplot as plt
-from geomesh import RasterCollection, \
+from geomesh import Raster, \
                     PlanarStraightLineGraph, \
                     SizeFunction, \
                     Jigsaw
@@ -18,43 +18,54 @@ except ModuleNotFoundError:
 def main():
 
     # ------- init test DEM files
-    data = os.path.dirname(os.path.abspath(__file__)) + '/data'
-    subprocess.check_call(["git", "submodule", "update", "--init", data])
-    file = os.path.abspath(data + '/PR_1s.tif')
+    rootdir = os.path.dirname(os.path.abspath(__file__))
+    datadir = rootdir + '/data'
+    subprocess.check_call(["git", "submodule", "update", "--init", datadir])
+    file = os.path.abspath(datadir + '/PR_1s.tif')
 
-    # ------- init = RasterCollection object
-    dsc = RasterCollection()
-    dsc.add_dataset(file)
+    # ------- init Raster object
+    rast = Raster(file)
 
-    # ------- generate PSLG
-    pslg = PlanarStraightLineGraph(dsc, -1500., 15.)
-    # pslg.make_plot(show=True)
+    # ------- init PSLG object
+    pslg = PlanarStraightLineGraph(rast, -1500., 15.)
 
-    # ------- generate size function
-    hfun = SizeFunction(pslg)
-    hfun.add_contour(0., 50., 0.001, hmax=1500.)
-    hfun.add_subtidal_flow_limiter(hmin=50., hmax=1500.)
-    # print(hfun.values)
-    # hfun.make_plot(show=True)
+    # ------- visualize PSLG object
+    # pslg.plot(show=True)
+
+    # ------- init size function
+    hfun = SizeFunction(pslg, 50., 1500.)
+
+    # ------- add size function constraints
+    hfun.add_contour(0., 0.001)
+    hfun.add_subtidal_flow_limiter()
+
+    # ------- visualize size function
+    # hfun.tricontourf()
+    # hfun.triplot(show=True)
 
     # ------- init jigsaw and set options
-    jigsaw = Jigsaw(
-        pslg,
-        hfun
-    )
+    jigsaw = Jigsaw(hfun)
     jigsaw.verbosity = 1
-    # jigsaw._opts.optm_qlim = .95
 
     # ------- run jigsaw, get mesh
     mesh = jigsaw.run()
 
     # ------- interpolate bathymetry to output mesh
-    mesh.interpolate(dsc, fix_invalid=True)
-    fig = plt.figure()
-    axes = fig.add_subplot(111)
-    mesh.make_plot(axes=axes)
-    axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
-    plt.show()
+    mesh.interpolate(rast, fix_invalid=True)
+
+    # ------- reproject mesh to WGS84
+    mesh.transform_to('EPSG:4326')
+
+    # ------- visualize results
+    # fig = plt.figure()
+    # axes = fig.add_subplot(111)
+    # mesh.make_plot(axes=axes)
+    # axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
+    # plt.show()
+
+    # -------- write to disk
+    fname = os.path.abspath(rootdir + '/example_1.grd')
+    mesh.save(fname, overwrite=True)
 
 
 if __name__ == "__main__":

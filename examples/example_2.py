@@ -15,47 +15,56 @@ except ModuleNotFoundError:
 
 def main():
 
-    # ------- init test DEM files
-    data = os.path.dirname(os.path.abspath(__file__)) + '/data'
-    file1 = os.path.abspath(data + '/ncei19_n41x00_w074x00_2015v1.tif')
-    file2 = os.path.abspath(data + '/ncei19_n41x00_w073x75_2015v1.tif')
+    # ------- make list of file paths to process
+    rootdir = os.path.dirname(os.path.abspath(__file__))
+    datadir = rootdir + '/data'
+    files = [
+        'ncei19_n41x00_w074x00_2015v1.tif',
+        'ncei19_n41x00_w073x75_2015v1.tif',
+    ]
+    files = [os.path.abspath(datadir + '/' + file) for file in files]
 
-    # ------- init test RasterCollection object
-    dsc = RasterCollection()
-    dsc.add_dataset(file1)
-    dsc.add_dataset(file2)
+    # ------- init RasterCollection object
+    rc = RasterCollection(files)
 
-    # ------- generate PSLG
-    pslg = PlanarStraightLineGraph(dsc, -1500., 15.)
+    # ------- init PSLG
+    pslg = PlanarStraightLineGraph(rc, -1500., 15.)
     # pslg.make_plot(show=True)
 
     # ------- generate size function
-    hfun = SizeFunction(pslg)
-    hfun.add_contour(0., 50., 0.001, hmax=1500.)
-    hfun.add_subtidal_flow_limiter(50., 1500.)
-    # hfun.make_plot(show=True)
+    hfun = SizeFunction(pslg, 50., 1500.)
+    hfun.add_contour(0., 0.001)
+    hfun.add_subtidal_flow_limiter()
+    # hfun.tricontourf(cmap='jet')
+    # hfun.triplot(show=True)
 
-    # ------- init jigsaw and set options
-    jigsaw = Jigsaw(pslg, hfun)
+    # ------- init jigsaw
+    jigsaw = Jigsaw(hfun)
+
+    # ------- set additional jigsaw options
     jigsaw.verbosity = 1
 
     # ------- run jigsaw, get mesh
     mesh = jigsaw.run()
 
-    # ------- interpolate bathymtery to output mesh
-    mesh.interpolate(dsc, fix_invalid=True)
+    # ------- interpolate bathymetry to output mesh
+    mesh.interpolate_collection(rc, fix_invalid=True)
+
+    # ------- reproject mesh to WGS84
+    mesh.transform_to('EPSG:4326')
+
+    # ------- visualize results
     fig = plt.figure()
     axes = fig.add_subplot(111)
     mesh.make_plot(axes=axes)
-    axes.triplot(mesh.mpl_tri, linewidth=0.07, color='k')
+    axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
     plt.show()
     print("NP={}".format(mesh.values.size))
     print("elements={}".format(mesh.elements.shape[0]))
 
     # -------- write to disk
-    mesh.dump(
-        os.path.dirname(os.path.abspath(__file__)) + '/example_2.gr3',
-        overwrite=True)
+    fname = os.path.abspath(rootdir + '/example_2.grd')
+    mesh.save(fname, overwrite=True)
 
 
 if __name__ == "__main__":
