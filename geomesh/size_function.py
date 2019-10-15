@@ -1,81 +1,67 @@
 import gc
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
-from matplotlib.path import Path
 import numpy as np
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
 from geomesh.pslg import PlanarStraightLineGraph
 
-
 #  ----------- multiprocessing imports and functions
-from multiprocessing import Pool
-from shapely .geometry import Point
+from multiprocessing import Pool, cpu_count
 
 
-def parallel_path_contains_point(coord):
-    global path
-    return path.contains_point(coord)
-
-
-def parallel_exterior_contains(coord):
-    global exterior
-    return exterior.contains(Point(coord[0], coord[1]))
-
-
-def parallel_interior_contains(coord):
-    global interior
-    return interior.contains(Point(coord[0], coord[1]))
+def parallel_raster_sample(coord):
+    global raster
+    try:
+        sample = list(raster.sample(coord, raster.count))
+        if sample[0][0] == 0.:
+            return True
+        else:
+            return False
+    except (TypeError, IndexError):
+        return False
 
 
 class SizeFunction:
 
-    def __init__(self, pslg, hmin=None, hmax=None, dst_crs="EPSG:3395"):
+    def __init__(
+        self,
+        pslg,
+        hmin=None,
+        hmax=None,
+        dst_crs="EPSG:3395",
+        nproc=1
+    ):
         self._pslg = pslg
         self._hmin = hmin
         self._hmax = hmax
         self._dst_crs = dst_crs
+        self._nproc = nproc
 
-    def tricontourf(
-        self,
-        axes=None,
-        figsize=None,
-        show=False,
-        **kwargs
-    ):
-        if axes is None:
-            axes = plt.figure(figsize=figsize).add_subplot(111)
-        axes.tricontourf(self.triangulation, self.values, **kwargs)
-        axes.axis('scaled')
+    def tricontourf(self, show=False, **kwargs):
+        plt.tricontourf(self.triangulation, self.values, **kwargs)
         if show:
-            plt.colorbar()
+            plt.gca().axis('scaled')
             plt.show()
-        return axes
 
     def triplot(
         self,
-        axes=None,
-        figsize=None,
         show=False,
         linewidth=0.07,
         color='black',
         alpha=0.5,
         **kwargs
     ):
-        if axes is None:
-            axes = plt.figure().add_subplot(111)
-        axes.triplot(
+        plt.triplot(
             self.triangulation,
             linewidth=linewidth,
             color=color,
             alpha=alpha,
             **kwargs
             )
-        axes.axis('scaled')
         if show:
-            plt.colorbar()
+            plt.gca().axis('scaled')
             plt.show()
-        return axes
 
     def add_contour(
         self,
@@ -84,8 +70,10 @@ class SizeFunction:
         target_size=None,
         hmin=None,
         hmax=None,
-        n_jobs=-1
+        nproc=None
     ):
+        if nproc is None:
+            nproc = self.nproc
         if target_size is None:
             target_size = self.hmin
         level = float(level)
@@ -104,7 +92,7 @@ class SizeFunction:
             xt = xt.flatten()
             yt = yt.flatten()
             xy_target = np.vstack([xt, yt]).T
-            values, _ = tree.query(xy_target, n_jobs=n_jobs)
+            values, _ = tree.query(xy_target, n_jobs=nproc)
             values = expansion_rate*target_size*values + target_size
             values = values.reshape(raster.values.shape)
             if hmin is not None:
@@ -132,6 +120,7 @@ class SizeFunction:
             raster.add_band("SIZE_FUNCTION", values)
 
     def _set_triangulation(self):
+        global raster
         points = np.empty((0, 3), float)
         for raster in self.raster_collection:
             band = np.full(raster.shape, float("inf"))
@@ -156,33 +145,20 @@ class SizeFunction:
             y = y[~band.mask]
             band = band[~band.mask].data
             points = np.vstack([points, np.vstack([x, y, band]).T])
-            del(x)
-            del(y)
-            del(band)
+        self._values = points[:, 2]
+        points = points[:, :2]
+        del(x)
+        del(y)
+        del(band)
         gc.collect()
         elements = Triangulation(points[:, 0], points[:, 1]).triangles.copy()
-        gc.collect()
-        # generate mask
-        # TODO: Looking for options to speed-up this part using
-        # parallelization. This is the main bottleneck of the program.
-        mask = np.full((1, elements.shape[0]), True).flatten()
+        # generate mask, this is the main bottleneck.
         centroids = np.vstack(
             [np.sum(points[:, 0][elements], axis=1) / 3,
              np.sum(points[:, 1][elements], axis=1) / 3]).T
-        path = Path(self.pslg.polygon.exterior.coords, closed=True)
-        bbox = path.get_extents()
-        idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= centroids[:, 0],
-                                bbox.xmax >= centroids[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= centroids[:, 1],
-                                bbox.ymax >= centroids[:, 1])))[0]
-        mask[idxs] = np.logical_and(
-            mask[idxs], ~path.contains_points(centroids[idxs]))
-        for interior in self.pslg.polygon.interiors:
-            path = Path(interior.coords, closed=True)
-            bbox = path.get_extents()
+        mask = np.full((1, elements.shape[0]), True).flatten()
+        for raster in self.raster_collection:
+            bbox = raster.bbox
             idxs = np.where(np.logical_and(
                             np.logical_and(
                                 bbox.xmin <= centroids[:, 0],
@@ -190,13 +166,24 @@ class SizeFunction:
                             np.logical_and(
                                 bbox.ymin <= centroids[:, 1],
                                 bbox.ymax >= centroids[:, 1])))[0]
-            mask[idxs] = np.logical_or(
-                mask[idxs],
-                path.contains_points(centroids[idxs]))
+            # ----serial version
+            if self.nproc == 1:
+                results = raster.sample(centroids[idxs], raster.count)
+                mask[idxs] = np.ma.masked_equal(
+                    np.asarray([value for value in results]),
+                    raster.nodataval(raster.count)).mask.flatten()
+            # ----parallel version
+            else:
+                pool = Pool(processes=self.nproc)
+                results = pool.map_async(
+                        parallel_raster_sample,
+                        ([centroid] for centroid in centroids[idxs]))
+                results = results.get()
+                pool.close()
+                pool.join()
+                mask[idxs] = results
         self._triangulation = Triangulation(
             points[:, 0], points[:, 1], triangles=elements[~mask])
-        self._values = points[:, 2]
-        gc.collect()
 
     @property
     def pslg(self):
@@ -239,6 +226,10 @@ class SizeFunction:
         return self.pslg
 
     @property
+    def nproc(self):
+        return self._nproc
+
+    @property
     def hfun(self):
         hfun = jigsaw_msh_t()
         hfun.vert2 = self.vert2
@@ -263,6 +254,10 @@ class SizeFunction:
     @property
     def hfun_value(self):
         return np.asarray(self.values, dtype=jigsaw_msh_t.REALS_t)
+
+    @property
+    def _nproc(self):
+        return self.__nproc
 
     @property
     def _hmin(self):
@@ -312,6 +307,10 @@ class SizeFunction:
     def scaling(self, scaling):
         self._scaling = scaling
 
+    @nproc.setter
+    def nproc(self, nproc):
+        self._nproc = nproc
+
     @dst_crs.setter
     def dst_crs(self, dst_crs):
         self._dst_crs = dst_crs
@@ -358,7 +357,44 @@ class SizeFunction:
         assert scaling in ["absolute", "relative"]
         self.__scaling = scaling
 
-# PARALLEL MASK GENERATION TESTS
+    @_nproc.setter
+    def _nproc(self, nproc):
+        if nproc == -1:
+            nproc = cpu_count()
+        assert isinstance(nproc, int)
+        assert nproc > 0
+        self.__nproc = nproc
+
+# MASK GENERATION TESTS
+
+# -------- serial mask generation
+# path = Path(self.pslg.polygon.exterior.coords, closed=True)
+# bbox = path.get_extents()
+# idxs = np.where(np.logical_and(
+#                     np.logical_and(
+#                         bbox.xmin <= centroids[:, 0],
+#                         bbox.xmax >= centroids[:, 0]),
+#                     np.logical_and(
+#                         bbox.ymin <= centroids[:, 1],
+#                         bbox.ymax >= centroids[:, 1])))[0]
+# mask[idxs] = np.logical_and(
+#     mask[idxs], ~path.contains_points(centroids[idxs]))
+# for interior in self.pslg.polygon.interiors:
+#     path = Path(interior.coords, closed=True)
+#     bbox = path.get_extents()
+#     idxs = np.where(np.logical_and(
+#                     np.logical_and(
+#                         bbox.xmin <= centroids[:, 0],
+#                         bbox.xmax >= centroids[:, 0]),
+#                     np.logical_and(
+#                         bbox.ymin <= centroids[:, 1],
+#                         bbox.ymax >= centroids[:, 1])))[0]
+#     mask[idxs] = np.logical_or(
+#         mask[idxs],
+#         path.contains_points(centroids[idxs]))
+# -------- end serial mask generation
+
+
 # -------------- parallel exterior/interior version
 # global exterior
 # global interior
