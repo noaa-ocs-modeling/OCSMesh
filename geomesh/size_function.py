@@ -8,18 +8,12 @@ from geomesh.pslg import PlanarStraightLineGraph
 
 #  ----------- multiprocessing imports and functions
 from multiprocessing import Pool, cpu_count
+from matplotlib.path import Path
 
 
-def parallel_raster_sample(coord):
-    global raster
-    try:
-        sample = list(raster.sample(coord, raster.count))
-        if sample[0][0] == 0.:
-            return True
-        else:
-            return False
-    except (TypeError, IndexError):
-        return False
+def path_contains_point_parallel_wrapper(coord):
+    global path
+    return path.contains_point(coord)
 
 
 class SizeFunction:
@@ -30,7 +24,7 @@ class SizeFunction:
         hmin=None,
         hmax=None,
         dst_crs="EPSG:3395",
-        nproc=1
+        nproc=-1
     ):
         self._pslg = pslg
         self._hmin = hmin
@@ -120,10 +114,10 @@ class SizeFunction:
             raster.add_band("SIZE_FUNCTION", values)
 
     def _set_triangulation(self):
-        global raster
-        points = np.empty((0, 3), float)
+        global path
+        points = np.empty((0, 3), np.float32)
         for raster in self.raster_collection:
-            band = np.full(raster.shape, float("inf"))
+            band = np.full(raster.shape, np.float32(float("inf")))
             for i in range(1, raster.count + 1):
                 if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
                     band = np.minimum(band, raster.read(i))
@@ -157,8 +151,37 @@ class SizeFunction:
             [np.sum(points[:, 0][elements], axis=1) / 3,
              np.sum(points[:, 1][elements], axis=1) / 3]).T
         mask = np.full((1, elements.shape[0]), True).flatten()
-        for raster in self.raster_collection:
-            bbox = raster.bbox
+        path = Path(self.pslg.polygon.exterior.coords, closed=True)
+        bbox = path.get_extents()
+        idxs = np.where(np.logical_and(
+                            np.logical_and(
+                                bbox.xmin <= centroids[:, 0],
+                                bbox.xmax >= centroids[:, 0]),
+                            np.logical_and(
+                                bbox.ymin <= centroids[:, 1],
+                                bbox.ymax >= centroids[:, 1])))[0]
+        if self.nproc == 1:
+            mask[idxs] = np.logical_and(
+                mask[idxs], ~path.contains_points(centroids[idxs]))
+        else:
+            pool = Pool(
+                processes=self.nproc,
+                # maxtasksperchild=1
+                )
+            results = pool.map_async(
+                path_contains_point_parallel_wrapper,
+                [centroid for centroid in centroids[idxs]],
+                chunksize=1
+                )
+            results = results.get()
+            pool.close()
+            pool.join()
+            mask[idxs] = np.logical_and(
+                mask[idxs], ~np.asarray(results))
+
+        for interior in self.pslg.polygon.interiors:
+            path = Path(interior.coords, closed=True)
+            bbox = path.get_extents()
             idxs = np.where(np.logical_and(
                             np.logical_and(
                                 bbox.xmin <= centroids[:, 0],
@@ -166,22 +189,23 @@ class SizeFunction:
                             np.logical_and(
                                 bbox.ymin <= centroids[:, 1],
                                 bbox.ymax >= centroids[:, 1])))[0]
-            # ----serial version
             if self.nproc == 1:
-                results = raster.sample(centroids[idxs], raster.count)
-                mask[idxs] = np.ma.masked_equal(
-                    np.asarray([value for value in results]),
-                    raster.nodataval(raster.count)).mask.flatten()
-            # ----parallel version
+                mask[idxs] = np.logical_or(
+                    mask[idxs], path.contains_points(centroids[idxs]))
             else:
-                pool = Pool(processes=self.nproc)
+                pool = Pool(
+                    processes=self.nproc,
+                    # maxtasksperchild=1
+                    )
                 results = pool.map_async(
-                        parallel_raster_sample,
-                        ([centroid] for centroid in centroids[idxs]))
+                    path_contains_point_parallel_wrapper,
+                    [centroid for centroid in centroids[idxs]],
+                    chunksize=1
+                    )
                 results = results.get()
                 pool.close()
                 pool.join()
-                mask[idxs] = results
+                mask[idxs] = np.logical_or(mask[idxs], np.asarray(results))
         self._triangulation = Triangulation(
             points[:, 0], points[:, 1], triangles=elements[~mask])
 
