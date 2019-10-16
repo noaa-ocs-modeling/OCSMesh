@@ -183,6 +183,12 @@ class Raster:
         y = np.linspace(y1, y0, height)
         return x, y, band
 
+    def set_dst_crs(self, dst_crs):
+        self.__dst_crs = dst_crs
+
+    def clear_dst_crs(self):
+        del(self.__dst_crs)
+
     @property
     def path(self):
         return self._path
@@ -313,7 +319,13 @@ class Raster:
                     dst.write_band(1, src.read(1))
                     dst.update_tags(1, BAND_TYPE='ELEVATION')
             self._tmpfile = tmpfile
-            return self.__src
+            # handles the case where file is getting reopened
+            if not hasattr(self, f"_{self.__class__.__name__}__dst_crs"):
+                return self.__src
+            else:
+                self._dst_crs = self.__dst_crs
+                return self.__src
+            # return self.__src
 
     @property
     def _path(self):
@@ -459,7 +471,7 @@ class Raster:
         try:
             self.__src.close()
             del(self.__src)
-            del(self._collection)
+            del(self._tmpfile)
         except AttributeError:
             pass
 
@@ -467,6 +479,7 @@ class Raster:
     def _tmpfile(self):
         try:
             del(self.__tmpfile)
+            del(self._collection)
         except AttributeError:
             pass
 

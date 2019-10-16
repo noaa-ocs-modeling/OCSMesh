@@ -19,8 +19,8 @@ def main():
     rootdir = os.path.dirname(os.path.abspath(__file__))
     datadir = rootdir + '/data'
     files = [
-        'ncei19_n41x00_w074x00_2015v1.tif',
-        'ncei19_n41x00_w073x75_2015v1.tif',
+        'ncei13_n41x00_w074x00_2015v1.tif',
+        # 'ncei19_n41x00_w073x75_2015v1.tif',
     ]
     files = [os.path.abspath(datadir + '/' + file) for file in files]
 
@@ -29,11 +29,12 @@ def main():
 
     # ------- init PSLG
     pslg = PlanarStraightLineGraph(rc, -1500., 15.)
-    # pslg.make_plot(show=True)
+    # pslg.plot(show=True)
+    # pslg.triplot(show=True)
 
     # ------- generate size function
     hfun = SizeFunction(pslg, 50., 1500.)
-    hfun.add_contour(0., 0.001)
+    # hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
     # hfun.tricontourf(cmap='jet')
     # hfun.triplot(show=True)
@@ -54,11 +55,11 @@ def main():
     mesh.transform_to('EPSG:4326')
 
     # ------- visualize results
-    fig = plt.figure()
-    axes = fig.add_subplot(111)
-    mesh.make_plot(axes=axes)
-    axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
-    plt.show()
+    # fig = plt.figure()
+    # axes = fig.add_subplot(111)
+    # mesh.make_plot(axes=axes)
+    # axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
+    # plt.show()
     print("NP={}".format(mesh.values.size))
     print("elements={}".format(mesh.elements.shape[0]))
 

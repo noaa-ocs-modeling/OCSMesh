@@ -3,20 +3,31 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.tri import Triangulation
 import tempfile
+import gc
 import fiona
 from shapely.geometry import shape, mapping, MultiPolygon
+from multiprocessing import Pool, cpu_count
 from jigsawpy import jigsaw_msh_t
+from geomesh.parallel_processing import pslg_pool_initializer, pslg_pool_worker
 from geomesh.raster import Raster
 from geomesh.raster_collection import RasterCollection
 
 
 class PlanarStraightLineGraph:
 
-    def __init__(self, raster_collection, zmin, zmax, dst_crs="EPSG:3395"):
+    def __init__(
+        self,
+        raster_collection,
+        zmin,
+        zmax,
+        dst_crs="EPSG:3395",
+        nproc=-1
+    ):
         self._raster_collection = raster_collection
         self._zmin = zmin
         self._zmax = zmax
         self._dst_crs = dst_crs
+        self._nproc = nproc
 
     def __iter__(self):
         for raster in self.raster_collection:
@@ -32,6 +43,25 @@ class PlanarStraightLineGraph:
         if show:
             plt.show()
         return plt.gca()
+
+    def triplot(
+        self,
+        show=False,
+        linewidth=0.07,
+        color='black',
+        alpha=0.5,
+        **kwargs
+    ):
+        plt.triplot(
+            self.triangulation,
+            linewidth=linewidth,
+            color=color,
+            alpha=alpha,
+            **kwargs
+            )
+        if show:
+            plt.gca().axis('scaled')
+            plt.show()
 
     @property
     def raster_collection(self):
@@ -64,33 +94,60 @@ class PlanarStraightLineGraph:
         return self._collection
 
     @property
+    def points(self):
+        return self.memmap_points
+
+    @property
+    def elements(self):
+        return self.memmap_elements
+
+    @property
+    def neighbors(self):
+        return self.triangulation.neighbors
+
+    @property
     def coords(self):
-        coords = np.empty((0, 2), dtype=np.float32)
-        for polygon in self.multipolygon:
-            coords = np.vstack([coords, polygon.exterior.coords])
-            for interior in polygon.interiors:
-                coords = np.vstack([coords, interior.coords])
-        return coords
+        return self.points
 
     @property
     def x(self):
-        return self.triangulation.x
+        return self.coords[:, 0]
 
     @property
     def y(self):
-        return self.triangulation.y
+        return self.coords[:, 1]
+
+    @property
+    def triangles(self):
+        return self.elements
 
     @property
     def triangulation(self):
-        return self._triangulation
-
-    @property
-    def shp(self):
-        return self._shp
+        return Triangulation(self.x, self.y, self.elements)
 
     @property
     def dst_crs(self):
         return self._dst_crs
+
+    @property
+    def memmap_points(self):
+        return self._memmap_points
+
+    @property
+    def memmap_elements(self):
+        return self._memmap_elements
+
+    @property
+    def tmpfile_points(self):
+        return self._tmpfile_points
+
+    @property
+    def tmpfile_elements(self):
+        return self._tmpfile_elements
+
+    @property
+    def tmpfile_shp(self):
+        return self._tmpfile_shp
 
     @property
     def ndim(self):
@@ -111,21 +168,20 @@ class PlanarStraightLineGraph:
 
     @property
     def vert2(self):
-        coords = np.vstack([self.triangulation.x, self.triangulation.y]).T
+        coords = np.vstack([self.x, self.y]).T
         coords = [([x, y], 0) for x, y in coords]
         return np.asarray(coords, dtype=jigsaw_msh_t.VERT2_t)
 
     @property
     def edge2(self):
-        idxs = np.vstack(list(np.where(self.triangulation.neighbors == -1))).T
-        edge2 = [
-            ([self.triangulation.triangles[i, j],
-              self.triangulation.triangles[i, (j+1) % 3]], 0) for i, j in idxs]
+        idxs = np.vstack(list(np.where(self.neighbors == -1))).T
+        edge2 = [([self.triangles[i, j], self.triangles[i, (j+1) % 3]], 0)
+                 for i, j in idxs]
         return np.asarray(edge2, dtype=jigsaw_msh_t.EDGE2_t)
 
     @property
-    def _raster_collection(self):
-        return self.__raster_collection
+    def nproc(self):
+        return self._nproc
 
     @property
     def _collection(self):
@@ -140,9 +196,10 @@ class PlanarStraightLineGraph:
                     multipolygon = shape(feature["geometry"])
                     for polygon in multipolygon:
                         polygon_collection.append(polygon)
+                raster.close()
             multipolygon = MultiPolygon(polygon_collection).buffer(0)
             with fiona.open(
-                    self.shp.name,
+                    self.tmpfile_shp.name,
                     'w',
                     driver='ESRI Shapefile',
                     crs=self.dst_crs,
@@ -156,8 +213,182 @@ class PlanarStraightLineGraph:
                     "properties": {
                         "zmin": self.zmin,
                         "zmax": self.zmax}})
-            self.__collection = fiona.open(self.shp.name)
+            self.__collection = fiona.open(self.tmpfile_shp.name)
             return self.__collection
+
+    @property
+    def _memmap_points(self):
+        try:
+            return self.__memmap_points
+        except AttributeError:
+            start_shape = (0, 2)
+            for polygon in self.multipolygon:
+                new_points = polygon.exterior.coords
+                old_len = start_shape[0]
+                new_len = old_len + len(list(new_points))
+                new_shape = (new_len, 2)
+                points = np.memmap(
+                    self.tmpfile_points.name,
+                    dtype=float, mode='r+', shape=new_shape)
+                points[old_len:new_len] = new_points
+                start_shape = points.shape
+                for interior in polygon.interiors:
+                    new_points = interior.coords
+                    old_len = start_shape[0]
+                    new_len = old_len + len(list(new_points))
+                    new_shape = (new_len, 2)
+                    points = np.memmap(
+                        self.tmpfile_points.name,
+                        dtype=float, mode='r+', shape=new_shape)
+                    points[old_len:new_len] = new_points
+                    start_shape = points.shape
+            self.__memmap_points = np.memmap(
+                self.tmpfile_points.name, dtype=float, mode='r',
+                shape=points.shape)
+            return self.__memmap_points
+
+    @property
+    def _memmap_elements(self):
+        try:
+            return self.__memmap_elements
+        except AttributeError:
+
+            # make preliminary triangulation
+            elements = Triangulation(self.x, self.y).triangles
+
+            # put preliminary elements in tmpfile
+            tmpfile_elements = tempfile.NamedTemporaryFile()
+            shape = elements.shape
+            memmap_elements = np.memmap(
+                        tmpfile_elements.name,
+                        dtype=int, mode='r+', shape=shape)
+            memmap_elements[:] = elements
+            del memmap_elements
+            elements = np.memmap(
+                        tmpfile_elements.name,
+                        dtype=int, mode='r', shape=shape)
+
+            # create mask to be populated
+            tmpfile_mask = tempfile.NamedTemporaryFile()
+            mask = np.memmap(
+                        tmpfile_mask.name,
+                        dtype=bool, mode='r+', shape=(shape[0],))
+            mask[:] = True
+            mask.flush()
+
+            # create centroid list
+            tmpfile_centroids = tempfile.NamedTemporaryFile()
+            centroids = np.memmap(
+                        tmpfile_centroids.name,
+                        dtype=float, mode='r+', shape=(shape[0], 2))
+            centroids[:] = np.vstack(
+                [np.sum(self.x[elements], axis=1) / 3,
+                 np.sum(self.y[elements], axis=1) / 3]).T
+            del centroids
+            centroids = np.memmap(
+                        tmpfile_centroids.name,
+                        dtype=float, mode='r', shape=(shape[0], 2))
+
+            path = Path(self.polygon.exterior.coords, closed=True)
+            bbox = path.get_extents()
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+            # ------ parallel inpoly test on polygon exterior
+            if self.nproc > 1:
+                pool = Pool(self.nproc, pslg_pool_initializer, (path,))
+                results = pool.map_async(
+                            pslg_pool_worker,
+                            (centroid for centroid in centroids[idxs]),
+                            )
+                results = results.get()
+                pool.close()
+                pool.join()
+                results = np.asarray(results).flatten()
+                mask[idxs] = np.logical_and(mask[idxs], ~results)
+                del results
+                gc.collect()
+            # ------ serial inpoly test on polygon exterior
+            else:
+                mask[idxs] = np.logical_and(
+                    mask[idxs], ~path.contains_points(centroids[idxs]))
+            mask.flush()
+            for interior in self.polygon.interiors:
+                path = Path(interior.coords, closed=True)
+                bbox = path.get_extents()
+                idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+                # ------ parallel inpoly test on polygon interior
+                if self.nproc > 1:
+                    pool = Pool(self.nproc, pslg_pool_initializer, (path,))
+                    results = pool.map_async(
+                                pslg_pool_worker,
+                                (centroid for centroid in centroids[idxs]),
+                                )
+                    results = results.get()
+                    pool.close()
+                    pool.join()
+                    results = np.asarray(results).flatten()
+                    mask[idxs] = np.logical_or(mask[idxs], results)
+                    del results
+                    gc.collect()
+                # ------ serial inpoly test on polygon interior
+                else:
+                    mask[idxs] = np.logical_or(
+                        mask[idxs], path.contains_points(centroids[idxs]))
+                mask.flush()
+            del centroids
+            gc.collect()
+            shape = elements[~mask].shape
+            memmap_elements = np.memmap(
+                        self.tmpfile_elements.name,
+                        dtype=int, mode='r+', shape=shape)
+            memmap_elements[:] = elements[~mask]
+            memmap_elements.flush()
+            self.__memmap_elements = np.memmap(
+                self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
+            return self.__memmap_elements
+
+    @property
+    def _tmpfile_points(self):
+        try:
+            return self.__tmpfile_points
+        except AttributeError:
+            self.__tmpfile_points = tempfile.NamedTemporaryFile()
+            return self.__tmpfile_points
+
+    @property
+    def _tmpfile_elements(self):
+        try:
+            return self.__tmpfile_elements
+        except AttributeError:
+            self.__tmpfile_elements = tempfile.NamedTemporaryFile()
+            return self.__tmpfile_elements
+
+    @property
+    def _tmpfile_shp(self):
+        try:
+            return self.__tmpfile_shp
+        except AttributeError:
+            self.__tmpfile_shp = tempfile.TemporaryDirectory()
+            return self.__tmpfile_shp
+
+    @property
+    def _feature(self):
+        return self.collection[0]["geometry"]
+
+    @property
+    def _raster_collection(self):
+        return self.__raster_collection
 
     @property
     def _dst_crs(self):
@@ -172,54 +403,8 @@ class PlanarStraightLineGraph:
         return self.__zmax
 
     @property
-    def _triangulation(self):
-        try:
-            return self.__triangulation
-        except AttributeError:
-            coords = self.coords
-            tri = Triangulation(coords[:, 0], coords[:, 1])
-            mask = np.full((1, tri.triangles.shape[0]), True).flatten()
-            centroids = np.vstack(
-                [np.sum(tri.x[tri.triangles], axis=1) / 3,
-                 np.sum(tri.y[tri.triangles], axis=1) / 3]).T
-            path = Path(self.polygon.exterior.coords, closed=True)
-            bbox = path.get_extents()
-            idxs = np.where(np.logical_and(
-                                np.logical_and(
-                                    bbox.xmin <= centroids[:, 0],
-                                    bbox.xmax >= centroids[:, 0]),
-                                np.logical_and(
-                                    bbox.ymin <= centroids[:, 1],
-                                    bbox.ymax >= centroids[:, 1])))[0]
-            mask[idxs] = np.logical_and(
-                mask[idxs], ~path.contains_points(centroids[idxs]))
-            for interior in self.polygon.interiors:
-                path = Path(interior.coords, closed=True)
-                bbox = path.get_extents()
-                idxs = np.where(np.logical_and(
-                                np.logical_and(
-                                    bbox.xmin <= centroids[:, 0],
-                                    bbox.xmax >= centroids[:, 0]),
-                                np.logical_and(
-                                    bbox.ymin <= centroids[:, 1],
-                                    bbox.ymax >= centroids[:, 1])))[0]
-                mask[idxs] = np.logical_or(
-                    mask[idxs], path.contains_points(centroids[idxs]))
-            self.__triangulation = Triangulation(
-                coords[:, 0], coords[:, 1], triangles=tri.triangles[~mask])
-            return self.__triangulation
-
-    @property
-    def _shp(self):
-        try:
-            return self.__shp
-        except AttributeError:
-            self.__shp = tempfile.TemporaryDirectory()
-            return self.__shp
-
-    @property
-    def _feature(self):
-        return self.collection[0]["geometry"]
+    def _nproc(self):
+        return self.__nproc
 
     @dst_crs.setter
     def dst_crs(self, dst_crs):
@@ -238,7 +423,6 @@ class PlanarStraightLineGraph:
 
     @_dst_crs.setter
     def _dst_crs(self, dst_crs):
-        self.raster_collection.dst_crs = dst_crs
         del(self._collection)
         self.__dst_crs = dst_crs
 
@@ -268,6 +452,14 @@ class PlanarStraightLineGraph:
                 pass
             self.__zmax = float(zmax)
 
+    @_nproc.setter
+    def _nproc(self, nproc):
+        if nproc == -1:
+            nproc = cpu_count()
+        assert isinstance(nproc, int)
+        assert nproc > 0
+        self.__nproc = nproc
+
     @_collection.deleter
     def _collection(self):
         try:
@@ -289,13 +481,6 @@ class PlanarStraightLineGraph:
         try:
             del(self.__zmax)
             del(self._collection)
-        except AttributeError:
-            pass
-
-    @_triangulation.deleter
-    def _triangulation(self):
-        try:
-            del(self.__triangulation)
         except AttributeError:
             pass
 

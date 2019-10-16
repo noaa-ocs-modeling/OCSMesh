@@ -1,12 +1,13 @@
+import tempfile
 import gc
 import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 import numpy as np
-from scipy.spatial import cKDTree
+from scipy.spatial import cKDTree, Delaunay
 from jigsawpy import jigsaw_msh_t
 from multiprocessing import Pool, cpu_count
 from geomesh.pslg import PlanarStraightLineGraph
-from geomesh.parallel_processing import pool_initializer, pool_worker
+from geomesh.parallel_processing import hfun_pool_initializer, hfun_pool_worker
 
 
 class SizeFunction:
@@ -59,13 +60,24 @@ class SizeFunction:
         hmax=None,
         nproc=None
     ):
-        if nproc is None:
-            nproc = self.nproc
-        if target_size is None:
-            target_size = self.hmin
+
+        # lint input args
+        nproc = self.nproc if nproc is None else float(nproc)
+        target_size = self.hmin if target_size is None else float(target_size)
+        if hmin is None:
+            hmin = self.hmin
+        else:
+            hmin = float(hmin)
+            assert hmin > 0
+        if hmax is None:
+            hmax = self.hmax
+        else:
+            hmax = float(hmax)
+            assert hmax >= hmin
         level = float(level)
-        target_size = float(target_size)
         expansion_rate = float(expansion_rate)
+
+        # gather contour points
         vertices = np.empty((0, 2), float)
         for i, raster in enumerate(self.raster_collection):
             ax = plt.contour(raster.x, raster.y, raster.values, levels=[level])
@@ -73,103 +85,57 @@ class SizeFunction:
             for path_collection in ax.collections:
                 for path in path_collection.get_paths():
                     vertices = np.vstack([vertices, path.vertices])
+
+        # compute distances from pixel to nearest contour point
         tree = cKDTree(vertices)
+        del vertices
+        gc.collect()
         for i, raster in enumerate(self.raster_collection):
+            raster.dst_crs = self.dst_crs
             xt, yt = np.meshgrid(raster.x, raster.y)
-            xt = xt.flatten()
-            yt = yt.flatten()
-            xy_target = np.vstack([xt, yt]).T
+            xy_target = np.vstack([xt.flatten(), yt.flatten()]).T
+            del xt
+            del yt
             values, _ = tree.query(xy_target, n_jobs=nproc)
+            del xy_target
+            gc.collect()
             values = expansion_rate*target_size*values + target_size
             values = values.reshape(raster.values.shape)
-            if hmin is not None:
-                values[np.where(values < hmin)] = hmin
-            if hmax is not None:
-                values[np.where(values > hmax)] = hmax
+            values[np.where(values < hmin)] = hmin
+            values[np.where(values > hmax)] = hmax
             raster.add_band("SIZE_FUNCTION", values)
+            del values
+            gc.collect()
 
     def add_subtidal_flow_limiter(self, hmin=None, hmax=None):
         """
         https://wiki.fvcom.pml.ac.uk/doku.php?id=configuration%3Agrid_scale_considerations
         """
+        if hmin is None:
+            hmin = self.hmin
+        else:
+            hmin = float(hmin)
+            assert hmin > 0
+        if hmax is None:
+            hmax = self.hmax
+        else:
+            hmax = float(hmax)
+            assert hmax >= hmin
         for i, raster in enumerate(self.raster_collection):
             dx = np.abs(raster.src.transform[0])
             dy = np.abs(raster.src.transform[4])
             dx, dy = np.gradient(raster.values, dx, dy)
             dh = np.sqrt(dx**2 + dy**2)
+            del dx
+            del dy
             dh = np.ma.masked_equal(dh, 0.)
             values = np.abs((1./3.)*(raster.values/dh))
+            del dh
             values = values.filled(np.max(values))
-            if hmin is not None:
-                values[np.where(values < hmin)] = hmin
-            if hmax is not None:
-                values[np.where(values > hmax)] = hmax
+            values[np.where(values < hmin)] = hmin
+            values[np.where(values > hmax)] = hmax
             raster.add_band("SIZE_FUNCTION", values)
-
-    def _set_triangulation(self):
-        points = np.empty((0, 3), np.float32)
-        for raster in self.raster_collection:
-            band = np.full(raster.shape, np.float32(float("inf")))
-            for i in range(1, raster.count + 1):
-                if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
-                    band = np.minimum(band, raster.read(i))
-            raster.add_band("SIZE_FUNCTION_FINALIZED", band)
-            raster.mask([self.pslg.polygon], raster.count)
-            if raster.dx < self.hmin or raster.dy < self.hmin:
-                x, y, band = raster.resampled(
-                    raster.count, self.hmin, self.hmin)
-            else:
-                x, y = raster.x, raster.y
-            band = np.ma.masked_equal(
-                band.astype(raster.dtype(raster.count)),
-                raster.nodataval(raster.count))
-            x, y = np.meshgrid(x, y)
-            x = x.flatten()
-            y = y.flatten()
-            band = band.flatten()
-            x = x[~band.mask]
-            y = y[~band.mask]
-            band = band[~band.mask].data
-            points = np.vstack([points, np.vstack([x, y, band]).T])
-        del(x)
-        del(y)
-        del(band)
-        gc.collect()
-        elements = Triangulation(points[:, 0], points[:, 1]).triangles.copy()
-        # generate mask, this is the main bottleneck.
-        centroids = np.vstack(
-            [np.sum(points[:, 0][elements], axis=1) / 3,
-             np.sum(points[:, 1][elements], axis=1) / 3]).T
-        mask = np.full((1, elements.shape[0]), True).flatten()
-        for raster in self.raster_collection:
-            bbox = raster.bbox
-            idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= centroids[:, 0],
-                                bbox.xmax >= centroids[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= centroids[:, 1],
-                                bbox.ymax >= centroids[:, 1])))[0]
-            # ----serial version
-            if self.nproc == 1:
-                results = raster.sample(centroids[idxs], raster.count)
-                mask[idxs] = np.ma.masked_equal(
-                    np.asarray([value for value in results]),
-                    raster.nodataval(raster.count)).mask.flatten()
-            # ----parallel version
-            else:
-                pool = Pool(self.nproc, pool_initializer, (raster,))
-                results = pool.map_async(
-                        pool_worker,
-                        ([centroid] for centroid in centroids[idxs]),
-                        )
-                results = results.get()
-                pool.close()
-                pool.join()
-                mask[idxs] = results
-        self._triangulation = Triangulation(
-            points[:, 0], points[:, 1], triangles=elements[~mask])
-        self._values = points[:, 2]
+            del values
 
     @property
     def pslg(self):
@@ -177,19 +143,47 @@ class SizeFunction:
 
     @property
     def raster_collection(self):
-        return self.pslg._raster_collection
+        return self.pslg.raster_collection
+
+    @property
+    def points(self):
+        return self.memmap_points
+
+    @property
+    def elements(self):
+        return self.memmap_elements
+
+    @property
+    def neighbors(self):
+        return self.triangulation.neighbors
 
     @property
     def triangulation(self):
-        return self._triangulation
+        return Triangulation(self.x, self.y, self.elements)
 
     @property
     def coords(self):
-        return np.vstack([self.triangulation.x, self.triangulation.y]).T
+        return self.points[:, :2]
+
+    @property
+    def xy(self):
+        return self.points[:, :2]
+
+    @property
+    def x(self):
+        return self.points[:, 0]
+
+    @property
+    def y(self):
+        return self.points[:, 1]
 
     @property
     def values(self):
-        return self._values
+        return self.points[:, 2]
+
+    @property
+    def triangles(self):
+        return self.elements
 
     @property
     def scaling(self):
@@ -216,6 +210,14 @@ class SizeFunction:
         return self._nproc
 
     @property
+    def tmpfile_points(self):
+        return self._tmpfile_points
+
+    @property
+    def tmpfile_elements(self):
+        return self._tmpfile_elements
+
+    @property
     def hfun(self):
         hfun = jigsaw_msh_t()
         hfun.vert2 = self.vert2
@@ -228,18 +230,26 @@ class SizeFunction:
     @property
     def vert2(self):
         return np.asarray(
-            [([x, y], 0) for x, y in self.coords[:, :2]],
+            [([x, y], 0) for x, y in self.coords],
             dtype=jigsaw_msh_t.VERT2_t)
 
     @property
     def tria3(self):
         return np.asarray(
-            [(tuple(indices), 0) for indices in self.triangulation.triangles],
+            [(tuple(indices), 0) for indices in self.elements],
             dtype=jigsaw_msh_t.TRIA3_t)
 
     @property
     def hfun_value(self):
         return np.asarray(self.values, dtype=jigsaw_msh_t.REALS_t)
+
+    @property
+    def memmap_points(self):
+        return self._memmap_points
+
+    @property
+    def memmap_elements(self):
+        return self._memmap_elements
 
     @property
     def _nproc(self):
@@ -262,6 +272,142 @@ class SizeFunction:
         return self.__mesh
 
     @property
+    def _memmap_points(self):
+        try:
+            return self.__memmap_points
+        except AttributeError:
+            start_shape = (0, 3)
+            for raster in self.raster_collection:
+                band = np.full(raster.shape, float("inf"))
+                for i in range(1, raster.count + 1):
+                    if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
+                        band = np.minimum(band, raster.read(i))
+                raster.add_band("SIZE_FUNCTION_FINALIZED", band)
+                raster.mask([self.pslg.polygon], raster.count)
+                if raster.dx < self.hmin or raster.dy < self.hmin:
+                    x, y, band = raster.resampled(
+                        raster.count, self.hmin, self.hmin)
+                else:
+                    x, y = raster.x, raster.y
+                band = np.ma.masked_equal(
+                    band.astype(raster.dtype(raster.count)),
+                    raster.nodataval(raster.count))
+                x, y = np.meshgrid(x, y)
+                x = x.flatten()
+                y = y.flatten()
+                band = band.flatten()
+                x = x[~band.mask]
+                y = y[~band.mask]
+                band = band[~band.mask].data
+                band[np.where(band < self.hmin)] = self.hmin
+                band[np.where(band > self.hmax)] = self.hmax
+                new_points = np.vstack([x, y, band]).T
+                del band
+                del x
+                del y
+                old_len = start_shape[0]
+                new_len = old_len + new_points.shape[0]
+                new_shape = (new_len, 3)
+                points = np.memmap(
+                    self.tmpfile_points.name,
+                    dtype=float, mode='r+',
+                    shape=new_shape)
+                points[old_len:new_len] = new_points
+                del new_points
+                points.flush()
+                start_shape = points.shape
+                gc.collect()
+            points.flush()
+            points = np.memmap(
+                self.tmpfile_points.name, dtype=float, mode='r',
+                shape=points.shape)
+            self.__memmap_points = points
+            return self.__memmap_points
+
+    @property
+    def _memmap_elements(self):
+        try:
+            return self.__memmap_elements
+        except AttributeError:
+            print('making memmap elements')
+            tri = Delaunay(self.coords.astype(np.float32))
+            elements = tri.simplices.copy()
+            del tri
+            tmpfile_elements = tempfile.NamedTemporaryFile()
+            shape = elements.shape
+            memmap_elements = np.memmap(
+                        tmpfile_elements.name,
+                        dtype=int, mode='r+', shape=shape)
+            memmap_elements[:] = elements
+            del elements
+            del memmap_elements
+            elements = np.memmap(
+                        tmpfile_elements.name,
+                        dtype=int, mode='r', shape=shape)
+
+            # create mask to be populated
+            tmpfile_mask = tempfile.NamedTemporaryFile()
+            mask = np.memmap(
+                        tmpfile_mask.name,
+                        dtype=bool, mode='r+', shape=(shape[0],))
+            mask[:] = True
+            mask.flush()
+
+            # create centroid list
+            tmpfile_centroids = tempfile.NamedTemporaryFile()
+            centroids = np.memmap(
+                        tmpfile_centroids.name,
+                        dtype=float, mode='r+', shape=(shape[0], 2))
+            centroids[:] = np.vstack(
+                [np.sum(self.x[elements], axis=1) / 3,
+                 np.sum(self.y[elements], axis=1) / 3]).T
+            del centroids
+            centroids = np.memmap(
+                        tmpfile_centroids.name,
+                        dtype=float, mode='r', shape=(shape[0], 2))
+
+            for raster in self.raster_collection:
+                bbox = raster.bbox
+                idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+                # ----serial version
+                if self.nproc == 1:
+                    results = raster.sample(centroids[idxs], raster.count)
+                    mask[idxs] = np.ma.masked_equal(
+                        np.asarray([value for value in results]),
+                        raster.nodataval(raster.count)).mask.flatten()
+                # ----parallel version
+                else:
+                    print('will shoot hfun parallel')
+                    pool = Pool(self.nproc, hfun_pool_initializer, (raster,))
+                    results = pool.map_async(
+                            hfun_pool_worker,
+                            ([centroid] for centroid in centroids[idxs]),
+                            )
+                    # tmpfile_results = tempfile.NamedTemporaryFile()
+                    breakpoint()
+                    results = results.get()
+                    breakpoint()
+                    pool.close()
+                    pool.join()
+                    mask[idxs] = results
+                mask.flush()
+            shape = elements[~mask].shape
+            memmap_elements = np.memmap(
+                        self.tmpfile_elements.name,
+                        dtype=int, mode='r+', shape=shape)
+            memmap_elements[:] = elements[~mask]
+            memmap_elements.flush()
+            self.__memmap_elements = np.memmap(
+                self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
+            return self.__memmap_elements
+
+    @property
     def _scaling(self):
         try:
             return self.__scaling
@@ -270,20 +416,20 @@ class SizeFunction:
             return self.__scaling
 
     @property
-    def _triangulation(self):
+    def _tmpfile_points(self):
         try:
-            return self.__triangulation
+            return self.__tmpfile_points
         except AttributeError:
-            self._set_triangulation()
-            return self.__triangulation
+            self.__tmpfile_points = tempfile.NamedTemporaryFile()
+            return self.__tmpfile_points
 
     @property
-    def _values(self):
+    def _tmpfile_elements(self):
         try:
-            return self.__values
+            return self.__tmpfile_elements
         except AttributeError:
-            self._set_triangulation()
-            return self.__values
+            self.__tmpfile_elements = tempfile.NamedTemporaryFile()
+            return self.__tmpfile_elements
 
     @property
     def _dst_crs(self):
@@ -305,16 +451,6 @@ class SizeFunction:
     def _scaling(self, scaling):
         assert scaling in ["absolute", "relative"]
         self.__scaling = scaling
-
-    @_triangulation.setter
-    def _triangulation(self, triangulation):
-        self.__triangulation = triangulation
-
-    @_values.setter
-    def _values(self, values):
-        values[np.where(values < self.hmin)] = self.hmin
-        values[np.where(values > self.hmax)] = self.hmax
-        self.__values = values
 
     @_dst_crs.setter
     def _dst_crs(self, dst_crs):

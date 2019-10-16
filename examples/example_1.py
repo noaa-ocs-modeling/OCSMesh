@@ -57,11 +57,11 @@ def main():
     mesh.transform_to('EPSG:4326')
 
     # ------- visualize results
-    # fig = plt.figure()
-    # axes = fig.add_subplot(111)
-    # mesh.make_plot(axes=axes)
-    # axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
-    # plt.show()
+    fig = plt.figure()
+    axes = fig.add_subplot(111)
+    mesh.make_plot(axes=axes)
+    axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
+    plt.savefig('pr_mesh.png')
 
     # -------- write to disk
     fname = os.path.abspath(rootdir + '/example_1.grd')

@@ -6,6 +6,7 @@ class RasterCollection:
 
     def __init__(self, files=[], dst_crs="EPSG:3395"):
         self._dst_crs = dst_crs
+        files = list(files)
         for file in files:
             self.append(file)
 
@@ -24,7 +25,7 @@ class RasterCollection:
         for item in self.container:
             if raster.path == item.path:
                 return
-        raster.dst_crs = self.dst_crs
+        raster.set_dst_crs(self.dst_crs)
         self._container.append(raster)
 
     @property
