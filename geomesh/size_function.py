@@ -1,15 +1,14 @@
 import tempfile
 import gc
 import matplotlib.pyplot as plt
+from matplotlib.path import Path
 from matplotlib.tri import Triangulation
 import numpy as np
-from scipy.spatial import cKDTree, Delaunay
-from shapely.geometry import MultiPoint
-from shapely.ops import triangulate
+from scipy.spatial import cKDTree
 from multiprocessing import Pool, cpu_count
 from jigsawpy import jigsaw_msh_t
 from geomesh.pslg import PlanarStraightLineGraph
-from geomesh.parallel_processing import hfun_pool_initializer, hfun_pool_worker
+from geomesh import parallel_processing
 
 
 class SizeFunction:
@@ -320,7 +319,32 @@ class SizeFunction:
         try:
             return self.__memmap_elements
         except AttributeError:
-            elements = Triangulation(self.x, self.y).triangles
+            tri = Triangulation(self.x, self.y)
+            from shapely.geometry import LineString
+            from rtree import index
+
+            idx = index.Index()
+            for i, (e0, e1) in enumerate(self.pslg.triangulation.edges):
+                edge = LineString(
+                    [(self.x[e0], self.y[e1]), (self.x[e0], self.y[e1])])
+                idx.insert(i, edge.bounds)
+
+            edges_mask = np.full((tri.edges.shape[0],), True)
+            for i, (e0, e1) in enumerate(tri.edges):
+                edge = LineString(
+                    [(tri.x[e0], tri.y[e1]), (tri.x[e0], tri.y[e1])])
+                edges_mask[list(idx.intersection(edge.bounds))] = False
+
+            edges = tri.edges[~edges_mask]
+            elements = np.where(np.any(tri.triangles
+            plt.plot(tri.x[elements], tri.y[elements])
+            plt.show()
+
+
+
+
+            breakme
+
             tmpfile_elements = tempfile.NamedTemporaryFile()
             shape = elements.shape
             memmap_elements = np.memmap(
@@ -353,9 +377,40 @@ class SizeFunction:
             centroids = np.memmap(
                         tmpfile_centroids.name,
                         dtype=float, mode='r', shape=(shape[0], 2))
-
-            for raster in self.raster_collection:
-                bbox = raster.bbox
+            path = Path(self.pslg.polygon.exterior.coords, closed=True)
+            bbox = path.get_extents()
+            idxs = np.where(np.logical_and(
+                                np.logical_and(
+                                    bbox.xmin <= centroids[:, 0],
+                                    bbox.xmax >= centroids[:, 0]),
+                                np.logical_and(
+                                    bbox.ymin <= centroids[:, 1],
+                                    bbox.ymax >= centroids[:, 1])))[0]
+            # ------ parallel inpoly test on polygon exterior
+            if self.nproc > 1:
+                pool = Pool(
+                    self.nproc,
+                    parallel_processing.inpoly_pool_initializer,
+                    (path,))
+                results = pool.map_async(
+                            parallel_processing.inpoly_pool_worker,
+                            (centroid for centroid in centroids[idxs]),
+                            )
+                results = results.get()
+                pool.close()
+                pool.join()
+                results = np.asarray(results).flatten()
+                mask[idxs] = np.logical_and(mask[idxs], ~results)
+                del results
+                gc.collect()
+            # ------ serial inpoly test on polygon exterior
+            else:
+                mask[idxs] = np.logical_and(
+                    mask[idxs], ~path.contains_points(centroids[idxs]))
+            mask.flush()
+            for interior in self.pslg.polygon.interiors:
+                path = Path(interior.coords, closed=True)
+                bbox = path.get_extents()
                 idxs = np.where(np.logical_and(
                                 np.logical_and(
                                     bbox.xmin <= centroids[:, 0],
@@ -363,24 +418,29 @@ class SizeFunction:
                                 np.logical_and(
                                     bbox.ymin <= centroids[:, 1],
                                     bbox.ymax >= centroids[:, 1])))[0]
-                # ----serial version
-                if self.nproc == 1:
-                    results = raster.sample(centroids[idxs], raster.count)
-                    mask[idxs] = np.ma.masked_equal(
-                        np.asarray([value for value in results]),
-                        raster.nodataval(raster.count)).mask.flatten()
-                # ----parallel version
-                else:
-                    pool = Pool(self.nproc, hfun_pool_initializer, (raster,))
+                # ------ parallel inpoly test on polygon interior
+                if self.nproc > 1:
+                    pool = Pool(
+                        self.nproc,
+                        parallel_processing.inpoly_pool_initializer,
+                        (path,))
                     results = pool.map_async(
-                            hfun_pool_worker,
-                            ([centroid] for centroid in centroids[idxs]),
-                            )
+                                parallel_processing.inpoly_pool_worker,
+                                (centroid for centroid in centroids[idxs]),
+                                )
                     results = results.get()
                     pool.close()
                     pool.join()
-                    mask[idxs] = results
+                    results = np.asarray(results).flatten()
+                    mask[idxs] = np.logical_or(mask[idxs], results)
+                    del results
+                    gc.collect()
+                # ------ serial inpoly test on polygon interior
+                else:
+                    mask[idxs] = np.logical_or(
+                        mask[idxs], path.contains_points(centroids[idxs]))
                 mask.flush()
+            del centroids
             shape = elements[~mask].shape
             memmap_elements = np.memmap(
                         self.tmpfile_elements.name,
@@ -389,13 +449,6 @@ class SizeFunction:
             memmap_elements.flush()
             self.__memmap_elements = np.memmap(
                 self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
-
-
-            tri = Triangulation(self.x, self.y, self.__memmap_elements)
-            plt.triplot(tri)
-            plt.show()
-
-
             return self.__memmap_elements
 
     @property

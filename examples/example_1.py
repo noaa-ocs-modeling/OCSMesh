@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 import os
 import subprocess
-# import numpy as np
-# from pathlib import Path
+import time
 import matplotlib.pyplot as plt
 from geomesh import Raster, \
                     PlanarStraightLineGraph, \
@@ -30,18 +29,19 @@ def main():
     pslg = PlanarStraightLineGraph(rast, -1500., 15.)
 
     # ------- visualize PSLG object
-    pslg.plot(show=True)
-    pslg.triplot(show=True)
+    # pslg.plot(show=True)
+    # pslg.triplot(show=True)
 
     # ------- init size function
-    hfun = SizeFunction(pslg, 500., 1500.)
+    hfun = SizeFunction(pslg, 50., 1500.)
 
     # ------- add size function constraints
     hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
 
     # ------- visualize size function
-    hfun.tripcolor(show=True)
+    # hfun.tripcolor(show=True)
+    # hfun.tricontourf(show=True)
     # hfun.triplot(show=True)
 
     # ------- init jigsaw and set options
@@ -49,7 +49,9 @@ def main():
     jigsaw.verbosity = 1
 
     # ------- run jigsaw, get mesh
+    start = time.time()
     mesh = jigsaw.run()
+    print(f"Took {time.time()-start} seconds.")
 
     # ------- interpolate bathymetry to output mesh
     mesh.interpolate(rast, fix_invalid=True)

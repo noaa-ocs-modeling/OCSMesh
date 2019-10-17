@@ -28,14 +28,15 @@ def main():
     rc = RasterCollection(files)
 
     # ------- init PSLG
-    pslg = PlanarStraightLineGraph(rc, -1500., 15.)
+    pslg = PlanarStraightLineGraph(rc, -1500., 15., nproc=1)
     # pslg.plot(show=True)
     # pslg.triplot(show=True)
 
     # ------- generate size function
-    hfun = SizeFunction(pslg, 50., 1500.)
+    hfun = SizeFunction(pslg, 50., 1500., nproc=1)
     # hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
+    hfun.memmap_elements
     # hfun.tricontourf(cmap='jet')
     # hfun.triplot(show=True)
 

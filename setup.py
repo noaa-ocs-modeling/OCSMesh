@@ -89,6 +89,7 @@ setuptools.setup(
                       "fiona",
                       "rasterio",
                       "pysheds",
-                      "shapely"
+                      "shapely",
+                      "rtree"
                       ],
     )

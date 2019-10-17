@@ -8,7 +8,7 @@ import fiona
 from shapely.geometry import shape, mapping, MultiPolygon
 from multiprocessing import Pool, cpu_count
 from jigsawpy import jigsaw_msh_t
-from geomesh.parallel_processing import pslg_pool_initializer, pslg_pool_worker
+from geomesh import parallel_processing
 from geomesh.raster import Raster
 from geomesh.raster_collection import RasterCollection
 
@@ -312,9 +312,12 @@ class PlanarStraightLineGraph:
                                     bbox.ymax >= centroids[:, 1])))[0]
             # ------ parallel inpoly test on polygon exterior
             if self.nproc > 1:
-                pool = Pool(self.nproc, pslg_pool_initializer, (path,))
+                pool = Pool(
+                    self.nproc,
+                    parallel_processing.inpoly_pool_initializer,
+                    (path,))
                 results = pool.map_async(
-                            pslg_pool_worker,
+                            parallel_processing.inpoly_pool_worker,
                             (centroid for centroid in centroids[idxs]),
                             )
                 results = results.get()
@@ -341,9 +344,11 @@ class PlanarStraightLineGraph:
                                     bbox.ymax >= centroids[:, 1])))[0]
                 # ------ parallel inpoly test on polygon interior
                 if self.nproc > 1:
-                    pool = Pool(self.nproc, pslg_pool_initializer, (path,))
+                    pool = Pool(self.nproc,
+                                parallel_processing.inpoly_pool_initializer,
+                                (path,))
                     results = pool.map_async(
-                                pslg_pool_worker,
+                                parallel_processing.inpoly_pool_worker,
                                 (centroid for centroid in centroids[idxs]),
                                 )
                     results = results.get()
