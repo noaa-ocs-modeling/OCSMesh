@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 from matplotlib.tri import Triangulation
 import numpy as np
 from scipy.spatial import cKDTree, Delaunay
-from jigsawpy import jigsaw_msh_t
+from shapely.geometry import MultiPoint
+from shapely.ops import triangulate
 from multiprocessing import Pool, cpu_count
+from jigsawpy import jigsaw_msh_t
 from geomesh.pslg import PlanarStraightLineGraph
 from geomesh.parallel_processing import hfun_pool_initializer, hfun_pool_worker
 
@@ -28,6 +30,14 @@ class SizeFunction:
 
     def tricontourf(self, show=False, **kwargs):
         plt.tricontourf(self.triangulation, self.values, **kwargs)
+        plt.colorbar()
+        if show:
+            plt.gca().axis('scaled')
+            plt.show()
+
+    def tripcolor(self, show=False, **kwargs):
+        plt.tripcolor(self.triangulation, self.values, **kwargs)
+        plt.colorbar()
         if show:
             plt.gca().axis('scaled')
             plt.show()
@@ -58,26 +68,22 @@ class SizeFunction:
         target_size=None,
         hmin=None,
         hmax=None,
-        nproc=None
+        n_jobs=None
     ):
 
-        # lint input args
-        nproc = self.nproc if nproc is None else float(nproc)
-        target_size = self.hmin if target_size is None else float(target_size)
-        if hmin is None:
-            hmin = self.hmin
-        else:
-            hmin = float(hmin)
-            assert hmin > 0
-        if hmax is None:
-            hmax = self.hmax
-        else:
-            hmax = float(hmax)
-            assert hmax >= hmin
+        # argument checks
         level = float(level)
         expansion_rate = float(expansion_rate)
+        target_size = self.hmin if target_size is None else float(target_size)
+        hmin = self.hmin if hmin is None else float(hmin)
+        hmax = self.hmax if hmax is None else float(hmax)
+        n_jobs = self.nproc if n_jobs is None else n_jobs
+        assert target_size > 0.
+        assert hmin > 0.
+        assert hmax > hmin
+        assert n_jobs == -1 or n_jobs in list(range(1, cpu_count()+1))
 
-        # gather contour points
+        # get vertices
         vertices = np.empty((0, 2), float)
         for i, raster in enumerate(self.raster_collection):
             ax = plt.contour(raster.x, raster.y, raster.values, levels=[level])
@@ -86,56 +92,40 @@ class SizeFunction:
                 for path in path_collection.get_paths():
                     vertices = np.vstack([vertices, path.vertices])
 
-        # compute distances from pixel to nearest contour point
+        # calculate distances between each pixel and nearest contour point
         tree = cKDTree(vertices)
-        del vertices
-        gc.collect()
         for i, raster in enumerate(self.raster_collection):
-            raster.dst_crs = self.dst_crs
             xt, yt = np.meshgrid(raster.x, raster.y)
-            xy_target = np.vstack([xt.flatten(), yt.flatten()]).T
-            del xt
-            del yt
-            values, _ = tree.query(xy_target, n_jobs=nproc)
-            del xy_target
-            gc.collect()
+            xt = xt.flatten()
+            yt = yt.flatten()
+            xy_target = np.vstack([xt, yt]).T
+            values, _ = tree.query(xy_target, n_jobs=n_jobs)
             values = expansion_rate*target_size*values + target_size
             values = values.reshape(raster.values.shape)
             values[np.where(values < hmin)] = hmin
             values[np.where(values > hmax)] = hmax
             raster.add_band("SIZE_FUNCTION", values)
-            del values
-            gc.collect()
 
     def add_subtidal_flow_limiter(self, hmin=None, hmax=None):
         """
         https://wiki.fvcom.pml.ac.uk/doku.php?id=configuration%3Agrid_scale_considerations
         """
-        if hmin is None:
-            hmin = self.hmin
-        else:
-            hmin = float(hmin)
-            assert hmin > 0
-        if hmax is None:
-            hmax = self.hmax
-        else:
-            hmax = float(hmax)
-            assert hmax >= hmin
-        for i, raster in enumerate(self.raster_collection):
+        # argument check
+        hmin = self.hmin if hmin is None else float(hmin)
+        hmax = self.hmax if hmax is None else float(hmax)
+        assert hmin > 0.
+        assert hmax > hmin
+        for raster in self.raster_collection:
             dx = np.abs(raster.src.transform[0])
             dy = np.abs(raster.src.transform[4])
             dx, dy = np.gradient(raster.values, dx, dy)
             dh = np.sqrt(dx**2 + dy**2)
-            del dx
-            del dy
             dh = np.ma.masked_equal(dh, 0.)
             values = np.abs((1./3.)*(raster.values/dh))
-            del dh
             values = values.filled(np.max(values))
             values[np.where(values < hmin)] = hmin
             values[np.where(values > hmax)] = hmax
             raster.add_band("SIZE_FUNCTION", values)
-            del values
 
     @property
     def pslg(self):
@@ -188,6 +178,10 @@ class SizeFunction:
     @property
     def scaling(self):
         return self._scaling
+
+    @property
+    def size_function_types(self):
+        return self._size_function_types
 
     @property
     def dst_crs(self):
@@ -285,7 +279,7 @@ class SizeFunction:
                 raster.add_band("SIZE_FUNCTION_FINALIZED", band)
                 raster.mask([self.pslg.polygon], raster.count)
                 if raster.dx < self.hmin or raster.dy < self.hmin:
-                    x, y, band = raster.resampled(
+                    x, y, band = raster.get_resampled(
                         raster.count, self.hmin, self.hmin)
                 else:
                     x, y = raster.x, raster.y
@@ -302,9 +296,6 @@ class SizeFunction:
                 band[np.where(band < self.hmin)] = self.hmin
                 band[np.where(band > self.hmax)] = self.hmax
                 new_points = np.vstack([x, y, band]).T
-                del band
-                del x
-                del y
                 old_len = start_shape[0]
                 new_len = old_len + new_points.shape[0]
                 new_shape = (new_len, 3)
@@ -329,10 +320,7 @@ class SizeFunction:
         try:
             return self.__memmap_elements
         except AttributeError:
-            print('making memmap elements')
-            tri = Delaunay(self.coords.astype(np.float32))
-            elements = tri.simplices.copy()
-            del tri
+            elements = Triangulation(self.x, self.y).triangles
             tmpfile_elements = tempfile.NamedTemporaryFile()
             shape = elements.shape
             memmap_elements = np.memmap(
@@ -383,16 +371,12 @@ class SizeFunction:
                         raster.nodataval(raster.count)).mask.flatten()
                 # ----parallel version
                 else:
-                    print('will shoot hfun parallel')
                     pool = Pool(self.nproc, hfun_pool_initializer, (raster,))
                     results = pool.map_async(
                             hfun_pool_worker,
                             ([centroid] for centroid in centroids[idxs]),
                             )
-                    # tmpfile_results = tempfile.NamedTemporaryFile()
-                    breakpoint()
                     results = results.get()
-                    breakpoint()
                     pool.close()
                     pool.join()
                     mask[idxs] = results
@@ -405,7 +389,25 @@ class SizeFunction:
             memmap_elements.flush()
             self.__memmap_elements = np.memmap(
                 self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
+
+
+            tri = Triangulation(self.x, self.y, self.__memmap_elements)
+            plt.triplot(tri)
+            plt.show()
+
+
             return self.__memmap_elements
+
+    @property
+    def _size_function_types(self):
+        try:
+            return self.__size_function_types
+        except AttributeError:
+            self.__size_function_types = {
+                "contours": [],
+                "subtidal_flow_limiter": False
+            }
+            return self.__size_function_types
 
     @property
     def _scaling(self):
@@ -601,3 +603,4 @@ class SizeFunction:
 # print(f'parallel path version took {start-time.time()}')
 # del globals()['path']
 # ---------- end parallel path version
+

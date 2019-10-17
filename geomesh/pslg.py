@@ -33,26 +33,38 @@ class PlanarStraightLineGraph:
         for raster in self.raster_collection:
             yield raster
 
-    def plot(self, show=False):
+    def plot(
+        self,
+        axes=None,
+        show=None
+    ):
+        show = False if axes is None else True
+        if axes is None:
+            fig = plt.figure()
+            axes = fig.add_subplot(111)
         xy = np.asarray(self.polygon.exterior.coords)
-        plt.plot(xy[:, 0], xy[:, 1], color='k')
+        axes.plot(xy[:, 0], xy[:, 1], color='k')
         for inner_ring in self.polygon.interiors:
             xy = np.asarray(inner_ring.coords)
-            plt.plot(xy[:, 0], xy[:, 1], color='r')
-        plt.gca().axis('scaled')
+            axes.plot(xy[:, 0], xy[:, 1], color='r')
         if show:
+            axes.axis('scaled')
             plt.show()
-        return plt.gca()
 
     def triplot(
         self,
-        show=False,
+        axes=None,
+        show=None,
         linewidth=0.07,
         color='black',
         alpha=0.5,
         **kwargs
     ):
-        plt.triplot(
+        show = False if axes is None else True
+        if axes is None:
+            fig = plt.figure()
+            axes = fig.add_subplot(111)
+        axes.triplot(
             self.triangulation,
             linewidth=linewidth,
             color=color,
@@ -60,7 +72,7 @@ class PlanarStraightLineGraph:
             **kwargs
             )
         if show:
-            plt.gca().axis('scaled')
+            axes.axis('scaled')
             plt.show()
 
     @property
@@ -196,7 +208,7 @@ class PlanarStraightLineGraph:
                     multipolygon = shape(feature["geometry"])
                     for polygon in multipolygon:
                         polygon_collection.append(polygon)
-                raster.close()
+                # raster.close()
             multipolygon = MultiPolygon(polygon_collection).buffer(0)
             with fiona.open(
                     self.tmpfile_shp.name,

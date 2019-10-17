@@ -30,17 +30,18 @@ def main():
     pslg = PlanarStraightLineGraph(rast, -1500., 15.)
 
     # ------- visualize PSLG object
-    # pslg.plot(show=True)
+    pslg.plot(show=True)
+    pslg.triplot(show=True)
 
     # ------- init size function
-    hfun = SizeFunction(pslg, 50., 1500.)
+    hfun = SizeFunction(pslg, 500., 1500.)
 
     # ------- add size function constraints
     hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
 
     # ------- visualize size function
-    # hfun.tricontourf()
+    hfun.tripcolor(show=True)
     # hfun.triplot(show=True)
 
     # ------- init jigsaw and set options

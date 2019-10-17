@@ -14,7 +14,7 @@ Notes:
 def hfun_parallel_worker(raster, coord):
     try:
         sample = list(raster.sample(coord, raster.count))
-        if sample[0][0] == 0.:
+        if sample[0][0] == raster.nodataval(raster.count):
             return True
         else:
             return False

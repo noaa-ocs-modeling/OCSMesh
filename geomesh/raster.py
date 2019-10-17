@@ -16,11 +16,21 @@ from pyproj import Proj
 
 class Raster:
 
-    def __init__(self, path, zmin=None, zmax=None, dst_crs=None):
+    def __init__(
+        self,
+        path,
+        zmin=None,
+        zmax=None,
+        dst_crs=None,
+        xres=None,
+        yres=None
+    ):
         self._path = path
         self._zmin = zmin
         self._zmax = zmax
         self._dst_crs = dst_crs
+        self._xres = xres
+        self._yres = yres
 
     def __call__(self, zmin, zmax):
         if np.all(self.values > zmax) or np.all(self.values < zmin):
@@ -99,8 +109,8 @@ class Raster:
     def sample(self, xy, i):
         return self.src.sample(xy, i)
 
-    def close(self):
-        del(self._src)
+    # def close(self):
+    #     del(self._src)
 
     def add_band(self,  band_type, values):
         kwargs = self.src.meta.copy()
@@ -116,9 +126,9 @@ class Raster:
             dst.update_tags(band_id, BAND_TYPE=band_type)
         self._tmpfile = tmpfile
 
-    def mask(self, features, i=None, nodata=-99999.):
+    def mask(self, features, i=None):
         kwargs = self.src.meta.copy()
-        kwargs.update({'nodata': nodata})
+        # kwargs.update({'nodata': nodata})
         out_images, out_transform = mask(self.src, features)
         tmpfile = tempfile.NamedTemporaryFile()
         fname = tmpfile.name
@@ -136,6 +146,50 @@ class Raster:
                         dst.write_band(j, self.src.read(j))
                         dst.update_tags(j, **self.src.tags(j))
         self._tmpfile = tmpfile
+
+    def warp(self, dst_crs):
+        src = rasterio.open(self.path)
+        transform, width, height = warp.calculate_default_transform(
+            src.crs, dst_crs, src.width, src.height,
+            *src.bounds)
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': dst_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+        tmpfile = tempfile.NamedTemporaryFile()
+        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    # resampling=<Resampling.nearest: 0>,
+                    num_threads=multiprocessing.cpu_count(),
+                    )
+                dst.update_tags(i, **self.src.tags(i))
+        self._tmpfile = tmpfile
+
+    def resample(self, xres, yres, method='bilinear'):
+        transform, width, heigth = warp.aligned_target(
+            self.transform, self.width, self.height, (xres, yres))
+        kwargs = self.src.meta.copy()
+        kwargs.update({
+            "transform": transform,
+            "width": width,
+            "heigth": heigth})
+        tmpfile = tempfile.NamedTemporaryFile()
+        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+            for i in self.count:
+                x, y, band = self.get_resampled(i, xres, yres, method)
+                dst.write_band(i, band)
+                dst.update_tags(i, band)
+        self._tmpfile = tempfile
 
     def save(self, path):
         with rasterio.open(pathlib.Path(path), 'w', **self.src.meta) as dst:
@@ -156,7 +210,7 @@ class Raster:
             plt.gca().axis('scaled')
             plt.show()
 
-    def resampled(self, i, xres, yres, method='bilinear'):
+    def get_resampled(self, i, xres, yres, method='bilinear'):
         method_dict = {
             'bilinear': Resampling.bilinear,
             'nearest': Resampling.nearest,
@@ -171,8 +225,6 @@ class Raster:
             assert isinstance(method, Resampling), msg
         transform, width, height = warp.aligned_target(
             self.transform, self.width, self.height, (xres, yres))
-        x0, y0, x1, y1 = rasterio.transform.array_bounds(
-            height, width, transform)
         band = self.read(
             i,
             out_shape=(height, width),
@@ -182,12 +234,6 @@ class Raster:
         x = np.linspace(x0, x1, width)
         y = np.linspace(y1, y0, height)
         return x, y, band
-
-    def set_dst_crs(self, dst_crs):
-        self.__dst_crs = dst_crs
-
-    def clear_dst_crs(self):
-        del(self.__dst_crs)
 
     @property
     def path(self):
@@ -230,6 +276,10 @@ class Raster:
     @property
     def crs(self):
         return self.src.crs
+
+    @property
+    def dst_crs(self):
+        return self._dst_crs
 
     @property
     def srs(self):
@@ -278,20 +328,12 @@ class Raster:
         return self._zmax
 
     @property
-    def shp(self):
-        return self._shp
-
-    @property
-    def tiff(self):
-        return self._tmpfile
+    def tmpdir_shp(self):
+        return self._tmpdir_shp
 
     @property
     def collection(self):
         return self._collection
-
-    @property
-    def dst_crs(self):
-        return self._dst_crs
 
     @property
     def schema(self):
@@ -307,25 +349,42 @@ class Raster:
             return self.__src
         except AttributeError:
             tmpfile = tempfile.NamedTemporaryFile()
-            fname = tmpfile.name
             with rasterio.open(self.path) as src:
-                # copy raster as tmpfile
                 if src.count > 1 or src.count == 0:
                     msg = 'Input raster must have only a single band and it '
                     msg += 'must correspond to terrain elevation.'
                     raise TypeError(msg)
                 kwargs = src.meta.copy()
-                with rasterio.open(fname, 'w', **kwargs) as dst:
-                    dst.write_band(1, src.read(1))
-                    dst.update_tags(1, BAND_TYPE='ELEVATION')
+                if self.dst_crs != src.crs:
+                    transform, width, height = \
+                        warp.calculate_default_transform(
+                            src.crs, self.dst_crs, src.width, src.height,
+                            *src.bounds)
+                    kwargs = src.meta.copy()
+                    kwargs.update({
+                        'crs': self.dst_crs,
+                        'transform': transform,
+                        'width': width,
+                        'height': height
+                    })
+                    with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+                        rasterio.warp.reproject(
+                            source=rasterio.band(src, 1),
+                            destination=rasterio.band(dst, 1),
+                            src_transform=src.transform,
+                            src_crs=src.crs,
+                            dst_transform=transform,
+                            dst_crs=self.dst_crs,
+                            # resampling=<Resampling.nearest: 0>,
+                            num_threads=multiprocessing.cpu_count(),
+                            )
+                        dst.update_tags(1, BAND_TYPE='ELEVATION')
+                else:
+                    with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+                        dst.write_band(1, src.read(1))
+                        dst.update_tags(1, BAND_TYPE='ELEVATION')
             self._tmpfile = tmpfile
-            # handles the case where file is getting reopened
-            if not hasattr(self, f"_{self.__class__.__name__}__dst_crs"):
-                return self.__src
-            else:
-                self._dst_crs = self.__dst_crs
-                return self.__src
-            # return self.__src
+            return self.__src
 
     @property
     def _path(self):
@@ -346,12 +405,12 @@ class Raster:
             raise AttributeError('Must set zmax attribute.')
 
     @property
-    def _shp(self):
+    def _tmpdir_shp(self):
         try:
-            return self.__shp
+            return self.__tmpdir_shp
         except AttributeError:
-            self.__shp = tempfile.TemporaryDirectory()
-            return self.__shp
+            self.__tmpdir_shp = tempfile.TemporaryDirectory()
+            return self.__tmpdir_shp
 
     @property
     def _tmpfile(self):
@@ -367,7 +426,7 @@ class Raster:
             return self.__collection
         except AttributeError:
             collection = fiona.open(
-                self.shp.name,
+                self.tmpdir_shp.name,
                 'w',
                 driver='ESRI Shapefile',
                 crs=self.dst_crs,
@@ -378,7 +437,7 @@ class Raster:
                     "zmin": self.zmin,
                     "zmax": self.zmax}})
             collection.close()
-            self.__collection = fiona.open(self.shp.name)
+            self.__collection = fiona.open(self.tmpdir_shp.name)
             return self.__collection
 
     @zmin.setter
@@ -393,41 +452,15 @@ class Raster:
     def dst_crs(self, dst_crs):
         self._dst_crs = dst_crs
 
-    @_dst_crs.setter
-    def _dst_crs(self, dst_crs):
-        src = self.src
-        if dst_crs is None:
-            dst_crs = src.crs
-        transform, width, height = warp.calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds)
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': dst_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
-        tmpfile = tempfile.NamedTemporaryFile()
-        fname = tmpfile.name
-        with rasterio.open(fname, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    # resampling=<Resampling.nearest: 0>,
-                    num_threads=multiprocessing.cpu_count(),
-                    )
-                dst.update_tags(i, **self.src.tags(i))
-        self._tmpfile = tmpfile
-        self.__dst_crs = dst_crs
-
     @_path.setter
     def _path(self, path):
-        self.__path = str(path)
+        self.__path = path
+
+    @_dst_crs.setter
+    def _dst_crs(self, dst_crs):
+        if dst_crs is None:
+            dst_crs = rasterio.open(self.path)
+        self.__dst_crs = dst_crs
 
     @_tmpfile.setter
     def _tmpfile(self, tmpfile):

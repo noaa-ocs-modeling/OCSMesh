@@ -25,7 +25,7 @@ class RasterCollection:
         for item in self.container:
             if raster.path == item.path:
                 return
-        raster.set_dst_crs(self.dst_crs)
+        raster.dst_crs = self.dst_crs
         self._container.append(raster)
 
     @property

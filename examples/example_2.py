@@ -55,11 +55,11 @@ def main():
     mesh.transform_to('EPSG:4326')
 
     # ------- visualize results
-    # fig = plt.figure()
-    # axes = fig.add_subplot(111)
-    # mesh.make_plot(axes=axes)
-    # axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
-    # plt.show()
+    fig = plt.figure()
+    axes = fig.add_subplot(111)
+    mesh.make_plot(axes=axes)
+    axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
+    plt.show()
     print("NP={}".format(mesh.values.size))
     print("elements={}".format(mesh.elements.shape[0]))
 
