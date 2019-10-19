@@ -1,3 +1,4 @@
+import numpy as np
 import jigsawpy
 import geomesh
 
@@ -19,6 +20,9 @@ class Jigsaw:
             self.initial_mesh,
             self.hfun
         )
+        # raise if empty mesh is returned
+        msg = 'ERROR: Jigsaw returned empty mesh.'
+        assert self.output_mesh.tria3['index'].shape[0] > 0, msg
         return geomesh.Mesh(
             self.output_mesh.vert2['coord'],
             self.output_mesh.tria3['index'],
@@ -137,9 +141,19 @@ class Jigsaw:
     def _hfun(self, hfun):
         if hfun is not None:
             assert isinstance(hfun, geomesh.SizeFunction)
+            # set scaling
             self.hfun_scal = hfun.scaling
-            self.hfun_hmin = hfun.hmin
-            self.hfun_hmax = hfun.hmax
+            # use hmin limits
+            if hfun.hmin_is_absolute_limit is True:
+                self.hfun_hmin = hfun.hmin
+            elif hfun.hmin_is_absolute_limit is False:
+                self.hfun_hmin = np.min(hfun.values)
+            # set hmax limits
+            if hfun.hmax_is_absolute_limit is True:
+                self.hfun_hmax = hfun.hmax
+            elif hfun.hmax_is_absolute_limit is False:
+                self.hfun_hmax = np.max(hfun.values)
+            # push jigsaw_msh_t object
             hfun = hfun.hfun
         self.__hfun = hfun
 

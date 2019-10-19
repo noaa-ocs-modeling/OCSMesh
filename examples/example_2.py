@@ -5,7 +5,6 @@ from geomesh import RasterCollection, \
                     PlanarStraightLineGraph, \
                     SizeFunction, \
                     Jigsaw
-# import numpy as np
 try:
     import colored_traceback
     colored_traceback.add_hook(always=True)
@@ -19,7 +18,7 @@ def main():
     rootdir = os.path.dirname(os.path.abspath(__file__))
     datadir = rootdir + '/data'
     files = [
-        'ncei13_n41x00_w074x00_2015v1.tif',
+        'ncei19_n41x00_w074x00_2015v1.tif',
         # 'ncei19_n41x00_w073x75_2015v1.tif',
     ]
     files = [os.path.abspath(datadir + '/' + file) for file in files]
@@ -28,17 +27,14 @@ def main():
     rc = RasterCollection(files)
 
     # ------- init PSLG
-    pslg = PlanarStraightLineGraph(rc, -1500., 15., nproc=1)
+    pslg = PlanarStraightLineGraph(rc, -1500., 15.)
     # pslg.plot(show=True)
-    # pslg.triplot(show=True)
 
     # ------- generate size function
-    hfun = SizeFunction(pslg, 50., 1500., nproc=1)
-    # hfun.add_contour(0., 0.001)
+    hfun = SizeFunction(pslg, 30.)
+    hfun.add_contour(0., 0.001, n_jobs=-1)
     hfun.add_subtidal_flow_limiter()
-    hfun.memmap_elements
-    # hfun.tricontourf(cmap='jet')
-    # hfun.triplot(show=True)
+    # hfun.tricontourf(show=True, cmap='jet')
 
     # ------- init jigsaw
     jigsaw = Jigsaw(hfun)

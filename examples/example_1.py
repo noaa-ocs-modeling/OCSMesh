@@ -15,7 +15,7 @@ except ModuleNotFoundError:
 
 
 def main():
-
+    start = time.time()
     # ------- init test DEM files
     rootdir = os.path.dirname(os.path.abspath(__file__))
     datadir = rootdir + '/data'
@@ -36,12 +36,12 @@ def main():
     hfun = SizeFunction(pslg, 50., 1500.)
 
     # ------- add size function constraints
-    hfun.add_contour(0., 0.001)
+    hfun.add_contour(0., 0.001, n_jobs=-1)
     hfun.add_subtidal_flow_limiter()
 
     # ------- visualize size function
     # hfun.tripcolor(show=True)
-    # hfun.tricontourf(show=True)
+    # hfun.tricontourf(show=True, levels=20)
     # hfun.triplot(show=True)
 
     # ------- init jigsaw and set options
@@ -49,9 +49,9 @@ def main():
     jigsaw.verbosity = 1
 
     # ------- run jigsaw, get mesh
-    start = time.time()
+    jig_start = time.time()
     mesh = jigsaw.run()
-    print(f"Took {time.time()-start} seconds.")
+    print(f"Jigsaw took {time.time()-jig_start} seconds.")
 
     # ------- interpolate bathymetry to output mesh
     mesh.interpolate(rast, fix_invalid=True)
@@ -69,6 +69,7 @@ def main():
     # -------- write to disk
     fname = os.path.abspath(rootdir + '/example_1.grd')
     mesh.save(fname, overwrite=True)
+    print(f"The whole thing took {time.time()-start} seconds.")
 
 
 if __name__ == "__main__":

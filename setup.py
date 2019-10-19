@@ -88,8 +88,8 @@ setuptools.setup(
                       "pyproj",
                       "fiona",
                       "rasterio",
-                      "pysheds",
+                      # "pysheds",
                       "shapely",
-                      "rtree"
+                      # "rtree"
                       ],
     )

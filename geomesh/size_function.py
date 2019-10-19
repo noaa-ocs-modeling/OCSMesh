@@ -1,14 +1,12 @@
 import tempfile
-import gc
+from multiprocessing import cpu_count
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.tri import Triangulation
 import numpy as np
 from scipy.spatial import cKDTree
-from multiprocessing import Pool, cpu_count
 from jigsawpy import jigsaw_msh_t
 from geomesh.pslg import PlanarStraightLineGraph
-from geomesh import parallel_processing
 
 
 class SizeFunction:
@@ -19,13 +17,11 @@ class SizeFunction:
         hmin=None,
         hmax=None,
         dst_crs="EPSG:3395",
-        nproc=-1
     ):
         self._pslg = pslg
         self._hmin = hmin
         self._hmax = hmax
         self._dst_crs = dst_crs
-        self._nproc = nproc
 
     def tricontourf(self, show=False, **kwargs):
         plt.tricontourf(self.triangulation, self.values, **kwargs)
@@ -67,7 +63,7 @@ class SizeFunction:
         target_size=None,
         hmin=None,
         hmax=None,
-        n_jobs=None
+        n_jobs=1
     ):
 
         # argument checks
@@ -76,7 +72,6 @@ class SizeFunction:
         target_size = self.hmin if target_size is None else float(target_size)
         hmin = self.hmin if hmin is None else float(hmin)
         hmax = self.hmax if hmax is None else float(hmax)
-        n_jobs = self.nproc if n_jobs is None else n_jobs
         assert target_size > 0.
         assert hmin > 0.
         assert hmax > hmin
@@ -143,12 +138,11 @@ class SizeFunction:
         return self.memmap_elements
 
     @property
-    def neighbors(self):
-        return self.triangulation.neighbors
-
-    @property
     def triangulation(self):
-        return Triangulation(self.x, self.y, self.elements)
+        return Triangulation(
+            self.memmap_points[:, 0],
+            self.memmap_points[:, 1],
+            self.memmap_elements)
 
     @property
     def coords(self):
@@ -172,7 +166,7 @@ class SizeFunction:
 
     @property
     def triangles(self):
-        return self.elements
+        return self.memmap_elements
 
     @property
     def scaling(self):
@@ -197,10 +191,6 @@ class SizeFunction:
     @property
     def geom(self):
         return self.pslg
-
-    @property
-    def nproc(self):
-        return self._nproc
 
     @property
     def tmpfile_points(self):
@@ -245,8 +235,12 @@ class SizeFunction:
         return self._memmap_elements
 
     @property
-    def _nproc(self):
-        return self.__nproc
+    def hmin_is_absolute_limit(self):
+        return self._hmin_is_absolute_limit
+
+    @property
+    def hmax_is_absolute_limit(self):
+        return self._hmax_is_absolute_limit
 
     @property
     def _hmin(self):
@@ -269,22 +263,29 @@ class SizeFunction:
         try:
             return self.__memmap_points
         except AttributeError:
-            start_shape = (0, 3)
+            points = np.empty((0, 3))
             for raster in self.raster_collection:
                 band = np.full(raster.shape, float("inf"))
                 for i in range(1, raster.count + 1):
                     if raster.tags(i)['BAND_TYPE'] == "SIZE_FUNCTION":
                         band = np.minimum(band, raster.read(i))
+                # maybe apply filter to band here
                 raster.add_band("SIZE_FUNCTION_FINALIZED", band)
-                raster.mask([self.pslg.polygon], raster.count)
-                if raster.dx < self.hmin or raster.dy < self.hmin:
+                raster.mask(self.pslg.multipolygon, raster.count)
+                if np.min(band) <= self.hmin:
                     x, y, band = raster.get_resampled(
-                        raster.count, self.hmin, self.hmin)
+                        raster.count, np.min(band), np.min(band))
                 else:
                     x, y = raster.x, raster.y
-                band = np.ma.masked_equal(
-                    band.astype(raster.dtype(raster.count)),
-                    raster.nodataval(raster.count))
+                    band = raster.band(raster.count)
+                if raster.nodataval(raster.count) is not None:
+                    band = np.ma.masked_equal(
+                        band.astype(raster.dtype(raster.count)),
+                        raster.nodataval(raster.count))
+                else:
+                    # for rasters with no masked value defined 0 is returned
+                    band = np.ma.masked_equal(
+                        band.astype(raster.dtype(raster.count)), 0)
                 x, y = np.meshgrid(x, y)
                 x = x.flatten()
                 y = y.flatten()
@@ -294,24 +295,15 @@ class SizeFunction:
                 band = band[~band.mask].data
                 band[np.where(band < self.hmin)] = self.hmin
                 band[np.where(band > self.hmax)] = self.hmax
-                new_points = np.vstack([x, y, band]).T
-                old_len = start_shape[0]
-                new_len = old_len + new_points.shape[0]
-                new_shape = (new_len, 3)
-                points = np.memmap(
-                    self.tmpfile_points.name,
-                    dtype=float, mode='r+',
-                    shape=new_shape)
-                points[old_len:new_len] = new_points
-                del new_points
-                points.flush()
-                start_shape = points.shape
-                gc.collect()
-            points.flush()
-            points = np.memmap(
+                points = np.vstack([points, np.vstack([x, y, band]).T])
+            memmap_points = np.memmap(
+                self.tmpfile_points.name, dtype=float, mode='w+',
+                shape=points.shape)
+            memmap_points[:] = points
+            del memmap_points
+            self.__memmap_points = np.memmap(
                 self.tmpfile_points.name, dtype=float, mode='r',
                 shape=points.shape)
-            self.__memmap_points = points
             return self.__memmap_points
 
     @property
@@ -319,137 +311,47 @@ class SizeFunction:
         try:
             return self.__memmap_elements
         except AttributeError:
-            tri = Triangulation(self.x, self.y)
-            from shapely.geometry import LineString
-            from rtree import index
-
-            idx = index.Index()
-            for i, (e0, e1) in enumerate(self.pslg.triangulation.edges):
-                edge = LineString(
-                    [(self.x[e0], self.y[e1]), (self.x[e0], self.y[e1])])
-                idx.insert(i, edge.bounds)
-
-            edges_mask = np.full((tri.edges.shape[0],), True)
-            for i, (e0, e1) in enumerate(tri.edges):
-                edge = LineString(
-                    [(tri.x[e0], tri.y[e1]), (tri.x[e0], tri.y[e1])])
-                edges_mask[list(idx.intersection(edge.bounds))] = False
-
-            edges = tri.edges[~edges_mask]
-            elements = np.where(np.any(tri.triangles
-            plt.plot(tri.x[elements], tri.y[elements])
-            plt.show()
-
-
-
-
-            breakme
-
-            tmpfile_elements = tempfile.NamedTemporaryFile()
-            shape = elements.shape
-            memmap_elements = np.memmap(
-                        tmpfile_elements.name,
-                        dtype=int, mode='r+', shape=shape)
-            memmap_elements[:] = elements
-            del elements
-            del memmap_elements
-            elements = np.memmap(
-                        tmpfile_elements.name,
-                        dtype=int, mode='r', shape=shape)
-
-            # create mask to be populated
-            tmpfile_mask = tempfile.NamedTemporaryFile()
-            mask = np.memmap(
-                        tmpfile_mask.name,
-                        dtype=bool, mode='r+', shape=(shape[0],))
-            mask[:] = True
-            mask.flush()
-
-            # create centroid list
-            tmpfile_centroids = tempfile.NamedTemporaryFile()
-            centroids = np.memmap(
-                        tmpfile_centroids.name,
-                        dtype=float, mode='r+', shape=(shape[0], 2))
-            centroids[:] = np.vstack(
-                [np.sum(self.x[elements], axis=1) / 3,
-                 np.sum(self.y[elements], axis=1) / 3]).T
-            del centroids
-            centroids = np.memmap(
-                        tmpfile_centroids.name,
-                        dtype=float, mode='r', shape=(shape[0], 2))
-            path = Path(self.pslg.polygon.exterior.coords, closed=True)
-            bbox = path.get_extents()
-            idxs = np.where(np.logical_and(
-                                np.logical_and(
-                                    bbox.xmin <= centroids[:, 0],
-                                    bbox.xmax >= centroids[:, 0]),
-                                np.logical_and(
-                                    bbox.ymin <= centroids[:, 1],
-                                    bbox.ymax >= centroids[:, 1])))[0]
-            # ------ parallel inpoly test on polygon exterior
-            if self.nproc > 1:
-                pool = Pool(
-                    self.nproc,
-                    parallel_processing.inpoly_pool_initializer,
-                    (path,))
-                results = pool.map_async(
-                            parallel_processing.inpoly_pool_worker,
-                            (centroid for centroid in centroids[idxs]),
-                            )
-                results = results.get()
-                pool.close()
-                pool.join()
-                results = np.asarray(results).flatten()
-                mask[idxs] = np.logical_and(mask[idxs], ~results)
-                del results
-                gc.collect()
-            # ------ serial inpoly test on polygon exterior
-            else:
-                mask[idxs] = np.logical_and(
-                    mask[idxs], ~path.contains_points(centroids[idxs]))
-            mask.flush()
-            for interior in self.pslg.polygon.interiors:
-                path = Path(interior.coords, closed=True)
+            tri = Triangulation(
+                self.memmap_points[:, 0],
+                self.memmap_points[:, 1])
+            mask = np.full((tri.triangles.shape[0],), True)
+            centroids = np.vstack(
+                [np.sum(tri.x[tri.triangles], axis=1) / 3,
+                 np.sum(tri.y[tri.triangles], axis=1) / 3]).T
+            for polygon in self.pslg.multipolygon:
+                path = Path(polygon.exterior.coords, closed=True)
                 bbox = path.get_extents()
                 idxs = np.where(np.logical_and(
-                                np.logical_and(
-                                    bbox.xmin <= centroids[:, 0],
-                                    bbox.xmax >= centroids[:, 0]),
-                                np.logical_and(
-                                    bbox.ymin <= centroids[:, 1],
-                                    bbox.ymax >= centroids[:, 1])))[0]
-                # ------ parallel inpoly test on polygon interior
-                if self.nproc > 1:
-                    pool = Pool(
-                        self.nproc,
-                        parallel_processing.inpoly_pool_initializer,
-                        (path,))
-                    results = pool.map_async(
-                                parallel_processing.inpoly_pool_worker,
-                                (centroid for centroid in centroids[idxs]),
-                                )
-                    results = results.get()
-                    pool.close()
-                    pool.join()
-                    results = np.asarray(results).flatten()
-                    mask[idxs] = np.logical_or(mask[idxs], results)
-                    del results
-                    gc.collect()
-                # ------ serial inpoly test on polygon interior
-                else:
+                                    np.logical_and(
+                                        bbox.xmin <= centroids[:, 0],
+                                        bbox.xmax >= centroids[:, 0]),
+                                    np.logical_and(
+                                        bbox.ymin <= centroids[:, 1],
+                                        bbox.ymax >= centroids[:, 1])))[0]
+                mask[idxs] = np.logical_and(
+                    mask[idxs], ~path.contains_points(centroids[idxs]))
+            for polygon in self.pslg.multipolygon:
+                for interior in polygon.interiors:
+                    path = Path(interior.coords, closed=True)
+                    bbox = path.get_extents()
+                    idxs = np.where(np.logical_and(
+                                    np.logical_and(
+                                        bbox.xmin <= centroids[:, 0],
+                                        bbox.xmax >= centroids[:, 0]),
+                                    np.logical_and(
+                                        bbox.ymin <= centroids[:, 1],
+                                        bbox.ymax >= centroids[:, 1])))[0]
                     mask[idxs] = np.logical_or(
                         mask[idxs], path.contains_points(centroids[idxs]))
-                mask.flush()
-            del centroids
-            shape = elements[~mask].shape
-            memmap_elements = np.memmap(
-                        self.tmpfile_elements.name,
-                        dtype=int, mode='r+', shape=shape)
-            memmap_elements[:] = elements[~mask]
-            memmap_elements.flush()
-            self.__memmap_elements = np.memmap(
-                self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
-            return self.__memmap_elements
+                shape = tri.triangles[~mask].shape
+                memmap_elements = np.memmap(
+                            self.tmpfile_elements.name,
+                            dtype=int, mode='r+', shape=shape)
+                memmap_elements[:] = tri.triangles[~mask]
+                del memmap_elements
+                self.__memmap_elements = np.memmap(
+                    self.tmpfile_elements.name, dtype=int, mode='r', shape=shape)
+                return self.__memmap_elements
 
     @property
     def _size_function_types(self):
@@ -490,17 +392,37 @@ class SizeFunction:
     def _dst_crs(self):
         return self.__dst_crs
 
+    @property
+    def _hmin_is_absolute_limit(self):
+        try:
+            return self.__hmin_is_absolute_limit
+        except AttributeError:
+            # Uses the data's limit by default to favor jigsaw stability
+            return False
+
+    @property
+    def _hmax_is_absolute_limit(self):
+        try:
+            return self.__hmax_is_absolute_limit
+        except AttributeError:
+            # Uses the data's limit by default to favor jigsaw stability
+            return False
+
     @scaling.setter
     def scaling(self, scaling):
         self._scaling = scaling
 
-    @nproc.setter
-    def nproc(self, nproc):
-        self._nproc = nproc
-
     @dst_crs.setter
     def dst_crs(self, dst_crs):
         self._dst_crs = dst_crs
+
+    @hmin_is_absolute_limit.setter
+    def hmin_is_absolute_limit(self, hmin_is_absolute_limit):
+        self._hmin_is_absolute_limit = hmin_is_absolute_limit
+
+    @hmax_is_absolute_limit.setter
+    def hmax_is_absolute_limit(self, hmax_is_absolute_limit):
+        self._hmax_is_absolute_limit = hmax_is_absolute_limit
 
     @_scaling.setter
     def _scaling(self, scaling):
@@ -520,12 +442,17 @@ class SizeFunction:
     @_hmin.setter
     def _hmin(self, hmin):
         if hmin is None:
-            hmin = np.finfo(float).eps
+            # bound hmin to raster resolution.
+            hmin = float("inf")
+            for raster in self.raster_collection:
+                hmin = np.min([np.abs(raster.dx), hmin])
+                hmin = np.min([np.abs(raster.dy), hmin])
         self.__hmin = float(hmin)
 
     @_hmax.setter
     def _hmax(self, hmax):
         if hmax is None:
+            # it's safe to keep hmax unbounded
             hmax = float("inf")
         self.__hmax = float(hmax)
 
@@ -534,126 +461,12 @@ class SizeFunction:
         assert scaling in ["absolute", "relative"]
         self.__scaling = scaling
 
-    @_nproc.setter
-    def _nproc(self, nproc):
-        if nproc == -1:
-            nproc = cpu_count()
-        assert isinstance(nproc, int)
-        assert nproc > 0
-        self.__nproc = nproc
+    @_hmin_is_absolute_limit.setter
+    def _hmin_is_absolute_limit(self, hmin_is_absolute_limit):
+        assert isinstance(hmin_is_absolute_limit, bool)
+        self.__hmin_is_absolute_limit = hmin_is_absolute_limit
 
-# MASK GENERATION TESTS
-
-# -------- serial mask generation
-# path = Path(self.pslg.polygon.exterior.coords, closed=True)
-# bbox = path.get_extents()
-# idxs = np.where(np.logical_and(
-#                     np.logical_and(
-#                         bbox.xmin <= centroids[:, 0],
-#                         bbox.xmax >= centroids[:, 0]),
-#                     np.logical_and(
-#                         bbox.ymin <= centroids[:, 1],
-#                         bbox.ymax >= centroids[:, 1])))[0]
-# mask[idxs] = np.logical_and(
-#     mask[idxs], ~path.contains_points(centroids[idxs]))
-# for interior in self.pslg.polygon.interiors:
-#     path = Path(interior.coords, closed=True)
-#     bbox = path.get_extents()
-#     idxs = np.where(np.logical_and(
-#                     np.logical_and(
-#                         bbox.xmin <= centroids[:, 0],
-#                         bbox.xmax >= centroids[:, 0]),
-#                     np.logical_and(
-#                         bbox.ymin <= centroids[:, 1],
-#                         bbox.ymax >= centroids[:, 1])))[0]
-#     mask[idxs] = np.logical_or(
-#         mask[idxs],
-#         path.contains_points(centroids[idxs]))
-# -------- end serial mask generation
-
-
-# -------------- parallel exterior/interior version
-# global exterior
-# global interior
-# for polygon in self.pslg.multipolygon:
-#     exterior = polygon.exterior
-#     bbox = polygon.bounds
-#     idxs = np.where(np.logical_and(
-#                         np.logical_and(
-#                             bbox[0] <= centroids[:, 0],
-#                             bbox[2] >= centroids[:, 0]),
-#                         np.logical_and(
-#                             bbox[1] <= centroids[:, 1],
-#                             bbox[3] >= centroids[:, 1])))[0]
-#     p = Pool()
-#     result = p.map(
-#         parallel_exterior_contains,
-#         [centroids[idx] for idx in idxs])
-#     p.close()
-#     p.join()
-#     mask[idxs] = np.logical_and(
-#         mask[idxs], ~np.asarray(result))
-#     for interior in polygon.interiors:
-#         bbox = interior.bounds
-#         idxs = np.where(np.logical_and(
-#                         np.logical_and(
-#                             bbox[0] <= centroids[:, 0],
-#                             bbox[2] >= centroids[:, 0]),
-#                         np.logical_and(
-#                             bbox[1] <= centroids[:, 1],
-#                             bbox[3] >= centroids[:, 1])))[0]
-#         p = Pool()
-#         result = p.map(
-#             parallel_interior_contains,
-#             [centroids[idx] for idx in idxs])
-#         p.close()
-#         p.join()
-#         mask[idxs] = np.logical_or(mask[idxs], np.asarray(result))
-# del globals()['exterior']
-# del globals()['interior']
-# ---------- end parallel exterior/interior version
-
-# -------------- parallel path version
-# print('begin parallel path version')
-# import time
-# start = time.time()
-# global path
-# for polygon in self.pslg.multipolygon:
-#     path = Path(polygon.exterior.coords, closed=True)
-#     bbox = path.get_extents()
-#     idxs = np.where(np.logical_and(
-#                         np.logical_and(
-#                             bbox.xmin <= centroids[:, 0],
-#                             bbox.xmax >= centroids[:, 0]),
-#                         np.logical_and(
-#                             bbox.ymin <= centroids[:, 1],
-#                             bbox.ymax >= centroids[:, 1])))[0]
-#     p = Pool()
-#     result = p.map_async(
-#         parallel_path_contains_point,
-#         [centroids[idx] for idx in idxs])
-#     p.close()
-#     p.join()
-#     mask[idxs] = np.logical_and(
-#         mask[idxs], ~np.asarray(result))
-#     for interior in polygon.interiors:
-#         path = Path(interior.coords, closed=True)
-#         bbox = path.get_extents()
-#         idxs = np.where(np.logical_and(
-#                         np.logical_and(
-#                             bbox.xmin <= centroids[:, 0],
-#                             bbox.xmax >= centroids[:, 0]),
-#                         np.logical_and(
-#                             bbox.ymin <= centroids[:, 1],
-#                             bbox.ymax >= centroids[:, 1])))[0]
-#         p = Pool()
-#         result = p.map_async(
-#             parallel_path_contains_point,
-#             [centroids[idx] for idx in idxs])
-#         p.close()
-#         p.join()
-#         mask[idxs] = np.logical_or(mask[idxs], np.asarray(result))
-# print(f'parallel path version took {start-time.time()}')
-# del globals()['path']
-# ---------- end parallel path version
-
+    @_hmax_is_absolute_limit.setter
+    def _hmax_is_absolute_limit(self, hmax_is_absolute_limit):
+        assert isinstance(hmax_is_absolute_limit, bool)
+        self.__hmax_is_absolute_limit = hmax_is_absolute_limit
