@@ -8,7 +8,8 @@ from rasterio import warp
 from rasterio.mask import mask
 from rasterio.enums import Resampling
 import multiprocessing
-from shapely.geometry import Polygon, LinearRing, MultiPolygon, mapping
+import fiona
+from shapely.geometry import mapping
 import tempfile
 from pyproj import Proj
 
@@ -19,72 +20,9 @@ class Raster:
         self,
         path,
         dst_crs=None,
-        xres=None,
-        yres=None
     ):
         self._path = path
         self._dst_crs = dst_crs
-        self._xres = xres
-        self._yres = yres
-
-    def __call__(self, zmin, zmax):
-        if np.all(self.values > zmax) or np.all(self.values < zmin):
-            # fully external tile.
-            return MultiPolygon()
-
-        elif (np.min(self.values) > zmin
-              and np.max(self.values) < zmax):
-            # fully internal tile
-            raise NotImplementedError
-            # _LinearRing = self.__get_empty_LinearRing()
-            # bbox = self.bbox.get_points()
-            # x0, y0 = float(bbox[0][0]), float(bbox[0][1])
-            # x1, y1 = float(bbox[1][0]), float(bbox[1][1])
-            # _LinearRing.AddPoint(x0, y0, float(self.get_value(x0, y0)))
-            # _LinearRing.AddPoint(x1, y0, float(self.get_value(x1, y0)))
-            # _LinearRing.AddPoint(x1, y1, float(self.get_value(x1, y1)))
-            # _LinearRing.AddPoint(x0, y1, float(self.get_value(x0, y1)))
-            # _LinearRing.AddPoint(*_LinearRing.GetPoint(0))
-            # _Polygon = self.__get_empty_Polygon()
-            # _Polygon.AddGeometry(_LinearRing)
-            # _MultiPolygon = self.__get_empty_MultiPolygon()
-            # _MultiPolygon.AddGeometry(_Polygon)
-            # self.__MultiPolygon = _MultiPolygon
-            # return self.__MultiPolygon
-        else:
-            # tile containing boundary
-            ax = plt.contourf(
-                self.x, self.y, self.values, levels=[zmin, zmax])
-            plt.close(plt.gcf())
-            # extract linear_rings from plot
-            linear_ring_collection = list()
-            for path_collection in ax.collections:
-                for path in path_collection.get_paths():
-                    polygons = path.to_polygons(closed_only=True)
-                    for linear_ring in polygons:
-                        linear_ring_collection.append(LinearRing(linear_ring))
-            # reorder linear rings from above
-            areas = [Polygon(linear_ring).area
-                     for linear_ring in linear_ring_collection]
-            idx = np.where(areas == np.max(areas))[0][0]
-            polygon_collection = list()
-            outer_ring = linear_ring_collection.pop(idx)
-            path = Path(np.asarray(outer_ring.coords), closed=True)
-            while len(linear_ring_collection) > 0:
-                inner_rings = list()
-                for i, linear_ring in reversed(
-                        list(enumerate(linear_ring_collection))):
-                    xy = np.asarray(linear_ring.coords)[0, :]
-                    if path.contains_point(xy):
-                        inner_rings.append(linear_ring_collection.pop(i))
-                polygon_collection.append(Polygon(outer_ring, inner_rings))
-                if len(linear_ring_collection) > 0:
-                    areas = [Polygon(linear_ring).area
-                             for linear_ring in linear_ring_collection]
-                    idx = np.where(areas == np.max(areas))[0][0]
-                    outer_ring = linear_ring_collection.pop(idx)
-                    path = Path(np.asarray(outer_ring.coords), closed=True)
-            return MultiPolygon(polygon_collection)
 
     def tags(self, i=None):
         if i is None:
@@ -104,27 +42,29 @@ class Raster:
     def sample(self, xy, i):
         return self.src.sample(xy, i)
 
-    # def close(self):
-    #     del(self._src)
+    def close(self):
+        pass
+        # del(self._src)
 
-    def add_band(self,  band_type, values):
+    def add_band(self, values,  **tags):
         kwargs = self.src.meta.copy()
         band_id = kwargs["count"]+1
         kwargs.update(count=band_id)
-        tmpfile = tempfile.NamedTemporaryFile()
+        tmpfile = tempfile.NamedTemporaryFile(prefix='add_band')
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
             for i in range(1, self.src.count + 1):
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
             dst.write_band(band_id, values.astype(self.src.dtypes[i-1]))
-            dst.update_tags(band_id, BAND_TYPE=band_type)
+            dst.update_tags(band_id, **tags)
         self._tmpfile = tmpfile
+        return band_id
 
     def mask(self, shapes, i=None, **kwargs):
         _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
         out_images, out_transform = mask(self.src, shapes)
-        tmpfile = tempfile.NamedTemporaryFile()
+        tmpfile = tempfile.NamedTemporaryFile(prefix='masked')
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
             if i is None:
                 for j in range(1, self.src.count + 1):
@@ -140,6 +80,11 @@ class Raster:
                         dst.update_tags(j, **self.src.tags(j))
         self._tmpfile = tmpfile
 
+    def read_masks(self, i=None):
+        i = 1 if i is None else int(i)
+        assert i in range(1, self.count + 1)
+        return self.src.read_masks(i)
+
     def warp(self, dst_crs):
         src = rasterio.open(self.path)
         transform, width, height = warp.calculate_default_transform(
@@ -152,7 +97,7 @@ class Raster:
             'width': width,
             'height': height
         })
-        tmpfile = tempfile.NamedTemporaryFile()
+        tmpfile = tempfile.NamedTemporaryFile(prefix='warp')
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
                 rasterio.warp.reproject(
@@ -168,53 +113,18 @@ class Raster:
                 dst.update_tags(i, **self.src.tags(i))
         self._tmpfile = tmpfile
 
-    def resample(self, xres, yres, method='bilinear'):
-        transform, width, heigth = warp.aligned_target(
-            self.transform, self.width, self.height, (xres, yres))
-        kwargs = self.src.meta.copy()
-        kwargs.update({
-            "transform": transform,
-            "width": width,
-            "heigth": heigth})
-        tmpfile = tempfile.NamedTemporaryFile()
-        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
-            for i in self.count:
-                x, y, band = self.get_resampled(i, xres, yres, method)
-                dst.write_band(i, band)
-                dst.update_tags(i, band)
-        self._tmpfile = tempfile
-
     def save(self, path):
         with rasterio.open(pathlib.Path(path), 'w', **self.src.meta) as dst:
             for i in range(1, self.src.count + 1):
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
 
-    def get_resampled(self, i, xres, yres, method='bilinear', masked=False):
-        method_dict = {
-            'bilinear': Resampling.bilinear,
-            'nearest': Resampling.nearest,
-            'cubic': Resampling.cubic,
-            'average': Resampling.average
-        }
-        if method in method_dict.keys():
-            method = method_dict[method]
-        else:
-            msg = 'Method must be one of {} '.format(method_dict.keys())
-            msg += 'or instance of type rasterio.enums.Resampling'
-            assert isinstance(method, Resampling), msg
-        transform, width, height = warp.aligned_target(
-            self.transform, self.width, self.height, (xres, yres))
-        band = self.read(
-            i,
-            out_shape=(height, width),
-            resampling=method,
-            masked=masked)
-        x0, y0, x1, y1 = rasterio.transform.array_bounds(
-            height, width, transform)
-        x = np.linspace(x0, x1, width)
-        y = np.linspace(y1, y0, height)
-        return x, y, band
+    def __add_feature(self, multipolygon, zmin, zmax):
+        self.collection.close()
+        with fiona.open(self.collection_tmpdir.name, 'a') as dst:
+            dst.write({"geometry": mapping(multipolygon),
+                       "properties": {"zmin": zmin, "zmax": zmax}})
+        self.__collection = fiona.open(self.collection_tmpdir.name)
 
     @property
     def path(self):
@@ -301,11 +211,26 @@ class Raster:
         return self.src.read(1)
 
     @property
+    def xres(self):
+        return self.transform[0]
+
+    @property
+    def yres(self):
+        return self.transform[4]
+
+    @property
+    def resampling_method(self):
+        try:
+            return self.__resampling_method
+        except AttributeError:
+            return 'bilinear'
+
+    @property
     def _src(self):
         try:
             return self.__src
         except AttributeError:
-            tmpfile = tempfile.NamedTemporaryFile()
+            tmpfile = tempfile.NamedTemporaryFile(prefix='src')
             with rasterio.open(self.path) as src:
                 if src.count > 1 or src.count == 0:
                     msg = 'Input raster must have only a single band and it '
@@ -322,7 +247,8 @@ class Raster:
                         'crs': self.dst_crs,
                         'transform': transform,
                         'width': width,
-                        'height': height
+                        'height': height,
+                        'driver': 'GTiff'
                     })
                     with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
                         rasterio.warp.reproject(
@@ -359,14 +285,26 @@ class Raster:
     def dst_crs(self, dst_crs):
         self._dst_crs = dst_crs
 
+    @resampling_method.setter
+    def resampling_method(self, resampling_method):
+        method_dict = {
+            'bilinear': Resampling.bilinear,
+            'nearest': Resampling.nearest,
+            'cubic': Resampling.cubic,
+            'average': Resampling.average
+        }
+        assert resampling_method in method_dict.keys()
+        self.__resampling_method = method_dict[resampling_method]
+
     @_path.setter
     def _path(self, path):
+        path = pathlib.Path(path)
         self.__path = path
 
     @_dst_crs.setter
     def _dst_crs(self, dst_crs):
         if dst_crs is None:
-            dst_crs = rasterio.open(self.path)
+            dst_crs = rasterio.open(self.path).crs
         self.__dst_crs = dst_crs
 
     @_tmpfile.setter

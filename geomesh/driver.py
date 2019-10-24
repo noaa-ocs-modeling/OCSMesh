@@ -141,18 +141,22 @@ class Jigsaw:
     def _hfun(self, hfun):
         if hfun is not None:
             assert isinstance(hfun, geomesh.SizeFunction)
+
             # set scaling
             self.hfun_scal = hfun.scaling
+
             # use hmin limits
-            if hfun.hmin_is_absolute_limit is True:
+            if hfun.hmin_is_absolute_limit:
                 self.hfun_hmin = hfun.hmin
-            elif hfun.hmin_is_absolute_limit is False:
+            else:
                 self.hfun_hmin = np.min(hfun.values)
+
             # set hmax limits
-            if hfun.hmax_is_absolute_limit is True:
+            if hfun.hmax_is_absolute_limit:
                 self.hfun_hmax = hfun.hmax
-            elif hfun.hmax_is_absolute_limit is False:
+            else:
                 self.hfun_hmax = np.max(hfun.values)
+
             # push jigsaw_msh_t object
             hfun = hfun.hfun
         self.__hfun = hfun

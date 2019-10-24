@@ -26,8 +26,8 @@ class InstallJigsawCommand(distutils.cmd.Command):
         self.pyenv_prefix = Path(self.pyenv_prefix)
 
     def run(self):
-        self._install_jigsawpy()
         self._install_jigsaw()
+        self._install_jigsawpy()
 
     def _setup_step(f):
         def decorator(self):
@@ -37,13 +37,6 @@ class InstallJigsawCommand(distutils.cmd.Command):
         return decorator
 
     @_setup_step
-    def _install_jigsawpy(self):
-        subprocess.check_call(
-            ["git", "submodule", "update", "--init", "jigsawpy"])
-        os.chdir(str(Path("jigsawpy")))
-        subprocess.check_call(["python", "setup.py", "install"])
-
-    @_setup_step
     def _install_jigsaw(self):
         os.chdir(str(Path("jigsawpy/_ext_/jigsaw")))
         os.makedirs("build", exist_ok=True)
@@ -51,7 +44,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
-             "-DCMAKE_INSTALL_PREFIX={}".format(self.pyenv_prefix),
+             f"-DCMAKE_INSTALL_PREFIX={self.pyenv_prefix}",
              # "-DCMAKE_CXX_COMPILER={}".format(),
              ])
         subprocess.check_call(["make", "install"])
@@ -62,6 +55,13 @@ class InstallJigsawCommand(distutils.cmd.Command):
             shutil.copy(libsaw, libsaw_prefix)
         os.chdir(self.work_dir + '/contrib')
         subprocess.check_call(["git", "submodule", "deinit", "-f", "jigsawpy"])
+
+    @_setup_step
+    def _install_jigsawpy(self):
+        subprocess.check_call(
+            ["git", "submodule", "update", "--init", "jigsawpy"])
+        os.chdir(str(Path("jigsawpy")))
+        subprocess.check_call(["python", "setup.py", "install"])
 
 
 conf = setuptools.config.read_configuration(
@@ -86,7 +86,7 @@ setuptools.setup(
                       "netCDF4",
                       "scipy",
                       "pyproj",
-                      "fiona",
+                      # "fiona",
                       "rasterio",
                       # "pysheds",
                       "shapely",

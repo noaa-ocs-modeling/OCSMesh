@@ -26,23 +26,18 @@ def main():
     rast = Raster(file)
 
     # ------- init PSLG object
-    pslg = PlanarStraightLineGraph(rast, -1500., 15.)
+    pslg = PlanarStraightLineGraph(rast, zmax=15.)
 
     # ------- visualize PSLG object
     # pslg.plot(show=True)
-    # pslg.triplot(show=True)
 
     # ------- init size function
-    hfun = SizeFunction(pslg, 50., 1500.)
+    hfun = SizeFunction(pslg, hmin=50., verbosity=1)
 
     # ------- add size function constraints
-    hfun.add_contour(0., 0.001, n_jobs=-1)
+    hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
-
-    # ------- visualize size function
-    # hfun.tripcolor(show=True)
-    # hfun.tricontourf(show=True, levels=20)
-    # hfun.triplot(show=True)
+    hfun.tripcolor(show=True)
 
     # ------- init jigsaw and set options
     jigsaw = Jigsaw(hfun)

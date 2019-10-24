@@ -17,6 +17,9 @@ class RasterCollection:
     def __getitem__(self, i):
         return self.container[i]
 
+    def __len__(self):
+        return len(self.container)
+
     def append(self, raster):
         if isinstance(raster, (str, Path)):
             raster = Raster(raster)
