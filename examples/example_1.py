@@ -37,7 +37,34 @@ def main():
     # ------- add size function constraints
     hfun.add_contour(0., 0.001)
     hfun.add_subtidal_flow_limiter()
-    hfun.tripcolor(show=True)
+    tri, values = hfun(0)
+    # plt.title('Size Function')
+    # plt.tricontourf(tri, values, levels=256, cmap='jet')
+    # plt.triplot(tri, linewidth=0.2, color='k')
+    # plt.gca().axis('scaled')
+    # plt.show()
+    # plt.close(plt.gcf())
+    from geomesh import Mesh
+    import numpy as np
+    vertices = np.vstack([tri.x, tri.y]).T
+    from scipy.interpolate import RectBivariateSpline
+    f = RectBivariateSpline(
+        rast.x,
+        np.flip(rast.y),
+        np.flipud(rast.values).T,
+        )
+    values = f.ev(vertices[:, 0], vertices[:, 1])
+    mesh = Mesh(vertices, tri.triangles, 'EPSG:3395', values=values)
+    mesh.transform_to('EPSG:4326')
+    # mesh.make_plot(show=True)
+    mesh.save('PuertoRicoTestCase.grd', overwrite=True)
+    # bbox = raster.bbox
+    # mesh.interpolate(rast, fix_invalid=True)
+    # mesh.tricontourf(show=True, levels=256)
+    # import numpy as np
+
+    exit()
+    # hfun.tripcolor(show=True)
 
     # ------- init jigsaw and set options
     jigsaw = Jigsaw(hfun)

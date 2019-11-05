@@ -240,14 +240,6 @@ class TriangularMesh:
         return self._element_id
 
     @property
-    def ocean_boundary_nodes(self):
-        return self._ocean_boundary_nodes
-
-    @property
-    def ocean_boundaries(self):
-        return self._ocean_boundaries
-
-    @property
     def gr3(self):
         f = "{}\n".format(self.description)
         f += "{} ".format(self.elements.shape[0])

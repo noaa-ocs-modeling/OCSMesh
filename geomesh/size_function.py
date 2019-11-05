@@ -27,8 +27,7 @@ class SizeFunction:
         self.verbosity = verbosity
 
     def __call__(self, i):
-        self.__fetch_triangulation(i)
-        return tri, values
+        return self._fetch_triangulation(i)
 
     # def __iter__(self):
     #     for i, data in enumerate(self.container):
@@ -49,6 +48,7 @@ class SizeFunction:
         if isinstance(i, int):
             assert i in list(range(len(self.raster_collection)))
             tri, values = self(i)
+
         plt.tripcolor(self.triangulation, self.values, **kwargs)
         plt.colorbar()
         if show:
@@ -158,21 +158,21 @@ class SizeFunction:
         for raster_id in i:
             self.gaussian_filter[raster_id] = kwargs
 
-    def __process_raster(self, idx):
+    def _process_raster(self, idx):
 
         raster = self.raster_collection[idx]
 
         # generate outband
         outband = np.full(raster.shape, float("inf"))
         for kwargs in self.contours[idx]:
-            outband = self.__apply_contour_level(raster, outband, **kwargs)
+            outband = self._apply_contour_level(raster, outband, **kwargs)
         kwargs = self.subtidal_flow_limiter[idx]
         if kwargs is not None:
-            outband = self.__apply_subtidal_flow_limiter(
+            outband = self._apply_subtidal_flow_limiter(
                 raster, outband, **kwargs)
         kwargs = self.gaussian_filter[idx]
         if kwargs is not None:
-            outband = self.__apply_gaussian_filter(outband, **kwargs)
+            outband = self._apply_gaussian_filter(outband, **kwargs)
         outband[np.where(outband < self.hmin)] = self.hmin
         outband[np.where(outband > self.hmax)] = self.hmax
 
@@ -206,8 +206,6 @@ class SizeFunction:
         density = len(mesh.vert2['coord']) / self.pslg.multipolygon(idx).area
         print(f"Local node density {density}")
 
-        exit()
-
         from scipy.interpolate import RectBivariateSpline
         f = RectBivariateSpline(
             raster.x,
@@ -223,13 +221,16 @@ class SizeFunction:
             mesh.vert2['coord'][:, 0],
             mesh.vert2['coord'][:, 1],
             mesh.tria3['index'])
-        plt.triplot(tri, color='y', linewidth=0.1, alpha=0.5)
-        plt.tricontourf(tri, values, cmap='jet')
-        plt.gca().axis('scaled')
-        # exit()
-        plt.show()
 
-    def __apply_contour_level(
+        # plt.triplot(tri, color='y', linewidth=0.1, alpha=0.5)
+        # plt.tricontourf(tri, values, cmap='jet')
+        # plt.gca().axis('scaled')
+        # # exit()
+        # plt.show()
+
+        return tri, values
+
+    def _apply_contour_level(
         self,
         raster,
         outband,
@@ -241,7 +242,7 @@ class SizeFunction:
         n_jobs
     ):
         # calculate distances between each pixel and nearest contour point
-        tree = self.__fetch_raster_level_tree(level)
+        tree = self._fetch_raster_level_tree(level)
         xt, yt = np.meshgrid(raster.x, raster.y)
         xt = xt.flatten()
         yt = yt.flatten()
@@ -254,7 +255,7 @@ class SizeFunction:
         outband = np.minimum(outband, values)
         return outband
 
-    def __apply_subtidal_flow_limiter(self, raster, outband, hmin, hmax):
+    def _apply_subtidal_flow_limiter(self, raster, outband, hmin, hmax):
         dx = np.abs(raster.dx)
         dy = np.abs(raster.dy)
         dx, dy = np.gradient(raster.values, dx, dy)
@@ -267,10 +268,10 @@ class SizeFunction:
         outband = np.minimum(outband, values)
         return outband
 
-    def __apply_gaussian_filter(self, outband, **kwargs):
+    def _apply_gaussian_filter(self, outband, **kwargs):
         return gaussian_filter(outband, **kwargs)
 
-    def __fetch_raster_level(self, level):
+    def _fetch_raster_level(self, level):
         try:
             return self.raster_level[level]["vertices"]
         except KeyError:
@@ -297,19 +298,19 @@ class SizeFunction:
             }
             return self.raster_level[level]["vertices"]
 
-    def __fetch_raster_level_tree(self, level):
+    def _fetch_raster_level_tree(self, level):
         try:
             return self.raster_level[level]["kdtree"]
         except KeyError:
-            points = self.__fetch_raster_level(level)
+            points = self._fetch_raster_level(level)
             self.raster_level[level]["kdtree"] = cKDTree(points)
             return self.raster_level[level]["kdtree"]
 
-    def __fetch_triangulation(self, i):
+    def _fetch_triangulation(self, i):
         data = self.triangulation_collection[i]
         if data is None:
-            x, y, elements, values = self.__process_raster(i)
-            raise NotImplementedError('continue...')
+            tri, values = self._process_raster(i)
+        return tri, values
 
     @property
     def pslg(self):
