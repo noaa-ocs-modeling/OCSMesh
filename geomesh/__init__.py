@@ -1,4 +1,7 @@
 import matplotlib as mpl
+import os
+import tempfile
+import pathlib
 from geomesh.mesh import TriangularMesh, Mesh
 from geomesh.pslg import PlanarStraightLineGraph
 from geomesh.size_function import SizeFunction
@@ -13,3 +16,5 @@ __all__ = ["Mesh",  # just an alias for TriangularMesh
            "Raster",
            "RasterCollection"]
 mpl.rcParams['agg.path.chunksize'] = 10000
+tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
+os.makedirs(tmpdir, exist_ok=True)

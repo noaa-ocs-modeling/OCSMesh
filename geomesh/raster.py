@@ -8,10 +8,11 @@ from rasterio import warp
 from rasterio.mask import mask
 from rasterio.enums import Resampling
 import multiprocessing
-import fiona
-from shapely.geometry import mapping
+# import fiona
+# from shapely.geometry import mapping
 import tempfile
 from pyproj import Proj
+import geomesh
 
 
 class Raster:
@@ -43,14 +44,14 @@ class Raster:
         return self.src.sample(xy, i)
 
     def close(self):
-        pass
-        # del(self._src)
+        del(self._src)
 
     def add_band(self, values,  **tags):
         kwargs = self.src.meta.copy()
         band_id = kwargs["count"]+1
         kwargs.update(count=band_id)
-        tmpfile = tempfile.NamedTemporaryFile(prefix='add_band')
+        tmpfile = tempfile.NamedTemporaryFile(
+            prefix=geomesh.tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
             for i in range(1, self.src.count + 1):
                 dst.write_band(i, self.src.read(i))
@@ -64,7 +65,7 @@ class Raster:
         _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
         out_images, out_transform = mask(self.src, shapes)
-        tmpfile = tempfile.NamedTemporaryFile(prefix='masked')
+        tmpfile = tempfile.NamedTemporaryFile(prefix=geomesh.tmpdir)
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
             if i is None:
                 for j in range(1, self.src.count + 1):
@@ -97,7 +98,7 @@ class Raster:
             'width': width,
             'height': height
         })
-        tmpfile = tempfile.NamedTemporaryFile(prefix='warp')
+        tmpfile = tempfile.NamedTemporaryFile(prefix=geomesh.tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
                 rasterio.warp.reproject(
@@ -119,12 +120,12 @@ class Raster:
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
 
-    def __add_feature(self, multipolygon, zmin, zmax):
-        self.collection.close()
-        with fiona.open(self.collection_tmpdir.name, 'a') as dst:
-            dst.write({"geometry": mapping(multipolygon),
-                       "properties": {"zmin": zmin, "zmax": zmax}})
-        self.__collection = fiona.open(self.collection_tmpdir.name)
+    # def __add_feature(self, multipolygon, zmin, zmax):
+    #     self.collection.close()
+    #     with fiona.open(self.collection_tmpdir.name, 'a') as dst:
+    #         dst.write({"geometry": mapping(multipolygon),
+    #                    "properties": {"zmin": zmin, "zmax": zmax}})
+    #     self.__collection = fiona.open(self.collection_tmpdir.name)
 
     @property
     def path(self):
@@ -230,7 +231,8 @@ class Raster:
         try:
             return self.__src
         except AttributeError:
-            tmpfile = tempfile.NamedTemporaryFile(prefix='src')
+            tmpfile = tempfile.NamedTemporaryFile(
+                prefix=geomesh.tmpdir)
             with rasterio.open(self.path) as src:
                 if src.count > 1 or src.count == 0:
                     msg = 'Input raster must have only a single band and it '

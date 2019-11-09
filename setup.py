@@ -26,8 +26,10 @@ class InstallJigsawCommand(distutils.cmd.Command):
         self.pyenv_prefix = Path(self.pyenv_prefix)
 
     def run(self):
-        self._install_jigsaw()
+        # need to install jigsawpy first, then jigsaw so that libjigsaw.so
+        # ends up on the right path.
         self._install_jigsawpy()
+        self._install_jigsaw()
 
     def _setup_step(f):
         def decorator(self):
@@ -86,10 +88,9 @@ setuptools.setup(
                       "netCDF4",
                       "scipy",
                       "pyproj",
-                      # "fiona",
+                      "fiona",
                       "rasterio",
                       # "pysheds",
                       "shapely",
-                      # "rtree"
                       ],
     )

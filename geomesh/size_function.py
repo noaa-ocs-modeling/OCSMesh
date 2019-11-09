@@ -1,12 +1,15 @@
 import tempfile
 import matplotlib.pyplot as plt
+from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import gaussian_filter
 from matplotlib.tri import Triangulation
+from matplotlib.path import Path
 import numpy as np
 from scipy.spatial import cKDTree
 from multiprocessing import cpu_count
 from jigsawpy.libsaw import jigsaw
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
+from jigsawpy import jigsaw_msh_t, jigsaw_jig_t, savemsh, loadmsh
+import geomesh
 from geomesh.pslg import PlanarStraightLineGraph
 
 
@@ -24,18 +27,7 @@ class SizeFunction:
         self._hmin = hmin
         self._hmax = hmax
         self._dst_crs = dst_crs
-        self.verbosity = verbosity
-
-    def __call__(self, i):
-        return self._fetch_triangulation(i)
-
-    # def __iter__(self):
-    #     for i, data in enumerate(self.container):
-    #        f data is None:
-    #             x, y, z, elements, values = self(i)
-    #         else:
-    #             x, y, z, elements, values = *data
-    #         yield data
+        self._verbosity = verbosity
 
     def tricontourf(self, show=False, **kwargs):
         plt.tricontourf(self.triangulation, self.values, **kwargs)
@@ -67,7 +59,6 @@ class SizeFunction:
         if isinstance(i, int):
             assert i in list(range(len(self.raster_collection)))
             tri, values = self(i)
-        
 
         elif i is None:
             plt.triplot(
@@ -158,11 +149,25 @@ class SizeFunction:
         for raster_id in i:
             self.gaussian_filter[raster_id] = kwargs
 
-    def _process_raster(self, idx):
+    def _get_hfun(self, idx):
+        data = self.hfun_collection[idx]
+        if data is None:
+            mesh, values = self._generate_hfun(idx)
+        else:
+            mesh = self._load_hfun(idx)
+            values = data['values']
+        return mesh, values
 
+    def _get_triangulation(self, idx):
+        mesh, _ = self._get_hfun(idx)
+        return Triangulation(
+            mesh.vert2['coord'][:, 0],
+            mesh.vert2['coord'][:, 1],
+            mesh.tria3['index'])
+
+    def _get_hmat(self, idx):
         raster = self.raster_collection[idx]
-
-        # generate outband
+        # apply size function requests.
         outband = np.full(raster.shape, float("inf"))
         for kwargs in self.contours[idx]:
             outband = self._apply_contour_level(raster, outband, **kwargs)
@@ -175,60 +180,56 @@ class SizeFunction:
             outband = self._apply_gaussian_filter(outband, **kwargs)
         outband[np.where(outband < self.hmin)] = self.hmin
         outband[np.where(outband > self.hmax)] = self.hmax
-
-        # hfun
+        # gcreate hmat object
         hmat = jigsaw_msh_t()
         hmat.mshID = "euclidean-grid"
         hmat.ndim = 2
         hmat.xgrid = np.array(raster.x, dtype=jigsaw_msh_t.REALS_t)
         hmat.ygrid = np.array(np.flip(raster.y), dtype=jigsaw_msh_t.REALS_t)
         hmat.value = np.array(np.flipud(outband), dtype=jigsaw_msh_t.REALS_t)
+        return hmat
+
+    def _save_hfun(self, idx, mesh, values):
+        tmpfile = tempfile.NamedTemporaryFile(
+            prefix=geomesh.tmpdir, suffix='.msh')
+        savemsh(tmpfile.name, mesh)
+        self._hfun_collection[idx] = {'tmpfile': tmpfile, 'values': values}
+
+    def _load_hfun(self, idx):
+        mesh = jigsaw_msh_t()
+        loadmsh(self.hfun_collection[idx]['tmpfile'].name, mesh)
+        return mesh
+
+    def _generate_hfun(self, idx):
+
+        # generate raster size function
+        values = self._get_hmat(idx)
 
         # jigsaw opts
         opts = jigsaw_jig_t()
         opts.verbosity = self.verbosity
         opts.mesh_dim = 2
-        opts.hfun_hmin = np.min(outband)
-        opts.hfun_hmax = np.max(outband)
+        opts.hfun_hmin = np.min(values.value)
+        opts.hfun_hmax = np.max(values.value)
         opts.hfun_scal = 'absolute'
-        # opts.mesh_top1 = True               # for sharp feat's
-        # opts.geom_feat = True
+        opts.optm_tria = False
 
         # pslg
-        geom = self.pslg.geom(idx)
+        geom = self.pslg._get_geom(idx)
 
         # output mesh
         mesh = jigsaw_msh_t()
 
-        jigsaw(opts, geom, mesh, hfun=hmat)
+        # call jigsaw to optimize local mesh
+        jigsaw(opts, geom, mesh, hfun=values)
 
-        print(f"Total nodes {len(mesh.vert2['coord'])}")
-        density = len(mesh.vert2['coord']) / self.pslg.multipolygon(idx).area
-        print(f"Local node density {density}")
+        # do post processing
+        mesh, values = self._jigsaw_post_process(mesh, values)
 
-        from scipy.interpolate import RectBivariateSpline
-        f = RectBivariateSpline(
-            raster.x,
-            np.flip(raster.y),
-            np.flipud(outband).T,
-            )
+        # save results to hfun_collection
+        self._save_hfun(idx, mesh, values)
 
-        values = f.ev(
-            mesh.vert2['coord'][:, 0],
-            mesh.vert2['coord'][:, 1])
-
-        tri = Triangulation(
-            mesh.vert2['coord'][:, 0],
-            mesh.vert2['coord'][:, 1],
-            mesh.tria3['index'])
-
-        # plt.triplot(tri, color='y', linewidth=0.1, alpha=0.5)
-        # plt.tricontourf(tri, values, cmap='jet')
-        # plt.gca().axis('scaled')
-        # # exit()
-        # plt.show()
-
-        return tri, values
+        return mesh, values
 
     def _apply_contour_level(
         self,
@@ -242,7 +243,7 @@ class SizeFunction:
         n_jobs
     ):
         # calculate distances between each pixel and nearest contour point
-        tree = self._fetch_raster_level_tree(level)
+        tree = self._get_raster_level_kdtree(level)
         xt, yt = np.meshgrid(raster.x, raster.y)
         xt = xt.flatten()
         yt = yt.flatten()
@@ -271,7 +272,7 @@ class SizeFunction:
     def _apply_gaussian_filter(self, outband, **kwargs):
         return gaussian_filter(outband, **kwargs)
 
-    def _fetch_raster_level(self, level):
+    def _get_raster_level(self, level):
         try:
             return self.raster_level[level]["vertices"]
         except KeyError:
@@ -285,7 +286,8 @@ class SizeFunction:
                         for (x, y), _ in path.iter_segments():
                             vertices.append((x, y))
             vertices = np.asarray(vertices)
-            tmpfile = tempfile.NamedTemporaryFile(prefix=f"sf_rl_{level}_")
+            tmpfile = tempfile.NamedTemporaryFile(
+                prefix=geomesh.tmpdir, suffix='.raster_level')
             memmap_vertices = np.memmap(
                 tmpfile.name, dtype=float, mode='w+', shape=vertices.shape)
             memmap_vertices[:] = vertices
@@ -298,19 +300,53 @@ class SizeFunction:
             }
             return self.raster_level[level]["vertices"]
 
-    def _fetch_raster_level_tree(self, level):
+    def _get_raster_level_kdtree(self, level):
         try:
             return self.raster_level[level]["kdtree"]
         except KeyError:
-            points = self._fetch_raster_level(level)
+            points = self._get_raster_level(level)
             self.raster_level[level]["kdtree"] = cKDTree(points)
             return self.raster_level[level]["kdtree"]
 
-    def _fetch_triangulation(self, i):
-        data = self.triangulation_collection[i]
-        if data is None:
-            tri, values = self._process_raster(i)
-        return tri, values
+    @classmethod
+    def _jigsaw_post_process(cls, mesh, hmat):
+        mesh = cls._cleanup_isolates(mesh)
+        values = cls._get_interpolated_values(mesh, hmat)
+        return mesh, values
+
+    @staticmethod
+    def _cleanup_isolates(mesh):
+        # cleanup isolated nodes
+        # TODO: Slow, needs optimization.
+        node_indexes = np.arange(mesh.vert2['coord'].shape[0])
+        used_indexes = np.unique(mesh.tria3['index'])
+        vert2_idxs = np.where(
+            np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+        tria3_idxs = np.where(
+            ~np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+        tria3 = mesh.tria3['index'].flatten()
+        for idx in reversed(tria3_idxs):
+            _idx = np.where(tria3 >= idx)
+            tria3[_idx] = tria3[_idx] - 1
+        tria3 = tria3.reshape(mesh.tria3['index'].shape)
+        _mesh = jigsaw_msh_t()
+        _mesh.ndims = 2
+        _mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
+        _mesh.tria3 = np.asarray(
+            [(tuple(indices), mesh.tria3['IDtag'][i])
+             for i, indices in enumerate(tria3)],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        return _mesh
+
+    @staticmethod
+    def _get_interpolated_values(mesh, hmat, **kwargs):
+        return RectBivariateSpline(
+            hmat.xgrid,
+            hmat.ygrid,
+            hmat.value.T,
+            **kwargs).ev(
+            mesh.vert2['coord'][:, 0],
+            mesh.vert2['coord'][:, 1])
 
     @property
     def pslg(self):
@@ -321,43 +357,36 @@ class SizeFunction:
         return self.pslg.raster_collection
 
     @property
-    def points(self):
-        return self.memmap_points
-
-    @property
-    def elements(self):
-        return self.memmap_elements
+    def hfun_collection(self):
+        return tuple(self._hfun_collection)
 
     @property
     def triangulation(self):
-        return Triangulation(
-            self.memmap_points[:, 0],
-            self.memmap_points[:, 1],
-            self.memmap_elements)
+        return Triangulation(self.x, self.y, self.triangles)
 
     @property
     def coords(self):
-        return self.points[:, :2]
-
-    @property
-    def xy(self):
-        return self.points[:, :2]
-
-    @property
-    def x(self):
-        return self.points[:, 0]
-
-    @property
-    def y(self):
-        return self.points[:, 1]
-
-    @property
-    def values(self):
-        return self.points[:, 2]
+        return self.hfun.vert2['coord']
 
     @property
     def triangles(self):
-        return self.memmap_elements
+        return self.hfun.tria3['index']
+
+    @property
+    def values(self):
+        return self.hfun.value
+
+    @property
+    def xy(self):
+        return self.coords
+
+    @property
+    def x(self):
+        return self.xy[:, 0]
+
+    @property
+    def y(self):
+        return self.xy[:, 1]
 
     @property
     def scaling(self):
@@ -381,53 +410,39 @@ class SizeFunction:
 
     @property
     def geom(self):
-        return self.pslg
+        return self.pslg.geom
 
     @property
     def ndim(self):
-        return 2
+        return self.pslg.ndim
 
     @property
     def verbosity(self):
         return self.__verbosity
 
     @property
-    def tempdir(self):
-        return self._tempdir
-
-    @property
-    def tmpfile_points(self):
-        return self._tmpfile_points
-
-    @property
-    def tmpfile_elements(self):
-        return self._tmpfile_elements
-
-    @property
     def hfun(self):
-        hfun = jigsaw_msh_t()
-        hfun.vert2 = self.vert2
-        hfun.tria3 = self.tria3
-        hfun.value = self.hfun_value
-        hfun.ndim = self.ndim
-        hfun.mshID = "euclidean-mesh"
-        return hfun
-
-    @property
-    def vert2(self):
-        return np.asarray(
-            [([x, y], 0) for x, y in self.coords],
-            dtype=jigsaw_msh_t.VERT2_t)
-
-    @property
-    def tria3(self):
-        return np.asarray(
-            [(tuple(indices), 0) for indices in self.elements],
-            dtype=jigsaw_msh_t.TRIA3_t)
-
-    @property
-    def hfun_value(self):
-        return np.asarray(self.values, dtype=jigsaw_msh_t.REALS_t)
+        try:
+            return self.__hfun
+        except AttributeError:
+            vert2 = list()
+            tria3 = list()
+            value = list()
+            for i in range(len(self.raster_collection)):
+                mesh, values = self._get_hfun(i)
+                for index, id_tag in mesh.tria3:
+                    tria3.append(((index + len(vert2)), id_tag))
+                for coord, id_tag in mesh.vert2:
+                    vert2.append((coord, id_tag))
+                value.extend(values)
+            hfun = jigsaw_msh_t()
+            hfun.vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
+            hfun.tria3 = np.asarray(tria3, dtype=jigsaw_msh_t.TRIA3_t)
+            hfun.value = np.asarray(value, dtype=jigsaw_msh_t.REALS_t)
+            hfun.ndim = 2
+            hfun.mshID = "euclidean-mesh"
+            self.__hfun = hfun
+            return self.__hfun
 
     @property
     def hmin_is_absolute_limit(self):
@@ -470,13 +485,13 @@ class SizeFunction:
             return self.__gaussian_filter
 
     @property
-    def triangulation_collection(self):
+    def _hfun_collection(self):
         try:
-            return self.__triangulation_collection
+            return self.__hfun_collection
         except AttributeError:
-            self.__triangulation_collection = len(
+            self.__hfun_collection = len(
                 self.raster_collection)*[None]
-            return self.__triangulation_collection
+            return self.__hfun_collection
 
     @property
     def raster_level(self):
@@ -502,67 +517,9 @@ class SizeFunction:
     def _mesh(self):
         return self.__mesh
 
-    # @property
-    # def _memmap_points(self):
-    #     try:
-    #         return self.__memmap_points
-    #     except AttributeError:
-    #         for i, data in enumerate(self.memmap_container):
-    #             if data is None:
-    #                 data = self.__fill_memmap_container(i)
-    #             x, y, z, elements, values = *data
-
-
-                
-
-
-
-
-    #             # raster.close()
-    #         memmap_points = np.memmap(
-    #             self.tmpfile_points.name, dtype=float, mode='w+',
-    #             shape=points.shape)
-    #         memmap_points[:] = points
-    #         del memmap_points
-    #         self.__memmap_points = np.memmap(
-    #             self.tmpfile_points.name, dtype=float, mode='r',
-    #             shape=points.shape)
-    #         return self.__memmap_points
-
-    # @property
-    # def _memmap_elements(self):
-    #     try:
-    #         return self.__memmap_elements
-    #     except AttributeError:
-            
-    #             raster.close()
-    #             elements = tri.triangles[~mask]
-    #             memmap_elements = np.memmap(
-    #                         self.tmpfile_elements.name,
-    #                         dtype=int, mode='r+', shape=elements.shape)
-    #             memmap_elements[:] = elements
-    #             del memmap_elements
-    #             self.__memmap_elements = np.memmap(
-    #                 self.tmpfile_elements.name, dtype=int, mode='r',
-    #                 shape=elements.shape)
-    #             return self.__memmap_elements
-
-
     @property
-    def _tmpfile_points(self):
-        try:
-            return self.__tmpfile_points
-        except AttributeError:
-            self.__tmpfile_points = tempfile.NamedTemporaryFile()
-            return self.__tmpfile_points
-
-    @property
-    def _tmpfile_elements(self):
-        try:
-            return self.__tmpfile_elements
-        except AttributeError:
-            self.__tmpfile_elements = tempfile.NamedTemporaryFile()
-            return self.__tmpfile_elements
+    def _verbosity(self):
+        return self.__verbosity
 
     @scaling.setter
     def scaling(self, scaling):
@@ -576,9 +533,7 @@ class SizeFunction:
 
     @verbosity.setter
     def verbosity(self, verbosity):
-        assert isinstance(verbosity, int)
-        assert verbosity >= 0
-        self.__verbosity = verbosity
+        self._verbosity = verbosity
 
     @hmin_is_absolute_limit.setter
     def hmin_is_absolute_limit(self, hmin_is_absolute_limit):
@@ -611,3 +566,9 @@ class SizeFunction:
             # it's safe to keep hmax unbounded
             hmax = float("inf")
         self.__hmax = float(hmax)
+
+    @_verbosity.setter
+    def _verbosity(self, verbosity):
+        assert isinstance(verbosity, int)
+        assert verbosity >= 0
+        self.__verbosity = verbosity

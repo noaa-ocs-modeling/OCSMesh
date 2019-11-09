@@ -91,6 +91,19 @@ class TriangularMesh:
         else:
             print(self.gr3)
 
+    def maximum_timestep(self, cfl=0.7, maxvel=5.):
+        """
+        maxvel must be in meters per second.
+        """
+        edges = self.triangulation.edges
+        x = self.get_x(3395)
+        y = self.get_y(3395)
+        dx = x[edges[:, 1]] - x[edges[:, 0]]
+        dy = y[edges[:, 1]] - y[edges[:, 0]]
+        array = np.asarray(np.sqrt(dx ** 2 + dy**2))
+        timesteps = cfl*array/np.abs(maxvel)
+        return np.min(timesteps)
+
     def make_plot(
         self,
         axes=None,
@@ -407,6 +420,7 @@ class TriangularMesh:
 
     @_vertices.setter
     def _vertices(self, vertices):
+        # triangulation depends of vertices
         del(self._triangulation)
         vertices = np.asarray(vertices)
         assert vertices.shape[1] == 2

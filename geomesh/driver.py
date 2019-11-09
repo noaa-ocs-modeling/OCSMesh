@@ -1,4 +1,5 @@
 import numpy as np
+from matplotlib.tri import Triangulation
 import jigsawpy
 import geomesh
 
@@ -20,13 +21,39 @@ class Jigsaw:
             self.initial_mesh,
             self.hfun
         )
-        # raise if empty mesh is returned
-        msg = 'ERROR: Jigsaw returned empty mesh.'
-        assert self.output_mesh.tria3['index'].shape[0] > 0, msg
+        self._certify_output()
         return geomesh.Mesh(
             self.output_mesh.vert2['coord'],
             self.output_mesh.tria3['index'],
-            crs=self.crs)
+            crs=self.dst_crs)
+
+    def _certify_output(self):
+        # raise if empty mesh is returned
+        msg = 'ERROR: Jigsaw returned empty mesh.'
+        assert self.output_mesh.tria3['index'].shape[0] > 0, msg
+        self._remove_isolates()
+
+    def _remove_isolates(self):
+        # cleanup isolated nodes
+        node_indexes = np.arange(self.output_mesh.vert2['coord'].shape[0])
+        used_indexes = np.unique(self.output_mesh.tria3['index'])
+        vert2_idxs = np.where(
+            np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+        tria3_idxs = np.where(
+            ~np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+        tria3 = self.output_mesh.tria3['index'].flatten()
+        for idx in reversed(tria3_idxs):
+            _idx = np.where(tria3 >= idx)
+            tria3[_idx] = tria3[_idx] - 1
+        tria3 = tria3.reshape(self.output_mesh.tria3['index'].shape)
+        _mesh = jigsawpy.jigsaw_msh_t()
+        _mesh.ndims = 2
+        _mesh.vert2 = self.output_mesh.vert2.take(vert2_idxs, axis=0)
+        _mesh.tria3 = np.asarray(
+            [(tuple(indices), self.output_mesh.tria3['IDtag'][i])
+             for i, indices in enumerate(tria3)],
+            dtype=jigsawpy.jigsaw_msh_t.TRIA3_t)
+        self.__output_mesh = _mesh
 
     @property
     def geom(self):
@@ -45,16 +72,16 @@ class Jigsaw:
         return self._output_mesh
 
     @property
-    def jigsaw_jig_t(self):
-        return self._jigsaw_jig_t
-
-    @property
     def jigsaw(self):
         return jigsawpy.lib.jigsaw
 
     @property
     def opts(self):
-        return self.jigsaw_jig_t
+        try:
+            return self.__opts
+        except AttributeError:
+            self.__opts = jigsawpy.jigsaw_jig_t()
+            return self.__opts
 
     @property
     def verbosity(self):
@@ -73,16 +100,20 @@ class Jigsaw:
         return self.opts.hfun_scal
 
     @property
-    def crs(self):
-        return self._crs
+    def optm_qlim(self):
+        return self.opts.optm_qlim
 
     @property
-    def _jigsaw_jig_t(self):
-        try:
-            return self.__jigsaw_jig_t
-        except AttributeError:
-            self.__jigsaw_jig_t = jigsawpy.jigsaw_jig_t()
-            return self.__jigsaw_jig_t
+    def mesh_top1(self):
+        return self.opts.mesh_top1
+
+    @property
+    def geom_feat(self):
+        return self.opts.geom_feat
+
+    @property
+    def dst_crs(self):
+        return self._dst_crs
 
     @property
     def _geom(self):
@@ -97,8 +128,12 @@ class Jigsaw:
         return self.__initial_mesh
 
     @property
-    def _crs(self):
-        return self.__crs
+    def _dst_crs(self):
+        return self.__dst_crs
+
+    @property
+    def _mesh_dims(self):
+        return self.__mesh_dims
 
     @property
     def _output_mesh(self):
@@ -126,15 +161,30 @@ class Jigsaw:
         assert hfun_scal in ["absolute", "relative"]
         self.opts.hfun_scal = hfun_scal
 
+    @optm_qlim.setter
+    def optm_qlim(self, optm_qlim):
+        optm_qlim = float(optm_qlim)
+        assert optm_qlim > 0 and optm_qlim < 1
+        self.opts.optm_qlim = optm_qlim
+
+    @mesh_top1.setter
+    def mesh_top1(self, mesh_top1):
+        assert isinstance(mesh_top1, bool)
+        self.opts.mesh_top1 = mesh_top1
+
+    @geom_feat.setter
+    def geom_feat(self, geom_feat):
+        assert isinstance(geom_feat, bool)
+        self.opts.geom_feat = geom_feat
+
     @_geom.setter
     def _geom(self, geom):
         if isinstance(geom, geomesh.SizeFunction):
             self._hfun = geom
-            geom = geom.geom
         elif isinstance(geom, geomesh.PlanarStraightLineGraph):
             self._hfun = None
-        self.opts.mesh_dims = geom.ndim
-        self._crs = geom.crs
+        self._dst_crs = geom.dst_crs
+        self._mesh_dims = geom.ndim
         self.__geom = geom.geom
 
     @_hfun.setter
@@ -166,80 +216,18 @@ class Jigsaw:
         if initial_mesh is not None:
             assert isinstance(initial_mesh, geomesh.Mesh)
             initial_mesh = initial_mesh.mesh
+        # Seams between the tiles become noticeable when initial mesh
+        # is provided. More testing should be done.
+        # elif self.hfun is not None:
+        #     initial_mesh = jigsawpy.jigsaw_msh_t()
+        #     initial_mesh.vert2 = self.hfun.vert2
+        #     initial_mesh.tria3 = self.hfun.tria3
         self.__initial_mesh = initial_mesh
 
-    @_crs.setter
-    def _crs(self, crs):
-        self.__crs = crs
+    @_dst_crs.setter
+    def _dst_crs(self, dst_crs):
+        self.__dst_crs = dst_crs
 
-
-
-
-
-
-    # @property
-    # def _input_mesh(self):
-    #     if self.Mesh is not None:
-    #         raise NotImplementedError
-    #         return self.Mesh._msh
-
-    # @property
-    # def _hfun(self):
-    #     if self.Hfun is not None:
-    #         return self.Hfun.hfun
-
-    # @property
-    # def _mesh(self):
-    #     try:
-    #         return self.__output_mesh
-    #     except AttributeError:
-    #         self.__output_mesh = jigsawpy.jigsaw_msh_t()
-    #         return self.__output_mesh
-
-    # @property
-    # def _Geom(self):
-    #     return self.__Geom
-
-    # @property
-    # def _Hfun(self):
-    #     return self.__Hfun
-
-    # @property
-    # def _Mesh(self):
-    #     return self.__Mesh
-
-    # @verbosity.setter
-    # def verbosity(self, verbosity):
-    #     self._opts.verbosity = verbosity
-
-    # @_Geom.setter
-    # def _Geom(self, Geom):
-    #     assert isinstance(Geom, (geomesh.PlanarStraightLineGraph, ))
-    #     self.__Geom = Geom
-
-    # @_Hfun.setter
-    # def _Hfun(self, Hfun):
-    #     assert isinstance(Hfun, (geomesh.SizeFunction, type(None)))
-    #     self.__Hfun = Hfun
-
-    # @_Mesh.setter
-    # def _Mesh(self, Mesh):
-    #     assert isinstance(Mesh, (geomesh.UnstructuredMesh, type(None)))
-    #     self.__Mesh = Mesh
-
-    # @_opts.setter
-    # def _opts(self, jigsaw_jig_t):
-    #     jigsaw_jig_t.mesh_dims = self.Geom._ndim
-    #     if self.Hfun is not None:
-    #         jigsaw_jig_t.hfun_scal = self.Hfun.scaling
-    #         if np.min(self.Hfun.values) == np.max(self.Hfun.values):
-    #             # For a constant size function is better to use built-in
-    #             jigsaw_jig_t.hfun_hmin = 0.
-    #             jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
-    #             self.__Hfun = None
-    #         else:
-    #             # jigsaw_jig_t.hfun_hmin = 0.
-    #             jigsaw_jig_t.hfun_hmax = np.max(self.Hfun.values)
-    #     else:
-    #         jigsaw_jig_t.hfun_scal = "absolute"
-    #     self.__opts = jigsaw_jig_t
+    @_mesh_dims.setter
+    def _mesh_dims(self, mesh_dims):
+        self.opts.mesh_dims = mesh_dims
