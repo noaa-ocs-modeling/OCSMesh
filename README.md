@@ -21,3 +21,4 @@ git-lfs install
 git submodule update --init examples/data
 ./examples/example_1.py && ./examples/example_2.py
 ```
+![Long Island Sound](https://raw.githubusercontent.com/jreniel/geomesh/master/examples/example_2.png)
