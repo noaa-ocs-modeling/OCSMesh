@@ -48,8 +48,6 @@ class Geomesh:
                 raise Exception(msg)
 
     def generate_mesh(self):
-        self.geom.make_plot(show=True)
-        exit()
         driver = geomesh.driver.JigsawDriver(
             self.geom,
             self.hfun,
