@@ -9,65 +9,81 @@ from pathlib import Path
 import sys
 import os
 
+PARENT = Path(__file__).parent.absolute()
+PYENV_PREFIX = "/".join(sys.executable.split('/')[:-2])
 
-class InstallJigsawCommand(distutils.cmd.Command):
+
+class BootstrapJigsawCommand(distutils.cmd.Command):
     """Custom build command."""
 
     user_options = []
 
-    def initialize_options(self):
-        """Set default values for options."""
-        self.work_dir = Path(__file__).parent.absolute()
-        self.pyenv_prefix = "/".join(sys.executable.split('/')[:-2])
+    def initialize_options(self): pass
 
-    def finalize_options(self):
-        """Post-process options."""
-        self.work_dir = str(Path(self.work_dir))
-        self.pyenv_prefix = Path(self.pyenv_prefix)
+    def finalize_options(self): pass
 
     def run(self):
-        # need to install jigsawpy first, then jigsaw so that libjigsaw.so
-        # ends up on the right path.
-        self._install_jigsawpy()
-        self._install_jigsaw()
-
-    def _setup_step(f):
-        def decorator(self):
-            os.chdir(str(Path(str(self.work_dir) + "/contrib")))
-            f(self)
-            os.chdir(self.work_dir)
-        return decorator
-
-    @_setup_step
-    def _install_jigsaw(self):
-        os.chdir(str(Path("jigsawpy/_ext_/jigsaw")))
+        # init jigsaw-python submodule
+        subprocess.check_call(
+            ["git", "submodule", "update",
+             "--init", "submodules/jigsaw-python"])
+        # install jigsawpy
+        os.chdir(PARENT / 'submodules/jigsaw-python')
+        subprocess.check_call(["python", "setup.py", "install"])
+        # install jigsaw
+        os.chdir("external/jigsaw")
         os.makedirs("build", exist_ok=True)
-        os.chdir(str(Path("build")))
+        os.chdir("build")
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
-             f"-DCMAKE_INSTALL_PREFIX={self.pyenv_prefix}",
-             # "-DCMAKE_CXX_COMPILER={}".format(),
+             f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
              ])
         subprocess.check_call(["make", "install"])
-        libsaw_prefix = str(
-            list(self.pyenv_prefix.glob("**/*jigsawpy")).pop()) + '/_lib'
-        os.makedirs(libsaw_prefix, exist_ok=True)
-        for libsaw in self.pyenv_prefix.glob("lib/*jigsaw*"):
-            shutil.copy(libsaw, libsaw_prefix)
-        os.chdir(self.work_dir + '/contrib')
-        subprocess.check_call(["git", "submodule", "deinit", "-f", "jigsawpy"])
+        # push the shell to the parent dir
+        os.chdir(PARENT)
 
-    @_setup_step
-    def _install_jigsawpy(self):
+
+class BootstrapJigsawPreviousVersionCommand(distutils.cmd.Command):
+    """Custom build command."""
+
+    user_options = []
+
+    def initialize_options(self): pass
+
+    def finalize_options(self): pass
+
+    def run(self):
+        # init jigsaw-python submodule
+        tgt = PARENT / 'submodules/jigsaw-geo-python'
+        if tgt.is_dir():
+            shutil.rmtree(tgt)
         subprocess.check_call(
-            ["git", "submodule", "update", "--init", "jigsawpy"])
-        os.chdir(str(Path("jigsawpy")))
+            ["git",
+             "clone",
+             "--single-branch",
+             '--branch',
+             'certify_values_fix',
+             'https://github.com/jreniel/jigsaw-geo-python',
+             'submodules/jigsaw-geo-python'])
+        # install jigsawpy
+        os.chdir(PARENT / 'submodules/jigsaw-geo-python')
         subprocess.check_call(["python", "setup.py", "install"])
+        # install jigsaw
+        os.chdir("_ext_/jigsaw")
+        os.makedirs("build", exist_ok=True)
+        os.chdir("build")
+        subprocess.check_call(
+            ["cmake", "..",
+             "-DCMAKE_BUILD_TYPE=Release",
+             f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
+             ])
+        subprocess.check_call(["make", "install"])
+        # push the shell to the parent dir
+        os.chdir(PARENT)
 
 
-conf = setuptools.config.read_configuration(
-    str(Path(__file__).parent.absolute()) + '/setup.cfg')
+conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
 meta = conf['metadata']
 setuptools.setup(
     name=meta['name'],
@@ -79,8 +95,11 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url=meta['url'],
     packages=setuptools.find_packages(),
-    cmdclass={'install_jigsaw': InstallJigsawCommand},
-    python_requires='>=3.7',
+    cmdclass={
+        # 'bootstrap_jigsaw': BootstrapJigsawCommand,
+        'bootstrap_jigsaw': BootstrapJigsawPreviousVersionCommand
+        },
+    python_requires='==3.8',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
                       "jigsawpy",
@@ -90,7 +109,17 @@ setuptools.setup(
                       "pyproj",
                       "fiona",
                       "rasterio",
+                      "jsmin",
                       # "pysheds",
+                      "requests",
                       "shapely",
                       ],
-    )
+    entry_points={
+        'console_scripts': [
+            "geomesh=geomesh.__main__:main",
+            "levee_interp=geomesh.cmd.levee_interp:main"
+        ]
+    },
+    tests_require=['nose'],
+    test_suite='nose.collector',
+)
