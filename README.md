@@ -1,24 +1,12 @@
-# geomesh
-#### A Python package for generating georeferenced unstructured meshes using the [jigsaw](https://github.com/dengwirda/jigsaw) library.
+# Geomesh
+## A Python package for processing DEM data into georeferenced unstructured meshes using the [jigsaw-python](https://github.com/dengwirda/jigsaw-python) library.
 
-Requires:
- - Python >= 3.7
- - CMake (??)
- - gcc >= 5.0
+### Installation
 
-Optional
- - git-lfs (to fetch the example data)
+The Jigsaw library must be initialized first by running `./setup.py bootstrap_jigsaw`, then, the package can be installed normally by doing `./setup.py install`:
 
 ```bash
-./setup.py install_jigsaw
-./setup.py install
-./setup.py develop # optional
-``` 
-To run the examples, you must have git-lfs installed and initialize git-lfs on the repository:
-
-```bash
-git-lfs install
-git submodule update --init examples/data
-./examples/example_1.py && ./examples/example_2.py
+./setup.py bootstrap_jigsaw && ./setup.py install
 ```
-![Long Island Sound](https://raw.githubusercontent.com/jreniel/geomesh/master/examples/example_2.png)
+
+This package requires Python>=3.8
