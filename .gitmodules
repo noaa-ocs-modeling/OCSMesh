@@ -1,6 +1,0 @@
-[submodule "examples/data"]
-	path = examples/data
-	url = https://gitlab.com/jreniel/geomesh_test_data.git
-[submodule "contrib/jigsawpy"]
-	path = contrib/jigsawpy
-	url = https://github.com/jreniel/jigsaw-geo-python.git
