@@ -642,7 +642,8 @@ class SizeFunction:
             hmat = jigsaw_msh_t()
             loadmsh(tmpfile.name, hmat)
             # fix shape output in hmat.value from loadmsh()
-            if self._interface == 'cmdsaw':  # TODO: this is not clear
+            # TODO: this is not clear
+            if self._interface == 'cmdsaw':
                 hmat.value = hmat.value.reshape(
                     (hmat.xgrid.size, hmat.ygrid.size)).T
         return hmat
