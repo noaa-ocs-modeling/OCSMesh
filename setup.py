@@ -109,7 +109,6 @@ setuptools.setup(
                       "pyproj",
                       "fiona",
                       "rasterio",
-                      "jsmin",
                       # "pysheds",
                       "colored_traceback",
                       "requests",

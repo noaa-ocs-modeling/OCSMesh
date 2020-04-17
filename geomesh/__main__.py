@@ -15,7 +15,6 @@ from shapely.ops import transform
 from scipy.spatial import cKDTree
 import numpy as np
 from pyproj import CRS, Transformer
-from jsmin import jsmin
 from shapely.geometry import (
     shape,
     LineString,
@@ -295,8 +294,6 @@ class Geomesh:
     @property
     @lru_cache
     def _config(self):
-        # with open(pathlib.Path(self.args.config_file), 'r') as js_file:
-        #     return json.loads(jsmin(js_file.read()))
         with open(pathlib.Path(self.args.config_file), 'r') as js_file:
             return json.loads(js_file.read())
 
