@@ -37,6 +37,7 @@ class Geomesh:
         self.generate_boundaries()
         self.fix_levee_elevations()
         self.save_mesh()
+        self.save_boundaries()
 
     def check_overwrite(self):
         outputs = self._outputs_config.get("mesh", [])
@@ -65,7 +66,7 @@ class Geomesh:
             if self._boundaries_config is True:
                 self.mesh.generate_boundaries()
             else:
-                self.mesh.generate_boundaries(**self.boundaries_config)
+                self.mesh.generate_boundaries(**self._boundaries_config)
 
     def save_mesh(self):
         outputs = self._outputs_config.get("mesh", [])
@@ -87,6 +88,12 @@ class Geomesh:
                 overwrite=self.args.overwrite,
                 fmt=fmt
                 )
+
+    def save_boundaries(self):
+        outputs = self._outputs_config.get("boundaries", False)
+        assert isinstance(outputs, bool)
+        if outputs:
+            self.mesh.write_boundaries('boundaries', overwrite=True)
 
     def fix_levee_elevations(self):
         levees = self._levees_config
@@ -389,8 +396,16 @@ class Geomesh:
         if boundaries is not None:
             if boundaries is True:
                 pass
+            elif isinstance(boundaries, dict):
+                boundaries.update({
+                    "threshold": boundaries.get("threshold", 0.),
+                    "land_ibtype": boundaries.get("land_ibtype", 0),
+                    "interior_ibtype": boundaries.get("interior_ibtype", 1)
+                    })
             else:
-                raise Exception('Certify boundaries inputs')
+                msg = '"boundaries" entry must be bool or dict'
+                raise NotImplementedError(msg)
+
         return boundaries
 
     @property
