@@ -295,8 +295,10 @@ class Geomesh:
     @property
     @lru_cache
     def _config(self):
+        # with open(pathlib.Path(self.args.config_file), 'r') as js_file:
+        #     return json.loads(jsmin(js_file.read()))
         with open(pathlib.Path(self.args.config_file), 'r') as js_file:
-            return json.loads(jsmin(js_file.read()))
+            return json.loads(js_file.read())
 
     @property
     @lru_cache
