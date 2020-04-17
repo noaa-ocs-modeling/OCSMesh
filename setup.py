@@ -111,6 +111,7 @@ setuptools.setup(
                       "rasterio",
                       "jsmin",
                       # "pysheds",
+                      "colored_traceback",
                       "requests",
                       "shapely",
                       ],
