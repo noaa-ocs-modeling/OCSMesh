@@ -43,7 +43,7 @@ class SizeFunction:
         self._crs = crs
         self._dst_crs = dst_crs
         self.verbosity = verbosity
-        self._interface = 'libsaw'
+        self._interface = 'cmdsaw'
 
     def contourf(self, **kwargs):
         for i in range(len(self.raster_collection)):
