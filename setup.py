@@ -117,7 +117,6 @@ setuptools.setup(
     entry_points={
         'console_scripts': [
             "geomesh=geomesh.__main__:main",
-            "levee_interp=geomesh.cmd.levee_interp:main"
         ]
     },
     tests_require=['nose'],

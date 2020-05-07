@@ -7,7 +7,14 @@ import fiona
 from functools import lru_cache
 from pyproj import Proj, CRS, Transformer
 import pathlib
-from shapely.geometry import MultiPolygon, Polygon, shape, mapping, LinearRing
+from shapely.geometry import (
+    MultiPolygon,
+    Polygon,
+    shape,
+    mapping,
+    LinearRing,
+    box
+    )
 from shapely.ops import transform
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh
 from geomesh import tmpdir
@@ -198,6 +205,10 @@ class Geom:
                 prefix=tmpdir, suffix='.msh')
             savemsh(tmpfile.name, geom)
             self.__geom_tmpfile = tmpfile
+
+            if self._radii is not None:
+                geom.radii = self._radii
+                geom.mshID = 'ellipsoidal-mesh'
             return geom
 
     @property
@@ -210,7 +221,7 @@ class Geom:
 
     @property
     def crs(self):
-        return self._dst_crs
+        return CRS.from_user_input(self._crs)
 
     @property
     def proj(self):
@@ -286,13 +297,7 @@ class Geom:
                 x1 = raster.bbox.xmax
                 y0 = raster.bbox.ymin
                 y1 = raster.bbox.ymax
-                polygon = Polygon([
-                    [x0, y0],
-                    [x1, y0],
-                    [x1, y1],
-                    [x0, y1],
-                    [x0, y0]])
-                multipolygon = MultiPolygon([polygon])
+                multipolygon = MultiPolygon([box(x0, y0, x1, y1)])
         # contour based
         else:
             msg = f'_generate_raster_multipolygon({id}) Computing contours.'
@@ -373,6 +378,10 @@ class Geom:
 
     @staticmethod
     def _transform_multipolygon(multipolygon, src_crs, dst_crs):
+        if isinstance(src_crs, str):
+            src_crs = CRS.from_user_input(src_crs)
+        if isinstance(dst_crs, str):
+            dst_crs = CRS.from_user_input(dst_crs)
         if dst_crs.srs != src_crs.srs:
             transformer = Transformer.from_crs(
                 src_crs, dst_crs, always_xy=True)
@@ -384,6 +393,18 @@ class Geom:
             multipolygon = MultiPolygon([outer, *polygon_collection])
         return multipolygon
 
+    @staticmethod
+    def _transform_polygon(polygon, src_crs, dst_crs):
+        if isinstance(src_crs, str):
+            src_crs = CRS.from_user_input(src_crs)
+        if isinstance(dst_crs, str):
+            dst_crs = CRS.from_user_input(dst_crs)
+        if dst_crs.srs != src_crs.srs:
+            transformer = Transformer.from_crs(
+                src_crs, dst_crs, always_xy=True)
+            polygon = transform(transformer.transform, polygon)
+        return polygon
+
     def _get_geom_from_shapely(self):
         # shapely.geometry.Polygon
         # if isinstance(self._geom, Polygon):
@@ -394,7 +415,7 @@ class Geom:
         if isinstance(self._geom, MultiPolygon):
             multipolygon = self._geom
 
-        if self._crs.srs != self._dst_crs.srs:
+        if self.crs.srs != self._dst_crs.srs:
             multipolygon = self._transform_multipolygon(
                 multipolygon, self._crs, self._dst_crs)
         geom = utils.multipolygon_to_geom(multipolygon)
@@ -495,6 +516,10 @@ class Geom:
         return self.__buffer
 
     @property
+    def _radii(self):
+        return self.__radii
+
+    @property
     @lru_cache
     def _geom_tmpfile_ptrs(self):
 
@@ -572,7 +597,8 @@ class Geom:
     def _buffer(self, buffer):
         if buffer is not None:
             assert isinstance(buffer, (Polygon, MultiPolygon))
-            buffer = self._transform_multipolygon(buffer, self.crs, self._dst_crs)
+            buffer = self._transform_multipolygon(
+                    buffer, self.crs, self._dst_crs)
         self.__buffer = buffer
 
     @_zmin.setter
@@ -586,3 +612,11 @@ class Geom:
         if zmax is not None:
             assert isinstance(zmax, (int, float))
         self.__zmax = zmax
+
+    @_radii.setter
+    def _radii(self, radii):
+        if radii is not None:
+            radii = np.array(radii, dtype=jigsaw_msh_t.REALS_t)
+            msg = "radii must be of shape 3"
+            assert radii.shape[0] == 3, msg
+        self.__radii = radii

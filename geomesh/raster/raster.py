@@ -168,17 +168,16 @@ class Raster:
 
     def warp(self, dst_crs):
         dst_crs = CRS.from_user_input(dst_crs)
-        src = self.src
         transform, width, height = warp.calculate_default_transform(
-            src.crs,
+            self.src.crs,
             dst_crs.srs,
-            src.width,
-            src.height,
-            *src.bounds,
-            dst_width=src.width,
-            dst_height=src.height
+            self.src.width,
+            self.src.height,
+            *self.src.bounds,
+            dst_width=self.src.width,
+            dst_height=self.src.height
             )
-        kwargs = src.meta.copy()
+        kwargs = self.src.meta.copy()
         kwargs.update({
             'crs': dst_crs.srs,
             'transform': transform,
@@ -187,12 +186,12 @@ class Raster:
         })
         tmpfile = tempfile.NamedTemporaryFile(prefix=geomesh.tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
+            for i in range(1, self.src.count + 1):
                 rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
+                    source=rasterio.band(self.src, i),
                     destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
+                    src_transform=self.src.transform,
+                    src_crs=self.src.crs,
                     dst_transform=transform,
                     dst_crs=dst_crs.srs,
                     resampling=self.resampling_method,
