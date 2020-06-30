@@ -220,7 +220,7 @@ class Mesh(EuclideanMesh2D):
                 raise NotImplementedError(msg)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def point_neighbors(self):
         point_neighbors = defaultdict(set)
         for simplex in self.triangulation.triangles:
@@ -229,7 +229,7 @@ class Mesh(EuclideanMesh2D):
         return point_neighbors
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def point_distances(self):
         point_distances = {}
         for i, (x, y) in enumerate(self.xy):
@@ -470,7 +470,7 @@ class Mesh(EuclideanMesh2D):
                     )
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def vert2(self):
         return np.array(
             [(coord, id) for id, coord in self._coords.items()],
@@ -478,7 +478,7 @@ class Mesh(EuclideanMesh2D):
             )
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def tria3(self):
         return np.array(
             [(list(map(self.get_node_index, index)), id)
@@ -486,7 +486,7 @@ class Mesh(EuclideanMesh2D):
             dtype=jigsaw_msh_t.TRIA3_t)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def quad4(self):
         return np.array(
             [(list(map(self.get_node_index, index)), id)
@@ -512,32 +512,32 @@ class Mesh(EuclideanMesh2D):
         return mesh
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def index_ring_collection(self):
         return utils.index_ring_collection(self.mesh)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def vertices_around_vertex(self):
         return utils.vertices_around_vertex(self.mesh)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def faces_around_vertex(self):
         return utils.faces_around_vertex(self.mesh)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def outer_ring_collection(self):
         return utils.outer_ring_collection(self.mesh)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def inner_ring_collection(self):
         return utils.inner_ring_collection(self.mesh)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _grd(self):
         """
         adds boundary data to _grd dict obtained from super()
@@ -547,7 +547,7 @@ class Mesh(EuclideanMesh2D):
         return _grd
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _sms2dm(self):
         """
         adds boundary data to _sms2dm dict obtained from super()
@@ -557,7 +557,7 @@ class Mesh(EuclideanMesh2D):
         return _sms2dm
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _nodes(self):
         """
         updates _nodes dict obtained from super() as positive-down
