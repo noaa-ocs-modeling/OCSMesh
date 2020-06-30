@@ -225,7 +225,7 @@ class EuclideanMesh2D:
         return axes
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def coords(self):
         return np.array(
             [coord for coord in self._coords.values()]
@@ -244,7 +244,7 @@ class EuclideanMesh2D:
         return self.coords[:, 1]
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def values(self):
         return self._values
 
@@ -262,47 +262,47 @@ class EuclideanMesh2D:
         return self.quad4['index']
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def nodes(self):
         return list(self._nodes.items())
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def elements(self):
         return list(self._elements.values())
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def coords_id(self):
         return self._coords.keys()
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def triangles_id(self):
         return self._triangles.keys()
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def quads_id(self):
         return self._quads.keys()
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def node_id(self):
         return {index: id for index, id in enumerate(self._coords)}
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def element_id(self):
         return {index: id for index, id in enumerate(self._elements)}
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def node_index(self):
         return {id: index for index, id in enumerate(self._coords)}
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def element_index(self):
         return {id: index for index, id in enumerate(self._elements)}
 
@@ -339,21 +339,21 @@ class EuclideanMesh2D:
         return sms2dm.string(self._sms2dm)
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def tria3(self):
         return np.array(
             [list(map(self.get_node_index, index))
              for index in self._triangles.values()])
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def quad4(self):
         return np.array(
             [list(map(self.get_node_index, index))
              for index in self._quads.values()])
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def logger(self):
         return logging.getLogger(__name__ + '.' + self.__class__.__name__)
 
@@ -400,13 +400,13 @@ class EuclideanMesh2D:
         return self.__description
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _nodes(self):
         return {id: ((x, y), self.values[i]) for i, (id, (x, y))
                 in enumerate(self._coords.items())}
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _elements(self):
         elements_id = list()
         elements_id.extend(list(self._triangles.keys()))
@@ -421,7 +421,7 @@ class EuclideanMesh2D:
         return elements
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _grd(self):
         description = self.description
         if self.crs is not None and self.crs.srs not in self.description:
@@ -433,7 +433,7 @@ class EuclideanMesh2D:
         }
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _sms2dm(self):
         return {
             "ND": self._nodes,
