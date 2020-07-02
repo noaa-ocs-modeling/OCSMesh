@@ -10,6 +10,6 @@ The Jigsaw library must be initialized first by running `./setup.py bootstrap_ji
 ./setup.py develop # run this if you are a developer.
 ```
 #### Requirements
-* Python3.8
+* Python>=3.6
 * CMake 
 * C/C++ compilers

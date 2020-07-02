@@ -84,9 +84,9 @@ def _figure(f):
             kwargs.get('figsize', None)
             )
         kwargs.update({'axes': axes})
-        axes = f(*argv, **kwargs)
+        f(*argv, **kwargs)
         if kwargs.get('show', False):
-            axes.axis('scaled')
+            plt.gca().axis('scaled')
             plt.show()
         return axes
     return decorator

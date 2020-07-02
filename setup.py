@@ -5,12 +5,13 @@ import setuptools.command.build_py
 import distutils.cmd
 import distutils.util
 import shutil
+from multiprocessing import cpu_count
 from pathlib import Path
 import sys
 import os
 
 PARENT = Path(__file__).parent.absolute()
-PYENV_PREFIX = "/".join(sys.executable.split('/')[:-2])
+PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
 
 
 class BootstrapJigsawCommand(distutils.cmd.Command):
@@ -39,7 +40,10 @@ class BootstrapJigsawCommand(distutils.cmd.Command):
              "-DCMAKE_BUILD_TYPE=Release",
              f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
              ])
-        subprocess.check_call(["make", "install"])
+        subprocess.check_call(["make", f"-j{cpu_count()}", "install"])
+        libsaw_prefix = list(PYENV_PREFIX.glob("**/*jigsawpy")).pop() / '_lib'
+        os.makedirs(libsaw_prefix, exist_ok=True)
+        shutil.copy(PYENV_PREFIX / "lib/libjigsaw.so", libsaw_prefix)
         # push the shell to the parent dir
         os.chdir(PARENT)
 
@@ -78,7 +82,10 @@ class BootstrapJigsawPreviousVersionCommand(distutils.cmd.Command):
              "-DCMAKE_BUILD_TYPE=Release",
              f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
              ])
-        subprocess.check_call(["make", "install"])
+        subprocess.check_call(["make", f"-j{cpu_count()}", "install"])
+        libsaw_prefix = list(PYENV_PREFIX.glob("**/*jigsawpy")).pop() / '_lib'
+        os.makedirs(libsaw_prefix, exist_ok=True)
+        shutil.copy(PYENV_PREFIX / "lib/libjigsaw.so", libsaw_prefix)
         # push the shell to the parent dir
         os.chdir(PARENT)
 
@@ -99,14 +106,14 @@ setuptools.setup(
         # 'bootstrap_jigsaw': BootstrapJigsawCommand,
         'bootstrap_jigsaw': BootstrapJigsawPreviousVersionCommand
         },
-    python_requires='==3.8',
+    python_requires='>=3.6',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
                       "scipy",
-                      "pyproj",
+                      "pyproj>=2.6",
                       "fiona",
                       "rasterio",
                       # "pysheds",

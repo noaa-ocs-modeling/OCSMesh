@@ -4,11 +4,15 @@ from geomesh import utils
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 import jigsawpy
 import tempfile
+import pathlib
+import os
 from functools import lru_cache
-from geomesh import tmpdir
 from geomesh import mesh
-from geomesh.hfun import SizeFunction
+from geomesh.hfun import Hfun
 from geomesh.geom import Geom
+
+tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
+os.makedirs(tmpdir, exist_ok=True)
 
 
 class JigsawDriver:
@@ -251,7 +255,7 @@ class JigsawDriver:
         return self.__mesh_dims
 
     @property
-    @lru_cache
+    @lru_cache(maxsize=None)
     def _opts(self):
         return jigsaw_jig_t()
 
