@@ -4,6 +4,12 @@ submodules/jigsaw-python/external/jigsaw/build
 # temporary old version of jigsaw
 submodules/jigsaw-geo-python
 
+# files generated or used by examples
+*.2dm
+*.gr3
+*.tif
+*.qgz
+
 # Created by https://www.gitignore.io/api/python
 # Edit at https://www.gitignore.io/?templates=python
 
