@@ -71,8 +71,6 @@ def main():
     # -------- write to disk
     fname = os.path.abspath(parent.parent / 'example_1.grd')
     mesh.save(fname, overwrite=True)
-    fname = os.path.abspath(parent.parent / 'example_1.2dm')
-    mesh.save(fname, overwrite=True, fmt='2dm')
 
 
 if __name__ == "__main__":

@@ -213,13 +213,13 @@ class SizeFunction:
         geom = self.pslg._get_geom(idx)
 
         mesh_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
+            prefix=str(tmpdir)+'/', suffix='.msh')
         hmat_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
+            prefix=str(tmpdir)+'/', suffix='.msh')
         geom_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
+            prefix=str(tmpdir)+'/', suffix='.msh')
         jcfg_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.jig')
+            prefix=str(tmpdir)+'/', suffix='.jig')
 
         savemsh(hmat_file.name, hmat)
         savemsh(geom_file.name, geom)
