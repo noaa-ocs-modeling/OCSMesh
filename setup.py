@@ -6,8 +6,15 @@ import distutils.cmd
 import distutils.util
 import shutil
 from pathlib import Path
+from multiprocessing import cpu_count
 import sys
 import os
+
+CMAKE_OPTS = []
+for i, argv in reversed(list(enumerate(sys.argv))):
+    if "-DCMAKE" in argv:
+        CMAKE_OPTS.append(argv)
+        sys.argv.pop(i)
 
 
 class InstallJigsawCommand(distutils.cmd.Command):
@@ -49,11 +56,9 @@ class InstallJigsawCommand(distutils.cmd.Command):
             "-DCMAKE_BUILD_TYPE=Release",
             f"-DCMAKE_INSTALL_PREFIX={self.pyenv_prefix}",
             ]
-        for arg in sys.argv:
-            if "-DCMAKE" in arg:
-                cmake_cmd.append(arg)
+        cmake_cmd.extend(CMAKE_OPTS)
         subprocess.check_call(cmake_cmd)
-        subprocess.check_call(["make", "install"])
+        subprocess.check_call(["make", f"-j{cpu_count()}", "install"])
         libsaw_prefix = str(
             list(self.pyenv_prefix.glob("**/*jigsawpy")).pop()) + '/_lib'
         os.makedirs(libsaw_prefix, exist_ok=True)
