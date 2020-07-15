@@ -3,14 +3,19 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import gaussian_filter
 from matplotlib.tri import Triangulation
-from matplotlib.path import Path
+# from matplotlib.path import Path
 import numpy as np
 from scipy.spatial import cKDTree
 from multiprocessing import cpu_count
-from jigsawpy.libsaw import jigsaw
+import jigsawpy
+# from jigsawpy.libsaw import jigsaw
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t, savemsh, loadmsh
 import geomesh
 from geomesh.pslg import PlanarStraightLineGraph
+import pathlib
+
+tmpdir = pathlib.Path(tempfile.gettempdir()) / 'geomesh'
+tmpdir.mkdir(exist_ok=True)
 
 
 class SizeFunction:
@@ -203,28 +208,43 @@ class SizeFunction:
     def _generate_hfun(self, idx):
 
         # generate raster size function
-        values = self._get_hmat(idx)
+        hmat = self._get_hmat(idx)
+        # pslg
+        geom = self.pslg._get_geom(idx)
+
+        mesh_file = tempfile.NamedTemporaryFile(
+            prefix=tmpdir, suffix='.msh')
+        hmat_file = tempfile.NamedTemporaryFile(
+            prefix=tmpdir, suffix='.msh')
+        geom_file = tempfile.NamedTemporaryFile(
+            prefix=tmpdir, suffix='.msh')
+        jcfg_file = tempfile.NamedTemporaryFile(
+            prefix=tmpdir, suffix='.jig')
+
+        savemsh(hmat_file.name, hmat)
+        savemsh(geom_file.name, geom)
 
         # jigsaw opts
         opts = jigsaw_jig_t()
+        opts.mesh_file = mesh_file.name
+        opts.hfun_file = hmat_file.name
+        opts.geom_file = geom_file.name
+        opts.jcfg_file = jcfg_file.name
         opts.verbosity = self.verbosity
         opts.mesh_dim = 2
-        opts.hfun_hmin = np.min(values.value)
-        opts.hfun_hmax = np.max(values.value)
+        opts.hfun_hmin = np.min(hmat.value)
+        opts.hfun_hmax = np.max(hmat.value)
         opts.hfun_scal = 'absolute'
         opts.optm_tria = False
-
-        # pslg
-        geom = self.pslg._get_geom(idx)
 
         # output mesh
         mesh = jigsaw_msh_t()
 
         # call jigsaw to optimize local mesh
-        jigsaw(opts, geom, mesh, hfun=values)
+        jigsawpy.cmd.jigsaw(opts, mesh)
 
         # do post processing
-        mesh, values = self._jigsaw_post_process(mesh, values)
+        mesh, values = self._jigsaw_post_process(mesh, hmat)
 
         # save results to hfun_collection
         self._save_hfun(idx, mesh, values)

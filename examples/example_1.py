@@ -17,10 +17,13 @@ import tempfile
 import tarfile
 
 
-def download_example_data():
+def main():
+
+    # Download example data
     parent = pathlib.Path(__file__).parent / 'data'
     parent.mkdir(exist_ok=True)
-    if not (parent / 'PR_1s.tif').is_file():
+    raster = parent / 'PR_1s.tif'
+    if not raster.is_file():
         url = "https://www.dropbox.com/s/0duc0tnp43rjgrt/PR_1s.tar.gz?dl=1"
         g = urllib.request.urlopen(url)
         tmpfile = tempfile.NamedTemporaryFile()
@@ -29,16 +32,8 @@ def download_example_data():
         with tarfile.open(tmpfile.name, "r:gz") as tar:
             tar.extractall(parent)
 
-
-def main():
-
-    # ------- init test DEM files
-    rootdir = os.path.dirname(os.path.abspath(__file__))
-    datadir = rootdir + '/data'
-    file = os.path.abspath(datadir + '/PR_1s.tif')
-
     # ------- init Raster object
-    rast = Raster(file)
+    rast = Raster(raster)
 
     # ------- init PSLG object
     pslg = PlanarStraightLineGraph(
@@ -70,13 +65,13 @@ def main():
     axes = fig.add_subplot(111)
     mesh.make_plot(axes=axes)
     axes.triplot(mesh.triangulation, linewidth=0.07, color='k')
-    plt.savefig(rootdir + '/example_1.png', bbox_inches='tight')
+    plt.savefig(parent.parent / 'example_1.png', bbox_inches='tight')
     plt.show()
 
     # -------- write to disk
-    fname = os.path.abspath(rootdir + '/example_1.grd')
+    fname = os.path.abspath(parent.parent / 'example_1.grd')
     mesh.save(fname, overwrite=True)
-    fname = os.path.abspath(rootdir + '/example_1.2dm')
+    fname = os.path.abspath(parent.parent / 'example_1.2dm')
     mesh.save(fname, overwrite=True, fmt='2dm')
 
 
