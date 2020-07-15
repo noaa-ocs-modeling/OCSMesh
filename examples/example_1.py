@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 import os
-import subprocess
-import time
 import matplotlib.pyplot as plt
 from geomesh import Raster, \
                     PlanarStraightLineGraph, \
@@ -13,8 +11,27 @@ try:
 except ModuleNotFoundError:
     pass
 
+import pathlib
+import urllib.request
+import tempfile
+import tarfile
+
+
+def download_example_data():
+    parent = pathlib.Path(__file__).parent / 'data'
+    parent.mkdir(exist_ok=True)
+    if not (parent / 'PR_1s.tif').is_file():
+        url = "https://www.dropbox.com/s/0duc0tnp43rjgrt/PR_1s.tar.gz?dl=1"
+        g = urllib.request.urlopen(url)
+        tmpfile = tempfile.NamedTemporaryFile()
+        with open(tmpfile.name, 'b+w') as f:
+            f.write(g.read())
+        with tarfile.open(tmpfile.name, "r:gz") as tar:
+            tar.extractall(parent)
+
 
 def main():
+
     # ------- init test DEM files
     rootdir = os.path.dirname(os.path.abspath(__file__))
     datadir = rootdir + '/data'
@@ -57,8 +74,10 @@ def main():
     plt.show()
 
     # -------- write to disk
-    # fname = os.path.abspath(rootdir + '/example_1.grd')
-    # mesh.save(fname, overwrite=True)
+    fname = os.path.abspath(rootdir + '/example_1.grd')
+    mesh.save(fname, overwrite=True)
+    fname = os.path.abspath(rootdir + '/example_1.2dm')
+    mesh.save(fname, overwrite=True, fmt='2dm')
 
 
 if __name__ == "__main__":
