@@ -43,12 +43,16 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.chdir(str(Path("jigsawpy/_ext_/jigsaw")))
         os.makedirs("build", exist_ok=True)
         os.chdir(str(Path("build")))
-        subprocess.check_call(
-            ["cmake", "..",
-             "-DCMAKE_BUILD_TYPE=Release",
-             f"-DCMAKE_INSTALL_PREFIX={self.pyenv_prefix}",
-             # "-DCMAKE_CXX_COMPILER={}".format(),
-             ])
+        cmake_cmd = [
+            "cmake",
+            "..",
+            "-DCMAKE_BUILD_TYPE=Release",
+            f"-DCMAKE_INSTALL_PREFIX={self.pyenv_prefix}",
+            ]
+        for arg in sys.argv:
+            if "-DCMAKE" in arg:
+                cmake_cmd.append(arg)
+        subprocess.check_call(cmake_cmd)
         subprocess.check_call(["make", "install"])
         libsaw_prefix = str(
             list(self.pyenv_prefix.glob("**/*jigsawpy")).pop()) + '/_lib'
