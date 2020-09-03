@@ -4,6 +4,7 @@ import subprocess
 import setuptools.command.build_py
 import distutils.cmd
 import distutils.util
+import shutil
 import platform
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -50,10 +51,13 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.chdir("external/jigsaw")
         os.makedirs("build", exist_ok=True)
         os.chdir("build")
+        cc, gcc = self._check_gcc_version()
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
              f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
+             f"-DCMAKE_C_COMPILER={cc}",
+             f"-DCMAKE_CXX_COMPILER={gcc}",
              ])
         subprocess.check_call(["make", f"-j{cpu_count()}", "install"])
         libsaw_prefix = list(PYENV_PREFIX.glob("**/*jigsawpy*")).pop() / '_lib'
@@ -63,6 +67,18 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.chdir(PARENT)
         subprocess.check_call(
           ["git", "submodule", "deinit", "-f", "submodules/jigsaw-python"])
+
+    def _check_gcc_version(self):
+        gcc = shutil.which("gcc")
+        major, minor, patch = subprocess.check_output(
+            [gcc, "--version"]
+            ).decode('utf-8').split('\n')[0].split()[-1].split('.')
+        current_version = float(f"{major}.{minor}")
+        if current_version < 7.:
+            raise Exception(
+                'JIGSAW requires GCC version 7 or later, got '
+                f'{major}.{minor}.{patch} from {gcc}')
+        return shutil.which("cc"), gcc
 
 
 conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
