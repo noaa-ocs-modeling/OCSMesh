@@ -1,12 +1,35 @@
-from importlib import util
-import os
 import pathlib
+from importlib import util
 import tempfile
-from geomesh import logger
-from geomesh.geom import Geom
-from geomesh.raster import Raster
-from geomesh.driver import JigsawDriver
-from geomesh.collections.rasters import RasterCollection
+import os
+import sys
+import platform
+
+
+try:
+    import jigsawpy  # noqa: F401
+except OSError as e:
+    pkg = util.find_spec("jigsawpy")
+    choices = {
+            "Windows": "jigsaw.dll",
+            "Linux": "libjigsaw.so",
+            "Darwin": "libjigsaw.dylib"
+            }
+    tgt_libpath = pathlib.Path(pkg.origin).parent / "_lib" / choices[
+        platform.system()]
+    pyenv = pathlib.Path("/".join(sys.executable.split('/')[:-2]))
+    src_libpath = pyenv / 'lib' / choices[platform.system()]
+    if not src_libpath.is_file():
+        raise e
+    else:
+        os.symlink(src_libpath, tgt_libpath)
+
+
+from .geom import Geom
+from .hfun import Hfun
+from .raster import Raster
+from .driver import JigsawDriver
+from .mesh import Mesh
 
 if util.find_spec("colored_traceback") is not None:
     import colored_traceback
@@ -17,10 +40,10 @@ os.makedirs(tmpdir, exist_ok=True)
 
 __all__ = [
     "Geom",
+    "Hfun",
     "Raster",
-    "RasterCollection",
+    "Mesh",
     "JigsawDriver",
-    "logger"
 ]
 
 # mpl.rcParams['agg.path.chunksize'] = 10000

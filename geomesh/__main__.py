@@ -5,36 +5,19 @@ This program parses a json configuration file and generates a model-ready mesh.
 import argparse
 from functools import lru_cache
 import pathlib
-# import json
 import logging
 import os
-import warnings
+import sys
 from copy import deepcopy
-from collections import namedtuple
-import fiona
-# from sqlalchemy.event import listen
-# from sqlalchemy.orm import sessionmaker
-# from sqlalchemy.sql import select, func
-# from sqlalchemy import create_engine
+import hashlib
+
 from scipy.spatial import cKDTree
 import numpy as np
-from pyproj import CRS  # , Transformer
-from shapely import ops
-from shapely.geometry import (
-    LineString,
-    MultiLineString,
-    MultiPolygon,
-    box
-    )
-from geomesh import (
-    cmd,
-    logger,
-    # db,
-    Geom,
-    Raster,
-    RasterCollection,
-    JigsawDriver,
-    )
+from pyproj import CRS
+from shapely.geometry import LineString, MultiLineString
+import geoalchemy2
+
+from . import cmd, db, logger, JigsawDriver, Geom, Hfun, Raster
 
 
 class Geomesh:
@@ -44,6 +27,8 @@ class Geomesh:
 
     def __init__(self, args):
         self._args = args
+
+    def main(self):
         self.generate_mesh()
         self.run_postprocessing()
         self.save_outputs()
@@ -66,6 +51,22 @@ class Geomesh:
     def save_outputs(self):
         self._save_mesh()
         self._save_boundaries()
+
+    @property
+    def geom(self):
+        geom = self._get_geom_from_db(self._geom_descriptor)
+        if geom is None:
+            geom = self._save_geom_to_db(
+                self._config.get_geom(), self._geom_descriptor)
+        return geom
+
+    @property
+    def hfun(self):
+        hfun = self._get_hfun_from_db(self._hfun_descriptor)
+        if hfun is None:
+            hfun = self._save_hfun_to_db(
+                self._config.get_hfun(self.geom), self._hfun_descriptor)
+        return hfun
 
     def _interpolate_mesh(self):
         for raster in self._interp_rasters:  # noqa: .iter(priority=self.raster_conf.get("priority", "auto")): 
@@ -128,362 +129,105 @@ class Geomesh:
         if outputs:
             self.mesh.write_boundaries('boundaries', overwrite=True)
 
-    def _load_rasters(self, config):
-        self._logger.debug('_get_config_rasters')
-        rasters = config.get('rasters')
-
-        if rasters is None:
+    def _get_geom_from_db(self, id):
+        query = self._session.query(db.Geom).get(id)
+        if query is None:
+            self._logger.debug("_get_geom_from_db(): not found")
             return
+        self._logger.debug("_get_geom_from_db(): found")
+        geom = Geom(
+            geoalchemy2.shape.to_shape(query.geom), crs="EPSG:4326")
+        if not self._config._crs.equals(geom.crs):
+            geom.transform_to(self._config._crs)
+        return geom
 
-        msg = "config.rasters must contain a dictionary. The keys must be "
-        msg += "an indentifier and each indentifier must contain a dictionary "
-        msg += "with at least 'uri' entry."
-        assert isinstance(rasters, dict), msg
+    def _save_geom_to_db(self, geom, id):
+        self._logger.debug("_save_geom_to_db()")
+        _original_crs = geom.crs
+        if not _original_crs.equals(CRS.from_epsg(4326)):
+            self._logger.debug(f"tranforming from {geom.crs} to EPSG:4326")
+            geom.transform_to('EPSG:4326')
+        self._session.add(
+            db.Geom(
+                geom=geoalchemy2.shape.from_shape(geom.multipolygon),
+                id=id))
+        self._session.commit()
+        if not geom.crs.equals(_original_crs):
+            geom.transform_to(_original_crs)
 
-        for id, data in rasters.copy().items():
-            if id.startswith("_"):
-                continue
-            self._logger.debug(f'_get_config_rasters:{id}')
-            msg = "raster entry with id {id} does not contain an uri entry."
-            assert 'uri' in data.keys(), msg
-            config['rasters'][id].update(
-                {"_obj": self._get_config_raster_data(data)})
-        return rasters
-
-    def _get_config_geom(self, config):
-        # self._logger.debug('_get_config_geom')
-        # geom = config.get('geom')
-        # if geom is None:
-        #     msg = "geom entry must be defined."
-        #     raise IOError(msg)
-        # msg = "geom must contain at least one of 'rasters' or 'features' keys."
-        # assert "rasters" in geom or "features" in geom, msg
-        # geom_collection = []
-        # if 'rasters' in geom:
-        #     rasters = config.get('rasters')
-        #     for id, opts in geom['rasters'].items():
-        #         if id.startswith("_"):
-        #             continue
-        #         self._logger.debug(f'_get_config_geom:{id}')
-        #         msg = f"config.geom.raster with id '{id}' not listed in "
-        #         msg += f"config.rasters.keys(): {rasters}"
-        #         assert id in rasters, msg
-        #         # raise NotImplementedError("Must do checksum check.")
-        #         geom_collection.append(rasters[id]["_obj"].get_geom(
-        #             zmin=opts.get("zmin"),
-        #             zmax=opts.get("zmax"),
-        #             join_method=opts.get("join_method"),
-        #             driver=opts.get("driver"),
-        #             overlap=opts.get("overlap"),
-        #             ))
-
-        if "features" in geom:
-            raise NotImplementedError("features")
-
-        mpc = []
-        for geom in geom_collection:
-            mpc.append(geom.multipolygon)
-        mp = ops.unary_union(mpc)
-
-        geom = Geom(mp, geom.crs)
-        geom.make_plot(show=True)
-        raise NotImplementedError
-
-        config["geom"].update({"_obj": geom})
-        return namedtuple(
-            "config_geom",
-            [
-                "rasters",
-                # "features",
-                "geom"
-            ]
-            )(
-            rasters=rasters,
-            geom=config["geom"]["_obj"]
-            )
-
-    def _get_config_hfun(self, config):
-        self._logger.debug('_get_config_hfun')
-        hfun = config.get('hfun')
-        if hfun is None:
-            msg = "hfun entry must be defined."
-            raise IOError(msg)
-        # msg = "geom must contain at least one of 'rasters' or 'features' keys."
-        # assert "rasters" in geom or "features" in geom, msg
-        hfun_collection = []
-        if 'rasters' in hfun:
-            hfun_rasters = hfun.get('rasters')
-            msg = "hfun.rasters must be  a dictionary."
-            assert isinstance(hfun_rasters, dict), msg
-            for id, opts in hfun_rasters.items():
-                self._logger.debug(f'_get_config_hfun:{id}')
-                hfun = config['rasters'][id]["_obj"].get_hfun(
-                    # geom=config['geom']["_obj"],
-                    # hmin=None,
-                    # hmax=None,
-                    )
-                self._update_hfun_raster_criteria(hfun, opts)
-                hfun.contourf(show=True)
-                hfun_collection.append(hfun)
-                exit()
-
-                # # process contours
-                # contours = opts.get("contours", {})
-                # if isinstance(contours, dict):
-                #     contours = [contours]
-                # assert isinstance(contours, list)
-                # for contour in contours:
-                #     level = float(contour['level'])
-                #     exp_rate = float(contour['expansion_rate'])
-                # # process features
-                # features = opts.get("features", {})
-                # if isinstance(features, dict):
-                #     features = [features]
-                # assert isinstance(features, list)
-                # for feature in features:
-                #     raise NotImplementedError('need to add features')
-
-    def _get_config_outputs(self, config):
-        outputs = config.get('outputs', {})
-        if len(outputs) == 0:
-            warnings.warn('No outputs set in configuration file.')
-        msg = 'outputs key must contain a dictionary with  "mesh" and '
-        msg += '"boundaries" entries.'
-        assert isinstance(outputs, dict), msg
-        return namedtuple(
-            "config_outputs",
-            [
-                "mesh",
-                "boundaries"
-            ]
-            )(
-            mesh=self._get_config_outputs_mesh(outputs),
-            boundaries=self._get_config_outputs_boundaries(outputs)
-            )
-
-    def _get_config_outputs_mesh(self, outputs):
-        mesh = outputs.get('mesh')
-        if mesh is None:
+    def _get_hfun_from_db(self, id):
+        query = self._session.query(db.Hfun).get(id)
+        if query is None:
+            self._logger.debug("_get_hfun_from_db(): not found")
             return
+        self._logger.debug("_get_hfun_from_db(): found")
+        hfun = Hfun(
+            geoalchemy2.shape.to_shape(query.hfun), crs="EPSG:4326")
+        if not self._config._crs.equals(hfun.crs):
+            hfun.transform_to(self._config._crs)
+        return hfun
 
-        # check input type
-        msg = "'outputs' entry must contain a dictionary or list of "
-        msg += 'dictionaries.'
-        assert isinstance(mesh, (list, dict)), msg
-        # cast dict input to list of dict
-        mesh = [mesh] if isinstance(mesh, dict) else mesh
-        # Check entries provided in json file
-        prefix = "Dictionary members of 'outputs.mesh[]' must contain at "
-        prefix += "least one"
-        suffix = "key. This key must correspond to the desired "
-        output_collection = []
-        for output in mesh:
-
-            # check 'name'
-            msg = f"{prefix} 'name' {suffix}"
-            msg += "output file path. Paths can be full or relative and "
-            msg += 'environment variables can be used.'
-            assert 'name' in output.keys(), msg
-            name = pathlib.Path(
-                os.path.expandvars(str(output.get('name')))).resolve()
-
-            # check for overwrite
-            if name.is_file() and self._args.overwrite is False:
-                msg = f"File {name} exists and overwrite is set to False "
-                msg += "(default)."
-                raise Exception(msg)
-
-            # check 'crs'
-            msg = f"{prefix} 'crs' {suffix}"
-            msg += "output coordinate reference system."
-            assert 'crs' in output.keys(), msg
-            crs = CRS.from_user_input(str(output['crs']))
-
-            # check 'format'
-            msg = f"{prefix} 'format' {suffix}"
-            msg += 'file format. This can be 2dm or grd.'
-            assert 'format' in output.keys(), msg
-
-            # check format types
-            format = str(output['format'])
-            msg = "'format' must be one of 2dm or grd."
-            assert format.lower() in ['2dm', 'grd'], msg
-
-            # collect parameters
-            output_collection.append(namedtuple(
-                "mesh_output_configuration",
-                ['name', 'crs', 'format']
-                )(
-                name=name,
-                crs=crs,
-                format=format
-                ))
-
-        return output_collection
-
-    def _get_config_outputs_boundaries(self, outputs):
-        boundaries = outputs.get('boundaries')
-        if boundaries is None:
-            return
-        raise NotImplementedError
-
-    # def _get_config_raster_data(self, data):
-
-        # We need to figure out if this URI is a URL or a local path.
-        # if 'http' in data['uri'] or 'ftp' in data['uri']:
-        #     msg = "URI provided is an internet address."
-        #     raise NotImplementedError(msg)
-
-        # Try to resolve path relative to config file.
-        data.update({
-            'uri': (
-                pathlib.Path(self._args.config_file).parent /
-                pathlib.Path(os.path.expandvars(data['uri']))
-                )
-            })
-
-        if not data['uri'].is_file():
-            msg = f"No file with path: {data['uri']}"
-            raise FileNotFoundError(msg)
-
-        try:
-            return self._get_config_rasters_tile_index(data)
-        except Exception:  # DriverError exception
-            pass
-
-        return self._get_config_raster_local_file(data)
-
-        # msg = "\nThe URI object is not readable by rasterio nor fiona."
-        # # msg += f"\nfiona returned {ferr} "
-        # msg += f"\nrasterio returned {rerr}"
-        # raise Exception(msg)
-
-    def _get_config_rasters_tile_index(self, data):
-        with fiona.open(data['uri'], 'r') as f:
-            pass
-        return RasterCollection()
-
-    def _get_config_raster_local_file(self, data):
-        self._logger.debug(f'_get_config_raster_local_file:{data["uri"]}')
-        kwargs = {
-            "path": data['uri'],
-            "src_crs": data.get("src_crs"),
-            "chunk_size": data.get("chunk_size"),
-            "overlap": data.get("overlap")
-        }
-        raster = Raster(**kwargs)
-        self._update_raster_opts(
-            raster,
-            # {x: data[x] for x in data if x != 'uri'}
-            data
-            )
-        data.update({"_obj": raster})
-        return data["_obj"]
-
-    # def _get_geom_raster_multipolygon(self):
-    #     polygon_collection = []
-    #     for id, data in self._config.geom.rasters.values():
-    #         for polygon in data['_obj'].get_multipolygon(
-    #             zmin=data.get(id).get("zmin"),
-    #             zmax=data.get(id).get("zmax")
-    #                 ):
-    #             polygon_collection.append(polygon)
-    #     return MultiPolygon(polygon_collection).buffer(0)
-
-    # def _resolve_tile_index(self, id):
-    #     with fiona.open(self._conf_rasters[id], 'r') as src:
-    #         uris = []
-    #         for feature in src:
-    #             url = feature.get('properties', {}).get('URL', None)
-    #             if url is None:
-    #                 msg = f'No URL given for feature with id {id}'
-    #                 raise Exception(msg)
-    #             fname = self._cache / url.split('/')[-1]
-    #             if not fname.is_file() or fname.stat().st_size == 0:
-    #                 open(fname, 'wb').write(
-    #                     requests.get(
-    #                         url, allow_redirects=True).content)
-    #             uris.append(fname)
-    #     return uris
-
-    def _update_raster_opts(self, raster, opts):
-        for key, opt in opts.items():
-            if key == "resample":
-                raster.resample(opt['scaling_factor'])
-            if key == 'warp':
-                raster.warp(opt)
-            if key == 'fill_nodata':
-                raster.fill_nodata()
-            if key == 'clip':
-                if isinstance(opt, dict):
-                    raster.clip(
-                        MultiPolygon(
-                            [box(
-                                opt['xmin'],
-                                opt['ymin'],
-                                opt['xmax'],
-                                opt['ymax'])]
-                            )
-                        )
-                else:
-                    msg = "clip by geometry"
-                    raise NotImplementedError(msg)
-
-    def _update_hfun_raster_criteria(self, hfun, config):
-
-        for id, criteria in config['hfun']['rasters'].items():
-            print(id, criteria)
-            raise NotImplementedError
-
-        # contours = opts.get('contours', [])
-        # if isinstance(contours, dict):
-        #     contours = [contours]
-        # for opt in contours:
-        #     hfun.add_contour(
-        #         opt['level'],
-        #         opt['target_size'],
-        #         opt['expansion_rate'],
-        #         hmin=opt['hmin'],
-        #         hmax=opt['hmax'],
-        #         n_jobs=opt['n_jobs']
-        #         )
-
-    def _load_geom(self):
-        print(self._config)
-        # self._load_rasters(self._config)
-        # self._get_config_geom(self._config)
-        # query = self._db.query(db.Geom).filter_by(
-        #     uri=self._get_current_config_uri(),
-        #     md5=self._get_current_config_md5()
-        #     )
-        raise NotImplementedError
-
-    @property
-    def geom(self):
-        return self._load_geom()
-
-    @property
-    def hfun(self):
-        return self._load_hfun()
-
-    @property
-    @lru_cache(maxsize=None)
-    def _config_path(self):
-        return pathlib.Path(self._args.config_file)
+    def _save_hfun_to_db(self, hfun, id):
+        self._logger.debug("_save_hfun_to_db()")
+        _original_crs = hfun.crs
+        if not _original_crs.equals(CRS.from_epsg(4326)):
+            self._logger.debug(f"tranforming from {hfun.crs} to EPSG:4326")
+            hfun.transform_to('EPSG:4326')
+        self._session.add(
+            db.Hfun(
+                hfun=geoalchemy2.shape.from_shape(hfun.multipolygon),
+                id=id))
+        self._session.commit()
+        if not hfun.crs.equals(_original_crs):
+            hfun.transform_to(_original_crs)
 
     @property
     @lru_cache(maxsize=None)
     def _config(self):
-        return cmd.config.read_config(self._config_path)
+        self._logger.debug("_config")
+        return cmd._ConfigManager(self._args, self._session)
 
     @property
-    def _args(self):
-        return self.__args
+    @lru_cache(maxsize=None)
+    def _session(self):
+        if self._args.db in [None, 'spatialite']:
+            if not hasattr(self._args, "path"):
+                self._args.path = None
+            if self._args.path is None:
+                path = pathlib.Path(sys.executable).parent / '../lib'
+                self._args.path = path.resolve() / 'cache.db'
+            if hasattr(self._args, "clear_cache"):
+                self._args.path.unlink(missing_ok=True)
+            session = db.spatialite_session(
+                self._args.path,
+                self._args.echo if hasattr(self._args, 'echo') else False
+                )
+        else:
+            raise NotImplementedError('postgis not implemented')
+        return session
 
-    @_args.setter
-    def _args(self, args):
-        args.config_file = pathlib.Path(args.config_file)
-        self.__args = args
+    @property
+    def _geom_descriptor(self):
+        descriptor = ""
+        for id, geom_opts in self._config._geom.items():
+            zmin = geom_opts.get("zmin")
+            zmax = geom_opts.get("zmax")
+            driver = geom_opts.get("driver")
+            for raster_path, _ in self._config._get_raster_by_id(id):
+                descriptor += cmd._geom_identifier(
+                    zmin, zmax, driver, Raster(raster_path).md5)
+        return hashlib.md5(descriptor.encode('utf-8')).hexdigest()
+
+    @property
+    def _hfun_descriptor(self):
+        return ""
+        descriptor = ""
+        global_hmin = self._config._hfun.get("hmin")
+        global_hmax = self._config._hfun.get("hmax")
+        for hrast in self._config._hfun.get("rasters", []):
+            for raster_path, _ in self._config._get_raster_by_id(id):
+                descriptor += cmd._hfun_identifier(Raster(raster_path).md5)
+        return hashlib.md5(descriptor.encode('utf-8')).hexdigest()
 
     @property
     @lru_cache(maxsize=None)
@@ -496,87 +240,45 @@ def parse_args():
     parser.add_argument(
         "config_file",
         help="Path to configuration file.",
-        # nargs='?'
-        )
+        type=lambda x: pathlib.Path(os.path.expandvars(x)))
     parser.add_argument("--log-level", choices=["info", "debug", "warning"])
-    # parser.add_argument("--verbosity", type=int, default=0)
-    # parser.add_argument("--cache-dir")
-    parser.add_argument("--clear-cache", action="store_true")
+    parser.add_argument(
+        "--nprocs", type=int, help="Number of parallel threads to use when "
+        "computing geom and hfun.")
+    parser.add_argument(
+        "--geom-nprocs", type=int, help="Number of processors used when "
+        "computing the geom, overrides --nprocs argument.")
+    parser.add_argument(
+        "--hfun-nprocs", type=int, help="Number of processors used when "
+        "computing the hfun, overrides --nprocs argument.")
+    parser.add_argument("--chunk-size")
+
+    db = parser.add_subparsers(dest='db')
+
+    spatialite = db.add_parser('spatialite')
+    spatialite.add_argument('--path')
+    spatialite.add_argument('--clear-cache', action="store_true")
+    spatialite.add_argument('--echo', action="store_true")
+
+    postgis = db.add_parser('postgis')
+    postgis.add_argument('hostname')
+
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     logger.init(args.log_level)
-    Geomesh(args)
+    Geomesh(args).main()
 
 
 if __name__ == '__main__':
     main()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     # def _get_feature_collection_by_id(self, id, dst_crs):
     #     uri = self._conf_features[id].get('uri', None)
     #     if uri is None:
-    #         msg = f'Must specify at least one "uri" for feature with id {id}.'
+    #         msg = f'Must specify at least one "uri" for feature with id {id}.'  # noqa: E501
     #         raise Exception(msg)
     #     feature_collection = []
     #     shp = fiona.open(uri)
@@ -604,7 +306,7 @@ if __name__ == '__main__':
     # def _conf_rasters(self):
     #     rasters = self._conf.get("rasters", {})
     #     msg = '"rasters" entry must be a dictionary, not '
-    #     msg += f'{type(rasters)}. The dictionary must consist of a unique key '
+    #     msg += f'{type(rasters)}. The dictionary must consist of a unique key '  # noqa: E501
     #     msg += 'for each raster, and each key contains a dictionary with '
     #     msg += 'raster options. At least the "uri" entry is required.'
     #     assert isinstance(rasters, dict), msg
@@ -754,7 +456,7 @@ if __name__ == '__main__':
     #         msg = '"levees" entry must be a dictionary, not '
     #         msg += f'{type(features)}.'
     #         assert isinstance(features, dict), msg
-    #         msg = 'feature specified as levee is not in not in "features" keys'
+    #         msg = 'feature specified as levee is not in not in "features" keys'  # noqa: E501
     #         for id in features:
     #             assert id in self._conf_features.keys(), msg
     #     return features
@@ -821,8 +523,7 @@ if __name__ == '__main__':
 #     print(config)
 #     raise NotImplementedError
 
-
-        # hfun is optional. Return if no inputs are given.
+    # hfun is optional. Return if no inputs are given.
     #     if self._conf_hfun is None:
     #         return
 
@@ -878,7 +579,7 @@ if __name__ == '__main__':
     #         assert "target_size" in opts, msg
     #         # It seems that we can handle MultiLineString more
     #         # efficiently than LineString and it seems to be natively
-    #         # supported by add_feature method. There seemsno obvious reason to
+    #         # supported by add_feature method. There seemsno obvious reason to  # noqa: E501
     #         # innput each feature individually, but was consider
     #         hfun.add_feature(MultiLineString(features), **opts)
 
@@ -887,3 +588,413 @@ if __name__ == '__main__':
     #         hfun.add_gaussian_filter(**kwargs)
 
     #     return hfun
+
+    # def _load_rasters(self, config):
+    #     self._logger.debug('_get_rasters')
+    #     rasters = config.get('rasters')
+
+    #     if rasters is None:
+    #         return
+
+    #     msg = "config.rasters must contain a dictionary. The keys must be "
+    #     msg += "an indentifier and each indentifier must contain a dictionary "  # noqa: E501
+    #     msg += "with at least 'uri' entry."
+    #     assert isinstance(rasters, dict), msg
+
+    #     for id, data in rasters.copy().items():
+    #         if id.startswith("_"):
+    #             continue
+    #         self._logger.debug(f'_get_config_rasters:{id}')
+    #         msg = "raster entry with id {id} does not contain an uri entry."
+    #         assert 'uri' in data.keys(), msg
+    #         config['rasters'][id].update(
+    #             {"_obj": self._get_config_raster_data(data)})
+    #     return rasters
+
+    # def _get_config_geom(self, config):
+    #     # self._logger.debug('_get_config_geom')
+    #     # geom = config.get('geom')
+    #     # if geom is None:
+    #     #     msg = "geom entry must be defined."
+    #     #     raise IOError(msg)
+    #     # msg = "geom must contain at least one of 'rasters' or 'features' keys."  # noqa: E501
+    #     # assert "rasters" in geom or "features" in geom, msg
+    #     # geom_collection = []
+    #     # if 'rasters' in geom:
+    #     #     rasters = config.get('rasters')
+    #     #     for id, opts in geom['rasters'].items():
+    #     #         if id.startswith("_"):
+    #     #             continue
+    #     #         self._logger.debug(f'_get_config_geom:{id}')
+    #     #         msg = f"config.geom.raster with id '{id}' not listed in "
+    #     #         msg += f"config.rasters.keys(): {rasters}"
+    #     #         assert id in rasters, msg
+    #     #         # raise NotImplementedError("Must do checksum check.")
+    #     #         geom_collection.append(rasters[id]["_obj"].get_geom(
+    #     #             zmin=opts.get("zmin"),
+    #     #             zmax=opts.get("zmax"),
+    #     #             join_method=opts.get("join_method"),
+    #     #             driver=opts.get("driver"),
+    #     #             overlap=opts.get("overlap"),
+    #     #             ))
+
+    #     if "features" in geom:
+    #         raise NotImplementedError("features")
+
+    #     mpc = []
+    #     for geom in geom_collection:
+    #         mpc.append(geom.multipolygon)
+    #     mp = ops.unary_union(mpc)
+
+    #     geom = Geom(mp, geom.crs)
+    #     geom.make_plot(show=True)
+    #     raise NotImplementedError
+
+    #     config["geom"].update({"_obj": geom})
+    #     return namedtuple(
+    #         "config_geom",
+    #         [
+    #             "rasters",
+    #             # "features",
+    #             "geom"
+    #         ]
+    #         )(
+    #         rasters=rasters,
+    #         geom=config["geom"]["_obj"]
+    #         )
+
+    # def _get_config_hfun(self, config):
+    #     self._logger.debug('_get_config_hfun')
+    #     hfun = config.get('hfun')
+    #     if hfun is None:
+    #         msg = "hfun entry must be defined."
+    #         raise IOError(msg)
+    #     # msg = "geom must contain at least one of 'rasters' or 'features' keys."  # noqa: E501
+    #     # assert "rasters" in geom or "features" in geom, msg
+    #     hfun_collection = []
+    #     if 'rasters' in hfun:
+    #         hfun_rasters = hfun.get('rasters')
+    #         msg = "hfun.rasters must be  a dictionary."
+    #         assert isinstance(hfun_rasters, dict), msg
+    #         for id, opts in hfun_rasters.items():
+    #             self._logger.debug(f'_get_config_hfun:{id}')
+    #             hfun = config['rasters'][id]["_obj"].get_hfun(
+    #                 # geom=config['geom']["_obj"],
+    #                 # hmin=None,
+    #                 # hmax=None,
+    #                 )
+    #             self._update_hfun_raster_criteria(hfun, opts)
+    #             hfun.contourf(show=True)
+    #             hfun_collection.append(hfun)
+    #             exit()
+
+    #             # # process contours
+    #             # contours = opts.get("contours", {})
+    #             # if isinstance(contours, dict):
+    #             #     contours = [contours]
+    #             # assert isinstance(contours, list)
+    #             # for contour in contours:
+    #             #     level = float(contour['level'])
+    #             #     exp_rate = float(contour['expansion_rate'])
+    #             # # process features
+    #             # features = opts.get("features", {})
+    #             # if isinstance(features, dict):
+    #             #     features = [features]
+    #             # assert isinstance(features, list)
+    #             # for feature in features:
+    #             #     raise NotImplementedError('need to add features')
+
+    # def _get_config_outputs(self, config):
+    #     outputs = config.get('outputs', {})
+    #     if len(outputs) == 0:
+    #         warnings.warn('No outputs set in configuration file.')
+    #     msg = 'outputs key must contain a dictionary with  "mesh" and '
+    #     msg += '"boundaries" entries.'
+    #     assert isinstance(outputs, dict), msg
+    #     return namedtuple(
+    #         "config_outputs",
+    #         [
+    #             "mesh",
+    #             "boundaries"
+    #         ]
+    #         )(
+    #         mesh=self._get_config_outputs_mesh(outputs),
+    #         boundaries=self._get_config_outputs_boundaries(outputs)
+    #         )
+
+    # def _get_config_outputs_mesh(self, outputs):
+    #     mesh = outputs.get('mesh')
+    #     if mesh is None:
+    #         return
+
+    #     # check input type
+    #     msg = "'outputs' entry must contain a dictionary or list of "
+    #     msg += 'dictionaries.'
+    #     assert isinstance(mesh, (list, dict)), msg
+    #     # cast dict input to list of dict
+    #     mesh = [mesh] if isinstance(mesh, dict) else mesh
+    #     # Check entries provided in json file
+    #     prefix = "Dictionary members of 'outputs.mesh[]' must contain at "
+    #     prefix += "least one"
+    #     suffix = "key. This key must correspond to the desired "
+    #     output_collection = []
+    #     for output in mesh:
+
+    #         # check 'name'
+    #         msg = f"{prefix} 'name' {suffix}"
+    #         msg += "output file path. Paths can be full or relative and "
+    #         msg += 'environment variables can be used.'
+    #         assert 'name' in output.keys(), msg
+    #         name = pathlib.Path(
+    #             os.path.expandvars(str(output.get('name')))).resolve()
+
+    #         # check for overwrite
+    #         if name.is_file() and self._args.overwrite is False:
+    #             msg = f"File {name} exists and overwrite is set to False "
+    #             msg += "(default)."
+    #             raise Exception(msg)
+
+    #         # check 'crs'
+    #         msg = f"{prefix} 'crs' {suffix}"
+    #         msg += "output coordinate reference system."
+    #         assert 'crs' in output.keys(), msg
+    #         crs = CRS.from_user_input(str(output['crs']))
+
+    #         # check 'format'
+    #         msg = f"{prefix} 'format' {suffix}"
+    #         msg += 'file format. This can be 2dm or grd.'
+    #         assert 'format' in output.keys(), msg
+
+    #         # check format types
+    #         format = str(output['format'])
+    #         msg = "'format' must be one of 2dm or grd."
+    #         assert format.lower() in ['2dm', 'grd'], msg
+
+    #         # collect parameters
+    #         output_collection.append(namedtuple(
+    #             "mesh_output_configuration",
+    #             ['name', 'crs', 'format']
+    #             )(
+    #             name=name,
+    #             crs=crs,
+    #             format=format
+    #             ))
+
+    #     return output_collection
+
+    # def _get_config_outputs_boundaries(self, outputs):
+    #     boundaries = outputs.get('boundaries')
+    #     if boundaries is None:
+    #         return
+    #     raise NotImplementedError
+
+    # # def _get_config_raster_data(self, data):
+
+    #     # We need to figure out if this URI is a URL or a local path.
+    #     # if 'http' in data['uri'] or 'ftp' in data['uri']:
+    #     #     msg = "URI provided is an internet address."
+    #     #     raise NotImplementedError(msg)
+
+    #     # Try to resolve path relative to config file.
+    #     data.update({
+    #         'uri': (
+    #             pathlib.Path(self._args.config_file).parent /
+    #             pathlib.Path(os.path.expandvars(data['uri']))
+    #             )
+    #         })
+
+    #     if not data['uri'].is_file():
+    #         msg = f"No file with path: {data['uri']}"
+    #         raise FileNotFoundError(msg)
+
+    #     try:
+    #         return self._get_config_rasters_tile_index(data)
+    #     except Exception:  # DriverError exception
+    #         pass
+
+    #     return self._get_config_raster_local_file(data)
+
+    #     # msg = "\nThe URI object is not readable by rasterio nor fiona."
+    #     # # msg += f"\nfiona returned {ferr} "
+    #     # msg += f"\nrasterio returned {rerr}"
+    #     # raise Exception(msg)
+
+    # def _get_config_rasters_tile_index(self, data):
+    #     with fiona.open(data['uri'], 'r') as f:
+    #         pass
+    #     return RasterCollection()
+
+    # def _get_config_raster_local_file(self, data):
+    #     self._logger.debug(f'_get_config_raster_local_file:{data["uri"]}')
+    #     kwargs = {
+    #         "path": data['uri'],
+    #         "src_crs": data.get("src_crs"),
+    #         "chunk_size": data.get("chunk_size"),
+    #         "overlap": data.get("overlap")
+    #     }
+    #     raster = Raster(**kwargs)
+    #     self._update_raster_opts(
+    #         raster,
+    #         # {x: data[x] for x in data if x != 'uri'}
+    #         data
+    #         )
+    #     data.update({"_obj": raster})
+    #     return data["_obj"]
+
+    # # def _get_geom_raster_multipolygon(self):
+    # #     polygon_collection = []
+    # #     for id, data in self._config.geom.rasters.values():
+    # #         for polygon in data['_obj'].get_multipolygon(
+    # #             zmin=data.get(id).get("zmin"),
+    # #             zmax=data.get(id).get("zmax")
+    # #                 ):
+    # #             polygon_collection.append(polygon)
+    # #     return MultiPolygon(polygon_collection).buffer(0)
+
+    # # def _resolve_tile_index(self, id):
+    # #     with fiona.open(self._conf_rasters[id], 'r') as src:
+    # #         uris = []
+    # #         for feature in src:
+    # #             url = feature.get('properties', {}).get('URL', None)
+    # #             if url is None:
+    # #                 msg = f'No URL given for feature with id {id}'
+    # #                 raise Exception(msg)
+    # #             fname = self._cache / url.split('/')[-1]
+    # #             if not fname.is_file() or fname.stat().st_size == 0:
+    # #                 open(fname, 'wb').write(
+    # #                     requests.get(
+    # #                         url, allow_redirects=True).content)
+    # #             uris.append(fname)
+    # #     return uris
+
+    # def _update_raster_opts(self, raster, opts):
+    #     for key, opt in opts.items():
+    #         if key == "resample":
+    #             raster.resample(opt['scaling_factor'])
+    #         if key == 'warp':
+    #             raster.warp(opt)
+    #         if key == 'fill_nodata':
+    #             raster.fill_nodata()
+    #         if key == 'clip':
+    #             if isinstance(opt, dict):
+    #                 raster.clip(
+    #                     MultiPolygon(
+    #                         [box(
+    #                             opt['xmin'],
+    #                             opt['ymin'],
+    #                             opt['xmax'],
+    #                             opt['ymax'])]
+    #                         )
+    #                     )
+    #             else:
+    #                 msg = "clip by geometry"
+    #                 raise NotImplementedError(msg)
+
+    # def _update_hfun_raster_criteria(self, hfun, config):
+
+    #     for id, criteria in config['hfun']['rasters'].items():
+    #         print(id, criteria)
+    #         raise NotImplementedError
+
+    #     # contours = opts.get('contours', [])
+    #     # if isinstance(contours, dict):
+    #     #     contours = [contours]
+    #     # for opt in contours:
+    #     #     hfun.add_contour(
+    #     #         opt['level'],
+    #     #         opt['target_size'],
+    #     #         opt['expansion_rate'],
+    #     #         hmin=opt['hmin'],
+    #     #         hmax=opt['hmax'],
+    #     #         n_jobs=opt['n_jobs']
+    #     #         )
+
+        # try:
+        #     return self._get_config_rasters_tile_index(data)
+        # except Exception:  # DriverError exception
+        #     pass
+
+        # return self._get_config_raster_local_file(data)
+
+        # print(uri.resolve())
+        # print(raster_opts)
+        # exit()
+
+            # yield raster
+
+        # rasters = {}
+        # for id, opts in self._conf["rasters"].items():
+        #     rasters.update({id: self._resolve_raster_data(id, opts)})
+        # return rasters
+        # uri = config['rasters']['uri']
+
+
+        # raster = Raster(
+        #     config['rasters']['uri'],
+        #     crs=config['rasters'].get('crs')
+        #     )
+
+    # # def _get_config_raster_data(self, data):
+
+    #     # We need to figure out if this URI is a URL or a local path.
+
+
+    #     # Try to resolve path relative to config file.
+    #     data.update({
+    #         'uri': (
+    #             pathlib.Path(self._args.config_file).parent /
+    #             pathlib.Path(os.path.expandvars(data['uri']))
+    #             )
+    #         })
+
+
+
+    #     try:
+    #         return self._get_config_rasters_tile_index(data)
+    #     except Exception:  # DriverError exception
+    #         pass
+
+    #     return self._get_config_raster_local_file(data)
+
+    #     # msg = "\nThe URI object is not readable by rasterio nor fiona."
+    #     # # msg += f"\nfiona returned {ferr} "
+    #     # msg += f"\nrasterio returned {rerr}"
+    #     # raise Exception(msg)
+
+    # def _get_config_rasters_tile_index(self, data):
+    #     with fiona.open(data['uri'], 'r') as f:
+    #         pass
+    #     return RasterCollection()
+
+    # def _get_config_raster_local_file(self, data):
+    #     self._logger.debug(f'_get_config_raster_local_file:{data["uri"]}')
+    #     kwargs = {
+    #         "path": data['uri'],
+    #         "src_crs": data.get("src_crs"),
+    #         "chunk_size": data.get("chunk_size"),
+    #         "overlap": data.get("overlap")
+    #     }
+    #     raster = Raster(**kwargs)
+    #     self._update_raster_opts(
+    #         raster,
+    #         # {x: data[x] for x in data if x != 'uri'}
+    #         data
+    #         )
+    #     data.update({"_obj": raster})
+    #     return data["_obj"]
+
+    # # def _resolve_tile_index(self, id):
+    # #     with fiona.open(self._conf_rasters[id], 'r') as src:
+    # #         uris = []
+    # #         for feature in src:
+    # #             url = feature.get('properties', {}).get('URL', None)
+    # #             if url is None:
+    # #                 msg = f'No URL given for feature with id {id}'
+    # #                 raise Exception(msg)
+    # #             fname = self._cache / url.split('/')[-1]
+    # #             if not fname.is_file() or fname.stat().st_size == 0:
+    # #                 open(fname, 'wb').write(
+    # #                     requests.get(
+    # #                         url, allow_redirects=True).content)
+    # #             uris.append(fname)
+    # #     return uris

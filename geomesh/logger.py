@@ -10,7 +10,7 @@ def init(log_level=None):
             "warning": logging.WARNING,
         }[log_level])
         logging.getLogger('matplotlib').setLevel(logging.WARNING)
-        logging.getLogger('fiona').setLevel(logging.WARNING)
+        logging.getLogger('fiona').setLevel(logging.CRITICAL)
         logging.getLogger('rasterio').setLevel(logging.WARNING)
 
 

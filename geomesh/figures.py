@@ -33,12 +33,7 @@ def get_topobathy_kwargs(values, vmin, vmax, colors=256):
             )
     else:
         norm = None
-    return {'cmap': cmap,
-            'norm': norm,
-            'levels': levels,
-            'col_val': col_val,
-            # 'extend': 'both'
-            }
+    return cmap, norm, levels, col_val
 
 
 def get_axes(axes, figsize=None, subplot=111):
@@ -72,7 +67,7 @@ class FixPointNormalize(Normalize):
 
     def __call__(self, value, clip=None):
         x, y = [self.vmin, self.sealevel, self.vmax], [0, self.col_val, 1]
-        if np.ma.is_masked(value)is False:
+        if np.ma.is_masked(value) is False:
             value = np.ma.masked_invalid(value)
         return np.ma.masked_where(value.mask, np.interp(value, x, y))
 

@@ -11,10 +11,10 @@ import matplotlib.pyplot as plt
 from functools import lru_cache
 from scipy.interpolate import RectBivariateSpline, griddata
 from jigsawpy import jigsaw_msh_t
-from geomesh.raster import Raster
-from geomesh import figures as fig
-from geomesh import utils
-from geomesh.mesh.euclidean_mesh_2d import EuclideanMesh2D
+from ..raster import Raster
+from .. import figures as fig
+from .. import utils
+from .euclidean_mesh_2d import EuclideanMesh2D
 
 
 class Mesh(EuclideanMesh2D):
@@ -179,13 +179,7 @@ class Mesh(EuclideanMesh2D):
         if raster.srs != self.srs:
             raster = Raster(raster.path)
             raster.warp(self.crs)
-        bbox = raster.bbox
-        if method == "spline":
-            self._spline_interp(raster, band, bbox, **kwargs)
-
-        elif method == 'griddata':
-            self._griddata_interp(raster, band, bbox, **kwargs)
-
+        getattr(self, f'_{method}_interp')(raster, band, raster.bbox, **kwargs)
         if fix_invalid:
             self.fix_invalid()
 
@@ -218,29 +212,6 @@ class Mesh(EuclideanMesh2D):
             else:
                 msg = 'Only nearest method is available.'
                 raise NotImplementedError(msg)
-
-    @property
-    @lru_cache(maxsize=None)
-    def point_neighbors(self):
-        point_neighbors = defaultdict(set)
-        for simplex in self.triangulation.triangles:
-            for i, j in permutations(simplex, 2):
-                point_neighbors[i].add(j)
-        return point_neighbors
-
-    @property
-    @lru_cache(maxsize=None)
-    def point_distances(self):
-        point_distances = {}
-        for i, (x, y) in enumerate(self.xy):
-            point_distances[i] = {}
-            for neighbor in self.point_neighbors[i]:
-                point_distances[i][neighbor] = np.sqrt(
-                    (self.x[i] - self.x[neighbor])**2
-                    +
-                    (self.y[i] - self.y[neighbor])**2
-                    )
-        return point_distances
 
     @fig._figure
     def make_plot(
@@ -347,6 +318,29 @@ class Mesh(EuclideanMesh2D):
         return self._boundaries
 
     @property
+    @lru_cache(maxsize=None)
+    def point_neighbors(self):
+        point_neighbors = defaultdict(set)
+        for simplex in self.triangulation.triangles:
+            for i, j in permutations(simplex, 2):
+                point_neighbors[i].add(j)
+        return point_neighbors
+
+    @property
+    @lru_cache(maxsize=None)
+    def point_distances(self):
+        point_distances = {}
+        for i, (x, y) in enumerate(self.xy):
+            point_distances[i] = {}
+            for neighbor in self.point_neighbors[i]:
+                point_distances[i][neighbor] = np.sqrt(
+                    (self.x[i] - self.x[neighbor])**2
+                    +
+                    (self.y[i] - self.y[neighbor])**2
+                    )
+        return point_distances
+
+    @property
     def gr3(self):
         """
         Returns a gr3 string with boundary information included.
@@ -445,31 +439,6 @@ class Mesh(EuclideanMesh2D):
         self._values = new_values
 
     @property
-    def _boundaries(self):
-        return self.__boundaries
-
-    @_boundaries.setter
-    def _boundaries(self, boundaries):
-        """
-        boundaries = {ibtype: {id: {'indexes': [i0, ..., in], 'properties': object }}
-        """
-        self.clear_boundaries()  # clear
-        if boundaries is not None:
-            for ibtype, bnds in boundaries.items():
-                self.add_boundary_type(ibtype)
-                for id, bnd in bnds.items():
-                    if 'properties' in bnd.keys():
-                        properties = bnd['properties']
-                    else:
-                        properties = {}
-                    self.set_boundary_data(
-                        ibtype,
-                        id,
-                        bnd['indexes'],
-                        **properties
-                    )
-
-    @property
     @lru_cache(maxsize=None)
     def vert2(self):
         return np.array(
@@ -535,6 +504,31 @@ class Mesh(EuclideanMesh2D):
     @lru_cache(maxsize=None)
     def inner_ring_collection(self):
         return utils.inner_ring_collection(self.mesh)
+
+    @property
+    def _boundaries(self):
+        return self.__boundaries
+
+    @_boundaries.setter
+    def _boundaries(self, boundaries):
+        """
+        boundaries = {ibtype: {id: {'indexes': [i0, ..., in], 'properties': object }}
+        """
+        self.clear_boundaries()  # clear
+        if boundaries is not None:
+            for ibtype, bnds in boundaries.items():
+                self.add_boundary_type(ibtype)
+                for id, bnd in bnds.items():
+                    if 'properties' in bnd.keys():
+                        properties = bnd['properties']
+                    else:
+                        properties = {}
+                    self.set_boundary_data(
+                        ibtype,
+                        id,
+                        bnd['indexes'],
+                        **properties
+                    )
 
     @property
     @lru_cache(maxsize=None)

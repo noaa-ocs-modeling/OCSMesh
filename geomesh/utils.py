@@ -49,43 +49,6 @@ def put_edge2(mesh):
         [(edge, 0) for edge in tri.edges], dtype=jigsaw_msh_t.EDGE2_t)
 
 
-def multipolygon_to_geom(multipolygon):
-    assert isinstance(multipolygon, MultiPolygon)
-    vert2 = list()
-    for polygon in multipolygon:
-        if np.all(
-                np.asarray(polygon.exterior.coords).flatten() == float('inf')):
-            msg = "PSLG seems to correspond to ellipsoidal mesh "
-            msg += "which has not yet been implemented."
-            raise NotImplementedError(msg)
-        for x, y in polygon.exterior.coords[:-1]:
-            vert2.append(((x, y), 0))
-        for interior in polygon.interiors:
-            for x, y in interior.coords[:-1]:
-                vert2.append(((x, y), 0))
-    vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
-    # edge2
-    edge2 = list()
-    for polygon in multipolygon:
-        polygon = [polygon.exterior, *polygon.interiors]
-        for linear_ring in polygon:
-            _edge2 = list()
-            for i in range(len(linear_ring.coords)-2):
-                _edge2.append((i, i+1))
-            _edge2.append((_edge2[-1][1], _edge2[0][0]))
-            edge2.extend(
-                [(e0+len(edge2), e1+len(edge2)) for e0, e1 in _edge2])
-    edge2 = np.asarray(
-        [((e0, e1), 0) for e0, e1 in edge2], dtype=jigsaw_msh_t.EDGE2_t)
-    # geom
-    geom = jigsaw_msh_t()
-    geom.ndims = +2
-    geom.mshID = 'euclidean-mesh'
-    geom.vert2 = vert2
-    geom.edge2 = edge2
-    return geom
-
-
 def geom_to_multipolygon(mesh):
     vertices = mesh.vert2['coord']
     _index_ring_collection = index_ring_collection(mesh)
