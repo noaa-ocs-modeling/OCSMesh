@@ -20,9 +20,10 @@ SYSLIB = {
 
 if "install_jigsaw" not in sys.argv:
     if "develop" not in sys.argv:
-        libsaw = PYENV_PREFIX / 'lib' / SYSLIB[platform.system()]
-        if not libsaw.is_file():
-            subprocess.check_call(["python", "setup.py", "install_jigsaw"])
+        if "install" in sys.argv:
+            libsaw = PYENV_PREFIX / 'lib' / SYSLIB[platform.system()]
+            if not libsaw.is_file():
+                subprocess.check_call(["python", "setup.py", "install_jigsaw"])
 
 
 class InstallJigsawCommand(distutils.cmd.Command):
@@ -51,13 +52,13 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.chdir("external/jigsaw")
         os.makedirs("build", exist_ok=True)
         os.chdir("build")
-        cc, gcc = self._check_gcc_version()
+        cc, cpp = self._check_gcc_version()
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
              f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
              f"-DCMAKE_C_COMPILER={cc}",
-             f"-DCMAKE_CXX_COMPILER={gcc}",
+             f"-DCMAKE_CXX_COMPILER={cpp}",
              ])
         subprocess.check_call(["make", f"-j{cpu_count()}", "install"])
         libsaw_prefix = list(PYENV_PREFIX.glob("**/*jigsawpy*")).pop() / '_lib'
@@ -69,16 +70,16 @@ class InstallJigsawCommand(distutils.cmd.Command):
           ["git", "submodule", "deinit", "-f", "submodules/jigsaw-python"])
 
     def _check_gcc_version(self):
-        gcc = shutil.which("gcc")
+        cpp = shutil.which("c++")
         major, minor, patch = subprocess.check_output(
-            [gcc, "--version"]
+            [cpp, "--version"]
             ).decode('utf-8').split('\n')[0].split()[-1].split('.')
         current_version = float(f"{major}.{minor}")
         if current_version < 7.:
             raise Exception(
                 'JIGSAW requires GCC version 7 or later, got '
-                f'{major}.{minor}.{patch} from {gcc}')
-        return shutil.which("cc"), gcc
+                f'{major}.{minor}.{patch} from {cpp}')
+        return shutil.which("cc"), cpp
 
 
 conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
