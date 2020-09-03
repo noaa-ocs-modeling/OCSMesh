@@ -114,7 +114,7 @@ class Raster:
             dst_crs=None,
             nprocs=None,
     ):
-        nprocs = multiprocessing.cpu_count() if nprocs is -1 else nprocs
+        nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
         nprocs = 1 if nprocs is None else nprocs
 
         # certify driver
