@@ -79,7 +79,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
             raise Exception(
                 'JIGSAW requires GCC version 7 or later, got '
                 f'{major}.{minor}.{patch} from {cpp}')
-        return shutil.which("cc"), cpp
+        return shutil.which("gcc"), cpp
 
 
 conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
