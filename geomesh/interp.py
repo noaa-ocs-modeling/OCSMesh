@@ -69,12 +69,12 @@ class Interp:
 
         # write output to file
         self.mesh.write(
-            self._args.output_mesh,
+            self._args.output_mesh_path,
             overwrite=self._args.overwrite,
             fmt='gr3'
             )
         self.mesh.write(
-            self._args.output_mesh + '.2dm',
+            self._args.output_mesh_path + '.2dm',
             overwrite=self._args.overwrite,
             fmt='2dm'
             )
@@ -132,7 +132,7 @@ class Interp:
     @lru_cache(maxsize=None)
     def mesh(self):
         return Mesh.open(
-            pathlib.Path(self._args.input_mesh),
+            pathlib.Path(self._args.input_mesh_path),
             CRS.from_user_input(self._args.crs)
             )
 
@@ -267,12 +267,6 @@ class Interp:
     #     return target_path, raster.m
     #     breakpoint()
 
-    @staticmethod
-    def _validate_raster_local(raster, md5):
-        if raster.md5 != md5:
-            msg = f'Checksum mismatch for path {str(raster.path)}'
-            raise Exception(msg)
-
     @property
     @lru_cache(maxsize=None)
     def _rasters(self):
@@ -374,6 +368,11 @@ def transform_polygon(polygon, src_crs, dst_crs):
             src_crs, dst_crs, always_xy=True)
         polygon = transform(transformer.transform, polygon)
     return polygon
+
+
+def validate_raster_local(raster, md5):
+    if raster.md5 != md5:
+        raise Exception(f'Checksum mismatch for path {str(raster.path)}')
 
 
 def parse_args():

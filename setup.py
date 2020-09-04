@@ -52,12 +52,12 @@ class InstallJigsawCommand(distutils.cmd.Command):
         os.chdir("external/jigsaw")
         os.makedirs("build", exist_ok=True)
         os.chdir("build")
-        cc, cpp = self._check_gcc_version()
+        gcc, cpp = self._check_gcc_version()
         subprocess.check_call(
             ["cmake", "..",
              "-DCMAKE_BUILD_TYPE=Release",
              f"-DCMAKE_INSTALL_PREFIX={PYENV_PREFIX}",
-             f"-DCMAKE_C_COMPILER={cc}",
+             f"-DCMAKE_C_COMPILER={gcc}",
              f"-DCMAKE_CXX_COMPILER={cpp}",
              ])
         subprocess.check_call(["make", f"-j{cpu_count()}", "install"])

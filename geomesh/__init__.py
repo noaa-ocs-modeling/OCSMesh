@@ -10,15 +10,14 @@ try:
     import jigsawpy  # noqa: F401
 except OSError as e:
     pkg = util.find_spec("jigsawpy")
-    choices = {
+    libjigsaw = {
             "Windows": "jigsaw.dll",
             "Linux": "libjigsaw.so",
             "Darwin": "libjigsaw.dylib"
-            }
-    tgt_libpath = pathlib.Path(pkg.origin).parent / "_lib" / choices[
-        platform.system()]
+            }[platform.system()]
+    tgt_libpath = pathlib.Path(pkg.origin).parent / "_lib" / libjigsaw
     pyenv = pathlib.Path("/".join(sys.executable.split('/')[:-2]))
-    src_libpath = pyenv / 'lib' / choices[platform.system()]
+    src_libpath = pyenv / 'lib' / libjigsaw
     if not src_libpath.is_file():
         raise e
     else:
