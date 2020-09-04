@@ -297,7 +297,7 @@ class Interp:
     @property
     @lru_cache(maxsize=None)
     def _session(self):
-        return db.session(self._cache / 'index.db', echo=False)
+        return db.spatialite_session(self._cache / 'index.db', echo=False)
 
 
 def polygon_sort(corners):
