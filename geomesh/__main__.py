@@ -197,7 +197,11 @@ class Geomesh:
                 path = pathlib.Path(sys.executable).parent / '../lib'
                 self._args.path = path.resolve() / 'cache.db'
             if hasattr(self._args, "clear_cache"):
-                self._args.path.unlink(missing_ok=True)
+                try:
+                    # python3.6 compat issue
+                    self._args.path.unlink(missing_ok=True)
+                except TypeError:
+                    self._args.path.unlink()
             session = db.spatialite_session(
                 self._args.path,
                 self._args.echo if hasattr(self._args, 'echo') else False
