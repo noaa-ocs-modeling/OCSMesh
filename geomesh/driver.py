@@ -273,18 +273,20 @@ class JigsawDriver:
 
     @_geom.setter
     def _geom(self, geom):
-        if isinstance(geom, SizeFunction):
+        if Hfun.is_valid_type(geom):
             self._hfun = geom
+            # TODO: Should we continue on the rest of the checks?
+            return
         else:
-            assert isinstance(geom, Geom)
-        self._dst_crs = geom._dst_crs
+            assert Geom.is_valid_type(geom)
+        self._dst_crs = geom.crs
         self._mesh_dims = geom.ndims
         self.__geom = geom.geom
 
     @_hfun.setter
     def _hfun(self, hfun):
         if hfun is not None:
-            assert isinstance(hfun, SizeFunction)
+            assert Hfun.is_valid_type(hfun)
             # set scaling
             self.hfun_scal = hfun.scaling
 
@@ -292,13 +294,13 @@ class JigsawDriver:
             if hfun.hmin_is_absolute_limit:
                 self.hfun_hmin = hfun.hmin
             else:
-                self.hfun_hmin = np.min(hfun.values)
+                self.hfun_hmin = np.min(hfun.hfun.value)
 
             # set hmax limits
             if hfun.hmax_is_absolute_limit:
                 self.hfun_hmax = hfun.hmax
             else:
-                self.hfun_hmax = np.max(hfun.values)
+                self.hfun_hmax = np.max(hfun.hfun.value)
 
             # push jigsaw_msh_t object
             hfun = hfun.hfun

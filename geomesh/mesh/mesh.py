@@ -230,7 +230,14 @@ class Mesh(EuclideanMesh2D):
             vmin = np.min(self.values)
         if vmax is None:
             vmax = np.max(self.values)
-        kwargs.update(**fig.get_topobathy_kwargs(self.values, vmin, vmax))
+        cmap, norm, levels, col_val = fig.get_topobathy_kwargs(
+                self.values, vmin, vmax)
+        auxKwargs = {
+                'cmap': cmap,
+                'norm': norm,
+                'levels': levels,
+                'col_val': col_val}
+        kwargs.update(auxKwargs)
         kwargs.pop('col_val')
         levels = kwargs.pop('levels')
         if vmin != vmax:

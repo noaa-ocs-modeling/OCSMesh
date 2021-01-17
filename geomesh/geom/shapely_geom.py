@@ -1,16 +1,14 @@
-
 from shapely.geometry import Polygon, MultiPolygon
 
-from ._base import _BaseGeomType
+from geomesh.geom.base import BaseGeom
 
 
-class _ShapelyGeomType(_BaseGeomType):
+class ShapelyGeom(BaseGeom):
     """ Base class for geoms based on shapely objects """
 
 
-class _PolygonGeomType(_ShapelyGeomType):
+class PolygonGeom(ShapelyGeom):
 
-    __slots__ = ["__polygon"]
 
     def __init__(self, polygon):
         self._polygon = polygon
@@ -32,9 +30,8 @@ class _PolygonGeomType(_ShapelyGeomType):
         self.__polygon = polygon
 
 
-class _MultiPolygonGeomType(_ShapelyGeomType):
+class MultiPolygonGeom(ShapelyGeom):
 
-    __slots__ = ["__polygon"]
 
     def __init__(self, polygon):
         self._polygon = polygon

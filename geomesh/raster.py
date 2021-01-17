@@ -381,14 +381,25 @@ class Raster:
         self._tmpfile = tmpfile
 
     def gaussian_filter(self, **kwargs):
+
+        # TODO: Don't overwrite; add additoinal bands for filtered values
+
+        # NOTE: Adding new bands in this function can result in issues
+        # in other parts of the code. Thorough testing is needed for
+        # modifying the raster (e.g. hfun add_contour is affected)
         meta = self._src.meta.copy()
-        band_id = meta["count"]+1
-        meta.update(count=band_id)
+#        n_bands_new = meta["count"] * 2
+        n_bands_new = meta["count"]
+        meta.update(count=n_bands_new)
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **meta) as dst:
             for i in range(1, self._src.count + 1):
-                outband = gaussian_filter(self._src.read(i), **kwargs)
+                outband = self._src.read(i)
+#                # Write orignal band
+#                dst.write_band(i + n_bands_new // 2, outband)
+                # Write filtered band
+                outband = gaussian_filter(outband, **kwargs)
                 dst.write_band(i, outband)
         self._tmpfile = tmpfile
 

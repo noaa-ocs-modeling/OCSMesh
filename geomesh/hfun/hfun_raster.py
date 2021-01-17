@@ -16,9 +16,10 @@ from shapely.ops import transform
 from shapely.geometry import LineString, MultiLineString
 import utm
 
-from ...figures import _figure
-from ...raster import Raster
-from ...geom import Geom
+from geomesh.figures import _figure
+from geomesh.raster import Raster
+from geomesh.geom import Geom
+from geomesh.hfun.base import BaseHfun
 
 
 tmpdir = pathlib.Path(tempfile.gettempdir()+'/geomesh') / 'hfun'
@@ -44,6 +45,10 @@ def _contour_worker(path, window, level, tgt_size):
 
 
 def _jigsaw_hmat_worker(path, window, hmin, hmax, geom):
+
+    # TODO: Check for is_geographic on crs before passing to utm package
+    raise NotImplementedError
+
     geom = None
     raster = Raster(path)
 
@@ -58,6 +63,8 @@ def _jigsaw_hmat_worker(path, window, hmin, hmax, geom):
     hmat.ndims = +2
     hmat.xgrid = _tx.astype(jigsaw_msh_t.REALS_t)
     hmat.ygrid = _ty.astype(jigsaw_msh_t.REALS_t)
+    # TODO: We always get band = 1, so we should make sure the raster's
+    # gaussian_filter will write the filtered band into band 1
     hmat.value = np.flipud(
             raster.get_values(band=1, window=window)
             ).astype(jigsaw_msh_t.REALS_t)
@@ -95,25 +102,22 @@ def _jigsaw_hmat_worker(path, window, hmin, hmax, geom):
     return mesh
 
 
-class _HfunRaster:
+class HfunRaster(BaseHfun):
 
-    __slots__ = [
-        "__raster",
-        "__nprocs",
-        "__hmin",
-        "__hmax",
-        "__src",
-        "__tmpfile",
-        ]
+    def __init__(self,
+                 raster,
+                 hmin=None,
+                 hmax=None,
+                 nprocs=None,
+                 interface='cmdsaw'):
 
-    def __init__(self, raster, hmin=None, hmax=None, nprocs=None):
         self._raster = raster
         self._nprocs = nprocs
         self._hmin = hmin
         self._hmax = hmax
 
     def __iter__(self):
-        for i, window in enumerate(self._src._iter_windows()):
+        for i, window in enumerate(self._src.iter_windows()):
             x = self._src.get_x(window)
             y = self._src.get_y(window)
             values = self._src.get_values(window=window)
@@ -140,7 +144,7 @@ class _HfunRaster:
             _old_backend = mpl.get_backend()
             mpl.use('agg')
             _job_args = []
-            for window in self._src._iter_windows():
+            for window in self._src.iter_windows():
                 _job_args.append(
                     (self._raster._tmpfile, window, level, target_size))
             with Pool(processes=self._nprocs) as pool:
@@ -150,10 +154,10 @@ class _HfunRaster:
             for items in _res:
                 res.extend(items)
         else:
-            for window in self._src._iter_windows():
+            for window in self._src.iter_windows():
                 res.extend(
                     _contour_worker(
-                        (self._raster._tmpfile, window, level, target_size)))
+                        self._raster._tmpfile, window, level, target_size))
         self.add_feature(MultiLineString(res), target_size, expansion_rate)
 
     def add_feature(self, feature, target_size, expansion_rate):
@@ -203,16 +207,12 @@ class _HfunRaster:
                     dst.write(values, window=window)
 
         else:  # is not geographic
-            xy = self._src.get_xy(window)
-            _tx, _ty, zone, _ = utm.from_latlon(xy[:, 1], xy[:, 0])
-            dst_crs = CRS(proj='utm', zone=zone, ellps='WGS84')
-            transformer = Transformer.from_crs(
-                self._src.crs, dst_crs, always_xy=True)
+
+            # NOTE: We are not iterating over windows here
+            xy = self._src.get_xy(window=None)
             res = []
             for linestring in feature:
                 distances = [0]
-                linestring = transform(
-                    transformer.transform, linestring)
                 while distances[-1] + target_size < linestring.length:
                     distances.append(distances[-1] + target_size)
                 distances.append(linestring.length)
@@ -342,20 +342,6 @@ class _HfunRaster:
         # return hfun
 
     @property
-    def nprocs(self):
-        return self._nprocs
-
-    @property
-    def _nprocs(self):
-        return np.abs(self.__nprocs)
-
-    @_nprocs.setter
-    def _nprocs(self, nprocs):
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        nprocs = 1 if nprocs is None else nprocs
-        self.__nprocs = nprocs
-
-    @property
     def _src(self):
         try:
             return self.__src
@@ -373,12 +359,41 @@ class _HfunRaster:
             "nodata": nodata
             })
         with rasterio.open(tmpfile.name, 'w', **meta) as dst:
-            for i, window in enumerate(raster._iter_windows()):
+            for i, window in enumerate(raster.iter_windows()):
                 dst.write(
                     np.full((1, window.height, window.width), nodata),
                     window=window)
         self._tmpfile = tmpfile
         return self.__src
+
+    @property
+    def hfun(self):
+        '''Return a jigsaw_msh_t object representing the mesh size'''
+        raster = self._src
+        x = raster.get_x()
+        y = np.flip(raster.get_y())
+        _tx = x
+        _ty = y
+        if self._src.crs.is_geographic:
+            _y = np.repeat(np.min(y), len(x))
+            _x = np.repeat(np.min(x), len(y))
+            _tx = utm.from_latlon(_y, x)[0]
+            _ty = utm.from_latlon(y, _x)[1]
+
+        hmat = jigsaw_msh_t()
+        hmat.mshID = "euclidean-grid"
+        hmat.ndims = +2
+        hmat.xgrid = _tx.astype(jigsaw_msh_t.REALS_t)
+        hmat.ygrid = _ty.astype(jigsaw_msh_t.REALS_t)
+
+        # TODO: Values of band=1 are only used. Make sure the
+        # raster's gaussian_filter writes the relevant values into
+        # band 1, or change the hardcoded band id here
+        hmat.value = np.flipud(
+                raster.get_values(band=1)
+                ).astype(jigsaw_msh_t.REALS_t)
+
+        return hmat
 
     @property
     def _raster(self):
@@ -388,22 +403,6 @@ class _HfunRaster:
     def _raster(self, raster):
         assert isinstance(raster,  Raster)
         self.__raster = raster
-
-    @property
-    def _hmin(self):
-        return self.__hmin
-
-    @_hmin.setter
-    def _hmin(self, hmin):
-        self.__hmin = hmin
-
-    @property
-    def _hmax(self):
-        return self.__hmax
-
-    @_hmax.setter
-    def _hmax(self, hmax):
-        self.__hmax = hmax
 
     @property
     def _tmpfile(self):
