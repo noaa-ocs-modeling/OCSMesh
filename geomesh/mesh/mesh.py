@@ -1,219 +1,266 @@
-import numpy as np
-import pathlib
-import logging
-from collections import defaultdict
-from itertools import permutations
-import fiona
-from matplotlib.cm import ScalarMappable
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from shapely.geometry import LineString, mapping
-import matplotlib.pyplot as plt
+# type: ignore[import]
+# from collections import defaultdict, namedtuple
+# import pathlib
 from functools import lru_cache
-from scipy.interpolate import RectBivariateSpline, griddata
-from jigsawpy import jigsaw_msh_t
-from ..raster import Raster
-from .. import figures as fig
-from .. import utils
-from .euclidean_mesh_2d import EuclideanMesh2D
+from typing import Union  # , List, Dict
+
+# import fiona
+import geopandas as gpd
+from matplotlib.cm import ScalarMappable
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
+from shapely.geometry import LineString
+
+from geomesh.figures import figure, get_topobathy_kwargs
+from geomesh.mesh.parsers import grd
+from geomesh.mesh.base import Gr3  # , sort_edges, signed_polygon_area
 
 
-class Mesh(EuclideanMesh2D):
+#     def auto_generate(
+#         self,
+#         threshold=0.,
+#         land_ibtype=0,
+#         interior_ibtype=1,
+#     ):
+#         values = self._obj.values
+#         if np.any(np.isnan(values)):
+#             raise Exception("Mesh contains invalid values. Raster values must"
+#                             "be interpolated to the mesh before generating "
+#                             "boundaries.")
 
-    def __init__(
-        self,
-        coords,
-        triangles=None,
-        quads=None,
-        values=None,
-        crs=None,
-        description=None,
-        boundaries=None,
-    ):
-        super().__init__(coords, triangles, quads, values, crs, description)
-        self._boundaries = boundaries
+#         # drop current boundaries
+#         self._obj.__dict__['boundaries'] = {}
+#         self._obj.__dict__['boundaries'][None] = {}
 
-    @classmethod
-    def open_2dm(cls, path, crs=None):
-        cls = super().open_2dm(path, crs)
-        cls._values = -cls.values
-        return cls
+#         # generate exterior boundaries
+#         for ring in self._obj.outer_ring_collection.values():
+#             # find boundary edges
+#             edge_tag = np.full(ring.shape, 0)
+#             edge_tag[np.where(values[ring[:, 0]] < threshold)[0], 0] = -1
+#             edge_tag[np.where(values[ring[:, 1]] < threshold)[0], 1] = -1
+#             edge_tag[np.where(values[ring[:, 0]] >= threshold)[0], 0] = 1
+#             edge_tag[np.where(values[ring[:, 1]] >= threshold)[0], 1] = 1
+#             # sort boundary edges
+#             ocean_boundary = list()
+#             land_boundary = list()
+#             for i, (e0, e1) in enumerate(edge_tag):
+#                 if np.any(np.asarray((e0, e1)) == -1):
+#                     ocean_boundary.append(tuple(ring[i, :]))
+#                 elif np.any(np.asarray((e0, e1)) == 1):
+#                     land_boundary.append(tuple(ring[i, :]))
+#             ocean_boundaries = sort_edges(ocean_boundary)
+#             land_boundaries = sort_edges(land_boundary)
+#             _bnd_id = len(self._obj.boundaries[None])
+#             for bnd in ocean_boundaries:
+#                 e0, e1 = [list(t) for t in zip(*bnd)]
+#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
+#                 data = e0 + [self._obj.get_vertex_id_by_index(e1[-1])]
+#                 self._set_boundary_data(self._obj.vertex_id,
+#                                         None, _bnd_id, data)
+#                 _bnd_id += 1
+#             # add land boundaries
+#             if land_ibtype not in self._obj.boundaries:
+#                 self._add_boundary_type(land_ibtype)
+#             _bnd_id = len(self._obj.boundaries[land_ibtype])
+#             for bnd in land_boundaries:
+#                 e0, e1 = [list(t) for t in zip(*bnd)]
+#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
+#                 data = e0 + [self._obj.get_vertex_id_by_index(e1[-1])]
+#                 self._set_boundary_data(self._obj.vertex_id, land_ibtype,
+#                                         _bnd_id, data)
+#                 _bnd_id += 1
+#         # generate interior boundaries
+#         _bnd_id = 0
+#         _interior_boundaries = defaultdict()
+#         for interiors in self._obj.inner_ring_collection.values():
+#             for interior in interiors:
+#                 e0, e1 = [list(t) for t in zip(*interior)]
+#                 if signed_polygon_area(self._obj._vertices[e0, :]) < 0:
+#                     e0 = list(reversed(e0))
+#                     e1 = list(reversed(e1))
+#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
+#                 e0.append(e0[0])
+#                 _interior_boundaries[_bnd_id] = e0
+#                 _bnd_id += 1
+#         self._add_boundary_type(interior_ibtype)
+#         for bnd_id, data in _interior_boundaries.items():
+#             self._set_boundary_data(self._obj._vertex_id, interior_ibtype,
+#                                     bnd_id, data)
 
-    @classmethod
-    def open_grd(cls, path, crs=None):
-        cls = super().open_grd(path, crs)
-        cls._values = -cls.values
-        return cls
+#     @figure
+#     def plot(
+#         self,
+#         ibtype,
+#         id,
+#         tags=True,
+#         axes=None,
+#         show=False,
+#         figsize=None,
+#         **kwargs
+#     ):
+#         boundary = list(map(self._obj.get_vertex_index_by_id,
+#                             self._obj.boundaries[ibtype][id].indexes))
+#         p = axes.plot(self._obj.x[boundary], self._obj.y[boundary], **kwargs)
+#         if tags:
+#             axes.text(
+#                 self._obj.x[boundary[len(boundary)//2]],
+#                 self._obj.y[boundary[len(boundary)//2]],
+#                 f"ibtype={ibtype}\nid={id}",
+#                 color=p[-1].get_color()
+#                 )
+#         return axes
 
-    def add_boundary_type(self, ibtype):
-        if ibtype not in self.boundaries:
-            self.__boundaries[ibtype] = defaultdict()
-        else:
-            msg = f"Cannot add boundary_type={ibtype}: boundary type already "
-            msg += "exists."
-            raise Exception(msg)
+#     @figure
+#     def make_plot(
+#         self,
+#         axes=None,
+#         show=False,
+#         figsize=None,
+#         **kwargs
+#     ):
+#         kwargs.update({'axes': axes})
+#         for ibtype, bnds in self._obj.boundaries.items():
+#             for id in bnds:
+#                 axes = self.plot(ibtype, id, **kwargs)
+#                 kwargs.update({'axes': axes})
+#         return kwargs['axes']
 
-    def set_boundary_data(self, ibtype, id, indexes, **properties):
-        msg = "Indexes must be subset of node id's."
-        for idx in indexes:
-            assert idx in self.node_index.keys(), msg
-        self.__boundaries[ibtype][id] = {
-            'indexes': indexes,
-            **properties
-        }
 
-    def clear_boundaries(self):
-        self.__boundaries = {}
+class MeshBoundaries:
 
-    def delete_boundary_type(self, ibtype):
-        del self.__boundaries[ibtype]
-
-    def delete_boundary_data(self, ibtype, id):
-        del self.__boundaries[ibtype][id]
-
-    def generate_boundaries(
-        self,
-        threshold=0.,
-        land_ibtype=0,
-        interior_ibtype=1,
-    ):
-        if np.any(np.isnan(self.values)):
-            msg = "Mesh contains invalid values. Raster values must "
-            msg += "be interpolated to the mesh before generating "
-            msg += "boundaries."
-            raise Exception(msg)
-
-        # generate exterior boundaries
-        for ring in self.outer_ring_collection.values():
-            # find boundary edges
-            edge_tag = np.full(ring.shape, 0)
-            edge_tag[np.where(self.values[ring[:, 0]] < threshold)[0], 0] = -1
-            edge_tag[np.where(self.values[ring[:, 1]] < threshold)[0], 1] = -1
-            edge_tag[np.where(self.values[ring[:, 0]] >= threshold)[0], 0] = 1
-            edge_tag[np.where(self.values[ring[:, 1]] >= threshold)[0], 1] = 1
-            # sort boundary edges
-            ocean_boundary = list()
-            land_boundary = list()
-            for i, (e0, e1) in enumerate(edge_tag):
-                if np.any(np.asarray((e0, e1)) == -1):
-                    ocean_boundary.append(tuple(ring[i, :]))
-                elif np.any(np.asarray((e0, e1)) == 1):
-                    land_boundary.append(tuple(ring[i, :]))
-            ocean_boundaries = utils.sort_edges(ocean_boundary)
-            land_boundaries = utils.sort_edges(land_boundary)
-            # add ocean boundaries
-            if None not in self.boundaries:
-                self.add_boundary_type(None)
-            _bnd_id = len(self.boundaries[None])
-            for bnd in ocean_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = list(map(self.get_node_id, e0))
-                data = e0 + [self.get_node_id(e1[-1])]
-                self.set_boundary_data(None, _bnd_id, data)
-                _bnd_id += 1
-            # add land boundaries
-            if land_ibtype not in self.boundaries:
-                self.add_boundary_type(land_ibtype)
-            _bnd_id = len(self._boundaries[land_ibtype])
-            for bnd in land_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = list(map(self.get_node_id, e0))
-                data = e0 + [self.get_node_id(e1[-1])]
-                self.set_boundary_data(land_ibtype, _bnd_id, data)
-                _bnd_id += 1
-        # generate interior boundaries
-        _bnd_id = 0
-        _interior_boundaries = defaultdict()
-        for interiors in self.inner_ring_collection.values():
-            for interior in interiors:
-                e0, e1 = [list(t) for t in zip(*interior)]
-                if utils.signed_polygon_area(self.coords[e0, :]) < 0:
-                    e0 = list(reversed(e0))
-                    e1 = list(reversed(e1))
-                e0 = list(map(self.get_node_id, e0))
-                e0 += [e0[0]]
-                _interior_boundaries[_bnd_id] = e0
-                _bnd_id += 1
-        self.add_boundary_type(interior_ibtype)
-        for bnd_id, data in _interior_boundaries.items():
-            self.set_boundary_data(interior_ibtype, bnd_id, data)
-
-    def write_boundaries(self, path, overwrite=False):
-        path = pathlib.Path(path)
-        with fiona.open(
-                    path.resolve(),
-                    'w',
-                    driver='ESRI Shapefile',
-                    crs=self.crs.srs,
-                    schema={
-                        'geometry': 'LineString',
-                        'properties': {
-                            'id': 'int',
-                            'ibtype': 'str',
-                            'bnd_id': 'str'
-                            }
-                        }) as dst:
-            _cnt = 0
-            for ibtype, bnds in self.boundaries.items():
-                for id, bnd in bnds.items():
-                    idxs = list(map(self.get_node_index, bnd['indexes']))
-                    linear_ring = LineString(self.xy[idxs].tolist())
-                    dst.write({
-                            "geometry": mapping(linear_ring),
-                            "properties": {
-                                "id": _cnt,
-                                "ibtype": ibtype,
-                                "bnd_id": f"{ibtype}:{id}"
-                                }
+    def __init__(self, mesh: "Mesh", boundaries: Union[dict, None]):
+        ocean_boundaries = []
+        land_boundaries = []
+        interior_boundaries = []
+        if boundaries is not None:
+            for ibtype, bnds in boundaries.items():
+                if ibtype is None:
+                    for id, data in bnds.items():
+                        indexes = list(map(mesh.nodes.get_index_by_id,
+                                       data['indexes']))
+                        ocean_boundaries.append({
+                            'id': id,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(mesh.vertices[indexes])
                             })
-                    _cnt += 1
 
-    def interpolate(
-        self,
-        raster,
-        band=1,
-        fix_invalid=False,
-        method='spline',
-        **kwargs
-    ):
-        assert method in ['griddata', 'spline']
-        if raster.srs != self.srs:
-            raster = Raster(raster.path)
-            raster.warp(self.crs)
-        getattr(self, f'_{method}_interp')(raster, band, raster.bbox, **kwargs)
-        if fix_invalid:
-            self.fix_invalid()
+                elif str(ibtype).endswith('1'):
+                    for id, data in bnds.items():
+                        indexes = list(map(mesh.nodes.get_index_by_id,
+                                       data['indexes']))
+                        interior_boundaries.append({
+                            'id': id,
+                            'ibtype': ibtype,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(mesh.vertices[indexes])
+                            })
+                else:
+                    for id, data in bnds.items():
+                        _indexes = np.array(data['indexes'])
+                        if _indexes.ndim > 1:
+                            # ndim > 1 implies we're dealing with an ADCIRC
+                            # mesh that includes boundary pairs, such as weir
+                            new_indexes = []
+                            for i, line in enumerate(_indexes.T):
+                                if i % 2 != 0:
+                                    new_indexes.extend(np.flip(line))
+                                else:
+                                    new_indexes.extend(line)
+                            _indexes = np.array(new_indexes).flatten()
+                        else:
+                            _indexes = _indexes.flatten()
+                        indexes = list(map(mesh.nodes.get_index_by_id,
+                                       _indexes))
 
-    def interpolate_collection(
-        self,
-        raster_collection,
-        band=1,
-        fix_invalid=False
-    ):
-        for raster in raster_collection:
-            self.interpolate(raster, band, False)
-        if fix_invalid:
-            self.fix_invalid()
+                        land_boundaries.append({
+                            'id': id,
+                            'ibtype': ibtype,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(mesh.vertices[indexes])
+                            })
 
-    def has_invalid(self):
-        return np.any(np.isnan(self.values))
+        self._ocean = gpd.GeoDataFrame(ocean_boundaries)
+        self._land = gpd.GeoDataFrame(land_boundaries)
+        self._interior = gpd.GeoDataFrame(interior_boundaries)
+        self._mesh = mesh
+        self._data = boundaries
 
-    def fix_invalid(self, method='nearest'):
-        if self.has_invalid():
-            if method == 'nearest':
-                idx = np.where(~np.isnan(self.values))
-                _idx = np.where(np.isnan(self.values))
-                values = griddata(
-                    (self.x[idx], self.y[idx]), self.values[idx],
-                    (self.x[_idx], self.y[_idx]), method='nearest')
-                new_values = self.values.copy()
-                for i, idx in enumerate(_idx):
-                    new_values[idx] = values[i]
-                self._values = new_values
-            else:
-                msg = 'Only nearest method is available.'
-                raise NotImplementedError(msg)
+    def ocean(self):
+        return self._ocean
 
-    @fig._figure
+    def land(self):
+        return self._land
+
+    def interior(self):
+        return self._interior
+
+    @property
+    def data(self):
+        return self._data
+
+    @lru_cache(maxsize=1)
+    def __call__(self):
+        data = []
+        for bnd in self.ocean().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': None,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        for bnd in self.land().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': bnd.ibtype,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        for bnd in self.interior().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': bnd.ibtype,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        return gpd.GeoDataFrame(data, crs=self._mesh.crs)
+
+    def __len__(self):
+        return len(self())
+
+
+class Mesh(Gr3):
+    """
+    Class that represents the unstructured planar mesh used by SCHISM.
+    """
+    # _boundaries = BoundariesDescriptor()
+
+    def __init__(self, *args, boundaries=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._boundaries = MeshBoundaries(self, boundaries)
+
+    @staticmethod
+    def open(path, crs=None):
+        _grd = grd.read(path, crs=crs)
+        _grd['nodes'] = {id: (coords, -val) for id, (coords, val)
+                         in _grd['nodes'].items()}
+        return Mesh(**_grd)
+
+    def to_dict(self):
+        _grd = super().to_dict()
+        _grd.update({
+            "nodes": {id: (coord, -val) for id, (coord, val)
+                      in self.nodes().items()},
+            "boundaries": self.boundaries.data})
+        return _grd
+
+    @figure
     def make_plot(
         self,
         axes=None,
@@ -230,14 +277,7 @@ class Mesh(EuclideanMesh2D):
             vmin = np.min(self.values)
         if vmax is None:
             vmax = np.max(self.values)
-        cmap, norm, levels, col_val = fig.get_topobathy_kwargs(
-                self.values, vmin, vmax)
-        auxKwargs = {
-                'cmap': cmap,
-                'norm': norm,
-                'levels': levels,
-                'col_val': col_val}
-        kwargs.update(auxKwargs)
+        kwargs.update(**get_topobathy_kwargs(self.values, vmin, vmax))
         kwargs.pop('col_val')
         levels = kwargs.pop('levels')
         if vmin != vmax:
@@ -272,299 +312,18 @@ class Mesh(EuclideanMesh2D):
             cbar.set_label(cbar_label)
         return axes
 
-    @fig._figure
-    def plot_boundary(
-        self,
-        ibtype,
-        id,
-        tags=True,
-        axes=None,
-        show=False,
-        figsize=None,
-        **kwargs
-    ):
-
-        boundary = list(map(
-            self.get_node_index, self.boundaries[ibtype][id]['indexes']))
-        p = axes.plot(self.x[boundary], self.y[boundary], **kwargs)
-        if tags:
-            axes.text(
-                self.x[boundary[len(boundary)//2]],
-                self.y[boundary[len(boundary)//2]],
-                f"ibtype={ibtype}\nid={id}",
-                color=p[-1].get_color()
-                )
-        return axes
-
-    @fig._figure
-    def plot_boundaries(
-        self,
-        axes=None,
-        show=False,
-        figsize=None,
-        **kwargs
-    ):
-        kwargs.update({'axes': axes})
-        for ibtype, bnds in self.boundaries.items():
-            for id in bnds:
-                axes = self.plot_boundary(ibtype, id, **kwargs)
-                kwargs.update({'axes': axes})
-        return kwargs['axes']
-
-    @property
-    def logger(self):
-        try:
-            return self.__logger
-        except AttributeError:
-            self.__logger = logging.getLogger(
-                __name__ + '.' + self.__class__.__name__)
-            return self.__logger
-
     @property
     def boundaries(self):
         return self._boundaries
 
     @property
-    @lru_cache(maxsize=None)
-    def point_neighbors(self):
-        point_neighbors = defaultdict(set)
-        for simplex in self.triangulation.triangles:
-            for i, j in permutations(simplex, 2):
-                point_neighbors[i].add(j)
-        return point_neighbors
+    def ocean_boundaries(self):
+        return self.boundaries.ocean
 
     @property
-    @lru_cache(maxsize=None)
-    def point_distances(self):
-        point_distances = {}
-        for i, (x, y) in enumerate(self.xy):
-            point_distances[i] = {}
-            for neighbor in self.point_neighbors[i]:
-                point_distances[i][neighbor] = np.sqrt(
-                    (self.x[i] - self.x[neighbor])**2
-                    +
-                    (self.y[i] - self.y[neighbor])**2
-                    )
-        return point_distances
+    def land_boundaries(self):
+        return self.boundaries.land
 
     @property
-    def gr3(self):
-        """
-        Returns a gr3 string with boundary information included.
-        """
-        f = super().gr3
-        # ocean boundaries
-        f += f"{len(self.boundaries[None].keys()):d} "
-        f += "! total number of ocean boundaries\n"
-        # count total number of ocean boundaries
-        _sum = np.sum(
-            [len(boundary['indexes'])
-             for boundary in self.boundaries[None].values()]
-            )
-        f += f"{int(_sum):d} ! total number of ocean boundary nodes\n"
-        # write ocean boundary indexes
-        for i, boundary in self.boundaries[None].items():
-            f += f"{len(boundary['indexes']):d}"
-            f += f" ! number of nodes for ocean_boundary_{i}\n"
-            for idx in boundary['indexes']:
-                f += f"{idx}\n"
-        # count non-ocean boundaries
-        _cnt = 0
-        for ibtype, bnd in self.boundaries.items():
-            if ibtype is not None:
-                _cnt += len(self.boundaries[ibtype].keys())
-        f += f"{_cnt:d}  ! total number of non-ocean boundaries\n"
-        # count all remaining nodes of all non-ocean boundaries
-        _cnt = 0
-        for ibtype, bnd in self.boundaries.items():
-            if ibtype is not None:
-                _cnt = int(np.sum([len(x['indexes'])
-                           for x in self.boundaries[ibtype].values()]))
-        f += f"{_cnt:d} ! Total number of non-ocean boundary nodes\n"
-        # write all non-ocean boundaries
-        for ibtype, bnds in self.boundaries.items():
-            if ibtype is not None:
-                # write land boundaries
-                for i, bnd in bnds.items():
-                    f += f"{len(bnd['indexes']):d} "
-                    f += f"{ibtype} "
-                    f += "! number of nodes for boundary_"
-                    f += f"{i}\n"
-                    for idx in bnd['indexes']:
-                        f += f"{idx}\n"
-        return f
-
-    def _spline_interp(self, raster, band, bbox, kx=3, ky=3, s=0):
-        f = RectBivariateSpline(
-            raster.x,
-            np.flip(raster.y),
-            np.flipud(raster.values).T,
-            bbox=[bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax],
-            kx=kx, ky=ky, s=s)
-        idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= self.coords[:, 0],
-                                bbox.xmax >= self.coords[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= self.coords[:, 1],
-                                bbox.ymax >= self.coords[:, 1])))[0]
-        values = f.ev(self.coords[idxs, 0], self.coords[idxs, 1])
-        new_values = self.values.copy()
-        new_values[idxs] = values
-        self._values = new_values
-
-    def _griddata_interp(
-        self,
-        raster,
-        band,
-        bbox,
-        method='linear',
-        fill_value=np.nan,
-        rescale=False
-    ):
-        idxs = np.where(np.logical_and(
-                            np.logical_and(
-                                bbox.xmin <= self.coords[:, 0],
-                                bbox.xmax >= self.coords[:, 0]),
-                            np.logical_and(
-                                bbox.ymin <= self.coords[:, 1],
-                                bbox.ymax >= self.coords[:, 1])))[0]
-        dstx = self.coords[idxs, 0]
-        dsty = self.coords[idxs, 1]
-        srcx, srcy = np.meshgrid(raster.x, raster.y)
-        srcx = srcx.flatten()
-        srcy = np.flipud(srcy.flatten())
-        srcz = raster.values.flatten()
-        values = griddata(
-            (srcx, srcy), srcz, (dstx, dsty),
-            method=method,
-            fill_value=fill_value,
-            rescale=rescale
-            )
-        new_values = self.values.copy()
-        new_values[idxs] = values
-        self._values = new_values
-
-    @property
-    @lru_cache(maxsize=None)
-    def vert2(self):
-        return np.array(
-            [(coord, id) for id, coord in self._coords.items()],
-            dtype=jigsaw_msh_t.VERT2_t
-            )
-
-    @property
-    @lru_cache(maxsize=None)
-    def tria3(self):
-        return np.array(
-            [(list(map(self.get_node_index, index)), id)
-             for id, index in self._triangles.items()],
-            dtype=jigsaw_msh_t.TRIA3_t)
-
-    @property
-    @lru_cache(maxsize=None)
-    def quad4(self):
-        return np.array(
-            [(list(map(self.get_node_index, index)), id)
-             for id, index in self._quads.items()],
-            dtype=jigsaw_msh_t.QUAD4_t)
-
-    @property
-    def value(self):
-        return np.array(
-            self.values.reshape((self.values.size, 1)),
-            dtype=jigsaw_msh_t.REALS_t)
-
-    @property
-    def mesh(self):
-        mesh = jigsaw_msh_t()
-        mesh.mshID = 'euclidean-mesh'
-        mesh.ndims = 2
-        mesh.vert2 = self.vert2
-        mesh.tria3 = self.tria3
-        mesh.quad4 = self.quad4
-        # mesh.hexa8 = self.hexa8
-        mesh.value = self.value
-        return mesh
-
-    @property
-    @lru_cache(maxsize=None)
-    def index_ring_collection(self):
-        return utils.index_ring_collection(self.mesh)
-
-    @property
-    @lru_cache(maxsize=None)
-    def vertices_around_vertex(self):
-        return utils.vertices_around_vertex(self.mesh)
-
-    @property
-    @lru_cache(maxsize=None)
-    def faces_around_vertex(self):
-        return utils.faces_around_vertex(self.mesh)
-
-    @property
-    @lru_cache(maxsize=None)
-    def outer_ring_collection(self):
-        return utils.outer_ring_collection(self.mesh)
-
-    @property
-    @lru_cache(maxsize=None)
-    def inner_ring_collection(self):
-        return utils.inner_ring_collection(self.mesh)
-
-    @property
-    def _boundaries(self):
-        return self.__boundaries
-
-    @_boundaries.setter
-    def _boundaries(self, boundaries):
-        """
-        boundaries = {ibtype: {id: {'indexes': [i0, ..., in], 'properties': object }}
-        """
-        self.clear_boundaries()  # clear
-        if boundaries is not None:
-            for ibtype, bnds in boundaries.items():
-                self.add_boundary_type(ibtype)
-                for id, bnd in bnds.items():
-                    if 'properties' in bnd.keys():
-                        properties = bnd['properties']
-                    else:
-                        properties = {}
-                    self.set_boundary_data(
-                        ibtype,
-                        id,
-                        bnd['indexes'],
-                        **properties
-                    )
-
-    @property
-    @lru_cache(maxsize=None)
-    def _grd(self):
-        """
-        adds boundary data to _grd dict obtained from super()
-        """
-        _grd = super()._grd
-        _grd.update({"boundaries": self.boundaries})
-        return _grd
-
-    @property
-    @lru_cache(maxsize=None)
-    def _sms2dm(self):
-        """
-        adds boundary data to _sms2dm dict obtained from super()
-        """
-        _sms2dm = super()._sms2dm
-        # _sms2dm.update({"boundaries": self.boundaries})
-        return _sms2dm
-
-    @property
-    @lru_cache(maxsize=None)
-    def _nodes(self):
-        """
-        updates _nodes dict obtained from super() as positive-down
-        """
-        _nodes = super()._nodes
-        _nodes.update(
-            {id: ((x, y), -value) for id, ((x, y), value) in
-             super()._nodes.items()})
-        return _nodes
+    def interior_boundaries(self):
+        return self.boundaries.interior

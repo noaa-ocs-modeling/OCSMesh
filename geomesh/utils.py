@@ -1,12 +1,15 @@
 from collections import defaultdict
 from itertools import permutations
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.path import Path
-from matplotlib.tri import Triangulation
-from scipy.interpolate import RectBivariateSpline
-from shapely.geometry import Polygon, MultiPolygon
-from jigsawpy import jigsaw_msh_t
+from typing import Union
+
+from jigsawpy import jigsaw_msh_t  # type: ignore[import]
+from matplotlib.path import Path  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import]
+from matplotlib.tri import Triangulation  # type: ignore[import]
+import numpy as np  # type: ignore[import]
+from pyproj import CRS, Transformer  # type: ignore[import]
+from scipy.interpolate import RectBivariateSpline  # type: ignore[import]
+from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
 
 
 def mesh_to_tri(mesh):
@@ -102,7 +105,6 @@ def finalize_mesh(mesh, sieve_area=None):
     while needs_sieve(mesh) or has_pinched_nodes(mesh):
         cleanup_pinched_nodes(mesh)
         sieve(mesh, sieve_area)
-        
     # cleanup_isolates(mesh)
     put_IDtags(mesh)
 
@@ -484,6 +486,22 @@ def triplot(
         axes.axis('scaled')
         plt.show()
     return axes
+
+
+def reproject(
+        mesh: jigsaw_msh_t,
+        mesh_crs: Union[str, CRS],
+        dst_crs: Union[str, CRS]
+):
+    src_crs = CRS.from_user_input(mesh_crs)
+    dst_crs = CRS.from_user_input(dst_crs)
+    transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    x, y = transformer.transform(
+        mesh.vert2['coord'][:, 0], mesh.vert2['coord'][:, 1])
+    mesh.vert2 = np.array(
+        [([x[i], y[i]], mesh.vert2['IDtag'][i]) for i
+         in range(len(mesh.vert2['IDtag']))],
+        dtype=jigsaw_msh_t.VERT2_t)
 
 
 def limgrad(mesh, dfdx, imax=100):

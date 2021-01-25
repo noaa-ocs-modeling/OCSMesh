@@ -1,18 +1,18 @@
 import logging
-import sys
 
 
-def init(log_level=None):
-    if log_level is not None:
-        logging.basicConfig(level={
-            "info": logging.INFO,
-            "debug": logging.DEBUG,
-            "warning": logging.WARNING,
-        }[log_level])
-        logging.getLogger('matplotlib').setLevel(logging.WARNING)
-        logging.getLogger('fiona').setLevel(logging.CRITICAL)
-        logging.getLogger('rasterio').setLevel(logging.WARNING)
+class Logger:
 
+    def __get__(self, obj, val):
+        logger = obj.__dict__.get('logger')
+        if logger is None:
+            logger = logging.getLogger(f"{obj.__class__.__name__}")
+            obj.__dict__['logger'] = logger
+        return logger
 
-log_level = "debug" if "--debug" in sys.argv else None
-init(log_level)
+    def __set__(self, obj, val):
+        if not isinstance(val, logging.Logger):
+            raise TypeError(
+                f'Property logger must be of type {logging.Logger}, '
+                f'not type {type(val)}.')
+        obj.__dict__['logger'] = val

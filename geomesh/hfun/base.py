@@ -1,89 +1,34 @@
-import abc
-import logging
-import numpy as np
-from functools import lru_cache
+from abc import ABC, abstractmethod
+
+from jigsawpy import jigsaw_msh_t  # type: ignore[import]
+
+from geomesh.logger import Logger
 
 
-class BaseHfun(abc.ABC):
+class BaseHfun(ABC):
+
+    logger = Logger()
 
     @property
-    @abc.abstractmethod
-    def hfun(self):
+    def hfun(self) -> jigsaw_msh_t:
         '''Return a jigsaw_msh_t object representing the mesh size'''
-        raise NotImplementedError
+        return self._get_jigsaw_msh_t('hfun')
 
     @property
-    def scaling(self):
-        # TODO: Hardcoded for now
-        return "absolute"
+    def hmat(self) -> jigsaw_msh_t:
+        '''Return a jigsaw_msh_t object representing the mesh size'''
+        return self._get_jigsaw_msh_t('hmat')
 
-    @property
-    def nprocs(self):
-        return self._nprocs
+    @abstractmethod
+    def get_hmat(self) -> jigsaw_msh_t:
+        '''Abstract method to generate hmat object.'''
 
-    @property
-    def hmin(self):
-        return self._hmin
+    @abstractmethod
+    def get_hfun(self) -> jigsaw_msh_t:
+        '''Abstract method to generate hfun object.'''
 
-    @property
-    def hmax(self):
-        return self._hmax
-
-    @property
-    def hmin_is_absolute_limit(self):
-        # TODO: Provide setter
-        return True
-
-    @property
-    def hmax_is_absolute_limit(self):
-        # TODO: Provide setter
-        return True
-
-    @property
-    def _nprocs(self):
-        return np.abs(self.__nprocs)
-
-    @_nprocs.setter
-    def _nprocs(self, nprocs):
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        nprocs = 1 if nprocs is None else nprocs
-        self.__nprocs = nprocs
-
-    @property
-    def _hmin(self):
-        return self.__hmin
-
-    @_hmin.setter
-    def _hmin(self, hmin):
-        self.__hmin = hmin
-
-    @property
-    def _hmax(self):
-        return self.__hmax
-
-    @_hmax.setter
-    def _hmax(self, hmax):
-        self.__hmax = hmax
-
-    @property
-    @lru_cache(maxsize=None)
-    def _logger(self):
-        return logging.getLogger(__name__ + '.' + self.__class__.__name__)
-
-    @abc.abstractmethod
-    def add_contour(
-            self,
-            level: float,
-            target_size: float,
-            expansion_rate: float
-    ):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def add_feature(self, feature, target_size, expansion_rate):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def add_subtidal_flow_limiter(
-            self, hmin=None, upper_bound=None, lower_bound=None):
-        raise NotImplementedError
+    def _get_jigsaw_msh_t(self, hfun_type, **kwargs) -> jigsaw_msh_t:
+        '''Returns a :class:jigsawpy.jigsaw_msh_t object representing the
+        geometry constrained by the arguments.'''
+        assert hfun_type in ['hfun', 'hmat']
+        return getattr(self, f'get_{hfun_type}')(**kwargs)

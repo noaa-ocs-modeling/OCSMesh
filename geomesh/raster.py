@@ -1,27 +1,31 @@
-import numpy as np
-import pathlib
-import matplotlib.pyplot as plt
-import rasterio
-import os
-import multiprocessing
-import tempfile
 import hashlib
-from matplotlib.transforms import Bbox
-from matplotlib.cm import ScalarMappable
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import multiprocessing
+import os
+import pathlib
+import tempfile
+from typing import Union
+
 # from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.path import Path
+from matplotlib.cm import ScalarMappable  # type: ignore[import]
+from matplotlib.path import Path  # type: ignore[import]
+import matplotlib.pyplot as plt  # type: ignore[import]
+from matplotlib.transforms import Bbox  # type: ignore[import]
+from mpl_toolkits.axes_grid1 import make_axes_locatable  # type: ignore[import]
+import numpy as np  # type: ignore[import]
+from pyproj import CRS  # type: ignore[import]  # , Transformer
+
+import rasterio  # type: ignore[import]
 from rasterio import warp
-from rasterio.mask import mask
-from rasterio.enums import Resampling
-from rasterio.fill import fillnodata
-from rasterio.transform import array_bounds
+from rasterio.mask import mask  # type: ignore[import]
+from rasterio.enums import Resampling  # type: ignore[import]
+from rasterio.fill import fillnodata  # type: ignore[import]
+from rasterio.transform import array_bounds  # type: ignore[import]
 from rasterio import windows
-from shapely.geometry import Polygon, MultiPolygon, LinearRing, shape
-from pyproj import Proj, CRS, Transformer
-from scipy.ndimage import gaussian_filter
-from shapely import ops
-from functools import lru_cache
+from scipy.ndimage import gaussian_filter  # type: ignore[import]
+from shapely import ops  # type: ignore[import]
+from shapely.geometry import (  # type: ignore[import]
+    Polygon, MultiPolygon, LinearRing, LineString)
+
 # from geomesh.geom import Geom
 # from geomesh.hfun import Hfun
 from geomesh import figures
@@ -31,52 +35,146 @@ tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 
+class RasterPath:
+
+    def __set__(self, obj, val: Union[str, os.PathLike]):
+        obj.__dict__['path'] = pathlib.Path(val)
+
+    def __get__(self, obj, val):
+        return obj.__dict__['path']
+
+
+class Crs:
+
+    def __set__(self, obj, val: Union[str, CRS, None]):
+
+        # check if CRS is in file
+        if val is None:
+            with rasterio.open(obj.path) as src:
+                # Raise if CRS not in file and the user did not provide a CRS.
+                # All Rasters objects must have a defined CRS.
+                # Program cannot operate with an undefined CRS.
+                val = src.crs
+                if val is None:
+                    raise IOError(
+                        'CRS not found in raster file. Must specify CRS.')
+        # CRS is specified by user rewrite raster but add CRS to meta
+        else:
+            if isinstance(val, str):
+                val = CRS.from_user_input(val)
+
+            if not isinstance(val, CRS):
+                raise TypeError(f'Argument crs must be of type {str} or {CRS},'
+                                f' not type {type(val)}.')
+            # create a temporary copy of the original file and update meta.
+            tmpfile = tempfile.NamedTemporaryFile()
+            with rasterio.open(obj.path) as src:
+                if obj.chunk_size is not None:
+                    windows = get_iter_windows(
+                        src.width, src.height, chunk_size=obj.chunk_size)
+                else:
+                    windows = [rasterio.windows.Window(
+                        0, 0, src.width, src.height)]
+                meta = src.meta.copy()
+                meta.update({'crs': val, 'driver': 'GTiff'})
+                with rasterio.open(tmpfile, 'w', **meta,) as dst:
+                    for window in windows:
+                        dst.write(src.read(window=window), window=window)
+            obj._tmpfile = tmpfile
+
+
+class TemporaryFile:
+
+    def __set__(self, obj, val):
+        obj.__dict__['tmpfile'] = val
+        obj._src = rasterio.open(val.name)
+
+    def __get__(self, obj, val) -> pathlib.Path:
+        tmpfile = obj.__dict__.get('tmpfile')
+        if tmpfile is None:
+            return obj.path
+        return pathlib.Path(tmpfile.name)
+
+
+class SourceRaster:
+
+    def __get__(self, obj, val) -> rasterio.DatasetReader:
+        source = obj.__dict__.get('source')
+        if source is None:
+            source = rasterio.open(obj.path)
+            obj.__dict__['source'] = source
+        return source
+
+    def __set__(self, obj, val: rasterio.DatasetReader):
+        obj.__dict__['source'] = val
+
+
+class ChunkSize:
+
+    def __set__(self, obj, val):
+        chunk_size = 0 if val is None else int(val)
+        if not chunk_size >= 0:
+            raise ValueError("Argument chunk_size must be >= 0.")
+        obj.__dict__['chunk_size'] = val
+
+    def __get__(self, obj, val):
+        return obj.__dict__['chunk_size']
+
+
+class Overlap:
+
+    def __set__(self, obj, val):
+        obj.__dict__['overlap'] = 0 if val is None else val
+
+    def __get__(self, obj, val):
+        return obj.__dict__['overlap']
+
+
 class Raster:
+
+    _path = RasterPath()
+    _crs = Crs()
+    _chunk_size = ChunkSize()
+    _overlap = Overlap()
+    _tmpfile = TemporaryFile()
+    _src = SourceRaster()
 
     def __init__(
             self,
-            path,
-            crs=None,
+            path: Union[str, os.PathLike],
+            crs: Union[str, CRS] = None,
             chunk_size=None,
             overlap=None
     ):
+        self._chunk_size = chunk_size
+        self._overlap = overlap
         self._path = path
         self._crs = crs
-        self.chunk_size = chunk_size
-        self.overlap = overlap
-
-    # def __call__(self, **kwargs):
-    #     return self.get_geom(**kwargs)
 
     def __iter__(self, chunk_size=None, overlap=None):
         for window in self.iter_windows(chunk_size, overlap):
-            bounds = array_bounds(
-                window.height,
-                window.width,
-                self.get_window_transform(window)
-            )
-            yield window, bounds
+            yield window, self.get_window_bounds(window)
 
     def get_x(self, window=None):
-        window = windows.Window(0, 0, self._src.shape[1], self._src.shape[0]) \
+        window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
         if window is not None:
             assert isinstance(window, windows.Window)
             width = window.width
         else:
             width = self.shape[0]
-        x0, y0, x1, y1 = self.get_array_bounds(window)
+        x0, y0, x1, y1 = self.get_window_bounds(window)
         return np.linspace(x0, x1, width)
 
     def get_y(self, window=None):
-        window = windows.Window(0, 0, self._src.shape[1], self._src.shape[0]) \
+        window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
         if window is not None:
             assert isinstance(window, windows.Window)
             height = window.height
         else:
             height = self.shape[1]
-        x0, y0, x1, y1 = self.get_array_bounds(window)
+        x0, y0, x1, y1 = self.get_window_bounds(window)
         return np.linspace(y1, y0, height)
 
     def get_xy(self, window=None):
@@ -85,11 +183,11 @@ class Raster:
 
     def get_values(self, window=None, band=None, **kwargs):
         i = 1 if band is None else band
-        window = windows.Window(0, 0, self._src.shape[1], self._src.shape[0]) \
+        window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
         if window is not None:
             assert isinstance(window, windows.Window)
-        return self._src.read(i, window=window, **kwargs)
+        return self.src.read(i, window=window, **kwargs)
 
     def get_xyz(self, window=None, band=None):
         xy = self.get_xy(window)
@@ -97,129 +195,46 @@ class Raster:
             (xy.shape[0], 1))
         return np.hstack([xy, values])
 
-    # def get_geom(self, **kwargs):
-    #     return Geom(self.get_multipolygon(**kwargs), self.crs)
-
-    # def get_hfun(self, **kwargs):
-    #     return Hfun(self, **kwargs)
-
     def get_multipolygon(
             self,
+            hmin=None,
             zmin=None,
             zmax=None,
             window=None,
-            join_method=None,
-            driver=None,
             overlap=None,
-            dst_crs=None,
-            nprocs=None,
+            band=1,
     ):
-        nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
-        nprocs = 1 if nprocs is None else nprocs
-
-        # certify driver
-        driver = 'matplotlib' if driver is None \
-            else driver
-        assert driver in ['rasterio', 'matplotlib']
-
-        # certify join_method
-        join_method = 'unary_union' if join_method is None else join_method
-        assert join_method in ['buffer', 'unary_union']
-
         polygon_collection = []
-
         if window is None:
-            iter_windows = self.iter_windows(overlap=2)
+            iter_windows = self.iter_windows(overlap=overlap)
         else:
             iter_windows = [window]
-        # case: fast
-        if driver == 'rasterio':
-            tmpfile = tempfile.NamedTemporaryFile(
-                prefix=tmpdir
-                )
-            with rasterio.open(tmpfile.name, 'w', **self._src.meta) as dst:
-                for window in iter_windows:
-                    data = self.get_values(window=window, masked=True)
-                    if zmin is not None:
-                        data[np.where(data < zmin)] = self._src.nodata
-                    if zmax is not None:
-                        data[np.where(data > zmax)] = self._src.nodata
-                    dst.write(data, window=window)
 
-            with rasterio.open(tmpfile.name) as src:
-                req = rasterio.features.dataset_features(
-                    src,
-                    # bidx=None,
-                    # sampling=1,
-                    band=False,
-                    # as_mask=False,
-                    with_nodata=False,
-                    # geographic=False,
-                    # precision=-1
-                    )
-                for res in req:
-                    multipolygon = shape(res['geometry'])
-                    if isinstance(multipolygon, Polygon):
-                        multipolygon = MultiPolygon([multipolygon])
-                    for polygon in multipolygon:
-                        polygon_collection.append(polygon)
+        for window in iter_windows:
+            x, y, z = self.get_window_data(window, band=band)
+            new_mask = np.full(z.mask.shape, 0)
+            new_mask[np.where(z.mask)] = -1
+            new_mask[np.where(~z.mask)] = 1
 
-                #     if isinstance(geom, geometry.Polygon):
-                #         geom = geometry.MultiPolygon([geom])
-                #     for polygon in geom:
-                #         plt.plot(*polygon.exterior.xy, color='k')
-                #         for interior in polygon.interiors:
-                #             plt.plot(*interior.xy, color='r')
-                # plt.show()
-                # exit()
+            if zmin is not None:
+                new_mask[np.where(z < zmin)] = -1
 
-        # case: accurate
-        if driver == 'matplotlib':
+            if zmax is not None:
+                new_mask[np.where(z > zmax)] = -1
 
-            for window in iter_windows:
-                x, y, z = self.get_window_data(window)
-                new_mask = np.full(z.mask.shape, 0)
-                new_mask[np.where(z.mask)] = -1
-                new_mask[np.where(~z.mask)] = 1
+            if np.all(new_mask == -1):  # or not new_mask.any():
+                continue
 
-                if zmin is not None:
-                    new_mask[np.where(z < zmin)] = -1
+            else:
+                ax = plt.contourf(
+                    x, y, new_mask, levels=[0, 1])
+                plt.close(plt.gcf())
+                polygon_collection.extend(get_multipolygon_from_axes(ax))
 
-                if zmax is not None:
-                    new_mask[np.where(z > zmax)] = -1
-
-                if np.all(new_mask == -1):  # or not new_mask.any():
-                    continue
-
-                else:
-                    ax = plt.contourf(
-                        x, y, new_mask[0, :, :], levels=[0, 1])
-                    plt.close(plt.gcf())
-                    for polygon in self._get_multipolygon_from_axes(ax):
-                        polygon_collection.append(polygon)
-
-        if join_method == 'buffer':
-            multipolygon = MultiPolygon(polygon_collection).buffer(0)
-
-        if join_method == 'unary_union':
-            multipolygon = ops.unary_union(polygon_collection)
-
-        if isinstance(multipolygon, Polygon):
-            multipolygon = MultiPolygon([multipolygon])
-
-        if dst_crs is not None:
-            dst_crs = CRS.from_user_input(dst_crs)
-            if not dst_crs.equal(self.crs):
-                transformer = Transformer.from_crs(
-                    self.crs, dst_crs, always_xy=True)
-                polygon_collection = list()
-                for polygon in multipolygon:
-                    polygon_collection.append(
-                        ops.transform(transformer.transform, polygon))
-                outer = polygon_collection.pop(0)
-                multipolygon = MultiPolygon([outer, *polygon_collection])
-
-        return multipolygon
+        geom = ops.unary_union(polygon_collection)
+        if not isinstance(geom, MultiPolygon):
+            geom = MultiPolygon([geom])
+        return geom
 
     def contourf(
             self,
@@ -244,55 +259,8 @@ class Raster:
         values = self.get_values(band=band, masked=True, window=window)
         vmin = np.min(values) if vmin is None else float(vmin)
         vmax = np.max(values) if vmax is None else float(vmax)
-
-        # def get_cmap(
-        #     values,
-        #     vmin,
-        #     vmax,
-        #     cmap=None,
-        #     levels=None,
-        #     colors=256,
-        #     norm=None,
-        # ):
-        #     colors = int(colors)
-        #     if cmap is None:
-        #         cmap = plt.cm.get_cmap('jet')
-        #         if levels is None:
-        #             levels = np.linspace(vmin, vmax, colors)
-        #         col_val = 0.
-        #     elif cmap == 'topobathy':
-        #         if vmax <= 0.:
-        #             cmap = plt.cm.seismic
-        #             col_val = 0.
-        #             levels = np.linspace(vmin, vmax, colors)
-        #         else:
-        #             wet_count = int(np.floor(colors*(float((values < 0.).sum())
-        #                                              / float(values.size))))
-        #             col_val = float(wet_count)/colors
-        #             dry_count = colors - wet_count
-        #             colors_undersea = plt.cm.bwr(np.linspace(1., 0., wet_count))
-        #             colors_land = plt.cm.terrain(np.linspace(0.25, 1., dry_count))
-        #             colors = np.vstack((colors_undersea, colors_land))
-        #             cmap = LinearSegmentedColormap.from_list('cut_terrain', colors)
-        #             wlevels = np.linspace(vmin, 0.0, wet_count, endpoint=False)
-        #             dlevels = np.linspace(0.0, vmax, dry_count)
-        #             levels = np.hstack((wlevels, dlevels))
-        #     else:
-        #         cmap = plt.cm.get_cmap(cmap)
-        #         levels = np.linspace(vmin, vmax, colors)
-        #         col_val = 0.
-        #     if vmax > 0:
-        #         if norm is None:
-        #             norm = FixPointNormalize(
-        #                 sealevel=0.0,
-        #                 vmax=vmax,
-        #                 vmin=vmin,
-        #                 col_val=col_val
-        #                 )
-        #     return cmap, norm, levels, col_val
-        # cmap, norm, levels, col_val = get_cmap(
-        #     values, vmin, vmax, cmap, levels, colors, norm)
-        cmap, norm, levels, col_val = figures.get_topobathy_kwargs()
+        cmap, norm, levels, col_val = figures.get_topobathy_kwargs(
+            values, vmin, vmax)
         axes.contourf(
             self.get_x(window),
             self.get_y(window),
@@ -305,8 +273,6 @@ class Raster:
             **kwargs
             )
         axes.axis('scaled')
-        # if extent is not None:
-        #     axes.axis(extent)
         if title is not None:
             axes.set_title(title)
         mappable = ScalarMappable(cmap=cmap)
@@ -334,35 +300,35 @@ class Raster:
 
     def tags(self, i=None):
         if i is None:
-            return self._src.tags()
+            return self.src.tags()
         else:
-            return self._src.tags(i)
+            return self.src.tags(i)
 
     def read(self, i, masked=True, **kwargs):
-        return self._src.read(i, masked=masked, **kwargs)
+        return self.src.read(i, masked=masked, **kwargs)
 
     def dtype(self, i):
-        return self._src.dtypes[i-1]
+        return self.src.dtypes[i-1]
 
     def nodataval(self, i):
-        return self._src.nodatavals[i-1]
+        return self.src.nodatavals[i-1]
 
     def sample(self, xy, i):
-        return self._src.sample(xy, i)
+        return self.src.sample(xy, i)
 
     def close(self):
         del(self._src)
 
     def add_band(self, values,  **tags):
-        kwargs = self._src.meta.copy()
+        kwargs = self.src.meta.copy()
         band_id = kwargs["count"]+1
         kwargs.update(count=band_id)
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
-            for i in range(1, self._src.count + 1):
-                dst.write_band(i, self._src.read(i))
-            dst.write_band(band_id, values.astype(self._src.dtypes[i-1]))
+            for i in range(1, self.src.count + 1):
+                dst.write_band(i, self.src.read(i))
+            dst.write_band(band_id, values.astype(self.src.dtypes[i-1]))
         self._tmpfile = tmpfile
         return band_id
 
@@ -372,10 +338,10 @@ class Raster:
         https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
         """
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-        with rasterio.open(tmpfile.name, 'w', **self._src.meta.copy()) as dst:
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta.copy()) as dst:
             for window in self.iter_windows():
                 dst.write(
-                    fillnodata(self._src.read(window=window, masked=True)),
+                    fillnodata(self.src.read(window=window, masked=True)),
                     window=window
                     )
         self._tmpfile = tmpfile
@@ -387,15 +353,15 @@ class Raster:
         # NOTE: Adding new bands in this function can result in issues
         # in other parts of the code. Thorough testing is needed for
         # modifying the raster (e.g. hfun add_contour is affected)
-        meta = self._src.meta.copy()
+        meta = self.src.meta.copy()
 #        n_bands_new = meta["count"] * 2
         n_bands_new = meta["count"]
         meta.update(count=n_bands_new)
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **meta) as dst:
-            for i in range(1, self._src.count + 1):
-                outband = self._src.read(i)
+            for i in range(1, self.src.count + 1):
+                outband = self.src.read(i)
 #                # Write orignal band
 #                dst.write_band(i + n_bands_new // 2, outband)
                 # Write filtered band
@@ -404,44 +370,46 @@ class Raster:
         self._tmpfile = tmpfile
 
     def mask(self, shapes, i=None, **kwargs):
-        _kwargs = self._src.meta.copy()
+        _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
         out_images, out_transform = mask(self._src, shapes)
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
             if i is None:
-                for j in range(1, self._src.count + 1):
+                for j in range(1, self.src.count + 1):
                     dst.write_band(j, out_images[j-1])
-                    dst.update_tags(j, **self._src.tags(j))
+                    dst.update_tags(j, **self.src.tags(j))
             else:
-                for j in range(1, self._src.count + 1):
+                for j in range(1, self.src.count + 1):
                     if i == j:
                         dst.write_band(j, out_images[j-1])
-                        dst.update_tags(j, **self._src.tags(j))
+                        dst.update_tags(j, **self.src.tags(j))
                     else:
-                        dst.write_band(j, self._src.read(j))
-                        dst.update_tags(j, **self._src.tags(j))
+                        dst.write_band(j, self.src.read(j))
+                        dst.update_tags(j, **self.src.tags(j))
         self._tmpfile = tmpfile
 
     def read_masks(self, i=None):
         if i is None:
             return np.dstack(
-                [self._src.read_masks(i) for i in range(1, self.count + 1)])
+                [self.src.read_masks(i) for i in range(1, self.count + 1)])
         else:
-            return self._src.read_masks(i)
+            return self.src.read_masks(i)
 
-    def warp(self, dst_crs):
+    def warp(self, dst_crs, nprocs=-1):
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
         dst_crs = CRS.from_user_input(dst_crs)
         transform, width, height = warp.calculate_default_transform(
-            self._src.crs,
+            self.src.crs,
             dst_crs.srs,
-            self._src.width,
-            self._src.height,
-            *self._src.bounds,
-            dst_width=self._src.width,
-            dst_height=self._src.height
+            self.src.width,
+            self.src.height,
+            *self.src.bounds,
+            dst_width=self.src.width,
+            dst_height=self.src.height
             )
-        kwargs = self._src.meta.copy()
+        kwargs = self.src.meta.copy()
         kwargs.update({
             'crs': dst_crs.srs,
             'transform': transform,
@@ -451,16 +419,16 @@ class Raster:
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
 
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
-            for i in range(1, self._src.count + 1):
+            for i in range(1, self.src.count + 1):
                 rasterio.warp.reproject(
                     source=rasterio.band(self._src, i),
                     destination=rasterio.band(dst, i),
-                    src_transform=self._src.transform,
-                    crs=self._src.crs,
+                    src_transform=self.src.transform,
+                    crs=self.src.crs,
                     dst_transform=transform,
                     dst_crs=dst_crs.srs,
                     resampling=self.resampling_method,
-                    num_threads=multiprocessing.cpu_count(),
+                    num_threads=nprocs,
                     )
 
         self._tmpfile = tmpfile
@@ -476,20 +444,20 @@ class Raster:
 
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         # resample data to target shape
-        width = int(self._src.width * scaling_factor)
-        height = int(self._src.height * scaling_factor)
-        data = self._src.read(
+        width = int(self.src.width * scaling_factor)
+        height = int(self.src.height * scaling_factor)
+        data = self.src.read(
             out_shape=(
-                self._src.count,
+                self.src.count,
                 height,
                 width
             ),
             resampling=resampling_method
         )
-        kwargs = self._src.meta.copy()
-        transform = self._src.transform * self._src.transform.scale(
-            (self._src.width / data.shape[-1]),
-            (self._src.height / data.shape[-2])
+        kwargs = self.src.meta.copy()
+        transform = self.src.transform * self.src.transform.scale(
+            (self.src.width / data.shape[-1]),
+            (self.src.height / data.shape[-2])
         )
         kwargs.update({
             'transform': transform,
@@ -501,15 +469,15 @@ class Raster:
         self._tmpfile = tmpfile
 
     def save(self, path):
-        with rasterio.open(pathlib.Path(path), 'w', **self._src.meta) as dst:
-            for i in range(1, self._src.count + 1):
-                dst.write_band(i, self._src.read(i))
-                dst.update_tags(i, **self._src.tags(i))
+        with rasterio.open(pathlib.Path(path), 'w', **self.src.meta) as dst:
+            for i in range(1, self.src.count + 1):
+                dst.write_band(i, self.src.read(i))
+                dst.update_tags(i, **self.src.tags(i))
 
     def clip(self, multipolygon):
         out_image, out_transform = rasterio.mask.mask(
             self._src, multipolygon, crop=True)
-        out_meta = self._src.meta.copy()
+        out_meta = self.src.meta.copy()
         out_meta.update({
             "driver": "GTiff",
             "height": out_image.shape[1],
@@ -528,47 +496,30 @@ class Raster:
             yield rasterio.windows.Window(0, 0, self.width, self.height)
             return
 
-        def get_iter_windows(
-            width,
-            height,
-            chunk_size=0,
-            overlap=0,
-            row_off=0,
-            col_off=0
-        ):
-            h = chunk_size
-            for i in range(
-                int(row_off),
-                int(row_off + height + chunk_size),
-                chunk_size
-                    ):
-                if i + h > row_off + height:
-                    h = height - i
-                    if h <= 0:
-                        break
-                w = chunk_size
-                for j in range(
-                    int(col_off),
-                    int(col_off + width + chunk_size),
-                    chunk_size
-                        ):
-                    if j + w > col_off + width:
-                        w = width - j
-                        if w <= 0:
-                            break
-                    o = overlap
-                    while j + w + o > width:
-                        o -= 1
-                    w += o
-                    o = overlap
-                    while i + h + o > height:
-                        o -= 1
-                    h += o
-                    yield windows.Window(j, i, w, h)
-
         for window in get_iter_windows(
                 self.width, self.height, chunk_size, overlap):
             yield window
+
+    def get_window_data(self, window, masked=True, band=None):
+        x0, y0, x1, y1 = self.get_window_bounds(window)
+        x = np.linspace(x0, x1, window.width)
+        y = np.linspace(y1, y0, window.height)
+        if band is not None:
+            data = self.src.read(band, masked=masked, window=window)
+        else:
+            data = self.src.read(masked=masked, window=window)
+        return x, y, data
+
+    def get_window_bounds(self, window):
+        return array_bounds(
+            window.height,
+            window.width,
+            self.get_window_transform(window))
+
+    def get_window_transform(self, window):
+        if window is None:
+            return
+        return windows.transform(window, self.transform)
 
     @property
     def x(self):
@@ -587,6 +538,10 @@ class Raster:
         return self._path
 
     @property
+    def tmpfile(self):
+        return self._tmpfile
+
+    @property
     def md5(self):
         hash_md5 = hashlib.md5()
         with open(self._tmpfile.resolve(), "rb") as f:
@@ -596,22 +551,22 @@ class Raster:
 
     @property
     def count(self):
-        return self._src.count
+        return self.src.count
 
     @property
     def is_masked(self):
         for window in self.iter_windows(self.chunk_size):
-            if self._src.nodata in self._src.read(window=window):
+            if self.src.nodata in self.src.read(window=window):
                 return True
         return False
 
     @property
     def shape(self):
-        return self._src.shape
+        return self.src.shape
 
     @property
     def height(self):
-        return self._src.height
+        return self.src.height
 
     @property
     def bbox(self):
@@ -620,44 +575,41 @@ class Raster:
         return Bbox([[x0, y0], [x1, y1]])
 
     @property
+    def src(self):
+        return self._src
+
+    @property
     def width(self):
-        return self._src.width
+        return self.src.width
 
     @property
     def dx(self):
-        return self._src.transform[0]
+        return self.src.transform[0]
 
     @property
     def dy(self):
-        return -self._src.transform[4]
+        return -self.src.transform[4]
 
     @property
-    def crs(self):
-        return self._src.crs
-
-    @property
-    def srs(self):
-        return self.proj.srs
-
-    @property
-    def proj(self):
-        return Proj(self.crs)
+    def crs(self) -> CRS:
+        # cast rasterio.CRS to pyproj.CRS for API consistency
+        return CRS.from_user_input(self.src.crs)
 
     @property
     def nodatavals(self):
-        return self._src.nodatavals
+        return self.src.nodatavals
 
     @property
     def transform(self):
-        return self._src.transform
+        return self.src.transform
 
     @property
     def dtypes(self):
-        return self._src.dtypes
+        return self.src.dtypes
 
     @property
     def nodata(self):
-        return self._src.nodata
+        return self.src.nodata
 
     @property
     def xres(self):
@@ -669,188 +621,124 @@ class Raster:
 
     @property
     def resampling_method(self):
-        try:
-            return self.__resampling_method
-        except AttributeError:
-            return Resampling.nearest
-
-    @property
-    def chunk_size(self):
-        return self.__chunk_size
-
-    @property
-    def overlap(self):
-        return self.__overlap
-
-    @chunk_size.setter
-    def chunk_size(self, chunk_size):
-        chunk_size = 0 if chunk_size is None else int(chunk_size)
-        assert chunk_size >= 0, "chunk_size must be >= 0."
-        self.__chunk_size = chunk_size
-
-    @overlap.setter
-    def overlap(self, overlap):
-        overlap = 0 if overlap is None else overlap
-        self.__overlap = overlap
+        if not hasattr(self, '_resampling_method'):
+            self._resampling_method = Resampling.nearest
+        return self._resampling_method
 
     @resampling_method.setter
     def resampling_method(self, resampling_method):
-        self.__resampling_method = self._resampling_methods[resampling_method]
-
-    def _get_multipolygon_from_axes(self, ax):
-        # extract linear_rings from plot
-        linear_ring_collection = list()
-        for path_collection in ax.collections:
-            for path in path_collection.get_paths():
-                polygons = path.to_polygons(closed_only=True)
-                for linear_ring in polygons:
-                    if linear_ring.shape[0] > 3:
-                        linear_ring_collection.append(
-                            LinearRing(linear_ring))
-        if len(linear_ring_collection) > 1:
-            # reorder linear rings from above
-            areas = [Polygon(linear_ring).area
-                     for linear_ring in linear_ring_collection]
-            idx = np.where(areas == np.max(areas))[0][0]
-            polygon_collection = list()
-            outer_ring = linear_ring_collection.pop(idx)
-            path = Path(np.asarray(outer_ring.coords), closed=True)
-            while len(linear_ring_collection) > 0:
-                inner_rings = list()
-                for i, linear_ring in reversed(
-                        list(enumerate(linear_ring_collection))):
-                    xy = np.asarray(linear_ring.coords)[0, :]
-                    if path.contains_point(xy):
-                        inner_rings.append(linear_ring_collection.pop(i))
-                polygon_collection.append(Polygon(outer_ring, inner_rings))
-                if len(linear_ring_collection) > 0:
-                    areas = [Polygon(linear_ring).area
-                             for linear_ring in linear_ring_collection]
-                    idx = np.where(areas == np.max(areas))[0][0]
-                    outer_ring = linear_ring_collection.pop(idx)
-                    path = Path(np.asarray(outer_ring.coords), closed=True)
-            multipolygon = MultiPolygon(polygon_collection)
-        else:
-            multipolygon = MultiPolygon(
-                [Polygon(linear_ring_collection.pop())])
-        return multipolygon
-
-    def get_window_data(self, window, masked=True):
-        x0, y0, x1, y1 = self.get_array_bounds(window)
-        x = np.linspace(x0, x1, window.width)
-        y = np.linspace(y1, y0, window.height)
-        data = self._src.read(masked=masked, window=window)
-        return x, y, data
-
-    def get_array_bounds(self, window):
-        return array_bounds(
-            window.height,
-            window.width,
-            self.get_window_transform(window))
-
-    def get_window_transform(self, window):
-        if window is None:
-            return
-        return windows.transform(window, self.transform)
+        if not isinstance(resampling_method, Resampling):
+            TypeError(
+                f'Argument resampling_method must be of type  {Resampling}, '
+                f'not type {type(resampling_method)}.')
+        self._resampling_method = resampling_method
 
     @property
-    def _path(self):
-        return self.__path
+    def chunk_size(self):
+        return self._chunk_size
+
+    @chunk_size.setter
+    def chunk_size(self, chunk_size):
+        self._chunk_size = chunk_size
 
     @property
-    def _crs(self):
-        return self.__crs
+    def overlap(self):
+        return self._overlap
 
-    @property
-    def _tmpfile(self):
-        try:
-            return pathlib.Path(self.__tmpfile.name)
-        except AttributeError:
-            return self._path.resolve()
-        # copy original file into a tmpfile
-        # tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-        # with rasterio.open(self.path) as src:
-        #     with rasterio.open(tmpfile.name, 'w', **src.meta.copy()) as dst:
-        #         for window in self._get_iter_windows(
-        #                 src.width, src.height, self.chunk_size):
-        #             dst.write(src.read(window=window), window=window)
-        # self.__tmpfile = 
-        # return self.__tmpfile
+    @overlap.setter
+    def overlap(self, overlap):
+        self._overlap = overlap
 
-    @property
-    def _src(self):
-        try:
-            return self.__src
-        except AttributeError:
-            return rasterio.open(self._path)
 
-    @property
-    @lru_cache(maxsize=None)
-    def _resampling_methods(self):
-        self.__resampling_method = {
-            'bilinear': Resampling.bilinear,
-            'nearest': Resampling.nearest,
-            'cubic': Resampling.cubic,
-            'average': Resampling.average
-        }
+def get_iter_windows(
+        width,
+        height,
+        chunk_size=0,
+        overlap=0,
+        row_off=0,
+        col_off=0
+):
+    h = chunk_size
+    for i in range(
+        int(row_off),
+        int(row_off + height + chunk_size),
+        chunk_size
+            ):
+        if i + h > row_off + height:
+            h = height - i
+            if h <= 0:
+                break
+        w = chunk_size
+        for j in range(
+            int(col_off),
+            int(col_off + width + chunk_size),
+            chunk_size
+                ):
+            if j + w > col_off + width:
+                w = width - j
+                if w <= 0:
+                    break
+            o = overlap
+            while j + w + o > width:
+                o -= 1
+            w += o
+            o = overlap
+            while i + h + o > height:
+                o -= 1
+            h += o
+            yield windows.Window(j, i, w, h)
 
-    @_path.setter
-    def _path(self, path):
-        self.__path = pathlib.Path(path)
 
-    @_crs.setter
-    def _crs(self, crs):
-        if crs is None:  # return if CRS in file || raise if no CRS
-            # check if CRS is in file
-            with rasterio.open(self.path) as src:
-                # If CRS not in file, raise. All Rasters objects must have a
-                # defined CRS. Cannot work with undefined CRS.
-                if src.crs is None:
-                    msg = 'CRS not found in raster file. Must specify CRS.'
-                    raise IOError(msg)
-                else:
-                    # return because crs will be read directly from file.
-                    return
-        else:
-            raise NotImplementedError('Raster._crs.setter')
-            # CRS is specified by user
-        #     with rasterio.open(self.path) as src:
-        #         kwargs = src.meta.copy()
-        #         if crs is not None:
-        #             kwargs.update({'crs': crs.srs})
-        #         kwargs.update({'driver': 'GTiff'})
-        #         with rasterio.open(out_h, 'w', **kwargs,) as dst:
-        #             if read_mode == "array":
-        #                 for i in range(1, in_h.count + 1):
-        #                     dst.write_band(i, in_h.read(i))
-        #             elif read_mode == 'block_windows':
-        #                 for _, window in in_h.block_windows():
-        #                     dst.write(
-        #                         in_h.read(window=window),
-        #                         window=window
-        #                         )
-        #             else:
-        #                 raise NotImplementedError('Duck-type invalid')
-        # self._tmpfile = tmpfile
+def get_multipolygon_from_axes(ax):
+    # extract linear_rings from plot
+    linear_ring_collection = list()
+    for path_collection in ax.collections:
+        for path in path_collection.get_paths():
+            polygons = path.to_polygons(closed_only=True)
+            for linear_ring in polygons:
+                if linear_ring.shape[0] > 3:
+                    linear_ring_collection.append(
+                        LinearRing(linear_ring))
+    if len(linear_ring_collection) > 1:
+        # reorder linear rings from above
+        areas = [Polygon(linear_ring).area
+                 for linear_ring in linear_ring_collection]
+        idx = np.where(areas == np.max(areas))[0][0]
+        polygon_collection = list()
+        outer_ring = linear_ring_collection.pop(idx)
+        path = Path(np.asarray(outer_ring.coords), closed=True)
+        while len(linear_ring_collection) > 0:
+            inner_rings = list()
+            for i, linear_ring in reversed(
+                    list(enumerate(linear_ring_collection))):
+                xy = np.asarray(linear_ring.coords)[0, :]
+                if path.contains_point(xy):
+                    inner_rings.append(linear_ring_collection.pop(i))
+            polygon_collection.append(Polygon(outer_ring, inner_rings))
+            if len(linear_ring_collection) > 0:
+                areas = [Polygon(linear_ring).area
+                         for linear_ring in linear_ring_collection]
+                idx = np.where(areas == np.max(areas))[0][0]
+                outer_ring = linear_ring_collection.pop(idx)
+                path = Path(np.asarray(outer_ring.coords), closed=True)
+        multipolygon = MultiPolygon(polygon_collection)
+    else:
+        multipolygon = MultiPolygon(
+            [Polygon(linear_ring_collection.pop())])
+    return multipolygon
 
-    @_tmpfile.setter
-    def _tmpfile(self, tmpfile):
-        del(self._tmpfile)
-        self.__src = rasterio.open(tmpfile.name)
-        self.__tmpfile = tmpfile
 
-    @_tmpfile.deleter
-    def _tmpfile(self):
-        try:
-            del(self._src)
-            self.__tmpfile.close()
-            del(self.__tmpfile)
-        except AttributeError:
-            pass
-
-    @_src.deleter
-    def _src(self):
-        try:
-            del(self.__src)
-        except AttributeError:
-            pass
+def redistribute_vertices(geom, distance):
+    if geom.geom_type == 'LineString':
+        num_vert = int(round(geom.length / distance))
+        if num_vert == 0:
+            num_vert = 1
+        return LineString(
+            [geom.interpolate(float(n) / num_vert, normalized=True)
+             for n in range(num_vert + 1)])
+    elif geom.geom_type == 'MultiLineString':
+        parts = [redistribute_vertices(part, distance)
+                 for part in geom]
+        return type(geom)([p for p in parts if not p.is_empty])
+    else:
+        raise ValueError('unhandled geometry %s', (geom.geom_type,))

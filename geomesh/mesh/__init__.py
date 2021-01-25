@@ -1,3 +1,2 @@
-from .mesh import Mesh
-
+from geomesh.mesh.mesh import Mesh  # type: ignore[attr-defined]
 __all__ = ["Mesh"]

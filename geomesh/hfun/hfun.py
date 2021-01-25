@@ -1,38 +1,24 @@
 from geomesh.raster import Raster
 from geomesh.hfun.base import BaseHfun
-from geomesh.hfun.hfun_raster import HfunRaster
+from geomesh.hfun.raster import HfunRaster
 
 
 class Hfun:
 
-    def __new__(cls,
-                hfun, 
-                hmin=None,
-                hmax=None,
-                ellipsoid=None,
-                verbosity=0,
-                interface='cmdsaw',
-                nprocs=None):
+    def __new__(cls, hfun, **kwargs):
         """
         Input parameters
         ----------------
-        hfun: Object defining mesh size, right now only raster is
-              supported
-        hmin: minimum size of mesh cell
-        hmax: maximum size of mesh cell
-        ellipsoid:
-            None, False, True, 'WGS84' or '??'
-        verbosity: logger/output verbosity settings
-        interface: 'cmdsaw' or 'libsaw' to be used in calling jigsawpy
-        nprocs: number of processors to be used in parallel sections
-                of the code
+        hfun: Object used to define and compute mesh size function.
         """
 
         if isinstance(hfun, Raster):
-            return (HfunRaster(hfun, hmin, hmax, nprocs, interface))
+            return HfunRaster(hfun, **kwargs)
+
         else:
-            raise NotImplementedError(
-                f"Size function type {type(hfun)} is not supported!")
+            raise TypeError(
+                f'Argument hfun must be of type {BaseHfun} or a derived type, '
+                f'not type {type(hfun)}.')
 
     @staticmethod
     def is_valid_type(hfun_object):

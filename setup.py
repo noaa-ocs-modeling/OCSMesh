@@ -23,7 +23,8 @@ if "install_jigsaw" not in sys.argv:
         if "install" in sys.argv:
             libsaw = PYENV_PREFIX / 'lib' / SYSLIB[platform.system()]
             if not libsaw.is_file():
-                subprocess.check_call(["python", "setup.py", "install_jigsaw"])
+                subprocess.check_call(
+                    [sys.executable, "setup.py", "install_jigsaw"])
 
 
 class InstallJigsawCommand(distutils.cmd.Command):
@@ -97,14 +98,14 @@ setuptools.setup(
     cmdclass={
         'install_jigsaw': InstallJigsawCommand,
         },
-    python_requires='>=3.6',
+    python_requires='>=3.6, <=3.8',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
                       "scipy",
-                      "pyproj>=2.6",
+                      "pyproj>=3.0",
                       "fiona",
                       "rasterio",
                       'tqdm',
@@ -114,6 +115,7 @@ setuptools.setup(
                       "shapely",
                       "geoalchemy2",
                       "utm",
+                      "geopandas",
                       ],
     entry_points={
         'console_scripts': [

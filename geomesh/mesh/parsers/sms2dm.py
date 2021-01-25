@@ -54,7 +54,7 @@ def graph(sms2dm):
 def nodes(sms2dm):
     assert all(int(id) > 0 for id in sms2dm['ND'])
     f = ''
-    for id, (coords, value) in sms2dm['ND'].items():
+    for id, (coords, value)in sms2dm['ND'].items():
         f += f"ND {int(id):d} "
         f += f"{coords[0]:<.16E} "
         f += f"{coords[1]:<.16E} "
@@ -107,26 +107,3 @@ def quadrilateral_elements(geom):
     if geom is not None:
         f += geom_string("E4Q", geom)
     return f
-
-
-def euclidean_mesh(geom):
-    coords = {id: (x, y) for id, ((x, y), value) in geom['ND'].items()}
-    triangles = {id: geom for id, geom in geom['E3T'].items()
-                 if len(geom) == 3}
-    if 'E4Q' in geom:
-        quads = {id: geom for id, geom in geom['E4Q'].items()
-                 if len(geom) == 4}
-    else:
-        quads = None
-    values = [value for coord, value in geom['ND'].values()]
-    msh = {
-        "coords": coords,
-        "triangles": triangles,
-        "quads": quads,
-        "values": values,
-        }
-    if 'crs' in geom:
-        msh.update({"crs": geom["crs"]})
-    if 'boundaries' in geom.keys():
-        msh.update({'boundaries': geom['boundaries']})
-    return msh
