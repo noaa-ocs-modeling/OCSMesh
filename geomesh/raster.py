@@ -231,9 +231,10 @@ class Raster:
                 continue
 
             else:
-                ax = plt.contourf(
+                fig, ax = plt.subplots()
+                ax.contourf(
                     x, y, new_mask, levels=[0, 1])
-                plt.close(plt.gcf())
+                plt.close(fig)
                 polygon_collection.extend(get_multipolygon_from_axes(ax))
 
         geom = ops.unary_union(polygon_collection)
@@ -544,9 +545,10 @@ class Raster:
             warnings.simplefilter('ignore', UserWarning)
             _logger.debug('Computing contours...')
             start = time()
-            ax = plt.contour(x, y, values, levels=[level])
+            fig, ax = plt.subplots()
+            ax.contour(x, y, values, levels=[level])
             _logger.debug(f'Took {time()-start}...')
-            plt.close(plt.gcf())
+            plt.close(fig)
         for path_collection in ax.collections:
             for path in path_collection.get_paths():
                 try:
@@ -569,9 +571,10 @@ class Raster:
                 warnings.simplefilter('ignore', UserWarning)
                 _logger.debug('Computing contours...')
                 start = time()
-                ax = plt.contour(x, y, values, levels=[level])
+                fig, ax = plt.subplots()
+                ax.contour(x, y, values, levels=[level])
                 _logger.debug(f'Took {time()-start}...')
-                plt.close(plt.gcf())
+                plt.close(fig)
             for path_collection in ax.collections:
                 for path in path_collection.get_paths():
                     try:
