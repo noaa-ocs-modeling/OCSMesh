@@ -86,12 +86,17 @@ class HfunRaster(BaseHfun, Raster):
     def msh_t(self, window: rasterio.windows.Window = None,
               marche: bool = False, verbosity=None) -> jigsaw_msh_t:
 
+
         if window is None:
             iter_windows = list(self.iter_windows())
         else:
             iter_windows = [window]
 
         utm_crs = None
+
+        output_mesh = jigsaw_msh_t()
+        output_mesh.ndims = +2
+        output_mesh.mshID = "euclidean-mesh"
         for window in iter_windows:
 
             hfun = jigsaw_msh_t()
@@ -235,9 +240,10 @@ class HfunRaster(BaseHfun, Raster):
                 verbosity
 
             # output mesh
-            output_mesh = jigsaw_msh_t()
-            output_mesh.mshID = 'euclidean-mesh'
-            output_mesh.ndims = +2
+
+            window_mesh = jigsaw_msh_t()
+            window_mesh.mshID = 'euclidean-mesh'
+            window_mesh.ndims = +2
 
             if marche is True:
                 libsaw.marche(opts, hfun)
@@ -247,17 +253,38 @@ class HfunRaster(BaseHfun, Raster):
             del geom
             # do post processing
             hfun.crs = utm_crs
-            utils.interpolate(hfun, output_mesh, **kwargs)
+            utils.interpolate(hfun, window_mesh, **kwargs)
 
             if utm_crs is not None:
                 output_mesh.crs = utm_crs
                 # utils.reproject(output_mesh, self.crs)
             else:
-                output_mesh.crs = self.crs
+                window_mesh.crs = self.crs
 
-            if len(iter_windows) > 1:
-                raise NotImplementedError(
-                    'iter_windows > 1, need to collect hfuns')
+
+            # combine with results from previous windows
+            output_mesh.tria3 = np.append(
+                output_mesh.tria3,
+                np.array([((idx + len(output_mesh.vert2)), tag)
+                          for idx, tag in window_mesh.tria3],
+                         dtype=jigsaw_msh_t.TRIA3_t),
+                axis=0)
+            output_mesh.vert2 = np.append(
+                output_mesh.vert2,
+                np.array([(coo, tag)
+                          for coo, tag in window_mesh.vert2],
+                         dtype=jigsaw_msh_t.VERT2_t),
+                axis=0)
+            if output_mesh.value.size:
+                output_mesh.value = np.append(
+                    output_mesh.value,
+                    np.array([v for v in window_mesh.value],
+                             dtype=jigsaw_msh_t.REALS_t),
+                    axis=0)
+            else:
+                output_mesh.value = np.array(
+                        [v for v in window_mesh.value],
+                        dtype=jigsaw_msh_t.REALS_t)
 
         return output_mesh
 
