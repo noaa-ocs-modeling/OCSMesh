@@ -84,7 +84,11 @@ class RasterGeom(BaseGeom):
                 plt.close(fig)
                 polygon_collection.extend(
                     [polygon for polygon in get_multipolygon_from_axes(ax)])
-        return ops.unary_union(polygon_collection)
+        union_result = ops.unary_union(polygon_collection)
+        if isinstance(union_result, Polygon):
+            union_result = MultiPolygon([union_result])
+        return union_result
+
 
     @property
     def raster(self):
