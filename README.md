@@ -1,1 +1,15 @@
-What we actually need is a concurrency manager. That is, a Python class that we can configure with the slurm account settings, and to which we can do "add_job(func, id='some_id', depends_on='some_other_id')", and then we can do manager.run(wait=True).
+## Geomesh
+### A Python package for processing DEM data into georeferenced unstructured meshes using the [jigsaw-python](https://github.com/dengwirda/jigsaw-python) library.
+
+#### Installation
+The Jigsaw library must be initialized first by running `./setup.py install_jigsaw`, then, the package can be installed normally by doing `./setup.py install`:
+
+```bash
+./setup.py install_jigsaw # installs the Jigsaw C-library to the current Python environment
+./setup.py install # Installs the geomesh library to the current Python environment
+./setup.py develop # run this if you are a developer.
+```
+#### Requirements
+* Python>=3.6
+* CMake 
+* C/C++ compilers
