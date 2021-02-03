@@ -588,11 +588,16 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
 
 
 def grd_to_msh_t(_grd: Dict) -> jigsaw_msh_t:
+
     msh = jigsaw_msh_t()
     msh.ndims = +2
     msh.mshID = 'euclidean-mesh'
-    triangles = [element for element in _grd['elements'] if len(element) == 3]
-    quads = [element for element in _grd['elements'] if len(element) == 4]
+    id_to_index = {node_id: index for index, node_id
+                   in enumerate(_grd['nodes'].keys())}
+    triangles = [list(map(lambda x: id_to_index[x], element)) for element
+                 in _grd['elements'].values() if len(element) == 3]
+    quads = [list(map(lambda x: id_to_index[x], element)) for element
+             in _grd['elements'].values() if len(element) == 4]
     msh.vert2 = np.array([(coord, 0) for coord, _ in _grd['nodes'].values()],
                          dtype=jigsaw_msh_t.VERT2_t)
     msh.tria3 = np.array([(index, 0) for index in triangles],
