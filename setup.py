@@ -44,6 +44,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
              "--init", "submodules/jigsaw-python"])
         # install jigsawpy
         os.chdir(PARENT / 'submodules/jigsaw-python')
+        subprocess.check_call(["git", "checkout", "master"])
         self.announce('INSTALLING JIGSAWPY', level=3)
         subprocess.check_call(["python", "setup.py", "install"])
         # install jigsaw

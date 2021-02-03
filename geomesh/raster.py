@@ -3,32 +3,35 @@ import multiprocessing
 import os
 import pathlib
 import tempfile
-from typing import Union
+from time import time
+from typing import Union, Literal
+import warnings
 
 # from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.cm import ScalarMappable  # type: ignore[import]
-from matplotlib.path import Path  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
-from matplotlib.transforms import Bbox  # type: ignore[import]
-from mpl_toolkits.axes_grid1 import make_axes_locatable  # type: ignore[import]
-import numpy as np  # type: ignore[import]
-from pyproj import CRS  # type: ignore[import]  # , Transformer
-
-import rasterio  # type: ignore[import]
+import geopandas as gpd
+from matplotlib.cm import ScalarMappable
+from matplotlib.path import Path
+import matplotlib.pyplot as plt
+from matplotlib.transforms import Bbox
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
+from pyproj import CRS, Transformer
+import rasterio
 from rasterio import warp
-from rasterio.mask import mask  # type: ignore[import]
-from rasterio.enums import Resampling  # type: ignore[import]
-from rasterio.fill import fillnodata  # type: ignore[import]
-from rasterio.transform import array_bounds  # type: ignore[import]
+from rasterio.mask import mask
+from rasterio.enums import Resampling
+from rasterio.fill import fillnodata
+from rasterio.transform import array_bounds
 from rasterio import windows
-from scipy.ndimage import gaussian_filter  # type: ignore[import]
-from shapely import ops  # type: ignore[import]
-from shapely.geometry import (  # type: ignore[import]
-    Polygon, MultiPolygon, LinearRing, LineString)
+from scipy.ndimage import gaussian_filter
+from shapely import ops
+from shapely.geometry import (
+    Polygon, MultiPolygon, LinearRing, LineString, MultiLineString, box)
 
 # from geomesh.geom import Geom
 # from geomesh.hfun import Hfun
 from geomesh import figures
+from geomesh.logger import Logger
 
 
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
@@ -138,6 +141,7 @@ class Raster:
     _overlap = Overlap()
     _tmpfile = TemporaryFile()
     _src = SourceRaster()
+    logger = Logger()
 
     def __init__(
             self,
@@ -235,6 +239,30 @@ class Raster:
         if not isinstance(geom, MultiPolygon):
             geom = MultiPolygon([geom])
         return geom
+
+    def get_bbox(
+            self,
+            crs: Union[str, CRS] = None,
+            output_type: Literal['polygon', 'bbox'] = None
+    ) -> Union[Polygon, Bbox]:
+        output_type = 'polygon' if output_type is None else output_type
+        xmin, xmax = np.min(self.x), np.max(self.x)
+        ymin, ymax = np.min(self.y), np.max(self.y)
+        crs = self.crs if crs is None else crs
+        if crs is not None:
+            if not self.crs.equals(crs):
+                transformer = Transformer.from_crs(
+                    self.crs, crs, always_xy=True)
+                (xmin, xmax), (ymin, ymax) = transformer.transform(
+                    (xmin, xmax), (ymin, ymax))
+        if output_type == 'polygon':
+            return box(xmin, ymin, xmax, ymax)
+        elif output_type == 'bbox':
+            return Bbox([[xmin, ymin], [xmax, ymax]])
+        else:
+            raise TypeError(
+                'Argument output_type must a string literal \'polygon\' or '
+                '\'bbox\'')
 
     def contourf(
             self,
@@ -474,9 +502,11 @@ class Raster:
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
 
-    def clip(self, multipolygon):
+    def clip(self, geom: Union[Polygon, MultiPolygon]):
+        if isinstance(geom, Polygon):
+            geom = MultiPolygon([geom])
         out_image, out_transform = rasterio.mask.mask(
-            self._src, multipolygon, crop=True)
+            self.src, geom, crop=True)
         out_meta = self.src.meta.copy()
         out_meta.update({
             "driver": "GTiff",
@@ -488,6 +518,91 @@ class Raster:
         with rasterio.open(tmpfile.name, "w", **out_meta) as dest:
             dest.write(out_image)
         self._tmpfile = tmpfile
+
+    def get_contour(
+            self,
+            level: float,
+            window: rasterio.windows.Window = None
+    ):
+        self.logger.debug(
+            f'RasterHfun.get_raster_contours(level={level}, window={window})')
+        tmpdir = tempfile.TemporaryDirectory()
+        self.logger.info(f'Opened temporary directory: {tmpdir.name}')
+        if window is None:
+            iter_windows = list(self.iter_windows())
+        else:
+            iter_windows = [window]
+        if len(iter_windows) > 1:
+            return self._get_raster_contour_feathered(level, iter_windows)
+        else:
+            return self._get_raster_contour_windowed(level, window)
+
+    def _get_raster_contour_windowed(self, level, window):
+        x, y = self.get_x(), self.get_y()
+        features = []
+        values = self.get_values(band=1, window=window)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            self.logger.debug('Computing contours...')
+            start = time()
+            ax = plt.contour(x, y, values, levels=[level])
+            self.logger.debug(f'Took {time()-start}...')
+            plt.close(plt.gcf())
+        for path_collection in ax.collections:
+            for path in path_collection.get_paths():
+                try:
+                    features.append(LineString(path.vertices))
+                except ValueError:
+                    # LineStrings must have at least 2 coordinate tuples
+                    pass
+        return ops.linemerge(features)
+
+    def _get_raster_contour_feathered(self, level, iter_windows):
+        feathers = []
+        total_windows = len(iter_windows)
+        self.logger.debug(f'Total windows to process: {total_windows}.')
+        for i, window in enumerate(iter_windows):
+            x, y = self.get_x(window), self.get_y(window)
+            self.logger.debug(f'Processing window {i+1}/{total_windows}.')
+            features = []
+            values = self.get_values(band=1, window=window)
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)
+                self.logger.debug('Computing contours...')
+                start = time()
+                ax = plt.contour(x, y, values, levels=[level])
+                self.logger.debug(f'Took {time()-start}...')
+                plt.close(plt.gcf())
+            for path_collection in ax.collections:
+                for path in path_collection.get_paths():
+                    try:
+                        features.append(LineString(path.vertices))
+                    except ValueError:
+                        # LineStrings must have at least 2 coordinate tuples
+                        pass
+            if len(features) > 0:
+                tmpfile = pathlib.Path(tmpdir) / pathlib.Path(
+                        tempfile.NamedTemporaryFile(suffix='.feather').name
+                        ).name
+                self.logger.debug('Saving feather.')
+                features = ops.linemerge(features)
+                gpd.GeoDataFrame(
+                    [{'geometry': features}]
+                    ).to_feather(tmpfile)
+                feathers.append(tmpfile)
+        self.logger.debug('Concatenating feathers.')
+        features = []
+        out = gpd.GeoDataFrame()
+        for feather in feathers:
+            out = out.append(gpd.read_feather(feather), ignore_index=True)
+            feather.unlink()
+            for geometry in out.geometry:
+                if isinstance(geometry, LineString):
+                    geometry = MultiLineString([geometry])
+            for linestring in geometry:
+                features.append(linestring)
+        self.logger.debug('Merging features.')
+        return ops.linemerge(features)
 
     def iter_windows(self, chunk_size=None, overlap=None):
         chunk_size = self.chunk_size if chunk_size is None else chunk_size
@@ -570,9 +685,7 @@ class Raster:
 
     @property
     def bbox(self):
-        x0, y0, x1, y1 = rasterio.transform.array_bounds(
-            self.height, self.width, self.transform)
-        return Bbox([[x0, y0], [x1, y1]])
+        return self.get_bbox()
 
     @property
     def src(self):

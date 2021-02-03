@@ -175,7 +175,12 @@ def read(resource: Union[str, os.PathLike], boundaries: bool = True, crs=True):
     """
     resource = pathlib.Path(resource)
     with open(resource, 'r') as stream:
-        grd = buffer_to_dict(stream)
+        try:
+            grd = buffer_to_dict(stream)
+        except Exception:
+            raise Exception(
+                f'Resource {str(resource)} is not a not a valid grd file or is'
+                ' corrupted.')
     if boundaries is False:
         grd.pop('boundaries', None)
     if crs is True:

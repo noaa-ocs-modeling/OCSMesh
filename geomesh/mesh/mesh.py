@@ -1,329 +1,553 @@
-# type: ignore[import]
-# from collections import defaultdict, namedtuple
-# import pathlib
 from functools import lru_cache
-from typing import Union  # , List, Dict
+import os
+import pathlib
+from typing import Union, Literal
+import warnings
 
-# import fiona
 import geopandas as gpd
-from matplotlib.cm import ScalarMappable
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+from jigsawpy import jigsaw_msh_t, savemsh, loadmsh
+from matplotlib.path import Path
+from matplotlib.transforms import Bbox
+from matplotlib.tri import Triangulation
 import numpy as np
-from shapely.geometry import LineString
-
-from geomesh.figures import figure, get_topobathy_kwargs
-from geomesh.mesh.parsers import grd
-from geomesh.mesh.base import Gr3  # , sort_edges, signed_polygon_area
+from pyproj import CRS, Transformer
+from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
 
 
-#     def auto_generate(
-#         self,
-#         threshold=0.,
-#         land_ibtype=0,
-#         interior_ibtype=1,
-#     ):
-#         values = self._obj.values
-#         if np.any(np.isnan(values)):
-#             raise Exception("Mesh contains invalid values. Raster values must"
-#                             "be interpolated to the mesh before generating "
-#                             "boundaries.")
-
-#         # drop current boundaries
-#         self._obj.__dict__['boundaries'] = {}
-#         self._obj.__dict__['boundaries'][None] = {}
-
-#         # generate exterior boundaries
-#         for ring in self._obj.outer_ring_collection.values():
-#             # find boundary edges
-#             edge_tag = np.full(ring.shape, 0)
-#             edge_tag[np.where(values[ring[:, 0]] < threshold)[0], 0] = -1
-#             edge_tag[np.where(values[ring[:, 1]] < threshold)[0], 1] = -1
-#             edge_tag[np.where(values[ring[:, 0]] >= threshold)[0], 0] = 1
-#             edge_tag[np.where(values[ring[:, 1]] >= threshold)[0], 1] = 1
-#             # sort boundary edges
-#             ocean_boundary = list()
-#             land_boundary = list()
-#             for i, (e0, e1) in enumerate(edge_tag):
-#                 if np.any(np.asarray((e0, e1)) == -1):
-#                     ocean_boundary.append(tuple(ring[i, :]))
-#                 elif np.any(np.asarray((e0, e1)) == 1):
-#                     land_boundary.append(tuple(ring[i, :]))
-#             ocean_boundaries = sort_edges(ocean_boundary)
-#             land_boundaries = sort_edges(land_boundary)
-#             _bnd_id = len(self._obj.boundaries[None])
-#             for bnd in ocean_boundaries:
-#                 e0, e1 = [list(t) for t in zip(*bnd)]
-#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
-#                 data = e0 + [self._obj.get_vertex_id_by_index(e1[-1])]
-#                 self._set_boundary_data(self._obj.vertex_id,
-#                                         None, _bnd_id, data)
-#                 _bnd_id += 1
-#             # add land boundaries
-#             if land_ibtype not in self._obj.boundaries:
-#                 self._add_boundary_type(land_ibtype)
-#             _bnd_id = len(self._obj.boundaries[land_ibtype])
-#             for bnd in land_boundaries:
-#                 e0, e1 = [list(t) for t in zip(*bnd)]
-#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
-#                 data = e0 + [self._obj.get_vertex_id_by_index(e1[-1])]
-#                 self._set_boundary_data(self._obj.vertex_id, land_ibtype,
-#                                         _bnd_id, data)
-#                 _bnd_id += 1
-#         # generate interior boundaries
-#         _bnd_id = 0
-#         _interior_boundaries = defaultdict()
-#         for interiors in self._obj.inner_ring_collection.values():
-#             for interior in interiors:
-#                 e0, e1 = [list(t) for t in zip(*interior)]
-#                 if signed_polygon_area(self._obj._vertices[e0, :]) < 0:
-#                     e0 = list(reversed(e0))
-#                     e1 = list(reversed(e1))
-#                 e0 = list(map(self._obj.get_vertex_id_by_index, e0))
-#                 e0.append(e0[0])
-#                 _interior_boundaries[_bnd_id] = e0
-#                 _bnd_id += 1
-#         self._add_boundary_type(interior_ibtype)
-#         for bnd_id, data in _interior_boundaries.items():
-#             self._set_boundary_data(self._obj._vertex_id, interior_ibtype,
-#                                     bnd_id, data)
-
-#     @figure
-#     def plot(
-#         self,
-#         ibtype,
-#         id,
-#         tags=True,
-#         axes=None,
-#         show=False,
-#         figsize=None,
-#         **kwargs
-#     ):
-#         boundary = list(map(self._obj.get_vertex_index_by_id,
-#                             self._obj.boundaries[ibtype][id].indexes))
-#         p = axes.plot(self._obj.x[boundary], self._obj.y[boundary], **kwargs)
-#         if tags:
-#             axes.text(
-#                 self._obj.x[boundary[len(boundary)//2]],
-#                 self._obj.y[boundary[len(boundary)//2]],
-#                 f"ibtype={ibtype}\nid={id}",
-#                 color=p[-1].get_color()
-#                 )
-#         return axes
-
-#     @figure
-#     def make_plot(
-#         self,
-#         axes=None,
-#         show=False,
-#         figsize=None,
-#         **kwargs
-#     ):
-#         kwargs.update({'axes': axes})
-#         for ibtype, bnds in self._obj.boundaries.items():
-#             for id in bnds:
-#                 axes = self.plot(ibtype, id, **kwargs)
-#                 kwargs.update({'axes': axes})
-#         return kwargs['axes']
+from geomesh import utils
+from geomesh.mesh.base import BaseMesh
+from geomesh.mesh.parsers import grd, sms2dm
 
 
-class MeshBoundaries:
+class Rings:
 
-    def __init__(self, mesh: "Mesh", boundaries: Union[dict, None]):
-        ocean_boundaries = []
-        land_boundaries = []
-        interior_boundaries = []
-        if boundaries is not None:
-            for ibtype, bnds in boundaries.items():
-                if ibtype is None:
-                    for id, data in bnds.items():
-                        indexes = list(map(mesh.nodes.get_index_by_id,
-                                       data['indexes']))
-                        ocean_boundaries.append({
-                            'id': id,
-                            "index_id": data['indexes'],
-                            "indexes": indexes,
-                            'geometry': LineString(mesh.vertices[indexes])
-                            })
+    def __init__(self, mesh: 'EuclideanMesh'):
+        self.mesh = mesh
 
-                elif str(ibtype).endswith('1'):
-                    for id, data in bnds.items():
-                        indexes = list(map(mesh.nodes.get_index_by_id,
-                                       data['indexes']))
-                        interior_boundaries.append({
-                            'id': id,
-                            'ibtype': ibtype,
-                            "index_id": data['indexes'],
-                            "indexes": indexes,
-                            'geometry': LineString(mesh.vertices[indexes])
-                            })
-                else:
-                    for id, data in bnds.items():
-                        _indexes = np.array(data['indexes'])
-                        if _indexes.ndim > 1:
-                            # ndim > 1 implies we're dealing with an ADCIRC
-                            # mesh that includes boundary pairs, such as weir
-                            new_indexes = []
-                            for i, line in enumerate(_indexes.T):
-                                if i % 2 != 0:
-                                    new_indexes.extend(np.flip(line))
-                                else:
-                                    new_indexes.extend(line)
-                            _indexes = np.array(new_indexes).flatten()
-                        else:
-                            _indexes = _indexes.flatten()
-                        indexes = list(map(mesh.nodes.get_index_by_id,
-                                       _indexes))
+    @lru_cache(maxsize=1)
+    def __call__(self):
+        tri = self.mesh.elements.triangulation()
+        idxs = np.vstack(list(np.where(tri.neighbors == -1))).T
+        boundary_edges = []
+        for i, j in idxs:
+            boundary_edges.append(
+                (tri.triangles[i, j], tri.triangles[i, (j+1) % 3]))
+        sorted_rings = sort_rings(edges_to_rings(boundary_edges),
+                                  self.mesh.coord)
+        data = []
+        for bnd_id, rings in sorted_rings.items():
+            coords = self.coord[rings['exterior'][:, 0], :]
+            geometry = LinearRing(coords)
+            data.append({
+                    "geometry": geometry,
+                    "bnd_id": bnd_id,
+                    "type": 'exterior'
+                })
+            for interior in rings['interiors']:
+                coords = self.coord[interior[:, 0], :]
+                geometry = LinearRing(coords)
+                data.append({
+                    "geometry": geometry,
+                    "bnd_id": bnd_id,
+                    "type": 'interior'
+                })
+        return gpd.GeoDataFrame(data, crs=self.msh_t.crs)
 
-                        land_boundaries.append({
-                            'id': id,
-                            'ibtype': ibtype,
-                            "index_id": data['indexes'],
-                            "indexes": indexes,
-                            'geometry': LineString(mesh.vertices[indexes])
-                            })
-
-        self._ocean = gpd.GeoDataFrame(ocean_boundaries)
-        self._land = gpd.GeoDataFrame(land_boundaries)
-        self._interior = gpd.GeoDataFrame(interior_boundaries)
-        self._mesh = mesh
-        self._data = boundaries
-
-    def ocean(self):
-        return self._ocean
-
-    def land(self):
-        return self._land
+    def exterior(self):
+        return self().loc[self()['type'] == 'exterior']
 
     def interior(self):
-        return self._interior
+        return self().loc[self()['type'] == 'interior']
 
-    @property
-    def data(self):
-        return self._data
+
+class Edges:
+
+    def __init__(self, mesh: 'EuclideanMesh'):
+        self.mesh = mesh
+
+    @lru_cache(maxsize=1)
+    def __call__(self) -> gpd.GeoDataFrame:
+        data = []
+        for ring in self.mesh.hull.rings().itertuples():
+            coords = ring.geometry.coords
+            for i in range(1, len(coords)):
+                data.append({
+                    "geometry": LineString([coords[i-1], coords[i]]),
+                    "bnd_id": ring.bnd_id,
+                    "type": ring.type})
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
+
+    def exterior(self):
+        return self().loc[self()['type'] == 'exterior']
+
+    def interior(self):
+        return self().loc[self()['type'] == 'interior']
+
+
+class Hull:
+
+    def __init__(self, mesh: 'EuclideanMesh'):
+        self.mesh = mesh
+        self.rings = Rings(mesh)
+        self.edges = Edges(mesh)
 
     @lru_cache(maxsize=1)
     def __call__(self):
         data = []
-        for bnd in self.ocean().itertuples():
+        for bnd_id in np.unique(self.rings()['bnd_id'].tolist()):
+            exterior = self.rings().loc[
+                (self.rings()['bnd_id'] == bnd_id) &
+                (self.rings()['type'] == 'exterior')]
+            interiors = self.rings().loc[
+                (self.rings()['bnd_id'] == bnd_id) &
+                (self.rings()['type'] == 'interior')]
             data.append({
-                'id': bnd.id,
-                'ibtype': None,
-                "index_id": bnd.index_id,
-                "indexes": bnd.indexes,
-                'geometry': bnd.geometry})
+                    "geometry": Polygon(
+                        exterior.iloc[0].geometry.coords,
+                        [row.geometry.coords for _, row
+                            in interiors.iterrows()]),
+                    "bnd_id": bnd_id
+                })
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
-        for bnd in self.land().itertuples():
+    def exterior(self):
+        data = []
+        for exterior in self.rings().loc[
+                self.rings()['type'] == 'exterior'].itertuples():
+            data.append({"geometry": Polygon(exterior.geometry.coords)})
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
+
+    def interior(self):
+        data = []
+        for interior in self.rings().loc[
+                self.rings()['type'] == 'interior'].itertuples():
+            data.append({"geometry": Polygon(interior.geometry.coords)})
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
+
+    def implode(self) -> gpd.GeoDataFrame:
+        return gpd.GeoDataFrame(
+            {"geometry": MultiPolygon([polygon.geometry for polygon
+                                       in self().itertuples()])},
+            crs=self.mesh.crs)
+
+    def multipolygon(self) -> MultiPolygon:
+        mp = self.implode().iloc[0].geometry
+        if isinstance(mp, Polygon):
+            mp = MultiPolygon([mp])
+        return mp
+
+    def triangulation(self):
+        triangles = self.msh_t.tria3['index'].tolist()
+        for quad in self.msh_t.quad4['index']:
+            triangles.extend([
+                [quad[0], quad[1], quad[3]],
+                [quad[1], quad[2], quad[3]]
+            ])
+        return Triangulation(self.coord[:, 0], self.coord[:, 1], triangles)
+
+
+class Nodes:
+
+    def __init__(self, mesh: "EuclideanMesh"):
+        self.mesh = mesh
+
+    @lru_cache(maxsize=1)
+    def __call__(self):
+        return {i+1: coord for i, coord in enumerate(self.coords())}
+
+    def id(self):
+        return list(self().keys())
+
+    def index(self):
+        return np.arange(len(self()))
+
+    def coords(self):
+        return self.mesh.coord
+
+    def values(self):
+        return self.mesh.values
+
+    def get_index_by_id(self, id):
+        return self.id_to_index[id]
+
+    def get_id_by_index(self, index: int):
+        return self.index_to_id[index]
+
+    @property
+    def id_to_index(self):
+        if not hasattr(self, '_id_to_index'):
+            self._id_to_index = {node_id: index for index, node_id
+                                 in enumerate(self().keys())}
+        return self._id_to_index
+
+    @property
+    def index_to_id(self):
+        if not hasattr(self, '_index_to_id'):
+            self._index_to_id = {index: node_id for index, node_id
+                                 in enumerate(self().keys())}
+        return self._index_to_id
+
+    # def get_indexes_around_index(self, index):
+    #     indexes_around_index = self.__dict__.get('indexes_around_index')
+    #     if indexes_around_index is None:
+    #         def append(geom):
+    #             for simplex in geom:
+    #                 for i, j in permutations(simplex, 2):
+    #                     indexes_around_index[i].add(j)
+    #         indexes_around_index = defaultdict(set)
+    #         append(self.gr3.elements.triangles())
+    #         append(self.gr3.elements.quads())
+    #         self.__dict__['indexes_around_index'] = indexes_around_index
+    #     return list(indexes_around_index[index])
+
+
+class Elements:
+
+    def __init__(self, mesh: "EuclideanMesh"):
+        self.mesh = mesh
+
+    @lru_cache(maxsize=1)
+    def __call__(self):
+        elements = {i+1: index+1 for i, index
+                    in enumerate(self.mesh.msh_t.tria3['index'])}
+        elements.update({i+len(elements)+1: index+1 for i, index
+                         in enumerate(self.mesh.msh_t.quad4['index'])})
+        return elements
+
+    @lru_cache(maxsize=1)
+    def id(self):
+        return list(self().keys())
+
+    @lru_cache(maxsize=1)
+    def index(self):
+        return np.arange(len(self()))
+
+    def array(self):
+        rank = int(max(map(len, self().values())))
+        array = np.full((len(self()), rank), -1)
+        for i, element in enumerate(self().values()):
+            row = np.array(list(map(self.mesh.nodes.get_index_by_id, element)))
+            array[i, :len(row)] = row
+        return np.ma.masked_equal(array, -1)
+
+    @lru_cache(maxsize=1)
+    def triangles(self):
+        return np.array(
+            [list(map(self.mesh.nodes.get_index_by_id, element))
+             for element in self().values()
+             if len(element) == 3])
+
+    @lru_cache(maxsize=1)
+    def quads(self):
+        return np.array(
+            [list(map(self.mesh.nodes.get_index_by_id, element))
+             for element in self().values()
+             if len(element) == 4])
+
+    def triangulation(self):
+        triangles = self.triangles().tolist()
+        for quad in self.quads():
+            triangles.append([quad[0], quad[1], quad[3]])
+            triangles.append([quad[1], quad[2], quad[3]])
+        return Triangulation(
+            self.mesh.coord[:, 0],
+            self.mesh.coord[:, 1],
+            triangles)
+
+    def geodataframe(self):
+        data = []
+        for id, element in self().items():
             data.append({
-                'id': bnd.id,
-                'ibtype': bnd.ibtype,
-                "index_id": bnd.index_id,
-                "indexes": bnd.indexes,
-                'geometry': bnd.geometry})
-
-        for bnd in self.interior().itertuples():
-            data.append({
-                'id': bnd.id,
-                'ibtype': bnd.ibtype,
-                "index_id": bnd.index_id,
-                "indexes": bnd.indexes,
-                'geometry': bnd.geometry})
-
-        return gpd.GeoDataFrame(data, crs=self._mesh.crs)
-
-    def __len__(self):
-        return len(self())
+                'geometry': Polygon(
+                    self.mesh.coord[list(
+                        map(self.mesh.nodes.get_index_by_id, element))]),
+                'id': id})
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
 
-class Mesh(Gr3):
-    """
-    Class that represents the unstructured planar mesh used by SCHISM.
-    """
-    # _boundaries = BoundariesDescriptor()
+class EuclideanMesh(BaseMesh):
 
-    def __init__(self, *args, boundaries=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._boundaries = MeshBoundaries(self, boundaries)
+    def __init__(self, mesh: jigsaw_msh_t):
+        if not isinstance(mesh, jigsaw_msh_t):
+            raise TypeError(f'Argument mesh must be of type {jigsaw_msh_t}, '
+                            f'not type {type(mesh)}.')
+        if mesh.mshID != 'euclidean-mesh':
+            raise ValueError(f'Argument mesh has property mshID={mesh.mshID}, '
+                             "but expected 'euclidean-mesh'.")
+        if not hasattr(mesh, 'crs'):
+            warnings.warn('Input mesh has no CRS information.')
+            mesh.crs = None
+        else:
+            if not isinstance(mesh.crs, CRS):
+                raise ValueError(f'crs property must be of type {CRS}, not '
+                                 f'type {type(mesh.crs)}.')
+
+        self._msh_t = mesh
+
+    def write(self, path: Union[str, os.PathLike], overwrite: bool = False,
+              format='grd'):
+        path = pathlib.Path(path)
+        if path.exists() and overwrite is not True:
+            raise IOError(
+                f'File {str(path)} exists and overwrite is not True.')
+        if format == 'grd':
+            grd.write(utils.msh_t_to_grd(self._msh_t), path, overwrite)
+
+        elif format == '2dm':
+            sms2dm.writer(utils.msh_t_to_2dm(self._msh_t), path, overwrite)
+
+        elif format == 'msh':
+            savemsh(self.msh_t, path)
+
+        else:
+            raise ValueError(f'Unhandled format {format}.')
+
+    @property
+    def tria3(self):
+        return self.msh_t.tria3
+
+    @property
+    def triangles(self):
+        return self.msh_t.tria3['index']
+
+    @property
+    def quad4(self):
+        return self.msh_t.quad4
+
+    @property
+    def quads(self):
+        return self.msh_t.quad4['index']
+
+    @property
+    def crs(self):
+        return self.msh_t.crs
+
+    @property
+    def hull(self):
+        if not hasattr(self, '_hull'):
+            self._hull = Hull(self)
+        return self._hull
+
+    @property
+    def nodes(self):
+        if not hasattr(self, '_nodes'):
+            self._nodes = Nodes(self)
+        return self._nodes
+
+    @property
+    def elements(self):
+        if not hasattr(self, '_elements'):
+            self._elements = Elements(self)
+        return self._elements
+
+
+class EuclideanMesh2D(EuclideanMesh):
+
+    def __init__(self, mesh: jigsaw_msh_t):
+        super().__init__(mesh)
+        if mesh.ndims != +2:
+            raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
+                             "but expected ndims=2.")
+
+    def get_bbox(
+            self,
+            crs: Union[str, CRS] = None,
+            output_type: Literal['polygon', 'bbox'] = None
+    ) -> Union[Polygon, Bbox]:
+        output_type = 'polygon' if output_type is None else output_type
+        xmin, xmax = np.min(self.coord[:, 0]), np.max(self.coord[:, 0])
+        ymin, ymax = np.min(self.coord[:, 1]), np.max(self.coord[:, 1])
+        crs = self.crs if crs is None else crs
+        if crs is not None:
+            if not self.crs.equals(crs):
+                transformer = Transformer.from_crs(
+                    self.crs, crs, always_xy=True)
+                (xmin, xmax), (ymin, ymax) = transformer.transform(
+                    (xmin, xmax), (ymin, ymax))
+        if output_type == 'polygon':
+            return box(xmin, ymin, xmax, ymax)
+        elif output_type == 'bbox':
+            return Bbox([[xmin, ymin], [xmax, ymax]])
+        else:
+            raise TypeError(
+                'Argument output_type must a string literal \'polygon\' or '
+                '\'bbox\'')
+
+    @property
+    def vert2(self):
+        return self.msh_t.vert2
+
+    @property
+    def value(self):
+        return self.msh_t.value
+
+    @property
+    def bbox(self):
+        return self.get_bbox()
+
+
+class Mesh(BaseMesh):
+    """Mesh factory"""
+
+    def __new__(self, mesh: jigsaw_msh_t):
+
+        if not isinstance(mesh, jigsaw_msh_t):
+            raise TypeError(f'Argument mesh must be of type {jigsaw_msh_t}, '
+                            f'not type {type(mesh)}.')
+
+        if mesh.mshID == 'euclidean-mesh':
+            if mesh.ndims == 2:
+                return EuclideanMesh2D(mesh)
+            else:
+                raise NotImplementedError(
+                    f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
+                    'handled.')
+
+        else:
+            raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
 
     @staticmethod
     def open(path, crs=None):
-        _grd = grd.read(path, crs=crs)
-        _grd['nodes'] = {id: (coords, -val) for id, (coords, val)
-                         in _grd['nodes'].items()}
-        return Mesh(**_grd)
+        try:
+            return Mesh(utils.grd_to_msh_t(grd.read(path, crs=crs)))
+        except Exception as e:
+            if 'not a valid grd file' in str(e):
+                pass
+            else:
+                raise e
 
-    def to_dict(self):
-        _grd = super().to_dict()
-        _grd.update({
-            "nodes": {id: (coord, -val) for id, (coord, val)
-                      in self.nodes().items()},
-            "boundaries": self.boundaries.data})
-        return _grd
+        try:
+            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path)))
+        except ValueError:
+            pass
 
-    @figure
-    def make_plot(
-        self,
-        axes=None,
-        vmin=None,
-        vmax=None,
-        show=False,
-        title=None,
-        # figsize=rcParams["figure.figsize"],
-        extent=None,
-        cbar_label=None,
-        **kwargs
-    ):
-        if vmin is None:
-            vmin = np.min(self.values)
-        if vmax is None:
-            vmax = np.max(self.values)
-        kwargs.update(**get_topobathy_kwargs(self.values, vmin, vmax))
-        kwargs.pop('col_val')
-        levels = kwargs.pop('levels')
-        if vmin != vmax:
-            self.tricontourf(
-                axes=axes,
-                levels=levels,
-                vmin=vmin,
-                vmax=vmax,
-                **kwargs
-            )
+        try:
+            msh_t = jigsaw_msh_t()
+            loadmsh(msh_t, path)
+            msh_t.crs = crs
+            return Mesh(msh_t)
+        except Exception:
+            pass
+
+        raise TypeError(
+            f'Unable to automatically determine file type for {str(path)}.')
+
+
+def edges_to_rings(edges):
+    if len(edges) == 0:
+        return edges
+    # start ordering the edges into linestrings
+    edge_collection = list()
+    ordered_edges = [edges.pop(-1)]
+    e0, e1 = [list(t) for t in zip(*edges)]
+    while len(edges) > 0:
+        if ordered_edges[-1][1] in e0:
+            idx = e0.index(ordered_edges[-1][1])
+            ordered_edges.append(edges.pop(idx))
+        elif ordered_edges[0][0] in e1:
+            idx = e1.index(ordered_edges[0][0])
+            ordered_edges.insert(0, edges.pop(idx))
+        elif ordered_edges[-1][1] in e1:
+            idx = e1.index(ordered_edges[-1][1])
+            ordered_edges.append(
+                list(reversed(edges.pop(idx))))
+        elif ordered_edges[0][0] in e0:
+            idx = e0.index(ordered_edges[0][0])
+            ordered_edges.insert(
+                0, list(reversed(edges.pop(idx))))
         else:
-            self.tripcolor(axes=axes, **kwargs)
-        self.quadface(axes=axes, **kwargs)
-        axes.axis('scaled')
-        if extent is not None:
-            axes.axis(extent)
-        if title is not None:
-            axes.set_title(title)
-        mappable = ScalarMappable(cmap=kwargs['cmap'])
-        mappable.set_array([])
-        mappable.set_clim(vmin, vmax)
-        divider = make_axes_locatable(axes)
-        cax = divider.append_axes("bottom", size="2%", pad=0.5)
-        cbar = plt.colorbar(
-            mappable,
-            cax=cax,
-            orientation='horizontal'
-        )
-        cbar.set_ticks([vmin, vmax])
-        cbar.set_ticklabels([np.around(vmin, 2), np.around(vmax, 2)])
-        if cbar_label is not None:
-            cbar.set_label(cbar_label)
-        return axes
+            edge_collection.append(tuple(ordered_edges))
+            idx = -1
+            ordered_edges = [edges.pop(idx)]
+        e0.pop(idx)
+        e1.pop(idx)
+    # finalize
+    if len(edge_collection) == 0 and len(edges) == 0:
+        edge_collection.append(tuple(ordered_edges))
+    else:
+        edge_collection.append(tuple(ordered_edges))
+    return edge_collection
 
-    @property
-    def boundaries(self):
-        return self._boundaries
 
-    @property
-    def ocean_boundaries(self):
-        return self.boundaries.ocean
+def sort_rings(index_rings, vertices):
+    """Sorts a list of index-rings.
 
-    @property
-    def land_boundaries(self):
-        return self.boundaries.land
+    Takes a list of unsorted index rings and sorts them into an "exterior" and
+    "interior" components. Any doubly-nested rings are considered exterior
+    rings.
 
-    @property
-    def interior_boundaries(self):
-        return self.boundaries.interior
+    TODO: Refactor and optimize. Calls that use :class:matplotlib.path.Path can
+    probably be optimized using shapely.
+    """
+
+    # sort index_rings into corresponding "polygons"
+    areas = list()
+    for index_ring in index_rings:
+        e0, e1 = [list(t) for t in zip(*index_ring)]
+        areas.append(float(Polygon(vertices[e0, :]).area))
+
+    # maximum area must be main mesh
+    idx = areas.index(np.max(areas))
+    exterior = index_rings.pop(idx)
+    areas.pop(idx)
+    _id = 0
+    _index_rings = dict()
+    _index_rings[_id] = {
+        'exterior': np.asarray(exterior),
+        'interiors': []
+    }
+    e0, e1 = [list(t) for t in zip(*exterior)]
+    path = Path(vertices[e0 + [e0[0]], :], closed=True)
+    while len(index_rings) > 0:
+        # find all internal rings
+        potential_interiors = list()
+        for i, index_ring in enumerate(index_rings):
+            e0, e1 = [list(t) for t in zip(*index_ring)]
+            if path.contains_point(vertices[e0[0], :]):
+                potential_interiors.append(i)
+        # filter out nested rings
+        real_interiors = list()
+        for i, p_interior in reversed(
+                list(enumerate(potential_interiors))):
+            _p_interior = index_rings[p_interior]
+            check = [index_rings[k]
+                     for j, k in
+                     reversed(list(enumerate(potential_interiors)))
+                     if i != j]
+            has_parent = False
+            for _path in check:
+                e0, e1 = [list(t) for t in zip(*_path)]
+                _path = Path(vertices[e0 + [e0[0]], :], closed=True)
+                if _path.contains_point(vertices[_p_interior[0][0], :]):
+                    has_parent = True
+            if not has_parent:
+                real_interiors.append(p_interior)
+        # pop real rings from collection
+        for i in reversed(sorted(real_interiors)):
+            _index_rings[_id]['interiors'].append(
+                np.asarray(index_rings.pop(i)))
+            areas.pop(i)
+        # if no internal rings found, initialize next polygon
+        if len(index_rings) > 0:
+            idx = areas.index(np.max(areas))
+            exterior = index_rings.pop(idx)
+            areas.pop(idx)
+            _id += 1
+            _index_rings[_id] = {
+                'exterior': np.asarray(exterior),
+                'interiors': []
+            }
+            e0, e1 = [list(t) for t in zip(*exterior)]
+            path = Path(vertices[e0 + [e0[0]], :], closed=True)
+    return _index_rings
+
+
+def signed_polygon_area(vertices):
+    # https://code.activestate.com/recipes/578047-area-of-polygon-using-shoelace-formula/
+    n = len(vertices)  # of vertices
+    area = 0.0
+    for i in range(n):
+        j = (i + 1) % n
+        area += vertices[i][0] * vertices[j][1]
+        area -= vertices[j][0] * vertices[i][1]
+        return area / 2.0

@@ -1,6 +1,7 @@
 from collections import defaultdict
+from enum import Enum
 from itertools import permutations
-from typing import Union
+from typing import Union, Dict
 
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
@@ -8,8 +9,11 @@ import matplotlib.pyplot as plt  # type: ignore[import]
 from matplotlib.tri import Triangulation  # type: ignore[import]
 import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
-from scipy.interpolate import RectBivariateSpline  # type: ignore[import]
+from scipy.interpolate import (  # type: ignore[import]
+    RectBivariateSpline, griddata)
 from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
+
+from geomesh.mesh.parsers import grd, sms2dm
 
 
 def mesh_to_tri(mesh):
@@ -419,25 +423,56 @@ def cleanup_pinched_nodes(mesh):
         axis=0)
 
 
-def interpolate_hmat(mesh, hmat, method='spline', kx=1, ky=1, **kwargs):
-    assert isinstance(mesh, jigsaw_msh_t)
-    assert isinstance(hmat, jigsaw_msh_t)
-    assert method in ['spline', 'linear', 'nearest']
-    kwargs.update({'kx': kx, 'ky': ky})
-    if method == 'spline':
-        values = RectBivariateSpline(
-            hmat.xgrid,
-            hmat.ygrid,
-            hmat.value.T,
-            **kwargs
-            ).ev(
-            mesh.vert2['coord'][:, 0],
-            mesh.vert2['coord'][:, 1])
-        mesh.value = np.array(
-            values.reshape((values.size, 1)),
-            dtype=jigsaw_msh_t.REALS_t)
+def interpolate(src: jigsaw_msh_t, dst: jigsaw_msh_t, **kwargs):
+    if src.mshID == 'euclidean-grid' and dst.mshID == 'euclidean-mesh':
+        interpolate_euclidean_grid_to_euclidean_mesh(src, dst, **kwargs)
+    elif src.mshID == 'euclidean-mesh' and dst.mshID == 'euclidean-mesh':
+        interpolate_euclidean_mesh_to_euclidean_mesh(src, dst, **kwargs)
     else:
-        raise NotImplementedError("Only 'spline' method is available")
+        raise NotImplementedError(
+            f'Not implemented type combination: source={src.mshID}, '
+            f'dest={dst.mshID}')
+
+
+def interpolate_euclidean_mesh_to_euclidean_mesh(
+        src: jigsaw_msh_t,
+        dst: jigsaw_msh_t,
+        method='linear',
+        fill_value=np.nan
+):
+    values = griddata(
+        src.vert2['coord'],
+        src.value.flatten(),
+        dst.vert2['coord'],
+        method=method,
+        fill_value=fill_value
+    )
+    dst.value = np.array(
+        values.reshape(len(values), 1), dtype=jigsaw_msh_t.REALS_t)
+
+
+def interpolate_euclidean_grid_to_euclidean_mesh(
+        src: jigsaw_msh_t,
+        dst: jigsaw_msh_t,
+        bbox=[None, None, None, None],
+        kx=3,
+        ky=3,
+        s=0
+):
+    values = RectBivariateSpline(
+        src.xgrid,
+        src.ygrid,
+        src.value.T,
+        bbox=bbox,
+        kx=kx,
+        ky=ky,
+        s=s
+        ).ev(
+        dst.vert2['coord'][:, 0],
+        dst.vert2['coord'][:, 1])
+    dst.value = np.array(
+        values.reshape((values.size, 1)),
+        dtype=jigsaw_msh_t.REALS_t)
 
 
 def tricontourf(
@@ -490,10 +525,9 @@ def triplot(
 
 def reproject(
         mesh: jigsaw_msh_t,
-        mesh_crs: Union[str, CRS],
         dst_crs: Union[str, CRS]
 ):
-    src_crs = CRS.from_user_input(mesh_crs)
+    src_crs = mesh.crs
     dst_crs = CRS.from_user_input(dst_crs)
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
     x, y = transformer.transform(
@@ -502,6 +536,7 @@ def reproject(
         [([x[i], y[i]], mesh.vert2['IDtag'][i]) for i
          in range(len(mesh.vert2['IDtag']))],
         dtype=jigsaw_msh_t.VERT2_t)
+    mesh.crs = dst_crs
 
 
 def limgrad(mesh, dfdx, imax=100):
@@ -546,3 +581,48 @@ def limgrad(mesh, dfdx, imax=100):
         msg = f'limgrad() did not converge within {imax} iterations.'
         raise Exception(msg)
     return ffun
+
+
+def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
+    raise NotImplementedError('utils.msh_t_to_grd')
+
+
+def grd_to_msh_t(_grd: Dict) -> jigsaw_msh_t:
+    msh = jigsaw_msh_t()
+    msh.ndims = +2
+    msh.mshID = 'euclidean-mesh'
+    triangles = [element for element in _grd['elements'] if len(element) == 3]
+    quads = [element for element in _grd['elements'] if len(element) == 4]
+    msh.vert2 = np.array([(coord, 0) for coord, _ in _grd['nodes'].values()],
+                         dtype=jigsaw_msh_t.VERT2_t)
+    msh.tria3 = np.array([(index, 0) for index in triangles],
+                         dtype=jigsaw_msh_t.TRIA3_t)
+    msh.quad4 = np.array([(index, 0) for index in quads],
+                         dtype=jigsaw_msh_t.QUAD4_t)
+    value = [value for _, value in _grd['nodes'].values()]
+    msh.value = np.array(np.array(value).reshape((len(value), 1)),
+                         dtype=jigsaw_msh_t.REALS_t)
+    crs = _grd.get('crs')
+    if crs is not None:
+        msh.crs = CRS.from_user_input(crs)
+    return msh
+
+
+def msh_t_to_2dm(msh: jigsaw_msh_t):
+    coords = msh.vert2['coord']
+    src_crs = msh.crs if hasattr(msh, 'crs') else None
+    if src_crs is not None:
+        EPSG_4326 = CRS.from_epsg(4326)
+        if not src_crs.equals(EPSG_4326):
+            transformer = Transformer.from_crs(
+                src_crs, EPSG_4326, always_xy=True)
+            coords = np.vstack(
+                transformer.transform(coords[:, 0], coords[:, 1])).T
+    return {
+            'ND': {i+1: (coord, msh.value[i, 0]) for i, coord
+                   in enumerate(coords)},
+            'E3T': {i+1: index+1 for i, index
+                    in enumerate(msh.tria3['index'])},
+            'E4Q': {i+1: index+1 for i, index
+                    in enumerate(msh.quad4['index'])}
+        }

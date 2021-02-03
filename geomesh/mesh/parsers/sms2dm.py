@@ -1,7 +1,7 @@
 import pathlib
 
 
-def reader(path):
+def read(path):
     sms2dm = dict()
     with open(pathlib.Path(path), 'r') as f:
         f.readline()
@@ -32,78 +32,58 @@ def writer(sms2dm, path, overwrite=False):
         msg = 'File exists, pass overwrite=True to allow overwrite.'
         raise Exception(msg)
     with open(path, 'w') as f:
-        f.write(string(sms2dm))
-    return 0  # for unittests
+        f.write(to_string(sms2dm))
+        # f.write('MESH2D')
+        # f.write('\n')
+        # f.write(E3T_string(sms2dm))
+        # f.write('\n')
+        # f.write(E4Q_string(sms2dm))
+        # f.write('\n')
+        # f.write(ND_string(sms2dm))
+        # f.write('\n')
 
 
-def string(sms2dm):
-    f = graph(sms2dm)
-    f += boundaries(sms2dm)
-    return f
+def to_string(sms2dm):
+    return '\n'.join([
+        "MESH2D",
+        E3T_string(sms2dm),
+        E4Q_string(sms2dm),
+        ND_string(sms2dm),
+    ])
 
 
-def graph(sms2dm):
-    f = "MESH2D\n"
-    # TODO: Make faster using np.array2string
-    f += triangular_elements(sms2dm)
-    f += quadrilateral_elements(sms2dm)
-    f += nodes(sms2dm)
-    return f
-
-
-def nodes(sms2dm):
+def ND_string(sms2dm):
     assert all(int(id) > 0 for id in sms2dm['ND'])
-    f = ''
-    for id, (coords, value)in sms2dm['ND'].items():
-        f += f"ND {int(id):d} "
-        f += f"{coords[0]:<.16E} "
-        f += f"{coords[1]:<.16E} "
-        f += f"{value:<.16E}\n"
-    return f
-
-
-def boundaries(sms2dm):
-    f = ''
-    if 'boundaries' in sms2dm.keys():
-        for ibtype, bnds in sms2dm['boundaries'].items():
-            for id, bnd in bnds.items():
-                f += nodestring(bnd['indexes'])
-    return f
+    lines = []
+    for id, (coords, value) in sms2dm['ND'].items():
+        lines.append(' '.join([
+            'ND',
+            f'{int(id):d}',
+            f"{coords[0]:<.16E}",
+            f"{coords[1]:<.16E}",
+            f"{value:<.16E}"
+        ]))
+    return '\n'.join(lines)
 
 
 def geom_string(geom_type, sms2dm):
     assert geom_type in ['E3T', 'E4Q', 'E6T', 'E8Q', 'E9Q']
     assert all(int(id) > 0 for id in sms2dm[geom_type])
-    f = ''
+    f = []
     for id, geom in sms2dm[geom_type].items():
-        f += f"{geom_type} {id} "
+        line = [
+            f'{geom_type}',
+            f'{id}',
+        ]
         for j in range(len(geom)):
-            f += f"{geom[j]} "
-        f += "\n"
-    return f
+            line.append(f"{geom[j]}")
+        f.append(' '.join(line))
+    return '\n'.join(f)
 
 
-def nodestring(geom):
-    f = "NS "
-    for i in range(len(geom) - 1):
-        f += f"{geom[i]} "
-    f += f"-{geom[-1]}\n"
-    return f
+def E3T_string(sms2dm):
+    return geom_string('E3T', sms2dm)
 
 
-def nodestrings(geom):
-    pass
-
-
-def triangular_elements(geom):
-    f = ''
-    if geom is not None:
-        f += geom_string("E3T", geom)
-    return f
-
-
-def quadrilateral_elements(geom):
-    f = ''
-    if geom is not None:
-        f += geom_string("E4Q", geom)
-    return f
+def E4Q_string(sms2dm):
+    return geom_string('E4Q', sms2dm)

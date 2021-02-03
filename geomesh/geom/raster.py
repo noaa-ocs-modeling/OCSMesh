@@ -45,13 +45,12 @@ class RasterGeom(BaseGeom):
         """
         self._source_raster = raster
 
-    def get_multipolygon(self, zmin=None, zmax=None):
-        # TODO: Is it better to partition the raster in windows and parallelize
-        # the computation, or is it better to do the windows in serial for all
-        # use cases?
-        # The current implementation uses serial processing over the raster
-        # windows. This computation uses considerable amounts of memory.
-        # Be aware of memory constraints if parallelizing this function.
+    def get_multipolygon(  # type: ignore[override]
+            self, zmin: float = None, zmax: float = None) -> MultiPolygon:
+        """Returns the shapely.geometry.MultiPolygon object that represents
+        the hull of the raster given optional zmin and zmax contraints.
+        """
+
         polygon_collection = []
         for window in self.raster.iter_windows():
             x, y, z = self.raster.get_window_data(window, band=1)
@@ -83,49 +82,16 @@ class RasterGeom(BaseGeom):
     def crs(self):
         return self.raster.crs
 
-    def make_plot(
-        self,
-        ax=None,
-        show=False,
-    ):
+    def make_plot(self, ax=None, show=False):
 
-        # TODO: This function doesn't work due to disabling ellipsoid
-
-        # spherical plot
-        if self._ellipsoid is not None:
-
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection='3d')
-            for polygon in self.multipolygon:
-                coords = np.asarray(polygon.exterior.coords)
-                x, y, z = self._geodetic_to_geocentric(
-                    self._ellipsoids[self._ellipsoid.upper()],
-                    coords[:, 1],
-                    coords[:, 0],
-                    0.
-                    )
-                ax.add_collection3d(
-                    m3d.art3d.Line3DCollection([np.vstack([x, y, z]).T]),
-                    )
-        # planar plot
-        else:
-            for polygon in self.multipolygon:
-                plt.plot(*polygon.exterior.xy, color='k')
-                for interior in polygon.interiors:
-                    plt.plot(*interior.xy, color='r')
+        # TODO: Consider the ellipsoidal case. Refer to commit
+        # dd087257c15692dd7d8c8e201d251ab5e66ff67f on main branch for
+        # ellipsoidal ploting routing (removed).
+        for polygon in self.multipolygon:
+            plt.plot(*polygon.exterior.xy, color='k')
+            for interior in polygon.interiors:
+                plt.plot(*interior.xy, color='r')
         if show:
-            if self._ellipsoid is None:
-                plt.gca().axis('scaled')
-            else:
-                radius = self._ellipsoids[self._ellipsoid.upper()][0]
-                # ax.set_aspect('equal')
-                ax.set_xlim3d([-radius, radius])
-                ax.set_xlabel("X")
-                ax.set_ylim3d([-radius, radius])
-                ax.set_ylabel("Y")
-                ax.set_zlim3d([-radius, radius])
-                ax.set_zlabel("Z")
-
             plt.show()
 
         return plt.gca()
