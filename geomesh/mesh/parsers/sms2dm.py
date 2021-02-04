@@ -1,7 +1,9 @@
 import pathlib
 
+from pyproj import CRS
 
-def read(path):
+
+def read(path, crs=None):
     sms2dm = dict()
     with open(pathlib.Path(path), 'r') as f:
         f.readline()
@@ -23,6 +25,8 @@ def read(path):
                         list(map(float, line[2:-1])), float(line[-1])
                         )
                     })
+    if crs is not None:
+        sms2dm['crs'] = CRS.from_user_input(crs)
     return sms2dm
 
 
@@ -33,14 +37,6 @@ def writer(sms2dm, path, overwrite=False):
         raise Exception(msg)
     with open(path, 'w') as f:
         f.write(to_string(sms2dm))
-        # f.write('MESH2D')
-        # f.write('\n')
-        # f.write(E3T_string(sms2dm))
-        # f.write('\n')
-        # f.write(E4Q_string(sms2dm))
-        # f.write('\n')
-        # f.write(ND_string(sms2dm))
-        # f.write('\n')
 
 
 def to_string(sms2dm):
@@ -78,7 +74,10 @@ def geom_string(geom_type, sms2dm):
         for j in range(len(geom)):
             line.append(f"{geom[j]}")
         f.append(' '.join(line))
-    return '\n'.join(f)
+    if len(f) > 0:
+        return '\n'.join(f)
+    else:
+        return ''
 
 
 def E3T_string(sms2dm):

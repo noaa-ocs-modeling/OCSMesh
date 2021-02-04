@@ -417,7 +417,7 @@ class Mesh(BaseMesh):
                 raise e
 
         try:
-            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path)))
+            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path, crs=crs)))
         except ValueError:
             pass
 

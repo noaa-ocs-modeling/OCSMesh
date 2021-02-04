@@ -626,3 +626,30 @@ def msh_t_to_2dm(msh: jigsaw_msh_t):
             'E4Q': {i+1: index+1 for i, index
                     in enumerate(msh.quad4['index'])}
         }
+
+
+def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
+    msh = jigsaw_msh_t()
+    msh.ndims = +2
+    msh.mshID = 'euclidean-mesh'
+    id_to_index = {node_id: index for index, node_id
+                   in enumerate(_sms2dm['ND'].keys())}
+    if 'E3T' in _sms2dm:
+        triangles = [list(map(lambda x: id_to_index[x], element)) for element
+                     in _sms2dm['E3T'].values()]
+        msh.tria3 = np.array([(index, 0) for index in triangles],
+                             dtype=jigsaw_msh_t.TRIA3_t)
+    if 'E4Q' in _sms2dm:
+        quads = [list(map(lambda x: id_to_index[x], element)) for element
+                 in _sms2dm['E4Q'].values()]
+        msh.quad4 = np.array([(index, 0) for index in quads],
+                             dtype=jigsaw_msh_t.QUAD4_t)
+    msh.vert2 = np.array([(coord, 0) for coord, _ in _sms2dm['ND'].values()],
+                         dtype=jigsaw_msh_t.VERT2_t)
+    value = [value for _, value in _sms2dm['ND'].values()]
+    msh.value = np.array(np.array(value).reshape((len(value), 1)),
+                         dtype=jigsaw_msh_t.REALS_t)
+    crs = _sms2dm.get('crs')
+    if crs is not None:
+        msh.crs = CRS.from_user_input(crs)
+    return msh
