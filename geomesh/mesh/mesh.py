@@ -36,7 +36,7 @@ class Rings:
                                   self.mesh.coord)
         data = []
         for bnd_id, rings in sorted_rings.items():
-            coords = self.coord[rings['exterior'][:, 0], :]
+            coords = self.mesh.coord[rings['exterior'][:, 0], :]
             geometry = LinearRing(coords)
             data.append({
                     "geometry": geometry,
@@ -51,7 +51,7 @@ class Rings:
                     "bnd_id": bnd_id,
                     "type": 'interior'
                 })
-        return gpd.GeoDataFrame(data, crs=self.msh_t.crs)
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
     def exterior(self):
         return self().loc[self()['type'] == 'exterior']
@@ -247,6 +247,7 @@ class Elements:
     def triangulation(self):
         triangles = self.triangles().tolist()
         for quad in self.quads():
+            # TODO: Not tested.
             triangles.append([quad[0], quad[1], quad[3]])
             triangles.append([quad[1], quad[2], quad[3]])
         return Triangulation(
