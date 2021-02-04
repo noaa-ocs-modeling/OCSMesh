@@ -44,7 +44,7 @@ class Rings:
                     "type": 'exterior'
                 })
             for interior in rings['interiors']:
-                coords = self.coord[interior[:, 0], :]
+                coords = self.mesh.coord[interior[:, 0], :]
                 geometry = LinearRing(coords)
                 data.append({
                     "geometry": geometry,
