@@ -51,6 +51,9 @@ class RasterGeom(BaseGeom):
         the hull of the raster given optional zmin and zmax contraints.
         """
 
+        if zmin is None and zmax is None:
+            return MultiPolygon([self.raster.get_bbox()])
+
         polygon_collection = []
         for window in self.raster.iter_windows():
             x, y, z = self.raster.get_window_data(window, band=1)

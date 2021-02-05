@@ -12,6 +12,8 @@ from geomesh import Raster, Geom
 from geomesh.mesh.mesh import Mesh
 
 _logger = logging.getLogger(__name__)
+
+
 def run(dem_files: Sequence[Union[str, os.PathLike]],
         out_file: Union[str, os.PathLike],
         out_format: Literal["shapefile"] = "shapefile",
@@ -44,7 +46,7 @@ def run(dem_files: Sequence[Union[str, os.PathLike]],
         if not pathlib.Path(dem_path).is_file():
             warnings.warn(f"File {dem_path} not found!")
             _logger.debug(f"File {dem_path} not found!")
-            continue;
+            continue
 
         # Calculate Polygon
         _logger.info("Loading raster from file...")
