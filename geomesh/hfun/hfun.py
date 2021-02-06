@@ -1,6 +1,8 @@
-from geomesh.raster import Raster
 from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
+from geomesh.hfun.mesh import HfunMesh
+from geomesh.mesh.mesh import EuclideanMesh2D
+from geomesh.raster import Raster
 
 
 class Hfun:
@@ -14,6 +16,9 @@ class Hfun:
 
         if isinstance(hfun, Raster):
             return HfunRaster(hfun, **kwargs)
+
+        elif isinstance(hfun, EuclideanMesh2D):
+            return HfunMesh(hfun)
 
         else:
             raise TypeError(

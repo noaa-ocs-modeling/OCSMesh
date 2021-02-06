@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import multiprocessing
 import os
 import pathlib
@@ -31,7 +32,8 @@ from shapely.geometry import (
 # from geomesh.geom import Geom
 # from geomesh.hfun import Hfun
 from geomesh import figures
-from geomesh.logger import Logger
+
+_logger = logging.getLogger(__name__)
 
 
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
@@ -141,7 +143,6 @@ class Raster:
     _overlap = Overlap()
     _tmpfile = TemporaryFile()
     _src = SourceRaster()
-    logger = Logger()
 
     def __init__(
             self,
@@ -524,10 +525,10 @@ class Raster:
             level: float,
             window: rasterio.windows.Window = None
     ):
-        self.logger.debug(
+        _logger.debug(
             f'RasterHfun.get_raster_contours(level={level}, window={window})')
         tmpdir = tempfile.TemporaryDirectory()
-        self.logger.info(f'Opened temporary directory: {tmpdir.name}')
+        _logger.info(f'Opened temporary directory: {tmpdir.name}')
         if window is None:
             iter_windows = list(self.iter_windows())
         else:
@@ -543,10 +544,10 @@ class Raster:
         values = self.get_values(band=1, window=window)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
-            self.logger.debug('Computing contours...')
+            _logger.debug('Computing contours...')
             start = time()
             ax = plt.contour(x, y, values, levels=[level])
-            self.logger.debug(f'Took {time()-start}...')
+            _logger.debug(f'Took {time()-start}...')
             plt.close(plt.gcf())
         for path_collection in ax.collections:
             for path in path_collection.get_paths():
@@ -560,18 +561,18 @@ class Raster:
     def _get_raster_contour_feathered(self, level, iter_windows):
         feathers = []
         total_windows = len(iter_windows)
-        self.logger.debug(f'Total windows to process: {total_windows}.')
+        _logger.debug(f'Total windows to process: {total_windows}.')
         for i, window in enumerate(iter_windows):
             x, y = self.get_x(window), self.get_y(window)
-            self.logger.debug(f'Processing window {i+1}/{total_windows}.')
+            _logger.debug(f'Processing window {i+1}/{total_windows}.')
             features = []
             values = self.get_values(band=1, window=window)
             with warnings.catch_warnings():
                 warnings.simplefilter('ignore', UserWarning)
-                self.logger.debug('Computing contours...')
+                _logger.debug('Computing contours...')
                 start = time()
                 ax = plt.contour(x, y, values, levels=[level])
-                self.logger.debug(f'Took {time()-start}...')
+                _logger.debug(f'Took {time()-start}...')
                 plt.close(plt.gcf())
             for path_collection in ax.collections:
                 for path in path_collection.get_paths():
@@ -584,13 +585,13 @@ class Raster:
                 tmpfile = pathlib.Path(tmpdir) / pathlib.Path(
                         tempfile.NamedTemporaryFile(suffix='.feather').name
                         ).name
-                self.logger.debug('Saving feather.')
+                _logger.debug('Saving feather.')
                 features = ops.linemerge(features)
                 gpd.GeoDataFrame(
                     [{'geometry': features}]
                     ).to_feather(tmpfile)
                 feathers.append(tmpfile)
-        self.logger.debug('Concatenating feathers.')
+        _logger.debug('Concatenating feathers.')
         features = []
         out = gpd.GeoDataFrame()
         for feather in feathers:
@@ -601,7 +602,7 @@ class Raster:
                     geometry = MultiLineString([geometry])
             for linestring in geometry:
                 features.append(linestring)
-        self.logger.debug('Merging features.')
+        _logger.debug('Merging features.')
         return ops.linemerge(features)
 
     def iter_windows(self, chunk_size=None, overlap=None):

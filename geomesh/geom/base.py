@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
-from jigsawpy import jigsaw_msh_t  # type: ignore[import]
-import numpy as np  # type: ignore[import]
-from shapely.geometry import MultiPolygon  # type: ignore[import]
+from jigsawpy import jigsaw_msh_t
+import numpy as np
+from pyproj import CRS, Transformer
+from shapely import ops
+from shapely.geometry import MultiPolygon
+import utm
 
-from geomesh.logger import Logger
+from geomesh.crs import CRS as CRSDescriptor
 
 
 class BaseGeom(ABC):
@@ -25,13 +28,10 @@ class BaseGeom(ABC):
     users.
     '''
 
-    logger = Logger()
+    _crs = CRSDescriptor()
 
-    @property
-    def geom(self) -> jigsaw_msh_t:
-        '''Returns a :class:jigsawpy.jigsaw_msh_t object representing the
-        currently configured geometry.'''
-        return self.get_jigsaw_msh_t()
+    def __init__(self, crs):
+        self._crs = crs
 
     @property
     def multipolygon(self) -> MultiPolygon:
@@ -39,10 +39,13 @@ class BaseGeom(ABC):
         the configured geometry.'''
         return self.get_multipolygon()
 
-    def get_jigsaw_msh_t(self, **kwargs) -> jigsaw_msh_t:
+    def msh_t(self, **kwargs) -> jigsaw_msh_t:
         '''Returns a :class:jigsawpy.jigsaw_msh_t object representing the
         geometry constrained by the arguments.'''
-        return multipolygon_to_jigsaw_msh_t(self.get_multipolygon(**kwargs))
+        return multipolygon_to_jigsaw_msh_t(
+            self.get_multipolygon(**kwargs),
+            self.crs
+        )
 
     @abstractmethod
     def get_multipolygon(self, **kwargs) -> MultiPolygon:
@@ -50,9 +53,31 @@ class BaseGeom(ABC):
         the geometry constrained by the arguments.'''
         raise NotImplementedError
 
+    @property
+    def crs(self):
+        return self._crs
 
-def multipolygon_to_jigsaw_msh_t(multipolygon: MultiPolygon) -> jigsaw_msh_t:
+
+def multipolygon_to_jigsaw_msh_t(
+        multipolygon: MultiPolygon,
+        crs: CRS
+) -> jigsaw_msh_t:
     '''Casts shapely.geometry.MultiPolygon to jigsawpy.jigsaw_msh_t'''
+    if crs.is_geographic:
+        x0, y0, x1, y1 = multipolygon.bounds
+        _, _, number, letter = utm.from_latlon(
+            (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+            proj='utm',
+            zone=f'{number}{letter}',
+            ellps={
+                'GRS 1980': 'GRS80',
+                'WGS 84': 'WGS84'
+                }[crs.ellipsoid.name]
+        )
+        transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
+        multipolygon = ops.transform(transformer.transform, multipolygon)
+
     vert2: List[Tuple[Tuple[float, float], int]] = list()
     for polygon in multipolygon:
         if np.all(

@@ -1,4 +1,5 @@
 import gc
+import logging
 from multiprocessing import cpu_count, Pool
 # import pathlib
 import tempfile
@@ -29,6 +30,8 @@ from geomesh import utils
 # supress feather warning
 warnings.filterwarnings(
     'ignore', message='.*initial implementation of Parquet.*')
+
+_logger = logging.getLogger(__name__)
 
 
 class HfunInputRaster:
@@ -125,7 +128,7 @@ class HfunRaster(BaseHfun, Raster):
                 right = ygrid[:, 1]
                 del ygrid
 
-                self.logger.info('Building hfun.tria3...')
+                _logger.info('Building hfun.tria3...')
                 dim1 = window.width
                 dim2 = window.height
                 tria3 = []
@@ -162,27 +165,27 @@ class HfunRaster(BaseHfun, Raster):
                     dtype=jigsaw_msh_t.TRIA3_t)
                 del tria3
                 gc.collect()
-                self.logger.info('Done building hfun.tria3...')
+                _logger.info('Done building hfun.tria3...')
 
                 # BUILD VERT2_t. this one comes from the memcache array
-                self.logger.info('Building hfun.vert2...')
+                _logger.info('Building hfun.vert2...')
                 hfun.vert2 = np.empty(
                     window.width*window.height,
                     dtype=jigsaw_msh_t.VERT2_t)
                 hfun.vert2['coord'] = np.array(
                     self.get_xy_memcache(window, utm_crs))
-                self.logger.info('Done building hfun.vert2...')
+                _logger.info('Done building hfun.vert2...')
 
                 # Build REALS_t: this one comes from hfun raster
-                self.logger.info('Building hfun.value...')
+                _logger.info('Building hfun.value...')
                 hfun.value = np.array(
                     self.get_values(window=window, band=1).flatten().reshape(
                         (window.width*window.height, 1)).astype(np.float32),
                     dtype=jigsaw_msh_t.REALS_t)
-                self.logger.info('Done building hfun.value...')
+                _logger.info('Done building hfun.value...')
 
                 # Build Geom
-                self.logger.info('Building initial geom...')
+                _logger.info('Building initial geom...')
                 transformer = Transformer.from_crs(
                     self.crs, utm_crs, always_xy=True)
                 bbox = [
@@ -192,12 +195,13 @@ class HfunRaster(BaseHfun, Raster):
                     *[(bottom[0], y) for y in reversed(left)]]
                 geom = PolygonGeom(
                     ops.transform(transformer.transform, Polygon(bbox)),
-                ).geom
-                self.logger.info('Building initial geom done.')
+                    utm_crs
+                ).msh_t()
+                _logger.info('Building initial geom done.')
                 kwargs = {'method': 'nearest'}
 
             else:
-                self.logger.info('Forming initial hmat (euclidean-grid).')
+                _logger.info('Forming initial hmat (euclidean-grid).')
                 start = time()
                 hfun.mshID = 'euclidean-grid'
                 hfun.xgrid = np.array(
@@ -210,11 +214,11 @@ class HfunRaster(BaseHfun, Raster):
                     np.flipud(self.get_values(window=window, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
-                geom = PolygonGeom(box(x0, y0, x1, y1)).geom
+                geom = PolygonGeom(box(x0, y0, x1, y1), self.crs).msh_t()
 
-            self.logger.info(f'Initial hfun generation took {time()-start}.')
+            _logger.info(f'Initial hfun generation took {time()-start}.')
 
-            self.logger.info('Configuring jigsaw...')
+            _logger.info('Configuring jigsaw...')
 
             opts = jigsaw_jig_t()
 
@@ -249,7 +253,7 @@ class HfunRaster(BaseHfun, Raster):
 
             if utm_crs is not None:
                 output_mesh.crs = utm_crs
-                utils.reproject(output_mesh, self.crs)
+                # utils.reproject(output_mesh, self.crs)
             else:
                 output_mesh.crs = self.crs
 
@@ -271,9 +275,9 @@ class HfunRaster(BaseHfun, Raster):
         """
         contours = self.raster.get_contour(level)
         if isinstance(contours, GeometryCollection):
-            self.logger.info('No contours found...')
+            _logger.info('No contours found...')
             return
-        self.logger.info('Adding contours as features...')
+        _logger.info('Adding contours as features...')
         self.add_feature(contours, expansion_rate, target_size, nprocs)
 
     def add_feature(
@@ -297,10 +301,14 @@ class HfunRaster(BaseHfun, Raster):
         instead of a locally projected window.
         '''
 
+        # TODO: Partition features if they are too "long" which results in an
+        # improvement for parallel pool. E.g. if a feature is too long, 1
+        # processor will be busy and the rest will be idle.
+
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
-        self.logger.debug(f'Using nprocs={nprocs}')
+        _logger.debug(f'Using nprocs={nprocs}')
         if not isinstance(feature, (LineString, MultiLineString)):
             raise TypeError(
                 f'Argument feature must be of type {LineString} or '
@@ -324,7 +332,7 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
-                self.logger.debug(f'Processing window {i+1}/{tot}.')
+                _logger.debug(f'Processing window {i+1}/{tot}.')
                 if self.crs.is_geographic:
                     x0, y0, x1, y1 = self.get_window_bounds(window)
                     _, _, number, letter = utm.from_latlon(
@@ -339,7 +347,7 @@ class HfunRaster(BaseHfun, Raster):
                     )
                 else:
                     utm_crs = None
-                self.logger.info('Resampling features...')
+                _logger.info(f'Resampling features on nprocs {nprocs}...')
                 start = time()
                 with Pool(processes=nprocs) as pool:
                     transformed_features = pool.starmap(
@@ -347,8 +355,9 @@ class HfunRaster(BaseHfun, Raster):
                         [(feat, target_size, self.src.crs, utm_crs) for
                          feat in feature]
                     )
-                self.logger.info(f'Resampling features took {time()-start}.')
-                self.logger.info('Concatenating points...')
+                pool.join()
+                _logger.info(f'Resampling features took {time()-start}.')
+                _logger.info('Concatenating points...')
                 start = time()
                 points = []
                 for geom in transformed_features:
@@ -357,22 +366,22 @@ class HfunRaster(BaseHfun, Raster):
                     elif isinstance(geom, MultiLineString):
                         for linestring in geom:
                             points.extend(linestring.coords)
-                self.logger.info(f'Point concatenation took {time()-start}.')
+                _logger.info(f'Point concatenation took {time()-start}.')
 
-                self.logger.info('Generating KDTree...')
+                _logger.info('Generating KDTree...')
                 start = time()
                 tree = cKDTree(np.array(points))
-                self.logger.info(f'Generating KDTree took {time()-start}.')
+                _logger.info(f'Generating KDTree took {time()-start}.')
                 if utm_crs is not None:
                     xy = self.get_xy_memcache(window, utm_crs)
                 else:
                     xy = self.get_xy(window)
 
-                self.logger.info(f'Transforming points took {time()-start}.')
-                self.logger.info('Querying KDTree...')
+                _logger.info(f'Transforming points took {time()-start}.')
+                _logger.info('Querying KDTree...')
                 start = time()
                 distances, _ = tree.query(xy, n_jobs=nprocs)
-                self.logger.info(f'Querying KDTree took {time()-start}.')
+                _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(
                     self.dtype(1))
@@ -381,10 +390,10 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                self.logger.info(f'Write array to file {tmpfile.name}...')
+                _logger.info(f'Write array to file {tmpfile.name}...')
                 start = time()
                 dst.write_band(1, values, window=window)
-                self.logger.info(f'Write array to file took {time()-start}.')
+                _logger.info(f'Write array to file took {time()-start}.')
         self._tmpfile = tmpfile
 
     def get_xy_memcache(self, window, dst_crs):
@@ -392,7 +401,7 @@ class HfunRaster(BaseHfun, Raster):
             self._xy_cache = {}
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
-            self.logger.info('Transform points to local CRS...')
+            _logger.info('Transform points to local CRS...')
             transformer = Transformer.from_crs(
                 self.src.crs, dst_crs, always_xy=True)
             tmpfile = tempfile.NamedTemporaryFile()
@@ -400,13 +409,13 @@ class HfunRaster(BaseHfun, Raster):
             fp = np.memmap(tmpfile, dtype='float32', mode='w+', shape=xy.shape)
             fp[:] = np.vstack(
                 transformer.transform(xy[:, 0], xy[:, 1])).T
-            self.logger.info('Saving values to memcache...')
+            _logger.info('Saving values to memcache...')
             fp.flush()
-            self.logger.info('Done!')
+            _logger.info('Done!')
             self._xy_cache[f'{window}{dst_crs}'] = tmpfile
             return fp[:]
         else:
-            self.logger.info('Loading values from memcache...')
+            _logger.info('Loading values from memcache...')
             return np.memmap(tmpfile, dtype='float32', mode='r',
                              shape=((window.width*window.height), 2))[:]
 

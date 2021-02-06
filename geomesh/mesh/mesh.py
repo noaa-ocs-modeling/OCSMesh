@@ -374,6 +374,9 @@ class EuclideanMesh2D(EuclideanMesh):
                 'Argument output_type must a string literal \'polygon\' or '
                 '\'bbox\'')
 
+    def tricontourf(self, **kwargs):
+        return utils.tricontourf(self.msh_t, **kwargs)
+
     @property
     def vert2(self):
         return self.msh_t.vert2

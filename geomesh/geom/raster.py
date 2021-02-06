@@ -36,7 +36,12 @@ class RasterGeom(BaseGeom):
 
     _source_raster = SourceRaster()
 
-    def __init__(self, raster: Union[Raster, str, os.PathLike]):
+    def __init__(
+            self,
+            raster: Union[Raster, str, os.PathLike],
+            zmin=None,
+            zmax=None,
+    ):
         """
         Input parameters
         ----------------
@@ -44,12 +49,16 @@ class RasterGeom(BaseGeom):
             Input object used to compute the output mesh hull.
         """
         self._source_raster = raster
+        self._zmin = zmin
+        self._zmax = zmax
 
     def get_multipolygon(  # type: ignore[override]
             self, zmin: float = None, zmax: float = None) -> MultiPolygon:
         """Returns the shapely.geometry.MultiPolygon object that represents
         the hull of the raster given optional zmin and zmax contraints.
         """
+        zmin = self._zmin if zmin is None else zmin
+        zmax = self._zmax if zmax is None else zmax
 
         if zmin is None and zmax is None:
             return MultiPolygon([self.raster.get_bbox()])
