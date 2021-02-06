@@ -8,7 +8,7 @@ from geomesh.geom.mesh import MeshGeom
 from geomesh.geom.shapely import PolygonGeom, MultiPolygonGeom
 
 
-class Geom:
+class Geom(BaseGeom):
     """
     Factory class that creates and returns correct object type
     based on the input type
