@@ -1,12 +1,11 @@
 import os
 from typing import Union
 
-from matplotlib.path import Path  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
-import mpl_toolkits.mplot3d as m3d  # type: ignore[import]
-import numpy as np  # type: ignore[import]
-from shapely import ops  # type: ignore[import]
-from shapely.geometry import (   # type: ignore[import]
+from matplotlib.path import Path
+import matplotlib.pyplot as plt
+import numpy as np
+from shapely import ops
+from shapely.geometry import (
     Polygon, MultiPolygon, LinearRing)
 
 from geomesh.geom.base import BaseGeom

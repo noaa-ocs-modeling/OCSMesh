@@ -81,9 +81,9 @@ class HfunRaster(BaseHfun, Raster):
     def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
                  verbosity=0):
         self._raster = raster
-        self._hmin = hmin
-        self._hmax = hmax
-        self._verbosity = verbosity
+        self._hmin = float(hmin) if hmin is not None else hmin
+        self._hmax = float(hmax) if hmax is not None else hmax
+        self._verbosity = int(verbosity)
 
     def msh_t(self, window: rasterio.windows.Window = None,
               verbosity=None) -> jigsaw_msh_t:
@@ -129,6 +129,7 @@ class HfunRaster(BaseHfun, Raster):
                 del ygrid
 
                 _logger.info('Building hfun.tria3...')
+
                 dim1 = window.width
                 dim2 = window.height
                 tria3 = []
@@ -180,7 +181,7 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info('Building hfun.value...')
                 hfun.value = np.array(
                     self.get_values(window=window, band=1).flatten().reshape(
-                        (window.width*window.height, 1)).astype(np.float32),
+                        (window.width*window.height, 1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 _logger.info('Done building hfun.value...')
 
@@ -240,12 +241,8 @@ class HfunRaster(BaseHfun, Raster):
             output_mesh.mshID = 'euclidean-mesh'
             output_mesh.ndims = +2
 
-            jigsaw(
-                opts,
-                geom,
-                output_mesh,
-                hfun=hfun
-            )
+            jigsaw(opts, geom, output_mesh, hfun=hfun)
+
             del geom
             # do post processing
             hfun.crs = utm_crs
@@ -286,6 +283,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: float,
             target_size: float = None,
             nprocs=None,
+            max_verts=200
     ):
         '''Adds a linear distance size function constraint to the mesh.
 
@@ -315,7 +313,10 @@ class HfunRaster(BaseHfun, Raster):
                 f'{MultiLineString}, not type {type(feature)}.')
 
         if isinstance(feature, LineString):
-            feature = MultiLineString([feature])
+            feature = [feature]
+
+        elif isinstance(feature, MultiLineString):
+            feature = [linestring for linestring in feature]
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -347,13 +348,31 @@ class HfunRaster(BaseHfun, Raster):
                     )
                 else:
                     utm_crs = None
+                _logger.info('Repartitioning features...')
+                start = time()
+                for i, linestring in reversed(list(enumerate(feature))):
+                    if len(linestring.coords) > max_verts:
+                        feature.pop(i)
+                        new_feat = []
+                        for segment in list(map(LineString, zip(
+                                linestring.coords[:-1],
+                                linestring.coords[1:]))):
+                            new_feat.append(segment)
+                            if len(new_feat) == max_verts - 1:
+                                feature.append(ops.linemerge(new_feat))
+                                new_feat = []
+                                gc.collect()
+                        if len(new_feat) != 0:
+                            feature.append(ops.linemerge(new_feat))
+                _logger.info(f'Repartitioning features took {time()-start}.')
+
                 _logger.info(f'Resampling features on nprocs {nprocs}...')
                 start = time()
                 with Pool(processes=nprocs) as pool:
                     transformed_features = pool.starmap(
-                        transform_features,
-                        [(feat, target_size, self.src.crs, utm_crs) for
-                         feat in feature]
+                        transform_linestring,
+                        [(linestring, target_size, self.src.crs, utm_crs) for
+                         linestring in feature]
                     )
                 pool.join()
                 _logger.info(f'Resampling features took {time()-start}.')
@@ -502,27 +521,22 @@ def transform_point(x, y, src_crs, utm_crs):
     return transformer.transform(x, y)
 
 
-def transform_features(
-    feature: Union[LineString, MultiLineString],
+def transform_linestring(
+    linestring: LineString,
     target_size: float,
     src_crs: CRS = None,
     utm_crs: CRS = None
 ):
-    if isinstance(feature, LineString):
-        feature = MultiLineString([feature])
-    features = []
-    for linestring in feature:
-        distances = [0.]
-        if utm_crs is not None:
-            transformer = Transformer.from_crs(
-                src_crs, utm_crs, always_xy=True)
-            linestring = ops.transform(transformer.transform, linestring)
-        while distances[-1] + target_size < linestring.length:
-            distances.append(distances[-1] + target_size)
-        distances.append(linestring.length)
-        linestring = LineString([
-            linestring.interpolate(distance)
-            for distance in distances
-            ])
-        features.append(linestring)
-    return ops.linemerge(features)
+    distances = [0.]
+    if utm_crs is not None:
+        transformer = Transformer.from_crs(
+            src_crs, utm_crs, always_xy=True)
+        linestring = ops.transform(transformer.transform, linestring)
+    while distances[-1] + target_size < linestring.length:
+        distances.append(distances[-1] + target_size)
+    distances.append(linestring.length)
+    linestring = LineString([
+        linestring.interpolate(distance)
+        for distance in distances
+        ])
+    return linestring
