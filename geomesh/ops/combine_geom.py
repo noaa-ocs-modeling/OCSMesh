@@ -2,7 +2,7 @@ import os
 import pathlib
 import logging
 import warnings
-from typing import Union, Sequence, Literal
+from typing import Union, Sequence
 
 import fiona
 from shapely import ops
@@ -16,7 +16,7 @@ _logger = logging.getLogger(__name__)
 
 def run(dem_files: Sequence[Union[str, os.PathLike]],
         out_file: Union[str, os.PathLike],
-        out_format: Literal["shapefile"] = "shapefile",
+        out_format: str = "shapefile",
         mesh_file: Union[str, os.PathLike, None] = None,
         zmin: Union[float, None] = None,
         zmax: Union[float, None] = None,
