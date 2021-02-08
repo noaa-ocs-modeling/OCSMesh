@@ -1,7 +1,7 @@
 from functools import lru_cache
 import os
 import pathlib
-from typing import Union, Literal
+from typing import Union
 import warnings
 
 import geopandas as gpd
@@ -353,7 +353,7 @@ class EuclideanMesh2D(EuclideanMesh):
     def get_bbox(
             self,
             crs: Union[str, CRS] = None,
-            output_type: Literal['polygon', 'bbox'] = None
+            output_type: str = None
     ) -> Union[Polygon, Bbox]:
         output_type = 'polygon' if output_type is None else output_type
         xmin, xmax = np.min(self.coord[:, 0]), np.max(self.coord[:, 0])

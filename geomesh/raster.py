@@ -5,7 +5,7 @@ import os
 import pathlib
 import tempfile
 from time import time
-from typing import Union, Literal
+from typing import Union
 import warnings
 
 # from matplotlib.colors import LinearSegmentedColormap
@@ -244,7 +244,7 @@ class Raster:
     def get_bbox(
             self,
             crs: Union[str, CRS] = None,
-            output_type: Literal['polygon', 'bbox'] = None
+            output_type: str = None
     ) -> Union[Polygon, Bbox]:
         output_type = 'polygon' if output_type is None else output_type
         xmin, xmax = np.min(self.x), np.max(self.x)

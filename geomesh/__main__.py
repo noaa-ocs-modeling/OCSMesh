@@ -36,6 +36,12 @@ class Geomesh:
             self.save_outputs()
 
         elif self._args.command == 'geom':
+
+            nprocs = self._args.nprocs
+            if self._args.geom_nprocs:
+                nprocs = self._args.geom_nprocs
+            nprocs = -1 if nprocs == None else nprocs
+
             if self._args.geom_cmd == "build":
                 arg_dict = dict(
                     dem_files=self._args.dem,
@@ -45,7 +51,8 @@ class Geomesh:
                     zmin=self._args.zmin,
                     zmax=self._args.zmax,
                     chunk_size=self._args.chunk_size,
-                    overlap=self._args.overlap)
+                    overlap=self._args.overlap,
+                    nprocs=nprocs)
                 combine_geometry(**arg_dict)
 
 
