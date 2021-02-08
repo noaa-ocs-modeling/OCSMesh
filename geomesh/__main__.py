@@ -17,8 +17,8 @@ from pyproj import CRS
 from shapely.geometry import LineString, MultiLineString
 import geoalchemy2
 
-from . import cmd, db, logger, JigsawDriver, Geom, Hfun, Raster
-from geomesh.operations import combine_geometry
+from . import cmd, db, JigsawDriver, Geom, Hfun, Raster
+from geomesh.ops import combine_geometry
 
 
 class Geomesh:
