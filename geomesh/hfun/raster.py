@@ -9,7 +9,7 @@ import warnings
 
 # import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t, savemsh, cmd, loadmsh
-from jigsawpy.libsaw import jigsaw
+from jigsawpy import libsaw
 # import matplotlib.pyplot as plt
 # from matplotlib.tri import Triangulation
 import numpy as np
@@ -86,7 +86,7 @@ class HfunRaster(BaseHfun, Raster):
         self._verbosity = int(verbosity)
 
     def msh_t(self, window: rasterio.windows.Window = None,
-              verbosity=None) -> jigsaw_msh_t:
+              marche: bool = False, verbosity=None) -> jigsaw_msh_t:
 
         if window is None:
             iter_windows = list(self.iter_windows())
@@ -241,7 +241,10 @@ class HfunRaster(BaseHfun, Raster):
             output_mesh.mshID = 'euclidean-mesh'
             output_mesh.ndims = +2
 
-            jigsaw(opts, geom, output_mesh, hfun=hfun)
+            if marche is True:
+                libsaw.marche(opts, hfun)
+
+            libsaw.jigsaw(opts, geom, output_mesh, hfun=hfun)
 
             del geom
             # do post processing
@@ -445,50 +448,105 @@ class HfunRaster(BaseHfun, Raster):
             upper_bound=None,
             lower_bound=None
     ):
-        raise NotImplementedError(
-            'Needs revision for consistency with updated API.')
-        hmin = np.finfo(np.float32).eps if hmin is None else hmin
-        if not self._src.crs.is_geographic:
-            dx = np.abs(self._src.dx)
-            dy = np.abs(self._src.dy)
 
-        meta = self._src._src.meta.copy()
+        hmin = float(hmin) if hmin is not None else hmin
+        hmax = float(hmax) if hmax is not None else hmax
 
-        tmpfile = tempfile.NamedTemporaryFile(prefix=str(tmpdir) + '/')
+        tmpfile = tempfile.NamedTemporaryFile()
+        utm_crs: Union[CRS, None] = None
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
 
-        with rasterio.open(tmpfile.name, 'w', **meta) as dst:
-            for window, bounds in self._src:
-                topobathy = self._raster.get_values(band=1, window=window)
-                if self._src.crs.is_geographic:
-                    west, south, east, north = bounds
-                    _bounds = np.array([[east, south], [west, north]])
-                    _x, _y = utm.from_latlon(_bounds[:, 1], _bounds[:, 0])[:2]
-                    dx = np.diff(np.linspace(_x[0], _x[1], window.width))[0]
-                    dy = np.diff(np.linspace(_y[0], _y[1], window.height))[0]
-                _dx, _dy = np.gradient(topobathy, dx, dy)
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+
+            for i, window in enumerate(iter_windows):
+
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                x0, y0, x1, y1 = self.get_window_bounds(window)
+
+                if self.crs.is_geographic:
+                    _, _, number, letter = utm.from_latlon(
+                        (y0 + y1)/2, (x0 + x1)/2)
+                    utm_crs = CRS(
+                        proj='utm',
+                        zone=f'{number}{letter}',
+                        ellps={
+                            'GRS 1980': 'GRS80',
+                            'WGS 84': 'WGS84'
+                            }[self.crs.ellipsoid.name]
+                    )
+                    transformer = Transformer.from_crs(
+                            self.crs, utm_crs, always_xy=True)
+                    (x0, x1), (y0, y1) = transformer.transform(
+                            [x0, x1], [y0, y1])
+                    dx = np.diff(np.linspace(x0, x1, window.width))[0]
+                    dy = np.diff(np.linspace(y0, y1, window.height))[0]
+                else:
+                    dx = self.dx
+                    dy = self.dy
+                topobathy = self.raster.get_values(band=1, window=window)
+                dx, dy = np.gradient(topobathy, dx, dy)
                 with warnings.catch_warnings():
                     # in case self._src.values is a masked array
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    dh = np.sqrt(_dx**2 + _dy**2)
+                    dh = np.sqrt(dx**2 + dy**2)
                 dh = np.ma.masked_equal(dh, 0.)
-                values = np.abs((1./3.)*(topobathy/dh))
-                values = values.filled(np.max(values))
+                hfun_values = np.abs((1./3.)*(topobathy/dh))
+                # values = values.filled(np.max(values))
 
                 if upper_bound is not None:
-                    values[np.where(
-                        topobathy > upper_bound)] = self._src.nodata
+                    idxs = np.where(topobathy > upper_bound)
+                    hfun_values[idxs] = self.get_values(
+                        band=1, window=window)[idxs]
                 if lower_bound is not None:
-                    values[np.where(
-                        topobathy < lower_bound)] = self._src.nodata
-                values[np.where(values < hmin)] = hmin
+                    idxs = np.where(topobathy < lower_bound)
+                    hfun_values[idxs] = self.get_values(
+                        band=1, window=window)[idxs]
+
+                if hmin is not None:
+                    hfun_values[np.where(hfun_values < hmin)] = hmin
+
+                if hmax is not None:
+                    hfun_values[np.where(hfun_values > hmax)] = hmax
+
                 if self._hmin is not None:
-                    values[np.where(values < self._hmin)] = self._hmin
+                    hfun_values[np.where(hfun_values < self._hmin)] = self._hmin
                 if self._hmax is not None:
-                    values[np.where(values > self._hmax)] = self._hmax
-                values = np.minimum(
-                    self._src.get_values(band=1, window=window),
-                    values).reshape((1, *values.shape)).astype(meta['dtype'])
-                dst.write(values, window=window)
+                    hfun_values[np.where(hfun_values > self._hmax)] = self._hmax
+
+                hfun_values = np.minimum(
+                    self.get_values(band=1, window=window),
+                    hfun_values).astype(
+                    self.dtype(1))
+                dst.write_band(1, hfun_values, window=window)
+        self._tmpfile = tmpfile
+
+    def add_constant_value(self, value, lower_bound=None, upper_bound=None):
+        lower_bound = -float('inf') if lower_bound is None \
+            else float(lower_bound)
+        upper_bound = float('inf') if upper_bound is None \
+            else float(upper_bound)
+        tmpfile = tempfile.NamedTemporaryFile()
+
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+
+            for i, window in enumerate(iter_windows):
+
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                hfun_values = self.get_values(band=1, window=window)
+                rast_values = self.raster.get_values(band=1, window=window)
+                hfun_values[np.where(np.logical_and(
+                    rast_values > lower_bound,
+                    rast_values < upper_bound))] = value
+                hfun_values = np.minimum(
+                    self.get_values(band=1, window=window),
+                    hfun_values.astype(self.dtype(1)))
+                dst.write_band(1, hfun_values, window=window)
+                del rast_values
+                gc.collect()
         self._tmpfile = tmpfile
 
     @property
