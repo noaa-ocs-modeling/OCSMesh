@@ -1,7 +1,7 @@
 from functools import lru_cache
 import os
 import pathlib
-from typing import Union, Literal
+from typing import Union
 import warnings
 
 import geopandas as gpd
@@ -44,7 +44,7 @@ class Rings:
                     "type": 'exterior'
                 })
             for interior in rings['interiors']:
-                coords = self.coord[interior[:, 0], :]
+                coords = self.mesh.coord[interior[:, 0], :]
                 geometry = LinearRing(coords)
                 data.append({
                     "geometry": geometry,
@@ -353,7 +353,7 @@ class EuclideanMesh2D(EuclideanMesh):
     def get_bbox(
             self,
             crs: Union[str, CRS] = None,
-            output_type: Literal['polygon', 'bbox'] = None
+            output_type: str = None
     ) -> Union[Polygon, Bbox]:
         output_type = 'polygon' if output_type is None else output_type
         xmin, xmax = np.min(self.coord[:, 0]), np.max(self.coord[:, 0])
@@ -373,6 +373,9 @@ class EuclideanMesh2D(EuclideanMesh):
             raise TypeError(
                 'Argument output_type must a string literal \'polygon\' or '
                 '\'bbox\'')
+
+    def tricontourf(self, **kwargs):
+        return utils.tricontourf(self.msh_t, **kwargs)
 
     @property
     def vert2(self):
@@ -418,7 +421,7 @@ class Mesh(BaseMesh):
                 raise e
 
         try:
-            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path)))
+            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path, crs=crs)))
         except ValueError:
             pass
 

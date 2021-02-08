@@ -1,4 +1,5 @@
 import gc
+import logging
 from multiprocessing import cpu_count, Pool
 # import pathlib
 import tempfile
@@ -8,7 +9,7 @@ import warnings
 
 # import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t, savemsh, cmd, loadmsh
-from jigsawpy.libsaw import jigsaw
+from jigsawpy import libsaw
 # import matplotlib.pyplot as plt
 # from matplotlib.tri import Triangulation
 import numpy as np
@@ -29,6 +30,8 @@ from geomesh import utils
 # supress feather warning
 warnings.filterwarnings(
     'ignore', message='.*initial implementation of Parquet.*')
+
+_logger = logging.getLogger(__name__)
 
 
 class HfunInputRaster:
@@ -78,12 +81,12 @@ class HfunRaster(BaseHfun, Raster):
     def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
                  verbosity=0):
         self._raster = raster
-        self._hmin = hmin
-        self._hmax = hmax
-        self._verbosity = verbosity
+        self._hmin = float(hmin) if hmin is not None else hmin
+        self._hmax = float(hmax) if hmax is not None else hmax
+        self._verbosity = int(verbosity)
 
     def msh_t(self, window: rasterio.windows.Window = None,
-              verbosity=None) -> jigsaw_msh_t:
+              marche: bool = False, verbosity=None) -> jigsaw_msh_t:
 
         if window is None:
             iter_windows = list(self.iter_windows())
@@ -125,7 +128,8 @@ class HfunRaster(BaseHfun, Raster):
                 right = ygrid[:, 1]
                 del ygrid
 
-                self.logger.info('Building hfun.tria3...')
+                _logger.info('Building hfun.tria3...')
+
                 dim1 = window.width
                 dim2 = window.height
                 tria3 = []
@@ -162,27 +166,27 @@ class HfunRaster(BaseHfun, Raster):
                     dtype=jigsaw_msh_t.TRIA3_t)
                 del tria3
                 gc.collect()
-                self.logger.info('Done building hfun.tria3...')
+                _logger.info('Done building hfun.tria3...')
 
                 # BUILD VERT2_t. this one comes from the memcache array
-                self.logger.info('Building hfun.vert2...')
+                _logger.info('Building hfun.vert2...')
                 hfun.vert2 = np.empty(
                     window.width*window.height,
                     dtype=jigsaw_msh_t.VERT2_t)
                 hfun.vert2['coord'] = np.array(
                     self.get_xy_memcache(window, utm_crs))
-                self.logger.info('Done building hfun.vert2...')
+                _logger.info('Done building hfun.vert2...')
 
                 # Build REALS_t: this one comes from hfun raster
-                self.logger.info('Building hfun.value...')
+                _logger.info('Building hfun.value...')
                 hfun.value = np.array(
                     self.get_values(window=window, band=1).flatten().reshape(
-                        (window.width*window.height, 1)).astype(np.float32),
+                        (window.width*window.height, 1)),
                     dtype=jigsaw_msh_t.REALS_t)
-                self.logger.info('Done building hfun.value...')
+                _logger.info('Done building hfun.value...')
 
                 # Build Geom
-                self.logger.info('Building initial geom...')
+                _logger.info('Building initial geom...')
                 transformer = Transformer.from_crs(
                     self.crs, utm_crs, always_xy=True)
                 bbox = [
@@ -192,12 +196,13 @@ class HfunRaster(BaseHfun, Raster):
                     *[(bottom[0], y) for y in reversed(left)]]
                 geom = PolygonGeom(
                     ops.transform(transformer.transform, Polygon(bbox)),
-                ).geom
-                self.logger.info('Building initial geom done.')
+                    utm_crs
+                ).msh_t()
+                _logger.info('Building initial geom done.')
                 kwargs = {'method': 'nearest'}
 
             else:
-                self.logger.info('Forming initial hmat (euclidean-grid).')
+                _logger.info('Forming initial hmat (euclidean-grid).')
                 start = time()
                 hfun.mshID = 'euclidean-grid'
                 hfun.xgrid = np.array(
@@ -210,11 +215,11 @@ class HfunRaster(BaseHfun, Raster):
                     np.flipud(self.get_values(window=window, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
-                geom = PolygonGeom(box(x0, y0, x1, y1)).geom
+                geom = PolygonGeom(box(x0, y0, x1, y1), self.crs).msh_t()
 
-            self.logger.info(f'Initial hfun generation took {time()-start}.')
+            _logger.info(f'Initial hfun generation took {time()-start}.')
 
-            self.logger.info('Configuring jigsaw...')
+            _logger.info('Configuring jigsaw...')
 
             opts = jigsaw_jig_t()
 
@@ -236,12 +241,11 @@ class HfunRaster(BaseHfun, Raster):
             output_mesh.mshID = 'euclidean-mesh'
             output_mesh.ndims = +2
 
-            jigsaw(
-                opts,
-                geom,
-                output_mesh,
-                hfun=hfun
-            )
+            if marche is True:
+                libsaw.marche(opts, hfun)
+
+            libsaw.jigsaw(opts, geom, output_mesh, hfun=hfun)
+
             del geom
             # do post processing
             hfun.crs = utm_crs
@@ -249,7 +253,7 @@ class HfunRaster(BaseHfun, Raster):
 
             if utm_crs is not None:
                 output_mesh.crs = utm_crs
-                utils.reproject(output_mesh, self.crs)
+                # utils.reproject(output_mesh, self.crs)
             else:
                 output_mesh.crs = self.crs
 
@@ -271,9 +275,9 @@ class HfunRaster(BaseHfun, Raster):
         """
         contours = self.raster.get_contour(level)
         if isinstance(contours, GeometryCollection):
-            self.logger.info('No contours found...')
+            _logger.info('No contours found...')
             return
-        self.logger.info('Adding contours as features...')
+        _logger.info('Adding contours as features...')
         self.add_feature(contours, expansion_rate, target_size, nprocs)
 
     def add_feature(
@@ -282,6 +286,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: float,
             target_size: float = None,
             nprocs=None,
+            max_verts=200
     ):
         '''Adds a linear distance size function constraint to the mesh.
 
@@ -297,17 +302,24 @@ class HfunRaster(BaseHfun, Raster):
         instead of a locally projected window.
         '''
 
+        # TODO: Partition features if they are too "long" which results in an
+        # improvement for parallel pool. E.g. if a feature is too long, 1
+        # processor will be busy and the rest will be idle.
+
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
-        self.logger.debug(f'Using nprocs={nprocs}')
+        _logger.debug(f'Using nprocs={nprocs}')
         if not isinstance(feature, (LineString, MultiLineString)):
             raise TypeError(
                 f'Argument feature must be of type {LineString} or '
                 f'{MultiLineString}, not type {type(feature)}.')
 
         if isinstance(feature, LineString):
-            feature = MultiLineString([feature])
+            feature = [feature]
+
+        elif isinstance(feature, MultiLineString):
+            feature = [linestring for linestring in feature]
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -324,7 +336,7 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
-                self.logger.debug(f'Processing window {i+1}/{tot}.')
+                _logger.debug(f'Processing window {i+1}/{tot}.')
                 if self.crs.is_geographic:
                     x0, y0, x1, y1 = self.get_window_bounds(window)
                     _, _, number, letter = utm.from_latlon(
@@ -339,16 +351,35 @@ class HfunRaster(BaseHfun, Raster):
                     )
                 else:
                     utm_crs = None
-                self.logger.info('Resampling features...')
+                _logger.info('Repartitioning features...')
+                start = time()
+                for i, linestring in reversed(list(enumerate(feature))):
+                    if len(linestring.coords) > max_verts:
+                        feature.pop(i)
+                        new_feat = []
+                        for segment in list(map(LineString, zip(
+                                linestring.coords[:-1],
+                                linestring.coords[1:]))):
+                            new_feat.append(segment)
+                            if len(new_feat) == max_verts - 1:
+                                feature.append(ops.linemerge(new_feat))
+                                new_feat = []
+                                gc.collect()
+                        if len(new_feat) != 0:
+                            feature.append(ops.linemerge(new_feat))
+                _logger.info(f'Repartitioning features took {time()-start}.')
+
+                _logger.info(f'Resampling features on nprocs {nprocs}...')
                 start = time()
                 with Pool(processes=nprocs) as pool:
                     transformed_features = pool.starmap(
-                        transform_features,
-                        [(feat, target_size, self.src.crs, utm_crs) for
-                         feat in feature]
+                        transform_linestring,
+                        [(linestring, target_size, self.src.crs, utm_crs) for
+                         linestring in feature]
                     )
-                self.logger.info(f'Resampling features took {time()-start}.')
-                self.logger.info('Concatenating points...')
+                pool.join()
+                _logger.info(f'Resampling features took {time()-start}.')
+                _logger.info('Concatenating points...')
                 start = time()
                 points = []
                 for geom in transformed_features:
@@ -357,22 +388,22 @@ class HfunRaster(BaseHfun, Raster):
                     elif isinstance(geom, MultiLineString):
                         for linestring in geom:
                             points.extend(linestring.coords)
-                self.logger.info(f'Point concatenation took {time()-start}.')
+                _logger.info(f'Point concatenation took {time()-start}.')
 
-                self.logger.info('Generating KDTree...')
+                _logger.info('Generating KDTree...')
                 start = time()
                 tree = cKDTree(np.array(points))
-                self.logger.info(f'Generating KDTree took {time()-start}.')
+                _logger.info(f'Generating KDTree took {time()-start}.')
                 if utm_crs is not None:
                     xy = self.get_xy_memcache(window, utm_crs)
                 else:
                     xy = self.get_xy(window)
 
-                self.logger.info(f'Transforming points took {time()-start}.')
-                self.logger.info('Querying KDTree...')
+                _logger.info(f'Transforming points took {time()-start}.')
+                _logger.info('Querying KDTree...')
                 start = time()
                 distances, _ = tree.query(xy, n_jobs=nprocs)
-                self.logger.info(f'Querying KDTree took {time()-start}.')
+                _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(
                     self.dtype(1))
@@ -381,10 +412,10 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                self.logger.info(f'Write array to file {tmpfile.name}...')
+                _logger.info(f'Write array to file {tmpfile.name}...')
                 start = time()
                 dst.write_band(1, values, window=window)
-                self.logger.info(f'Write array to file took {time()-start}.')
+                _logger.info(f'Write array to file took {time()-start}.')
         self._tmpfile = tmpfile
 
     def get_xy_memcache(self, window, dst_crs):
@@ -392,7 +423,7 @@ class HfunRaster(BaseHfun, Raster):
             self._xy_cache = {}
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
-            self.logger.info('Transform points to local CRS...')
+            _logger.info('Transform points to local CRS...')
             transformer = Transformer.from_crs(
                 self.src.crs, dst_crs, always_xy=True)
             tmpfile = tempfile.NamedTemporaryFile()
@@ -400,13 +431,13 @@ class HfunRaster(BaseHfun, Raster):
             fp = np.memmap(tmpfile, dtype='float32', mode='w+', shape=xy.shape)
             fp[:] = np.vstack(
                 transformer.transform(xy[:, 0], xy[:, 1])).T
-            self.logger.info('Saving values to memcache...')
+            _logger.info('Saving values to memcache...')
             fp.flush()
-            self.logger.info('Done!')
+            _logger.info('Done!')
             self._xy_cache[f'{window}{dst_crs}'] = tmpfile
             return fp[:]
         else:
-            self.logger.info('Loading values from memcache...')
+            _logger.info('Loading values from memcache...')
             return np.memmap(tmpfile, dtype='float32', mode='r',
                              shape=((window.width*window.height), 2))[:]
 
@@ -417,50 +448,105 @@ class HfunRaster(BaseHfun, Raster):
             upper_bound=None,
             lower_bound=None
     ):
-        raise NotImplementedError(
-            'Needs revision for consistency with updated API.')
-        hmin = np.finfo(np.float32).eps if hmin is None else hmin
-        if not self._src.crs.is_geographic:
-            dx = np.abs(self._src.dx)
-            dy = np.abs(self._src.dy)
 
-        meta = self._src._src.meta.copy()
+        hmin = float(hmin) if hmin is not None else hmin
+        hmax = float(hmax) if hmax is not None else hmax
 
-        tmpfile = tempfile.NamedTemporaryFile(prefix=str(tmpdir) + '/')
+        tmpfile = tempfile.NamedTemporaryFile()
+        utm_crs: Union[CRS, None] = None
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
 
-        with rasterio.open(tmpfile.name, 'w', **meta) as dst:
-            for window, bounds in self._src:
-                topobathy = self._raster.get_values(band=1, window=window)
-                if self._src.crs.is_geographic:
-                    west, south, east, north = bounds
-                    _bounds = np.array([[east, south], [west, north]])
-                    _x, _y = utm.from_latlon(_bounds[:, 1], _bounds[:, 0])[:2]
-                    dx = np.diff(np.linspace(_x[0], _x[1], window.width))[0]
-                    dy = np.diff(np.linspace(_y[0], _y[1], window.height))[0]
-                _dx, _dy = np.gradient(topobathy, dx, dy)
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+
+            for i, window in enumerate(iter_windows):
+
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                x0, y0, x1, y1 = self.get_window_bounds(window)
+
+                if self.crs.is_geographic:
+                    _, _, number, letter = utm.from_latlon(
+                        (y0 + y1)/2, (x0 + x1)/2)
+                    utm_crs = CRS(
+                        proj='utm',
+                        zone=f'{number}{letter}',
+                        ellps={
+                            'GRS 1980': 'GRS80',
+                            'WGS 84': 'WGS84'
+                            }[self.crs.ellipsoid.name]
+                    )
+                    transformer = Transformer.from_crs(
+                            self.crs, utm_crs, always_xy=True)
+                    (x0, x1), (y0, y1) = transformer.transform(
+                            [x0, x1], [y0, y1])
+                    dx = np.diff(np.linspace(x0, x1, window.width))[0]
+                    dy = np.diff(np.linspace(y0, y1, window.height))[0]
+                else:
+                    dx = self.dx
+                    dy = self.dy
+                topobathy = self.raster.get_values(band=1, window=window)
+                dx, dy = np.gradient(topobathy, dx, dy)
                 with warnings.catch_warnings():
                     # in case self._src.values is a masked array
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    dh = np.sqrt(_dx**2 + _dy**2)
+                    dh = np.sqrt(dx**2 + dy**2)
                 dh = np.ma.masked_equal(dh, 0.)
-                values = np.abs((1./3.)*(topobathy/dh))
-                values = values.filled(np.max(values))
+                hfun_values = np.abs((1./3.)*(topobathy/dh))
+                # values = values.filled(np.max(values))
 
                 if upper_bound is not None:
-                    values[np.where(
-                        topobathy > upper_bound)] = self._src.nodata
+                    idxs = np.where(topobathy > upper_bound)
+                    hfun_values[idxs] = self.get_values(
+                        band=1, window=window)[idxs]
                 if lower_bound is not None:
-                    values[np.where(
-                        topobathy < lower_bound)] = self._src.nodata
-                values[np.where(values < hmin)] = hmin
+                    idxs = np.where(topobathy < lower_bound)
+                    hfun_values[idxs] = self.get_values(
+                        band=1, window=window)[idxs]
+
+                if hmin is not None:
+                    hfun_values[np.where(hfun_values < hmin)] = hmin
+
+                if hmax is not None:
+                    hfun_values[np.where(hfun_values > hmax)] = hmax
+
                 if self._hmin is not None:
-                    values[np.where(values < self._hmin)] = self._hmin
+                    hfun_values[np.where(hfun_values < self._hmin)] = self._hmin
                 if self._hmax is not None:
-                    values[np.where(values > self._hmax)] = self._hmax
-                values = np.minimum(
-                    self._src.get_values(band=1, window=window),
-                    values).reshape((1, *values.shape)).astype(meta['dtype'])
-                dst.write(values, window=window)
+                    hfun_values[np.where(hfun_values > self._hmax)] = self._hmax
+
+                hfun_values = np.minimum(
+                    self.get_values(band=1, window=window),
+                    hfun_values).astype(
+                    self.dtype(1))
+                dst.write_band(1, hfun_values, window=window)
+        self._tmpfile = tmpfile
+
+    def add_constant_value(self, value, lower_bound=None, upper_bound=None):
+        lower_bound = -float('inf') if lower_bound is None \
+            else float(lower_bound)
+        upper_bound = float('inf') if upper_bound is None \
+            else float(upper_bound)
+        tmpfile = tempfile.NamedTemporaryFile()
+
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+
+            for i, window in enumerate(iter_windows):
+
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                hfun_values = self.get_values(band=1, window=window)
+                rast_values = self.raster.get_values(band=1, window=window)
+                hfun_values[np.where(np.logical_and(
+                    rast_values > lower_bound,
+                    rast_values < upper_bound))] = value
+                hfun_values = np.minimum(
+                    self.get_values(band=1, window=window),
+                    hfun_values.astype(self.dtype(1)))
+                dst.write_band(1, hfun_values, window=window)
+                del rast_values
+                gc.collect()
         self._tmpfile = tmpfile
 
     @property
@@ -493,27 +579,22 @@ def transform_point(x, y, src_crs, utm_crs):
     return transformer.transform(x, y)
 
 
-def transform_features(
-    feature: Union[LineString, MultiLineString],
+def transform_linestring(
+    linestring: LineString,
     target_size: float,
     src_crs: CRS = None,
     utm_crs: CRS = None
 ):
-    if isinstance(feature, LineString):
-        feature = MultiLineString([feature])
-    features = []
-    for linestring in feature:
-        distances = [0.]
-        if utm_crs is not None:
-            transformer = Transformer.from_crs(
-                src_crs, utm_crs, always_xy=True)
-            linestring = ops.transform(transformer.transform, linestring)
-        while distances[-1] + target_size < linestring.length:
-            distances.append(distances[-1] + target_size)
-        distances.append(linestring.length)
-        linestring = LineString([
-            linestring.interpolate(distance)
-            for distance in distances
-            ])
-        features.append(linestring)
-    return ops.linemerge(features)
+    distances = [0.]
+    if utm_crs is not None:
+        transformer = Transformer.from_crs(
+            src_crs, utm_crs, always_xy=True)
+        linestring = ops.transform(transformer.transform, linestring)
+    while distances[-1] + target_size < linestring.length:
+        distances.append(distances[-1] + target_size)
+    distances.append(linestring.length)
+    linestring = LineString([
+        linestring.interpolate(distance)
+        for distance in distances
+        ])
+    return linestring

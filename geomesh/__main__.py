@@ -18,6 +18,7 @@ from shapely.geometry import LineString, MultiLineString
 import geoalchemy2
 
 from . import cmd, db, logger, JigsawDriver, Geom, Hfun, Raster
+from geomesh.operations import combine_geometry
 
 
 class Geomesh:
@@ -29,9 +30,31 @@ class Geomesh:
         self._args = args
 
     def main(self):
-        self.generate_mesh()
-        self.run_postprocessing()
-        self.save_outputs()
+        if self._args.command in ['db', None]:
+            self.generate_mesh()
+            self.run_postprocessing()
+            self.save_outputs()
+
+        elif self._args.command == 'geom':
+
+            nprocs = self._args.nprocs
+            if self._args.geom_nprocs:
+                nprocs = self._args.geom_nprocs
+            nprocs = -1 if nprocs == None else nprocs
+
+            if self._args.geom_cmd == "build":
+                arg_dict = dict(
+                    dem_files=self._args.dem,
+                    out_file=self._args.output,
+                    out_format=self._args.output_format,
+                    mesh_file=self._args.mesh,
+                    zmin=self._args.zmin,
+                    zmax=self._args.zmax,
+                    chunk_size=self._args.chunk_size,
+                    overlap=self._args.overlap,
+                    nprocs=nprocs)
+                combine_geometry(**arg_dict)
+
 
     def generate_mesh(self):
         driver = JigsawDriver(
@@ -240,39 +263,72 @@ class Geomesh:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "config_file",
-        help="Path to configuration file.",
-        type=lambda x: pathlib.Path(os.path.expandvars(x)))
-    parser.add_argument("--log-level", choices=["info", "debug", "warning"])
-    parser.add_argument(
+    common_parser = argparse.ArgumentParser()
+
+    common_parser.add_argument("--log-level", choices=["info", "debug", "warning"])
+    common_parser.add_argument(
         "--nprocs", type=int, help="Number of parallel threads to use when "
         "computing geom and hfun.")
-    parser.add_argument(
+    common_parser.add_argument(
         "--geom-nprocs", type=int, help="Number of processors used when "
         "computing the geom, overrides --nprocs argument.")
-    parser.add_argument(
+    common_parser.add_argument(
         "--hfun-nprocs", type=int, help="Number of processors used when "
         "computing the hfun, overrides --nprocs argument.")
-    parser.add_argument("--chunk-size")
+    common_parser.add_argument(
+        "--chunk-size",
+        help='Size of square window to be used for processing the raster')
+    common_parser.add_argument(
+        "--overlap",
+        help='Size of overlap to be used for between raster windows')
 
-    db = parser.add_subparsers(dest='db')
+    sub_parse_common = {
+            'parents': [common_parser],
+            'add_help': False
+    }
 
-    spatialite = db.add_parser('spatialite')
+    parser = argparse.ArgumentParser(**sub_parse_common)
+    subp = parser.add_subparsers(dest='command')
+
+    # NOTE: We CANNOT have positional argument when we have multilayer
+    # subparsers, otherwise --help doesn't show the right text
+    parser.add_argument(
+        "--config_file",
+        help="Path to configuration file.",
+        type=lambda x: pathlib.Path(os.path.expandvars(x)))
+
+    db_parser = subp.add_parser('db', **sub_parse_common)
+    db_subp = db_parser.add_subparsers(dest='db')
+    spatialite = db_subp.add_parser('spatialite', **sub_parse_common)
     spatialite.add_argument('--path')
     spatialite.add_argument('--clear-cache', action="store_true")
     spatialite.add_argument('--echo', action="store_true")
 
-    postgis = db.add_parser('postgis')
+    postgis = db_subp.add_parser('postgis', **sub_parse_common)
     postgis.add_argument('hostname')
+
+    geom_parser = subp.add_parser('geom', **sub_parse_common)
+    geom_subp = geom_parser.add_subparsers(dest='geom_cmd')
+    geom_bld = geom_subp.add_parser('build', **sub_parse_common)
+    geom_bld.add_argument('-o', '--output', required=True)
+    geom_bld.add_argument('-f', '--output-format', default="shapefile")
+    geom_bld.add_argument('--mesh', help='Mesh to extract hull from')
+    geom_bld.add_argument(
+        '--zmin', type=float,
+        help='Maximum elevation to consider')
+    geom_bld.add_argument(
+        '--zmax', type=float,
+        help='Maximum elevation to consider')
+    geom_bld.add_argument(
+        'dem', nargs='+',
+        help='Digital elevation model list to be used in geometry creation')
 
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    logger.init(args.log_level)
+#    logger.init(args.log_level)
     Geomesh(args).main()
 
 

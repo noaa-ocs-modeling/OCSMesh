@@ -1,12 +1,11 @@
 import os
 from typing import Union
 
-from matplotlib.path import Path  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
-import mpl_toolkits.mplot3d as m3d  # type: ignore[import]
-import numpy as np  # type: ignore[import]
-from shapely import ops  # type: ignore[import]
-from shapely.geometry import (   # type: ignore[import]
+from matplotlib.path import Path
+import matplotlib.pyplot as plt
+import numpy as np
+from shapely import ops
+from shapely.geometry import (
     Polygon, MultiPolygon, LinearRing)
 
 from geomesh.geom.base import BaseGeom
@@ -36,7 +35,12 @@ class RasterGeom(BaseGeom):
 
     _source_raster = SourceRaster()
 
-    def __init__(self, raster: Union[Raster, str, os.PathLike]):
+    def __init__(
+            self,
+            raster: Union[Raster, str, os.PathLike],
+            zmin=None,
+            zmax=None,
+    ):
         """
         Input parameters
         ----------------
@@ -44,12 +48,19 @@ class RasterGeom(BaseGeom):
             Input object used to compute the output mesh hull.
         """
         self._source_raster = raster
+        self._zmin = zmin
+        self._zmax = zmax
 
     def get_multipolygon(  # type: ignore[override]
             self, zmin: float = None, zmax: float = None) -> MultiPolygon:
         """Returns the shapely.geometry.MultiPolygon object that represents
         the hull of the raster given optional zmin and zmax contraints.
         """
+        zmin = self._zmin if zmin is None else zmin
+        zmax = self._zmax if zmax is None else zmax
+
+        if zmin is None and zmax is None:
+            return MultiPolygon([self.raster.get_bbox()])
 
         polygon_collection = []
         for window in self.raster.iter_windows():
