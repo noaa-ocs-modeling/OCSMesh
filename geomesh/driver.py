@@ -1,337 +1,114 @@
 import logging
-import numpy as np
-from geomesh import utils
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
-import jigsawpy
-import tempfile
-import pathlib
-import os
-from functools import lru_cache
-from geomesh import mesh
-from geomesh.hfun import Hfun
-from geomesh.geom import Geom
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
-os.makedirs(tmpdir, exist_ok=True)
+from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
+from jigsawpy import libsaw
+import numpy as np
+from pyproj import CRS
+from typing import Union
+
+
+from geomesh import utils
+from geomesh.mesh import Mesh
+from geomesh.hfun import Hfun
+from geomesh.hfun.base import BaseHfun
+from geomesh.geom import Geom
+from geomesh.geom.base import BaseGeom
+
+_logger = logging.getLogger(__name__)
+
+
+class GeomDescriptor:
+
+    def __set__(self, obj, val):
+        if not isinstance(val, BaseGeom):
+            raise TypeError(f'Argument geom must be of type {Geom}, '
+                            f'not type {type(val)}.')
+        obj.__dict__['geom'] = val
+
+    def __get__(self, obj, val):
+        return obj.__dict__['geom']
+
+
+class HfunDescriptor:
+
+    def __set__(self, obj, val):
+        if not isinstance(val, BaseHfun):
+            raise TypeError(f'Argument hfun must be of type {Hfun}, '
+                            f'not type {type(val)}.')
+        obj.__dict__['hfun'] = val
+
+    def __get__(self, obj, val):
+        return obj.__dict__['hfun']
+
+
+class OptsDescriptor:
+
+    def __get__(self, obj, val):
+        opts = obj.__dict__.get('opts')
+        if opts is None:
+            opts = jigsaw_jig_t()
+            opts.mesh_dims = +2
+            opts.optm_tria = True
+            opts.hfun_scal = 'absolute'
+            obj.__dict__['opts'] = opts
+        return opts
 
 
 class JigsawDriver:
 
+    _geom = GeomDescriptor()
+    _hfun = HfunDescriptor()
+    _opts = OptsDescriptor()
+
     def __init__(
-        self,
-        geom,
-        hfun=None,
-        initial_mesh=None,
+            self,
+            geom: Geom,
+            hfun: Hfun,
+            initial_mesh: bool = False,
+            crs: Union[str, CRS] = None,
+            verbosity: int = 0,
     ):
         """
         geom can be SizeFunction or PlanarStraightLineGraph instance.
         """
         self._geom = geom
         self._hfun = hfun
-        self._initial_mesh = initial_mesh
-        self._interface = 'libsaw'
+        self._init = initial_mesh
+        self._crs = CRS.from_user_input(crs) if crs is not None else crs
+        self._opts.verbosity = verbosity
 
     def run(self, sieve=None):
-        self.logger.debug("run()")
-        if self._interface == 'cmdsaw':
-            self._run_cmdsaw()
-        else:
-            self.jigsaw(
-                self.opts,
-                self.geom,
-                self.output_mesh,
-                self.initial_mesh,
-                self.hfun
-            )
+
+        hfun_msh_t = self.hfun.msh_t()
+
+        output_mesh = jigsaw_msh_t()
+        output_mesh.mshID = 'euclidean-mesh'
+        output_mesh.ndims = 2
+        output_mesh.crs = hfun_msh_t.crs
+
+        self.opts.hfun_hmin = np.min(hfun_msh_t.value)
+        self.opts.hfun_hmax = np.max(hfun_msh_t.value)
+
+        _logger.info('Calling libsaw.jigsaw() ...')
+        libsaw.jigsaw(
+            self.opts,
+            self.geom.msh_t(),
+            output_mesh,
+            init=hfun_msh_t if self._init is True else None,
+            hfun=hfun_msh_t
+        )
 
         # post process
-        msg = 'ERROR: Jigsaw returned empty mesh.'
-        assert self.output_mesh.tria3['index'].shape[0] > 0, msg
-        if self.verbosity > 0:
-            print('Finalizing mesh...', end='', flush=True)
-        utils.finalize_mesh(self.output_mesh, sieve)
-        if self.verbosity > 0:
-            print('done!')
-        return mesh.Mesh.from_msh_t(self.output_mesh, crs=self.dst_crs)
+        if output_mesh.tria3['index'].shape[0] == 0:
+            _err = 'ERROR: Jigsaw returned empty mesh.'
+            _logger.error(_err)
+            raise Exception(_err)
 
-    @property
-    def geom(self):
-        return self._geom
+        if self._crs is not None:
+            utils.reproject(output_mesh, self._crs)
 
-    @property
-    def hfun(self):
-        return self._hfun
+        _logger.info('Finalizing mesh...')
+        utils.finalize_mesh(output_mesh, sieve)
 
-    @property
-    def initial_mesh(self):
-        return self._initial_mesh
-
-    @property
-    def output_mesh(self):
-        return self._output_mesh
-
-    @property
-    def jigsaw(self):
-        return jigsawpy.lib.jigsaw
-
-    @property
-    def opts(self):
-        return self._opts
-
-    @property
-    def verbosity(self):
-        return self.opts.verbosity
-
-    @property
-    def hfun_hmin(self):
-        return self.opts.hfun_hmin
-
-    @property
-    def hfun_hmax(self):
-        return self.opts.hfun_hmax
-
-    @property
-    def hfun_scal(self):
-        return self.opts.hfun_scal
-
-    @property
-    def optm_qlim(self):
-        return self.opts.optm_qlim
-
-    @property
-    def mesh_top1(self):
-        return self.opts.mesh_top1
-
-    @property
-    def geom_feat(self):
-        return self.opts.geom_feat
-
-    @property
-    def dst_crs(self):
-        return self._dst_crs
-
-    @property
-    def logger(self):
-        try:
-            return self.__logger
-        except AttributeError:
-            self.__logger = logging.getLogger(
-                __name__ + '.' + self.__class__.__name__)
-            return self.__logger
-
-    @property
-    def hmin_is_absolute_limit(self):
-        try:
-            return self.__hmin_is_absolute_limit
-        except AttributeError:
-            # Uses the data's hmin limit by default
-            return False
-
-    @property
-    def hmax_is_absolute_limit(self):
-        try:
-            return self.__hmax_is_absolute_limit
-        except AttributeError:
-            # Uses the data's hmax limit by default
-            return False
-
-    @verbosity.setter
-    def verbosity(self, verbosity):
-        self._verbosity = verbosity
-
-    @hfun_hmin.setter
-    def hfun_hmin(self, hfun_hmin):
-        self.opts.hfun_hmin = float(hfun_hmin)
-
-    @hfun_hmax.setter
-    def hfun_hmax(self, hfun_hmax):
-        self.opts.hfun_hmax = float(hfun_hmax)
-
-    @hmin_is_absolute_limit.setter
-    def hmin_is_absolute_limit(self, hmin_is_absolute_limit):
-        assert isinstance(hmin_is_absolute_limit, bool)
-        self.__hmin_is_absolute_limit = hmin_is_absolute_limit
-
-    @hmax_is_absolute_limit.setter
-    def hmax_is_absolute_limit(self, hmax_is_absolute_limit):
-        assert isinstance(hmax_is_absolute_limit, bool)
-        self.__hmax_is_absolute_limit = hmax_is_absolute_limit
-
-    @hfun_scal.setter
-    def hfun_scal(self, hfun_scal):
-        assert hfun_scal in ["absolute", "relative"]
-        self.opts.hfun_scal = hfun_scal
-
-    @optm_qlim.setter
-    def optm_qlim(self, optm_qlim):
-        optm_qlim = float(optm_qlim)
-        assert optm_qlim > 0 and optm_qlim < 1
-        self.opts.optm_qlim = optm_qlim
-
-    @mesh_top1.setter
-    def mesh_top1(self, mesh_top1):
-        assert isinstance(mesh_top1, bool)
-        self.opts.mesh_top1 = mesh_top1
-
-    @geom_feat.setter
-    def geom_feat(self, geom_feat):
-        assert isinstance(geom_feat, bool)
-        self.opts.geom_feat = geom_feat
-
-    def _run_cmdsaw(self):
-        msg = f'_run_cmdsaw()'
-        self.logger.debug(msg)
-
-        # init tmpfiles
-        self.logger.debug(f'init tmpfiles')
-        mesh_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
-        hmat_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
-        geom_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.msh')
-        jcfg_file = tempfile.NamedTemporaryFile(
-            prefix=tmpdir, suffix='.jig')
-
-        # dump data to tempfiles
-        jigsawpy.savemsh(hmat_file.name, self.hfun)
-        jigsawpy.savemsh(geom_file.name, self.geom)
-
-        # init opts
-        opts = jigsaw_jig_t()
-        opts.mesh_file = mesh_file.name
-        opts.hfun_file = hmat_file.name
-        opts.geom_file = geom_file.name
-        opts.jcfg_file = jcfg_file.name
-
-        # additional configuration options
-        opts.verbosity = self.verbosity
-        opts.mesh_dims = +2  # NOTE: Hardcoded value
-        opts.hfun_scal = 'absolute'
-        opts.optm_tria = True  # NOTE: Hardcoded value
-        opts.optm_qlim = self.optm_qlim
-
-        if self.hmin_is_absolute_limit:
-            opts.hfun_hmin = self.hmin
-        else:
-            opts.hfun_hmin = np.min(self.hfun.value)
-
-        if self.hmax_is_absolute_limit:
-            opts.hfun_hmax = self.hmax
-        else:
-            opts.hfun_hmax = np.max(self.hfun.value)
-
-        # init outputmesh
-        mesh = jigsaw_msh_t()
-
-        # call jigsaw
-        self.logger.debug('call cmdsaw')
-        jigsawpy.cmd.jigsaw(opts, mesh)
-
-        # cleanup temporary files
-        for tmpfile in (mesh_file, hmat_file, geom_file, jcfg_file):
-            del(tmpfile)
-
-        self.__output_mesh = mesh
-
-    @property
-    def _geom(self):
-        return self.__geom
-
-    @property
-    def _hfun(self):
-        return self.__hfun
-
-    @property
-    def _initial_mesh(self):
-        return self.__initial_mesh
-
-    @property
-    def _dst_crs(self):
-        return self.__dst_crs
-
-    @property
-    def _mesh_dims(self):
-        return self.__mesh_dims
-
-    @property
-    @lru_cache(maxsize=None)
-    def _opts(self):
-        return jigsaw_jig_t()
-
-    @property
-    def _verbosity(self):
-        return self.__verbosity
-
-    @property
-    def _output_mesh(self):
-        try:
-            return self.__output_mesh
-        except AttributeError:
-            self.__output_mesh = jigsaw_msh_t()
-            return self.__output_mesh
-
-    @_geom.setter
-    def _geom(self, geom):
-        if Hfun.is_valid_type(geom):
-            self._hfun = geom
-            # TODO: Should we continue on the rest of the checks?
-            return
-        else:
-            assert Geom.is_valid_type(geom)
-        self._dst_crs = geom.crs
-        self._mesh_dims = geom.ndims
-        self.__geom = geom.geom
-
-    @_hfun.setter
-    def _hfun(self, hfun):
-        if hfun is not None:
-            assert Hfun.is_valid_type(hfun)
-            # set scaling
-            self.hfun_scal = hfun.scaling
-
-            # use hmin limits
-            if hfun.hmin_is_absolute_limit:
-                self.hfun_hmin = hfun.hmin
-            else:
-                self.hfun_hmin = np.min(hfun.hfun.value)
-
-            # set hmax limits
-            if hfun.hmax_is_absolute_limit:
-                self.hfun_hmax = hfun.hmax
-            else:
-                self.hfun_hmax = np.max(hfun.hfun.value)
-
-            # push jigsaw_msh_t object
-            hfun = hfun.hfun
-
-            self.__hfun = hfun
-        else:
-            if not hasattr(self, f"_{__class__.__name__}__hfun"):
-                self.__hfun = hfun
-
-    @_initial_mesh.setter
-    def _initial_mesh(self, initial_mesh):
-        if initial_mesh is not None:
-            msg = f"initial_mesh must be of type {jigsaw_msh_t}, "
-            msg += f"got type: {type(initial_mesh)}"
-            assert isinstance(initial_mesh, jigsaw_msh_t), msg
-        self.__initial_mesh = initial_mesh
-
-    @_verbosity.setter
-    def _verbosity(self, verbosity):
-        assert verbosity in [0, 1, 2, 3]
-        self.opts.verbosity = verbosity
-
-    @_dst_crs.setter
-    def _dst_crs(self, dst_crs):
-        self.__dst_crs = dst_crs
-
-    @_mesh_dims.setter
-    def _mesh_dims(self, mesh_dims):
-        self.opts.mesh_dims = mesh_dims
-
-    @_opts.setter
-    def _opts(self, opts):
-        assert isinstance(opts, jigsaw_jig_t)
-        self.__opts = opts
+        _logger.info('done!')
+        return Mesh(output_mesh)
