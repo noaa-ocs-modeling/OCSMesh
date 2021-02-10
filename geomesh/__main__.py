@@ -45,6 +45,7 @@ class Geomesh:
             if self._args.geom_cmd == "build":
                 arg_dict = dict(
                     dem_files=self._args.dem,
+                    priority_dem_files=self._args.high_priority_dem,
                     out_file=self._args.output,
                     out_format=self._args.output_format,
                     mesh_file=self._args.mesh,
@@ -320,10 +321,17 @@ def parse_args():
         '--zmax', type=float,
         help='Maximum elevation to consider')
     geom_bld.add_argument(
-        'dem', nargs='+',
+        '--high-priority-dem', nargs='*',
+        help='Digital elevation model list to be used in geometry creation')
+    geom_bld.add_argument(
+        'dem', nargs='*',
         help='Digital elevation model list to be used in geometry creation')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not (args.dem or args.high_priority_dem):
+        parser.error("No DEM data provided!")
+
+    return args
 
 
 def main():
