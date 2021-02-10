@@ -12,6 +12,7 @@ from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 import numpy as np
 from shapely import ops
 from shapely.geometry import box, Polygon, MultiPolygon, LinearRing
+from shapely.validation import explain_validity
 
 
 from geomesh import Raster, Geom
@@ -63,6 +64,9 @@ class GeomCombine:
         nprocs = self._operation_info['nprocs']
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
+        
+        out_dir = pathlib.Path(out_file).parent
+        out_dir.mkdir(exist_ok=True, parents=True)
 
         base_mult_poly = None
         if mesh_file and pathlib.Path(mesh_file).is_file():
@@ -74,12 +78,12 @@ class GeomCombine:
             base_mult_poly = base_mesh.hull.multipolygon()
             _logger.info("Done")
 
+            base_mult_poly = self._get_valid_multipolygon(base_mult_poly)
+
             # NOTE: This needs to happen once and before any
             # modification to basemesh happens (due to overlap
             # w/ DEM, etc.). Exterior of base mesh is used for
             # raster clipping
-            if isinstance(base_mult_poly, Polygon):
-                base_mult_poly = MultiPolygon([base_mult_poly])
             self._base_exterior = MultiPolygon(
                     [i for i in ops.polygonize(
                         [poly.exterior for poly in base_mult_poly])])
@@ -93,8 +97,6 @@ class GeomCombine:
 
         poly_files_coll = list()
         _logger.info(f"Number of processes: {nprocs}")
-        out_dir = pathlib.Path(out_file).parent
-        out_dir.mkdir(exist_ok=True, parents=True)
         with tempfile.TemporaryDirectory(dir=out_dir) as temp_dir, \
                 tempfile.NamedTemporaryFile() as base_file:
 
@@ -119,6 +121,10 @@ class GeomCombine:
                 with Pool(processes=n_proc_dem) as p:
                     poly_files_coll = p.starmap(
                         self._parallel_get_polygon_worker, parallel_args)
+                    # If a DEM doesn't intersect domain None will
+                    # be returned by worker
+                    poly_files_coll = [
+                        i for i in poly_files_coll if i]
             else:
                 poly_files_coll = self._serial_get_polygon(
                     base_mesh_path, temp_dir, dem_files,
@@ -133,7 +139,12 @@ class GeomCombine:
                 )
             for feather_f in poly_files_coll:
                 rasters_gdf = rasters_gdf.append(
-                    gpd.read_feather(feather_f), ignore_index=True)
+                    gpd.GeoDataFrame(
+                        {'geometry':self._get_valid_multipolygon(
+                            MultiPolygon([
+                                geom for geom in
+                                gpd.read_feather(feather_f).geometry]))}),
+                    ignore_index=True)
 
             # unary union of raster geoms
             _logger.info('Generate unary union of raster geoms...')
@@ -156,8 +167,9 @@ class GeomCombine:
 
                 fin_mult_poly = ops.unary_union(poly_coll)
 
-        if isinstance(fin_mult_poly, Polygon):
-            fin_mult_poly = MultiPolygon([fin_mult_poly])
+
+        # Get a clean multipolygon to write to output
+        fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
 
         # TODO: Consider projection(?)
         self._write_to_file(
@@ -165,6 +177,24 @@ class GeomCombine:
 
         self._base_exterior = None
 
+    def _get_valid_multipolygon(
+            self,
+            polygon: Union[Polygon, MultiPolygon]
+            ) -> MultiPolygon:
+
+        if not polygon.is_valid:
+            polygon = ops.unary_union(polygon)
+
+            if not polygon.is_valid:
+                polygon = polygon.buffer(0)
+
+            if not polygon.is_valid:
+                raise ValueError(explain_validity(polygon))
+
+        if isinstance(polygon, Polygon):
+            polygon = MultiPolygon([polygon])
+
+        return polygon
 
     def _serial_get_polygon(
             self,
@@ -197,7 +227,11 @@ class GeomCombine:
             if base_mesh_path is not None:
                 # NOTE: We use the exterior from the earlier calc
                 if not rast_box.within(self._base_exterior):
-                    _logger.info("Needs clipping...")
+                    if not rast_box.intersects(self._base_exterior):
+                        _logger.info(f"{dem_path} is ignored ...")
+                        continue
+
+                    _logger.info(f"{dem_path} needs clipping...")
                     rast.clip(self._base_exterior)
                     rast_box = box(*rast.src.bounds)
 
@@ -211,21 +245,27 @@ class GeomCombine:
                 _logger.info("Subtract DEM bounds from base mesh polygons...")
                 self._base_mesh_lock.acquire()
                 try:
+                    # Get a valid multipolygon from disk
                     base_mult_poly = MultiPolygon(
                             [i for i in gpd.read_feather(
                                 base_mesh_path).geometry])
+                    base_mult_poly = self._get_valid_multipolygon(
+                            base_mult_poly)
+
+                    # Get valid multipolygon after operation and write
                     base_mult_poly = base_mult_poly.difference(
                             rast_box)
-                    if isinstance(base_mult_poly, Polygon):
-                        base_mult_poly = MultiPolygon([base_mult_poly])
+                    base_mult_poly = self._get_valid_multipolygon(
+                            base_mult_poly)
                     gpd.GeoDataFrame(
                             {'geometry': base_mult_poly}).to_feather(
                                 base_mesh_path)
                 finally:
                     self._base_mesh_lock.release()
 
-            if isinstance(geom_mult_poly, Polygon):
-                geom_mult_poly = MultiPolygon([geom_mult_poly])
+            # Get a valid polygon from raster
+            geom_mult_poly = self._get_valid_multipolygon(
+                    geom_mult_poly)
             temp_path = (
                     pathlib.Path(temp_dir)
                     / f'{pathlib.Path(dem_path).name}.shp')
@@ -253,12 +293,12 @@ class GeomCombine:
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
-        poly_coll = self._serial_get_polygon(
+        poly_coll_files = self._serial_get_polygon(
             base_mesh_path, temp_dir, [dem_file],
             z_info, chunk_size, overlap)
 
-        # Only one item passed to serial code
-        return poly_coll[0]
+        # Only one item passed to serial code at most
+        return poly_coll_files[0] if poly_coll_files else None
 
 
     def _linearring_to_vert_edge(
