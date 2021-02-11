@@ -624,8 +624,9 @@ def msh_t_to_2dm(msh: jigsaw_msh_t):
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
     return {
-            'ND': {i+1: (coord, msh.value[i, 0]) for i, coord
-                   in enumerate(coords)},
+            'ND': {i+1: (coord, msh.value[i, 0] if not
+                         np.isnan(msh.value[i, 0]) else -99999)
+                   for i, coord in enumerate(coords)},
             'E3T': {i+1: index+1 for i, index
                     in enumerate(msh.tria3['index'])},
             'E4Q': {i+1: index+1 for i, index

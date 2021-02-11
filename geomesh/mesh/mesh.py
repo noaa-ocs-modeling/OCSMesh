@@ -1,20 +1,23 @@
 from functools import lru_cache
+from multiprocessing import Pool, cpu_count
 import os
 import pathlib
-from typing import Union
+from typing import Union, Iterable, List
 import warnings
 
 import geopandas as gpd
-from jigsawpy import jigsaw_msh_t, savemsh, loadmsh
+from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
 from matplotlib.path import Path
 from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
 import numpy as np
 from pyproj import CRS, Transformer
+from scipy.interpolate import RectBivariateSpline, griddata
 from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
 
 
 from geomesh import utils
+from geomesh.raster import Raster
 from geomesh.mesh.base import BaseMesh
 from geomesh.mesh.parsers import grd, sms2dm
 
@@ -292,13 +295,16 @@ class EuclideanMesh(BaseMesh):
             raise IOError(
                 f'File {str(path)} exists and overwrite is not True.')
         if format == 'grd':
-            grd.write(utils.msh_t_to_grd(self._msh_t), path, overwrite)
+            grd.write(utils.msh_t_to_grd(self.msh_t), path, overwrite)
 
         elif format == '2dm':
-            sms2dm.writer(utils.msh_t_to_2dm(self._msh_t), path, overwrite)
+            sms2dm.writer(utils.msh_t_to_2dm(self.msh_t), path, overwrite)
 
         elif format == 'msh':
             savemsh(self.msh_t, path)
+
+        elif format == 'vtk':
+            savevtk(self.msh_t, path)
 
         else:
             raise ValueError(f'Unhandled format {format}.')
@@ -350,6 +356,10 @@ class EuclideanMesh2D(EuclideanMesh):
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
                              "but expected ndims=2.")
 
+        if len(self.msh_t.value) == 0:
+            self.msh_t.value = np.array(
+                np.full((self.vert2['coord'].shape[0], 1), np.nan))
+
     def get_bbox(
             self,
             crs: Union[str, CRS] = None,
@@ -376,6 +386,32 @@ class EuclideanMesh2D(EuclideanMesh):
 
     def tricontourf(self, **kwargs):
         return utils.tricontourf(self.msh_t, **kwargs)
+
+    def interpolate(self, raster: Union[Raster, List[Raster]],
+                    method='nearest', nprocs=None):
+
+        if isinstance(raster, Raster):
+            raster = [raster]
+
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = cpu_count() if nprocs == -1 else nprocs
+
+        with Pool(processes=nprocs) as pool:
+            res = pool.starmap(
+                _mesh_interpolate_worker,
+                [(self.vert2['coord'], self.crs,
+                    _raster.tmpfile, _raster.chunk_size, method)
+                 for _raster in raster]
+                )
+
+        values = self.msh_t.value.flatten()
+
+        for idxs, _values in res:
+            values[idxs] = np.nanmean(
+                np.vstack([values[idxs], _values]).T, axis=1)
+
+        self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
+                                    dtype=jigsaw_msh_t.REALS_t)
 
     @property
     def vert2(self):
@@ -555,3 +591,38 @@ def signed_polygon_area(vertices):
         area += vertices[i][0] * vertices[j][1]
         area -= vertices[j][0] * vertices[i][1]
         return area / 2.0
+
+
+def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size, method):
+    raster = Raster(raster_path)
+    idxs = []
+    values = []
+    for window in raster.iter_windows(chunk_size=chunk_size, overlap=2):
+        xi = raster.get_x(window)
+        yi = np.flip(raster.get_y(window))
+        zi = np.flipud(raster.get_values(window=window)).flatten()
+        xi, yi = np.meshgrid(xi, yi)
+        xi = xi.flatten()
+        yi = yi.flatten()
+
+        if not raster.crs.equals(coords_crs):
+            transformer = Transformer.from_crs(
+                    raster.crs, coords_crs, always_xy=True)
+            xi, yi = transformer.transform(xi, yi)
+
+        _idxs = np.where(
+                np.logical_and(
+                    np.logical_and(
+                        np.min(xi) < coords[:, 0],
+                        np.max(xi) > coords[:, 0]),
+                    np.logical_and(
+                        np.min(yi) < coords[:, 1],
+                        np.max(yi) > coords[:, 1])))[0]
+
+        _values = griddata(
+            (xi, yi), zi, (coords[_idxs, 0], coords[_idxs, 1]),
+            method=method)
+        idxs.append(_idxs)
+        values.append(_values)
+
+    return (np.hstack(idxs), np.hstack(values))

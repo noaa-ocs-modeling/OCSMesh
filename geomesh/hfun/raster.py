@@ -1,17 +1,15 @@
+import functools
 import gc
 import logging
 from multiprocessing import cpu_count, Pool
-# import pathlib
+import operator
 import tempfile
 from time import time
-from typing import Union
+from typing import Union, List
 import warnings
 
-# import geopandas as gpd
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t, savemsh, cmd, loadmsh
+from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
-# import matplotlib.pyplot as plt
-# from matplotlib.tri import Triangulation
 import numpy as np
 from pyproj import CRS, Transformer
 import rasterio
@@ -23,8 +21,7 @@ import utm
 
 from geomesh.hfun.base import BaseHfun
 from geomesh.raster import Raster, get_iter_windows
-from geomesh.geom.shapely import PolygonGeom, MultiPolygonGeom
-from geomesh.mesh.mesh import EuclideanMesh
+from geomesh.geom.shapely import PolygonGeom
 from geomesh import utils
 
 # supress feather warning
@@ -265,7 +262,7 @@ class HfunRaster(BaseHfun, Raster):
 
     def add_contour(
             self,
-            level: float,
+            level: Union[List[float], float],
             expansion_rate: float,
             target_size: float = None,
             nprocs: int = None,
@@ -273,10 +270,26 @@ class HfunRaster(BaseHfun, Raster):
         """ See https://outline.com/YU7nSM for an excellent explanation about
         tree algorithms.
         """
-        contours = self.raster.get_contour(level)
-        if isinstance(contours, GeometryCollection):
-            _logger.info('No contours found...')
+        if not isinstance(level, list):
+            level = [level]
+
+        contours = []
+        for _level in level:
+            _contours = self.raster.get_contour(_level)
+            if isinstance(_contours, GeometryCollection):
+                continue
+            elif isinstance(_contours, LineString):
+                contours.append(_contours)
+            elif isinstance(_contours, MultiLineString):
+                for _cont in _contours:
+                    contours.append(_cont)
+
+        if len(contours) == 0:
+            _logger.info('No contours found!')
             return
+
+        contours = MultiLineString(contours)
+
         _logger.info('Adding contours as features...')
         self.add_feature(contours, expansion_rate, target_size, nprocs)
 
@@ -353,20 +366,13 @@ class HfunRaster(BaseHfun, Raster):
                     utm_crs = None
                 _logger.info('Repartitioning features...')
                 start = time()
-                for i, linestring in reversed(list(enumerate(feature))):
-                    if len(linestring.coords) > max_verts:
-                        feature.pop(i)
-                        new_feat = []
-                        for segment in list(map(LineString, zip(
-                                linestring.coords[:-1],
-                                linestring.coords[1:]))):
-                            new_feat.append(segment)
-                            if len(new_feat) == max_verts - 1:
-                                feature.append(ops.linemerge(new_feat))
-                                new_feat = []
-                                gc.collect()
-                        if len(new_feat) != 0:
-                            feature.append(ops.linemerge(new_feat))
+                with Pool(processes=nprocs) as pool:
+                    res = pool.starmap(
+                        repartition_features,
+                        [(linestring, max_verts) for linestring in feature]
+                        )
+                pool.join()
+                feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
 
                 _logger.info(f'Resampling features on nprocs {nprocs}...')
@@ -598,3 +604,21 @@ def transform_linestring(
         for distance in distances
         ])
     return linestring
+
+
+def repartition_features(linestring, max_verts):
+    features = []
+    if len(linestring.coords) > max_verts:
+        new_feat = []
+        for segment in list(map(LineString, zip(
+                linestring.coords[:-1],
+                linestring.coords[1:]))):
+            new_feat.append(segment)
+            if len(new_feat) == max_verts - 1:
+                features.append(ops.linemerge(new_feat))
+                new_feat = []
+        if len(new_feat) != 0:
+            features.append(ops.linemerge(new_feat))
+    else:
+        features.append(linestring)
+    return features

@@ -40,12 +40,15 @@ def writer(sms2dm, path, overwrite=False):
 
 
 def to_string(sms2dm):
-    return '\n'.join([
-        "MESH2D",
-        E3T_string(sms2dm),
-        E4Q_string(sms2dm),
-        ND_string(sms2dm),
-    ])
+    data = ['MESH2D']
+    E3T = E3T_string(sms2dm)
+    if E3T is not None:
+        data.append(E3T)
+    E4Q = E4Q_string(sms2dm)
+    if E4Q is not None:
+        data.append(E4Q)
+    data.append(ND_string(sms2dm))
+    return '\n'.join(data)
 
 
 def ND_string(sms2dm):
@@ -76,8 +79,6 @@ def geom_string(geom_type, sms2dm):
         f.append(' '.join(line))
     if len(f) > 0:
         return '\n'.join(f)
-    else:
-        return ''
 
 
 def E3T_string(sms2dm):

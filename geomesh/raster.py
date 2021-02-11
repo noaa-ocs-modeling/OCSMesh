@@ -527,8 +527,6 @@ class Raster:
     ):
         _logger.debug(
             f'RasterHfun.get_raster_contours(level={level}, window={window})')
-        tmpdir = tempfile.TemporaryDirectory()
-        _logger.info(f'Opened temporary directory: {tmpdir.name}')
         if window is None:
             iter_windows = list(self.iter_windows())
         else:
