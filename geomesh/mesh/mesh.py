@@ -2,7 +2,7 @@ from functools import lru_cache
 from multiprocessing import Pool, cpu_count
 import os
 import pathlib
-from typing import Union, Iterable, List
+from typing import Union, List
 import warnings
 
 import geopandas as gpd
@@ -12,7 +12,7 @@ from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
 import numpy as np
 from pyproj import CRS, Transformer
-from scipy.interpolate import RectBivariateSpline, griddata
+from scipy.interpolate import RectBivariateSpline
 from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
 
 
@@ -400,15 +400,14 @@ class EuclideanMesh2D(EuclideanMesh):
             res = pool.starmap(
                 _mesh_interpolate_worker,
                 [(self.vert2['coord'], self.crs,
-                    _raster.tmpfile, _raster.chunk_size, method)
+                    _raster.tmpfile, _raster.chunk_size)
                  for _raster in raster]
                 )
 
         values = self.msh_t.value.flatten()
 
         for idxs, _values in res:
-            values[idxs] = np.nanmean(
-                np.vstack([values[idxs], _values]).T, axis=1)
+            values[idxs] = _values
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
@@ -593,35 +592,37 @@ def signed_polygon_area(vertices):
         return area / 2.0
 
 
-def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size, method):
+def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size):
+    coords = np.array(coords)
     raster = Raster(raster_path)
     idxs = []
     values = []
     for window in raster.iter_windows(chunk_size=chunk_size, overlap=2):
-        xi = raster.get_x(window)
-        yi = np.flip(raster.get_y(window))
-        zi = np.flipud(raster.get_values(window=window)).flatten()
-        xi, yi = np.meshgrid(xi, yi)
-        xi = xi.flatten()
-        yi = yi.flatten()
 
         if not raster.crs.equals(coords_crs):
             transformer = Transformer.from_crs(
-                    raster.crs, coords_crs, always_xy=True)
-            xi, yi = transformer.transform(xi, yi)
-
+                    coords_crs, raster.crs, always_xy=True)
+            coords[:, 0], coords[:, 1] = transformer.transform(
+                coords[:, 0], coords[:, 1])
+        xi = raster.get_x(window)
+        yi = raster.get_y(window)
+        zi = raster.get_values(window=window)
+        f = RectBivariateSpline(
+            xi,
+            np.flip(yi),
+            np.flipud(zi).T,
+            kx=3, ky=3, s=0,
+            # bbox=[min(x), max(x), min(y), max(y)]  # ??
+        )
         _idxs = np.where(
+            np.logical_and(
                 np.logical_and(
-                    np.logical_and(
-                        np.min(xi) < coords[:, 0],
-                        np.max(xi) > coords[:, 0]),
-                    np.logical_and(
-                        np.min(yi) < coords[:, 1],
-                        np.max(yi) > coords[:, 1])))[0]
-
-        _values = griddata(
-            (xi, yi), zi, (coords[_idxs, 0], coords[_idxs, 1]),
-            method=method)
+                    np.min(xi) <= coords[:, 0],
+                    np.max(xi) >= coords[:, 0]),
+                np.logical_and(
+                    np.min(yi) <= coords[:, 1],
+                    np.max(yi) >= coords[:, 1])))[0]
+        _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
         idxs.append(_idxs)
         values.append(_values)
 
