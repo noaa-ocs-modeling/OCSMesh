@@ -22,15 +22,12 @@ from geomesh.mesh.mesh import Mesh
 
 _logger = logging.getLogger(__name__)
 
-
 class GeomCombine:
 
     _base_mesh_lock = Lock()
-    _priority_data_lock = Lock()
     def __init__(
             self,
             dem_files: Union[None, Sequence[Union[str, os.PathLike]]],
-            priority_dem_files: Union[None, Sequence[Union[str, os.PathLike]]],
             out_file: Union[str, os.PathLike],
             out_format: str = "shapefile",
             mesh_file: Union[str, os.PathLike, None] = None,
@@ -45,12 +42,9 @@ class GeomCombine:
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
         dem_files = [] if dem_files is None else dem_files
-        priority_dem_files = (
-            [] if priority_dem_files is None else priority_dem_files)
 
         self._operation_info = dict(
             dem_files=dem_files,
-            priority_dem_files=priority_dem_files,
             out_file=out_file,
             out_format=out_format,
             mesh_file=mesh_file,
@@ -63,7 +57,6 @@ class GeomCombine:
     def run(self):
 
         dem_files = self._operation_info['dem_files']
-        priority_dem_files = self._operation_info['priority_dem_files']
         out_file = self._operation_info['out_file']
         out_format = self._operation_info['out_format']
         mesh_file = self._operation_info['mesh_file']
@@ -72,19 +65,9 @@ class GeomCombine:
         chunk_size = self._operation_info['chunk_size']
         overlap = self._operation_info['overlap']
         nprocs = self._operation_info['nprocs']
-        
+
         out_dir = pathlib.Path(out_file).parent
         out_dir.mkdir(exist_ok=True, parents=True)
-
-        # NOTE: We need to process higher priority first
-        pr_dt = pd.DataFrame(
-            {'dem': [*priority_dem_files, *dem_files],
-             'priority': [*[1 for i in priority_dem_files],
-                          *[0 for i in dem_files]]
-            })
-        dem_sets = [
-            list(pr_dt[pr_dt.priority == pr].dem.unique()) for pr in
-            reversed(sorted(pr_dt.priority.unique()))]
 
         base_mult_poly = None
         if mesh_file and pathlib.Path(mesh_file).is_file():
@@ -130,29 +113,37 @@ class GeomCombine:
                 base_mesh_path = None
             base_mult_poly = None
 
-            poly_files_coll = list()
-            for dem_set in dem_sets:
-                if nprocs > 1:
-                    n_proc_dem = nprocs
-                    if nprocs > len(dem_set):
-                        n_proc_dem = len(dem_set)
-                    parallel_args = list()
-                    # NOTE: Since priority table is small
-                    # it's OK to copy it many times
-                    for dem_file in dem_set:
-                        parallel_args.append(
-                            (base_mesh_path, temp_dir, dem_file,
-                             z_info, chunk_size, overlap))
-                    with Pool(processes=n_proc_dem) as p:
-                        poly_files_coll.extend(
-                            p.starmap(
-                                self._parallel_get_polygon_worker,
-                                parallel_args))
-                else:
+
+            # Process priority: priority is based on order, the first
+            # has the highest priority (lower priority number)
+            priorities = list((range(len(dem_files))))
+            priority_args = list()
+            for priority, dem_file in zip(priorities, dem_files):
+                priority_args.append(
+                    (priority, temp_dir, dem_file, chunk_size, overlap))
+
+            with Pool(processes=nprocs) as p:
+                p.starmap(self._process_priority, priority_args)
+
+            # Process contours
+            if nprocs > 1:
+                parallel_args = list()
+                for priority, dem_file in zip(priorities, dem_files):
+                    parallel_args.append(
+                        (base_mesh_path, temp_dir,
+                         priority, dem_file,
+                         z_info, chunk_size, overlap))
+                with Pool(processes=nprocs) as p:
                     poly_files_coll.extend(
-                        self._serial_get_polygon(
-                            base_mesh_path, temp_dir, dem_set,
-                            z_info, chunk_size, overlap))
+                        p.starmap(
+                            self._parallel_get_polygon_worker,
+                            parallel_args))
+            else:
+                poly_files_coll.extend(
+                    self._serial_get_polygon(
+                        base_mesh_path, temp_dir,
+                        priorities, dem_files,
+                        z_info, chunk_size, overlap))
 
             # If a DEM doesn't intersect domain None will
             # be returned by worker
@@ -257,11 +248,43 @@ class GeomCombine:
 
         return multipolygon
 
+    def _read_to_geodf(
+            self, 
+            path: Union[str, os.PathLike],
+            ) -> gpd.GeoDataFrame:
+
+        gdf = gpd.read_feather(path)
+
+        return gdf
+
+
+    def _process_priority(
+            self,
+            priority: int,
+            temp_dir: Union[str, os.PathLike],
+            dem_path: Union[str, os.PathLike],
+            chunk_size: Union[int, None] = None,
+            overlap: Union[int, None] = None):
+
+        rast = Raster(
+                dem_path,
+                chunk_size=chunk_size,
+                overlap=overlap)
+
+        pri_dt_path = (
+            pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
+        
+        pri_mult_poly = MultiPolygon([box(*rast.src.bounds)])
+
+        self._multipolygon_to_disk(
+                pri_dt_path, pri_mult_poly)
+
 
     def _serial_get_polygon(
             self,
             base_mesh_path: Union[str, os.PathLike, None],
             temp_dir: Union[str, os.PathLike],
+            priorities: Sequence[int],
             dem_files: Sequence[Union[str, os.PathLike]],
             z_info: dict = dict(),
             chunk_size: Union[int, None] = None,
@@ -270,7 +293,7 @@ class GeomCombine:
 
         _logger.info("Getting DEM info")
         poly_coll = list()
-        for dem_path in dem_files:
+        for priority, dem_path in zip(priorities, dem_files):
             _logger.info(f"Processing {dem_path} ...")
             if not pathlib.Path(dem_path).is_file():
                 warnings.warn(f"File {dem_path} not found!")
@@ -326,45 +349,47 @@ class GeomCombine:
                     self._base_mesh_lock.release()
 
             # Processing DEM priority
-            pri_dt_path = (
-                pathlib.Path(temp_dir) / 'dem_priority_geom')
-            self._priority_data_lock.acquire()
-            try:
-                pri_mult_poly = MultiPolygon([rast_box])
-                if pri_dt_path.is_file():
-                    old_pri_mult_poly = self._read_multipolygon(
-                            pri_dt_path)
+            priority_geodf = gpd.GeoDataFrame(
+                    columns=['geometry'],
+                    crs='EPSG:4326')
+            for p in range(priority):
+                higher_pri_path = (
+                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
+            
+                if higher_pri_path.is_file():
+                    priority_geodf = priority_geodf.append(
+                             self._read_to_geodf(higher_pri_path))
 
-                    if pri_mult_poly.within(old_pri_mult_poly):
-                        _logger.info(
-                            f"{dem_path} is ignored due to priority...")
-                        continue
+            if len(priority_geodf):
+                op_res = priority_geodf.unary_union
+                pri_mult_poly = MultiPolygon()
+                if isinstance(op_res, MultiPolygon):
+                    pri_mult_poly = op_res
+                else:
+                    pri_mult_poly = MultiPolygon([op_res])
+                    
+                 
+                if rast_box.within(pri_mult_poly):
+                    _logger.info(
+                        f"{dem_path} is ignored due to priority...")
+                    continue
 
-                    if pri_mult_poly.intersects(old_pri_mult_poly):
-                        _logger.info(
-                            f"{dem_path} needs clipping by priority...")
+                if rast_box.intersects(pri_mult_poly):
+                    _logger.info(
+                        f"{dem_path} needs clipping by priority...")
 
-                        # Clipping raster can cause problem at
-                        # boundaries due to difference in pixel size
-                        # between high and low resolution rasters
-                        # so instead we operate on extracted polygons
-                        geom_mult_poly = geom_mult_poly.difference(
-                                old_pri_mult_poly)
-
-                    pri_mult_poly = ops.unary_union(
-                        [pri_mult_poly, old_pri_mult_poly])
-
-                self._multipolygon_to_disk(
-                        pri_dt_path, pri_mult_poly)
-
-            finally:
-                self._priority_data_lock.release()
+                    # Clipping raster can cause problem at
+                    # boundaries due to difference in pixel size
+                    # between high and low resolution rasters
+                    # so instead we operate on extracted polygons
+                    geom_mult_poly = geom_mult_poly.difference(
+                            pri_mult_poly)
 
 
             # Write geometry multipolygon to disk
             temp_path = (
                     pathlib.Path(temp_dir)
-                    / f'{pathlib.Path(dem_path).name}')
+                    / f'{pathlib.Path(dem_path).name}.feather')
 
             try:
                 self._multipolygon_to_disk(temp_path, geom_mult_poly)
@@ -383,13 +408,14 @@ class GeomCombine:
             self,
             base_mesh_path: Union[str, os.PathLike, None],
             temp_dir: Union[str, os.PathLike],
+            priority: int,
             dem_file: Union[str, os.PathLike],
             z_info: dict = dict(),
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
         poly_coll_files = self._serial_get_polygon(
-            base_mesh_path, temp_dir, [dem_file],
+            base_mesh_path, temp_dir, [priority], [dem_file],
             z_info, chunk_size, overlap)
 
         # Only one item passed to serial code at most
