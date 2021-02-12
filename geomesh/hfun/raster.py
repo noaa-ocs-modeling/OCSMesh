@@ -294,12 +294,15 @@ class HfunRaster(BaseHfun, Raster):
         # For expansion_rate
         if expansion_rate != None:
             exteriors = [ply.exterior for ply in multipolygon]
-            for exterior in exteriors:
-                self.add_feature(
-                    feature=exterior,
-                    expansion_rate=expansion_rate,
-                    target_size=target_size,
-                    nprocs=nprocs)
+            interiors = [
+                inter for ply in multipolygon for inter in ply.interiors]
+            
+            features = MultiLineString([*exteriors, *interiors])
+            self.add_feature(
+                feature=features,
+                expansion_rate=expansion_rate,
+                target_size=target_size,
+                nprocs=nprocs)
 
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
@@ -366,6 +369,7 @@ class HfunRaster(BaseHfun, Raster):
                 values = np.minimum(self.get_values(window=window), values)
 
                 _logger.info(f'Write array to file {tmpfile.name}...')
+                start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
 
