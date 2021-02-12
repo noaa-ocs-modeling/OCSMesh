@@ -16,7 +16,8 @@ import rasterio
 from scipy.spatial import cKDTree
 from shapely import ops
 from shapely.geometry import (
-    LineString, MultiLineString, box, GeometryCollection, Polygon)
+    LineString, MultiLineString, box, GeometryCollection,
+    Polygon, MultiPolygon)
 import utm
 
 from geomesh.hfun.base import BaseHfun
@@ -259,6 +260,121 @@ class HfunRaster(BaseHfun, Raster):
                     'iter_windows > 1, need to collect hfuns')
 
         return output_mesh
+
+    def add_patch(
+            self,
+            multipolygon: Union[MultiPolygon, Polygon],
+            expansion_rate: float = None,
+            target_size: float = None,
+            nprocs: int = None
+    ):
+
+        # TODO: Support other shapes - call buffer(1) on non polygons(?)
+        if not isinstance(multipolygon, (Polygon, MultiPolygon)):
+            raise TypeError(
+                    f"Wrong type \"{type()}\" for multipolygon input.")
+
+        if isinstance(multipolygon, Polygon):
+            multipolygon = MultiPolygon([multipolygon])
+
+        # Check nprocs
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = cpu_count() if nprocs == -1 else nprocs
+        _logger.debug(f'Using nprocs={nprocs}')
+
+
+        # check target size
+        target_size = self.hmin if target_size is None else target_size
+        if target_size is None:
+            raise ValueError('Argument target_size must be specified if no '
+                             'global hmin has been set.')
+        if target_size <= 0:
+            raise ValueError("Argument target_size must be greater than zero.")
+
+        # For expansion_rate
+        if expansion_rate != None:
+            exteriors = [ply.exterior for ply in multipolygon]
+            interiors = [
+                inter for ply in multipolygon for inter in ply.interiors]
+            
+            features = MultiLineString([*exteriors, *interiors])
+            self.add_feature(
+                feature=features,
+                expansion_rate=expansion_rate,
+                target_size=target_size,
+                nprocs=nprocs)
+
+        tmpfile = tempfile.NamedTemporaryFile()
+        meta = self.src.meta.copy()
+        meta.update({'driver': 'GTiff'})
+        utm_crs: Union[CRS, None] = None
+        with rasterio.open(tmpfile, 'w', **meta,) as dst:
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+            for i, window in enumerate(iter_windows):
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                if self.crs.is_geographic:
+                    x0, y0, x1, y1 = self.get_window_bounds(window)
+                    _, _, number, letter = utm.from_latlon(
+                        (y0 + y1)/2, (x0 + x1)/2)
+                    utm_crs = CRS(
+                        proj='utm',
+                        zone=f'{number}{letter}',
+                        ellps={
+                            'GRS 1980': 'GRS80',
+                            'WGS 84': 'WGS84'
+                            }[self.crs.ellipsoid.name]
+                    )
+                else:
+                    utm_crs = None
+
+                _logger.info(f'Transforming polygons ...')
+                start = time()
+                with Pool(processes=nprocs) as pool:
+                    transformed_polygons = MultiPolygon(pool.starmap(
+                        transform_polygon,
+                        [(polygon, self.src.crs, utm_crs) for
+                         polygon in multipolygon]
+                    ))
+                _logger.info(f'Transforming took {time()-start}.')
+
+                _logger.info(f'Creating mask from shape ...')
+                start = time()
+                try:
+                    mask, _, _ = rasterio.mask.raster_geometry_mask(
+                        self.src, transformed_polygons,
+                        all_touched=True, invert=True)
+                    if not mask.any():
+                        # Ignore polygon that doesn't intersect the raster
+                        continue
+                    mask = mask[rasterio.windows.window_index(window)]
+
+                except ValueError:
+                    # If there's no overlap between the raster and
+                    # shapes then it throws ValueError, instead of
+                    # checking for intersection, if there's a value 
+                    # error we assume there's no overlap
+                    _logger.debug(
+                        'Polygons don\'t intersect with the raster')
+                    continue
+                _logger.info(
+                    f'Creating mask from shape took {time()-start}.')
+
+                values = self.get_values(window=window).copy()
+                values[mask] = target_size
+                if self.hmin is not None:
+                    values[np.where(values < self.hmin)] = self.hmin
+                if self.hmax is not None:
+                    values[np.where(values > self.hmax)] = self.hmax
+                values = np.minimum(self.get_values(window=window), values)
+
+                _logger.info(f'Write array to file {tmpfile.name}...')
+                start = time()
+                dst.write_band(1, values, window=window)
+                _logger.info(f'Write array to file took {time()-start}.')
+
+        self._tmpfile = tmpfile
+
 
     def add_contour(
             self,
@@ -604,6 +720,19 @@ def transform_linestring(
         for distance in distances
         ])
     return linestring
+
+def transform_polygon(
+    polygon: Polygon,
+    src_crs: CRS = None,
+    utm_crs: CRS = None
+):
+    if utm_crs is not None:
+        transformer = Transformer.from_crs(
+            src_crs, utm_crs, always_xy=True)
+
+        polygon = ops.transform(
+                transformer.transform, polygon)
+    return polygon
 
 
 def repartition_features(linestring, max_verts):
