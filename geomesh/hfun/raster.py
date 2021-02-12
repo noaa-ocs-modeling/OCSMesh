@@ -248,7 +248,7 @@ class HfunRaster(BaseHfun, Raster):
             if marche is True:
                 libsaw.marche(opts, hfun)
 
-            libsaw.jigsaw(opts, geom, output_mesh, hfun=hfun)
+            libsaw.jigsaw(opts, geom, window_mesh, hfun=hfun)
 
             del geom
             # do post processing
