@@ -140,13 +140,13 @@ class Hull:
         return mp
 
     def triangulation(self):
-        triangles = self.msh_t.tria3['index'].tolist()
-        for quad in self.msh_t.quad4['index']:
+        triangles = self.mesh.msh_t.tria3['index'].tolist()
+        for quad in self.mesh.msh_t.quad4['index']:
             triangles.extend([
                 [quad[0], quad[1], quad[3]],
                 [quad[1], quad[2], quad[3]]
             ])
-        return Triangulation(self.coord[:, 0], self.coord[:, 1], triangles)
+        return Triangulation(self.mesh.coord[:, 0], self.mesh.coord[:, 1], triangles)
 
 
 class Nodes:
@@ -301,10 +301,10 @@ class EuclideanMesh(BaseMesh):
             sms2dm.writer(utils.msh_t_to_2dm(self.msh_t), path, overwrite)
 
         elif format == 'msh':
-            savemsh(self.msh_t, path)
+            savemsh(str(path), self.msh_t)
 
         elif format == 'vtk':
-            savevtk(self.msh_t, path)
+            savevtk(str(path), self.msh_t)
 
         else:
             raise ValueError(f'Unhandled format {format}.')
