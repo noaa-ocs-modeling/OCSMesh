@@ -259,7 +259,7 @@ class HfunRaster(BaseHfun, Raster):
                 output_mesh.crs = utm_crs
                 # utils.reproject(output_mesh, self.crs)
             else:
-                window_mesh.crs = self.crs
+                output_mesh.crs = self.crs
 
 
             # combine with results from previous windows
