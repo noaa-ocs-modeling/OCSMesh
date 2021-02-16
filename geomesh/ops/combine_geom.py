@@ -114,6 +114,7 @@ class GeomCombine:
             base_mult_poly = None
 
 
+            _logger.info("Processing DEM priorities ...")
             # Process priority: priority is based on order, the first
             # has the highest priority (lower priority number)
             priorities = list((range(len(dem_files))))
@@ -125,6 +126,7 @@ class GeomCombine:
             with Pool(processes=nprocs) as p:
                 p.starmap(self._process_priority, priority_args)
 
+            _logger.info("Processing DEM contours ...")
             # Process contours
             if nprocs > 1:
                 parallel_args = list()
@@ -145,12 +147,13 @@ class GeomCombine:
                         priorities, dem_files,
                         z_info, chunk_size, overlap))
 
+
+            _logger.info("Generating final boundary polygon...")
             # If a DEM doesn't intersect domain None will
             # be returned by worker
             poly_files_coll = [i for i in poly_files_coll if i]
-
-            _logger.info("Generating final boundary polygon...")
-            poly_coll = list()
+            if base_mesh_path is not None:
+                poly_files_coll.append(base_mesh_path)
 
             rasters_gdf = gpd.GeoDataFrame(
                     columns=['geometry'],
@@ -164,32 +167,16 @@ class GeomCombine:
                         }),
                     ignore_index=True)
 
-            # unary union of raster geoms
-            _logger.info('Generate unary union of raster geoms...')
-            poly_coll.append(MultiPolygon(
-                [geom for geom in rasters_gdf.unary_union.geoms]))
 
-            if base_mesh_path is not None:
-                
-                base_mult_poly = self._read_multipolygon(
-                        base_mesh_path)
-                poly_coll.append(base_mult_poly)
-            fin_mult_poly = ops.unary_union(poly_coll)
-
+            # The assumption is this returns polygon or multipolygon
+            fin_mult_poly = rasters_gdf.unary_union
             _logger.info("Done")
-
-            if not fin_mult_poly:
-                # This should really happen in real-world scenarios!
-                if not poly_coll:
-                    raise ValueError("No polynomials to work with!")
-
-                fin_mult_poly = ops.unary_union(poly_coll)
 
 
         # Get a clean multipolygon to write to output
+        # Is this necessary? It can be expensive if geom is not valid
         fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
 
-        # TODO: Consider projection(?)
         self._write_to_file(
                 out_format, out_file, fin_mult_poly, 'EPSG:4326')
 
@@ -270,6 +257,7 @@ class GeomCombine:
                 dem_path,
                 chunk_size=chunk_size,
                 overlap=overlap)
+        rast.warp(dst_crs='EPSG:4326')
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
@@ -306,6 +294,7 @@ class GeomCombine:
                     dem_path,
                     chunk_size=chunk_size,
                     overlap=overlap)
+            rast.warp(dst_crs='EPSG:4326')
 
             _logger.info("Clipping to basemesh size if needed...")
             rast_box = box(*rast.src.bounds)
