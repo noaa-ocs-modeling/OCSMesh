@@ -94,9 +94,12 @@ class HfunRaster(BaseHfun, Raster):
 
         utm_crs = None
 
+        # NOTE: output_mesh is always in EPSG:4326 regardless of 
+        # raster CRS
         output_mesh = jigsaw_msh_t()
         output_mesh.ndims = +2
         output_mesh.mshID = "euclidean-mesh"
+        output_mesh.crs = CRS("EPSG:4326")
         for window in iter_windows:
 
             hfun = jigsaw_msh_t()
@@ -135,39 +138,31 @@ class HfunRaster(BaseHfun, Raster):
 
                 dim1 = window.width
                 dim2 = window.height
-                tria3 = []
-                for jpos in range(dim2 - 1):
 
-                    triaA = np.empty(
-                        (dim1 - 1),
-                        dtype=jigsaw_msh_t.TRIA3_t)
-
-                    index = triaA["index"]
-                    index[:, 0] = range(0, dim1 - 1)
-                    index[:, 0] += (jpos + 0) * dim1
-
-                    index[:, 1] = range(1, dim1 - 0)
-                    index[:, 1] += (jpos + 0) * dim1
-
-                    index[:, 2] = range(1, dim1 - 0)
-                    index[:, 2] += (jpos + 1) * dim1
-
-                    tria3.append(index)
-                    triaB = np.empty((dim1 - 1), dtype=jigsaw_msh_t.TRIA3_t)
-
-                    index = triaB["index"]
-                    index[:, 0] = range(0, dim1 - 1)
-                    index[:, 0] += (jpos + 0) * dim1
-
-                    index[:, 1] = range(1, dim1 - 0)
-                    index[:, 1] += (jpos + 1) * dim1
-
-                    index[:, 2] = range(0, dim1 - 1)
-                    index[:, 2] += (jpos + 1) * dim1
-                hfun.tria3 = np.array(
-                    [(index, 0) for index in np.vstack(tria3)],
+                tria3 = np.empty(
+                    ((dim1 - 1), (dim2  - 1)),
                     dtype=jigsaw_msh_t.TRIA3_t)
-                del tria3
+                index = tria3["index"]
+                helper_ary = np.ones(
+                        ((dim1 - 1), (dim2  - 1)),
+                        dtype=jigsaw_msh_t.INDEX_t).cumsum(1) - 1
+                index[:, :, 0] = np.arange(
+                        0, dim1 - 1,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 0] += (helper_ary + 0) * dim1
+
+                index[:, :, 1] = np.arange(
+                        1, dim1 - 0,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 1] += (helper_ary + 0) * dim1
+
+                index[:, :, 2] = np.arange(
+                        1, dim1 - 0,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 2] += (helper_ary + 1) * dim1
+
+                hfun.tria3 = tria3.ravel()
+                del tria3, helper_ary
                 gc.collect()
                 _logger.info('Done building hfun.tria3...')
 
@@ -239,7 +234,7 @@ class HfunRaster(BaseHfun, Raster):
             opts.verbosity = self.verbosity if verbosity is None else \
                 verbosity
 
-            # output mesh
+            # mesh of hfun window
 
             window_mesh = jigsaw_msh_t()
             window_mesh.mshID = 'euclidean-mesh'
@@ -255,12 +250,13 @@ class HfunRaster(BaseHfun, Raster):
             hfun.crs = utm_crs
             utils.interpolate(hfun, window_mesh, **kwargs)
 
+            # reproject and combine with other windows
             if utm_crs is not None:
-                output_mesh.crs = utm_crs
-                # utils.reproject(output_mesh, self.crs)
-            else:
-                output_mesh.crs = self.crs
+                window_mesh.crs = utm_crs
+                utils.reproject(window_mesh, output_mesh.crs)
 
+            elif self.crs != output_mesh.crs:
+                utils.reproject(window_mesh, output_mesh.crs)
 
             # combine with results from previous windows
             output_mesh.tria3 = np.append(
