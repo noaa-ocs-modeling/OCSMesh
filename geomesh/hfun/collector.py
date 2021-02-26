@@ -12,7 +12,7 @@ from copy import copy
 from typing import Union, Sequence, List
 
 import geopandas as gpd
-from pyproj import CRS
+from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
 from jigsawpy import jigsaw_msh_t
 
@@ -106,6 +106,7 @@ class HfunCollector(BaseHfun):
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
+        self._applied = False
         self._size_info = dict(hmin=hmin, hmax=hmax)
         self._nprocs = nprocs
         self._hfun_list = list()
@@ -171,6 +172,7 @@ class HfunCollector(BaseHfun):
             contour_defn: Contour = None,
     ):
         # Always lazy
+        self._applied = False
 
         if contour_defn == None:
             contour_defn = Contour(level=level)
@@ -193,6 +195,9 @@ class HfunCollector(BaseHfun):
 
 
     def add_patch(self, shape):
+
+        self._applied = False
+
         raise NotImplementedError(
             "Patch is not implemented for collector hfun!")
 
@@ -205,8 +210,12 @@ class HfunCollector(BaseHfun):
                 f', or a derived type.')
 
     def _apply_features(self):
-        self._apply_contours()
-        #self._apply_patch()
+
+        if not self._applied:
+            self._apply_contours()
+            #self._apply_patch()
+
+        self._applied = True
 
     def _apply_contours(self):
 
@@ -256,9 +265,25 @@ class HfunCollector(BaseHfun):
         pid = os.getpid()
         bbox_list = list()
         # TODO: Should basemesh be included?
-#        for hfun in [*self._hfun_list, self._base_mesh]:
-        for hfun in [*self._hfun_list]:
+        for hfun in [*self._hfun_list, self._base_mesh]:
+            # TODO: Calling msh_t() on HfunMesh more than once causes
+            # issue right now due to change in crs of internal Mesh
             hfun_mesh = hfun.msh_t()
+            # If no CRS info, we assume EPSG:4326
+            if hasattr(hfun_mesh, "crs"):
+                dst_crs = CRS.from_user_input("EPSG:4326")
+                if hfun_mesh.crs != dst_crs:
+                    xx = hfun_mesh.vert2["coord"][:, 0]
+                    yy = hfun_mesh.vert2["coord"][:, 1]
+                    transformer = Transformer.from_crs(
+                        hfun_mesh.crs, dst_crs, always_xy=True)
+                    transformed_crd = np.vstack(
+                            transformer.transform(xx, yy)).T
+                    hfun_mesh.crs = dst_crs
+                    hfun_mesh.vert2 = np.array(
+                            [(coo, 0) for coo in np.vstack(transformed_crd)],
+                            dtype=jigsaw_msh_t.VERT2_t)
+
             # Get all previous bbox and clip to resolve overlaps
             # removing all tria that have NODE in bbox because it's
             # faster and so we can resolve all overlaps
@@ -288,6 +313,7 @@ class HfunCollector(BaseHfun):
                     1)
                 _logger.info(f"Find drop trias took {time() - start}")
 
+                _logger.info(f"Dropping {np.sum(drop_tria)} triangles...")
                 start = time()
                 new_cnn_unfinished = cnn[np.logical_not(drop_tria), :]
                 _logger.info(f"Getting Unfinished CNN took {time() - start}")
