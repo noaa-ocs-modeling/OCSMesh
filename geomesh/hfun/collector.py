@@ -4,6 +4,7 @@ import logging
 import warnings
 import tempfile
 import numpy as np
+from functools import reduce
 from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
@@ -120,9 +121,7 @@ class HfunCollector(BaseHfun):
         # TODO: Interpolate max size on base mesh basemesh?
         #
         # TODO: CRS considerations
-        # 
-        # TODO: Clip by basemesh
-
+        
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -130,6 +129,7 @@ class HfunCollector(BaseHfun):
                 hfun = in_item
 
             elif isinstance(in_item, Raster):
+                in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
                 hfun = HfunRaster(in_item, **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
@@ -138,6 +138,7 @@ class HfunCollector(BaseHfun):
             elif isinstance(in_item, str):
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
+                    raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
                     hfun = HfunRaster(raster, **self._size_info)
 
                 elif in_item.endswith(
@@ -253,12 +254,69 @@ class HfunCollector(BaseHfun):
         path_list = list()
         file_counter = 0
         pid = os.getpid()
-        for hfun in [self._base_mesh, *self._hfun_list]:
-            mesh = hfun.msh_t()
+        bbox_list = list()
+        # TODO: Should basemesh be included?
+#        for hfun in [*self._hfun_list, self._base_mesh]:
+        for hfun in [*self._hfun_list]:
+            hfun_mesh = hfun.msh_t()
+            # Get all previous bbox and clip to resolve overlaps
+            # removing all tria that have NODE in bbox because it's
+            # faster and so we can resolve all overlaps
+            _logger.info(f"Removing bounds from hfun mesh...")
+            for bounds in bbox_list:
+                _logger.info(bounds)
+
+                xmin, ymin, xmax, ymax = bounds
+
+                cnn = hfun_mesh.tria3['index']
+                crd = hfun_mesh.vert2['coord']
+                _logger.info(f"# tria3: {len(cnn)}")
+
+                start = time()
+                in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
+                in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
+                in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
+                in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
+                in_box_idx = reduce(
+                    np.intersect1d,
+                    (in_box_idx_1, in_box_idx_2, in_box_idx_3, in_box_idx_4))
+                _logger.info(f"Find drop verts took {time() - start}")
+
+                start = time()
+                drop_tria = np.all(
+                    np.isin(cnn.ravel(), in_box_idx).reshape(cnn.shape),
+                    1)
+                _logger.info(f"Find drop trias took {time() - start}")
+
+                start = time()
+                new_cnn_unfinished = cnn[np.logical_not(drop_tria), :]
+                _logger.info(f"Getting Unfinished CNN took {time() - start}")
+
+                start = time()
+                lookup_table = {
+                    index: i for i, index
+                    in enumerate(sorted(np.unique(new_cnn_unfinished.flatten())))}
+                new_cnn = np.array([list(map(lambda x: lookup_table[x], element))
+                                      for element in new_cnn_unfinished])
+                new_crd = crd[list(lookup_table.keys()), :]
+                value = hfun_mesh.value[list(lookup_table.keys()), :]
+                
+                _logger.info(f"# tria3: {len(new_cnn)}")
+
+                hfun_mesh.value = value
+                hfun_mesh.vert2 = np.array(
+                    [(coo, 0) for coo in new_crd], dtype=jigsaw_msh_t.VERT2_t)
+                hfun_mesh.tria3 = np.array(
+                    [(con, 0) for con in new_cnn], dtype=jigsaw_msh_t.TRIA3_t)
+
+                _logger.info(f"Getting new CRD and CNN took {time() - start}")
+
+            mesh = Mesh(hfun_mesh)
+            bbox_list.append(mesh.get_bbox(crs="EPSG:4326").bounds)
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
-            Mesh(mesh).write(file_path, format='2dm')
+            mesh.write(file_path, format='2dm')
             path_list.append(file_path)
             _logger.info('Done writing 2dm file.')
             del mesh
@@ -276,69 +334,12 @@ class HfunCollector(BaseHfun):
             collection.append(Mesh.open(path, crs='EPSG:4326'))
         _logger.info(f'Reading 2dm hfun files took {time()-start}.')
 
+        # NOTE: Overlaps are taken care of in the write stage
 
-        _logger.info('Figuring out which one is the base hfun...')
-        start = time()
-        areas = [mp.area for mp in
-                 [mesh.hull.multipolygon() for mesh in collection]]
-        # TODO: What about other hfuns overlap?
-        base_hfun = collection.pop(
-            np.where(areas == np.max(areas))[0][0])
-        _logger.info(f'Found base hfun in {time()-start} seconds.')
-
-        _logger.info('Generating base hfun geodataframe...')
-        start = time()
-        elements = base_hfun.elements.geodataframe()
-        _logger.info(f'geodataframe generation took {time()-start}.')
-
-        _logger.info('Generating base hfun rtree index...')
-        start = time()
-        elements_r_index = elements.sindex
-        _logger.info(f'base_hfun rtree index gen took {time()-start}.')
-
-        _logger.info(
-            'Using r-tree indexing to find possible elements to discard...')
-        start = time()
-        possible_elements_to_discard = set()
-        for hfun in collection:
-            bounds = hfun.get_bbox(crs=base_hfun.crs).bounds
-            for index in list(elements_r_index.intersection(bounds)):
-                possible_elements_to_discard.add(index)
-        del elements_r_index
-        gc.collect()
-        possible_elements_to_discard = elements.iloc[list(
-            possible_elements_to_discard)]
-
-        _logger.info(
-            f'Found possible elements to discard in {time()-start} seconds.')
-
-        _logger.info('Finding exact elements to discard...')
-        start = time()
-        with Pool(processes=self._nprocs) as pool:
-            result = pool.starmap(
-                    _find_exact_elements_to_discard,
-                    [(hfun.get_bbox(crs=base_hfun.crs),
-                      possible_elements_to_discard)
-                     for hfun in collection]
-                )
-        to_keep = elements.loc[elements.index.difference(
-            [item for sublist in result for item in sublist])].index
-        _logger.info(
-            f'Found exact elements to discard in {time()-start} seconds.')
-        del elements
-        gc.collect()
-
-        final_tria = base_hfun.tria3['index'][to_keep, :]
-        del to_keep
-        gc.collect()
-
-        lookup_table = {index: i for i, index
-                        in enumerate(sorted(np.unique(final_tria.flatten())))}
-        coord = [base_hfun.coord[list(lookup_table.keys()), :]]
-        index = [np.array([list(map(lambda x: lookup_table[x], element))
-                          for element in final_tria])]
-        value = [base_hfun.value[list(lookup_table.keys()), :]]
-        offset = coord[-1].shape[0]
+        coord = list()
+        index = list()
+        value = list()
+        offset = 0
         for hfun in collection:
             index.append(hfun.tria3['index'] + offset)
             coord.append(hfun.coord)
@@ -364,7 +365,7 @@ class HfunCollector(BaseHfun):
 
 def _apply_contours_worker(hfun, contour_coll, nprocs):
     # HfunRaster object cannot be passed to pool due to raster buffers
-    # issue with pickling
+    # issue with pickling -- TODO: Use hfuninfo objects?
     for gdf in contour_coll:
         for row in gdf.itertuples():
             _logger.debug(row)
@@ -378,6 +379,8 @@ def _apply_contours_worker(hfun, contour_coll, nprocs):
             })
 
 def _find_exact_elements_to_discard(bbox, possible_elements_to_discard):
+    # NOTE: HfunCollector methods cannot be passed to pool due to 
+    # raster buffers issue with pickling
     exact_elements_to_discard = set()
     for row in possible_elements_to_discard.itertuples():
         if row.geometry.within(bbox):

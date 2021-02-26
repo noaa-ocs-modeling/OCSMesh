@@ -6,9 +6,11 @@ from pyproj import CRS
 def read(path, crs=None):
     sms2dm = dict()
     with open(pathlib.Path(path), 'r') as f:
-        f.readline()
-        while 1:
-            line = f.readline().split()
+        lines = list(map(str.split, f.readlines()))
+        ind = 1
+        while ind < len(lines):
+            line = lines[ind]
+            ind = ind + 1
             if len(line) == 0:
                 break
             if line[0] in ['E3T', 'E4Q']:
