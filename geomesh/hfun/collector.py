@@ -289,7 +289,6 @@ class HfunCollector(BaseHfun):
             # faster and so we can resolve all overlaps
             _logger.info(f"Removing bounds from hfun mesh...")
             for bounds in bbox_list:
-                _logger.info(bounds)
 
                 xmin, ymin, xmax, ymax = bounds
 
@@ -336,6 +335,10 @@ class HfunCollector(BaseHfun):
                     [(con, 0) for con in new_cnn], dtype=jigsaw_msh_t.TRIA3_t)
 
                 _logger.info(f"Getting new CRD and CNN took {time() - start}")
+
+            if not len(hfun_mesh.vert2):
+                _logger.debug("Hfun ignored due to overlap")
+                continue
 
             mesh = Mesh(hfun_mesh)
             bbox_list.append(mesh.get_bbox(crs="EPSG:4326").bounds)

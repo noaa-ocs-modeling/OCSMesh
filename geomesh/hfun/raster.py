@@ -517,10 +517,27 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info(f'Resampling features on nprocs {nprocs}...')
                 start = time()
                 with Pool(processes=nprocs) as pool:
+
+                    # We don't want to recreate the same transformation
+                    # many times (it takes time) and we can't pass
+                    # transformation object to subtask (cinit issue)
+                    transformer = None
+                    if utm_crs is not None:
+                        start2 = time()
+                        transformer = Transformer.from_crs(
+                            self.src.crs, utm_crs, always_xy=True)
+                        _logger.info(
+                                f"Transform creation took {time() - start2:f}")
+                        start2 = time()
+                        feature = [
+                            ops.transform(transformer.transform, linestring)
+                            for linestring in feature]
+                        _logger.info(
+                                f"Transform apply took {time() - start2:f}")
+
                     transformed_features = pool.starmap(
                         transform_linestring,
-                        [(linestring, target_size, self.src.crs, utm_crs) for
-                         linestring in feature]
+                        [(linestring, target_size) for linestring in feature]
                     )
                 pool.join()
                 _logger.info(f'Resampling features took {time()-start}.')
@@ -547,7 +564,15 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info(f'Transforming points took {time()-start}.')
                 _logger.info('Querying KDTree...')
                 start = time()
-                distances, _ = tree.query(xy, n_jobs=nprocs)
+                if self.hmax:
+                    r = (self.hmax - target_size) / (expansion_rate * target_size)
+                    near_dists, neighbors = tree.query(
+                        xy, workers=nprocs, distance_upper_bound=r)
+                    distances = r * np.ones(len(xy))
+                    mask = np.logical_not(np.isinf(near_dists))
+                    distances[mask] = near_dists[mask]
+                else:
+                    distances, _ = tree.query(xy, workers=nprocs)
                 _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(
@@ -727,14 +752,8 @@ def transform_point(x, y, src_crs, utm_crs):
 def transform_linestring(
     linestring: LineString,
     target_size: float,
-    src_crs: CRS = None,
-    utm_crs: CRS = None
 ):
     distances = [0.]
-    if utm_crs is not None:
-        transformer = Transformer.from_crs(
-            src_crs, utm_crs, always_xy=True)
-        linestring = ops.transform(transformer.transform, linestring)
     while distances[-1] + target_size < linestring.length:
         distances.append(distances[-1] + target_size)
     distances.append(linestring.length)
