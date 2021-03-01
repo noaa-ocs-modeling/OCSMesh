@@ -161,6 +161,7 @@ class HfunCollector(BaseHfun):
         with tempfile.TemporaryDirectory() as temp_dir:
             hfun_path_list = self._write_hfun_to_disk(temp_dir)
             composite_hfun = self._get_hfun_composite(hfun_path_list)
+        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
         return composite_hfun
 
 
