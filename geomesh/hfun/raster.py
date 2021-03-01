@@ -99,7 +99,7 @@ class HfunRaster(BaseHfun, Raster):
         output_mesh = jigsaw_msh_t()
         output_mesh.ndims = +2
         output_mesh.mshID = "euclidean-mesh"
-        output_mesh.crs = CRS("EPSG:4326")
+        output_mesh.crs = self.crs
         for window in iter_windows:
 
             hfun = jigsaw_msh_t()
@@ -251,12 +251,11 @@ class HfunRaster(BaseHfun, Raster):
             utils.interpolate(hfun, window_mesh, **kwargs)
 
             # reproject and combine with other windows
+            # output_mesh is always in self.crs
             if utm_crs is not None:
                 window_mesh.crs = utm_crs
-                utils.reproject(window_mesh, output_mesh.crs)
+                utils.reproject(window_mesh, self.crs)
 
-            elif self.crs != output_mesh.crs:
-                utils.reproject(window_mesh, output_mesh.crs)
 
             # combine with results from previous windows
             output_mesh.tria3 = np.append(
