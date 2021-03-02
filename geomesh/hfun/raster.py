@@ -94,8 +94,6 @@ class HfunRaster(BaseHfun, Raster):
 
         utm_crs = None
 
-        # NOTE: output_mesh is always in EPSG:4326 regardless of 
-        # raster CRS
         output_mesh = jigsaw_msh_t()
         output_mesh.ndims = +2
         output_mesh.mshID = "euclidean-mesh"
