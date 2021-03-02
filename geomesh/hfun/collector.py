@@ -341,6 +341,14 @@ class HfunCollector(BaseHfun):
                 _logger.debug("Hfun ignored due to overlap")
                 continue
 
+            # Check hfun_mesh.value against hmin & hmax
+            hmin = self._size_info['hmin']
+            hmax = self._size_info['hmax']
+            if hmin:
+                hfun_mesh.value[hfun_mesh.value < hmin] = hmin
+            if hmax:
+                hfun_mesh.value[hfun_mesh.value > hmax] = hmax
+
             mesh = Mesh(hfun_mesh)
             bbox_list.append(mesh.get_bbox(crs="EPSG:4326").bounds)
             file_counter = file_counter + 1
