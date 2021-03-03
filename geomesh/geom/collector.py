@@ -293,30 +293,24 @@ class GeomCollector(BaseGeom):
                 patch_raster_files = self._get_raster_files_from_source(
                         patch_rasters)
 
-            geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
-            combine_geometry(
-                patch_raster_files, geom_path, "feather",
-                None, mesh_multipoly, True,
-                patch_zmin, patch_zmax,
-                self._chunk_size, self._overlap,
-                self._nprocs)
-
-            # TODO: Make sure all calcs are in EPSG:4326
-
+            # Pass patch shape instead of base mesh
             # See explanation in add_patch
+            combine_poly = mesh_multipoly
             if ptch_defn:
                 patch_mp, crs = ptch_defn.get_multipolygon()
                 gdf_patch = gpd.GeoDataFrame(
                         {'geometry': patch_mp}, crs=crs)
                 if crs != CRS.from_user_input("EPSG:4326"):
                     gdf_patch = gdf_patch.to_crs("EPSG:4326")
-                if geom_path.is_file():
-                    gdf_contour = gpd.read_feather(geom_path)
-                    if gdf_contour.crs != CRS.from_user_input("EPSG:4326"):
-                        gdf_contour = gdf_contour.to_crs("EPSG:4326")
-                    gpd.overlay(
-                        gdf_contour, gdf_patch,
-                        how="intersection").to_feather(geom_path)
+                combine_poly = MultiPolygon([
+                    geom for geom in gdf_patch.geometry])
+            geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
+            combine_geometry(
+                patch_raster_files, geom_path, "feather",
+                None, combine_poly, True,
+                patch_zmin, patch_zmax,
+                self._chunk_size, self._overlap,
+                self._nprocs)
 
             if geom_path.is_file():
                 feather_files.append(geom_path)
