@@ -31,6 +31,7 @@ class GeomCombine:
             out_file: Union[str, os.PathLike],
             out_format: str = "shapefile",
             mesh_file: Union[str, os.PathLike, None] = None,
+            mesh_multipolygon: Union[MultiPolygon, Polygon] = None,
             ignore_mesh_final_boundary : bool = False,
             zmin: Union[float, None] = None,
             zmax: Union[float, None] = None,
@@ -49,6 +50,7 @@ class GeomCombine:
             out_file=out_file,
             out_format=out_format,
             mesh_file=mesh_file,
+            mesh_mp_in=mesh_multipolygon,
             ignore_mesh=ignore_mesh_final_boundary,
             zmin=zmin,
             zmax=zmax,
@@ -62,6 +64,7 @@ class GeomCombine:
         out_file = self._operation_info['out_file']
         out_format = self._operation_info['out_format']
         mesh_file = self._operation_info['mesh_file']
+        mesh_mp_in = self._operation_info['mesh_mp_in']
         ignore_mesh = self._operation_info['ignore_mesh']
         zmin = self._operation_info['zmin']
         zmax = self._operation_info['zmax']
@@ -73,7 +76,10 @@ class GeomCombine:
         out_dir.mkdir(exist_ok=True, parents=True)
 
         base_mult_poly = None
-        if mesh_file and pathlib.Path(mesh_file).is_file():
+        if mesh_mp_in:
+            base_mult_poly = self._get_valid_multipolygon(mesh_mp_in)
+
+        elif mesh_file and pathlib.Path(mesh_file).is_file():
             _logger.info("Creating mesh object from file...")
             base_mesh = Mesh.open(mesh_file)
             _logger.info("Done")
@@ -84,6 +90,8 @@ class GeomCombine:
 
             base_mult_poly = self._get_valid_multipolygon(base_mult_poly)
 
+
+        if base_mult_poly:
             # NOTE: This needs to happen once and before any
             # modification to basemesh happens (due to overlap
             # w/ DEM, etc.). Exterior of base mesh is used for
@@ -304,7 +312,7 @@ class GeomCombine:
             rast_box = box(*rast.src.bounds)
             if base_mesh_path is not None:
                 # NOTE: We use the exterior from the earlier calc
-                if not rast_box.within(self._base_exterior):
+                if self._base_exterior and not rast_box.within(self._base_exterior):
                     if not rast_box.intersects(self._base_exterior):
                         _logger.info(
                             f"{dem_path} is ignored due to base mesh...")

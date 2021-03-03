@@ -134,13 +134,12 @@ class GeomCollector(BaseGeom):
             feather_files = list()
 
             temp_path = Path(temp_dir)
-            mesh_path = temp_path / 'base_mesh.2dm'
 
-            self._base_mesh.write(mesh_path, format='2dm')
+            mesh_multipoly = self._base_mesh.hull.multipolygon()
             feather_files.append(self._extract_global_boundary(
-                temp_path, mesh_path))
+                temp_path, mesh_multipoly))
             feather_files.extend(self._extract_features(
-                temp_path, mesh_path))
+                temp_path, mesh_multipoly))
 
             # TODO: Make sure all calcs are in EPSG:4326
             gdf = gpd.GeoDataFrame(columns=['geometry'], crs='EPSG:4326')
@@ -245,7 +244,7 @@ class GeomCollector(BaseGeom):
             i for i in self._geom_list if not isinstance(i, raster_types)]
         return non_rasters
 
-    def _extract_global_boundary(self, out_dir, mesh_file):
+    def _extract_global_boundary(self, out_dir, mesh_multipoly):
 
         out_path = Path(out_dir)
 
@@ -256,21 +255,21 @@ class GeomCollector(BaseGeom):
         zmax = self._elev_info['zmax']
         combine_geometry(
             raster_files, geom_path, "feather",
-            mesh_file, False,
+            None, mesh_multipoly, False,
             zmin, zmax,
             self._chunk_size, self._overlap,
             self._nprocs)
 
         return geom_path
 
-    def _extract_features(self, out_dir, mesh_file):
+    def _extract_features(self, out_dir, mesh_multipoly):
 
         feather_files = list()
-        feather_files.extend(self._apply_patch(out_dir, mesh_file))
+        feather_files.extend(self._apply_patch(out_dir, mesh_multipoly))
 
         return feather_files
 
-    def _apply_patch(self, out_dir, mesh_file):
+    def _apply_patch(self, out_dir, mesh_multipoly):
 
         out_path = Path(out_dir)
 
@@ -295,11 +294,9 @@ class GeomCollector(BaseGeom):
                         patch_rasters)
 
             geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
-            # TODO: Mesh multipoly is extracted in ops everytime,
-            # need optimization
             combine_geometry(
                 patch_raster_files, geom_path, "feather",
-                mesh_file, True,
+                None, mesh_multipoly, True,
                 patch_zmin, patch_zmax,
                 self._chunk_size, self._overlap,
                 self._nprocs)

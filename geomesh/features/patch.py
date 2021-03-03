@@ -35,9 +35,7 @@ class Patch:
         elif self._shapefile.is_file():
             gdf = gpd.read_file(self._shapefile)
             dst_crs = CRS.from_user_input("EPSG:4326")
-            print("GDF", gdf.crs)
             if gdf.crs != dst_crs:
-                print("SHAPECRS", gdf.crs)
                 gdf = gdf.to_crs(dst_crs)
             multipolygon = MultiPolygon([i for i in gdf.geometry])
             
