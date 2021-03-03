@@ -16,7 +16,7 @@ from shapely.validation import explain_validity
 
 from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 
-from geomesh import Raster, Geom
+from geomesh.raster import Raster
 from geomesh.mesh.mesh import Mesh
 
 
@@ -31,6 +31,7 @@ class GeomCombine:
             out_file: Union[str, os.PathLike],
             out_format: str = "shapefile",
             mesh_file: Union[str, os.PathLike, None] = None,
+            ignore_mesh_final_boundary : bool = False,
             zmin: Union[float, None] = None,
             zmax: Union[float, None] = None,
             chunk_size: Union[int, None] = None,
@@ -48,6 +49,7 @@ class GeomCombine:
             out_file=out_file,
             out_format=out_format,
             mesh_file=mesh_file,
+            ignore_mesh=ignore_mesh_final_boundary,
             zmin=zmin,
             zmax=zmax,
             chunk_size=chunk_size,
@@ -60,6 +62,7 @@ class GeomCombine:
         out_file = self._operation_info['out_file']
         out_format = self._operation_info['out_format']
         mesh_file = self._operation_info['mesh_file']
+        ignore_mesh = self._operation_info['ignore_mesh']
         zmin = self._operation_info['zmin']
         zmax = self._operation_info['zmax']
         chunk_size = self._operation_info['chunk_size']
@@ -118,13 +121,14 @@ class GeomCombine:
             # Process priority: priority is based on order, the first
             # has the highest priority (lower priority number)
             priorities = list((range(len(dem_files))))
-            priority_args = list()
-            for priority, dem_file in zip(priorities, dem_files):
-                priority_args.append(
-                    (priority, temp_dir, dem_file, chunk_size, overlap))
-
-            with Pool(processes=nprocs) as p:
-                p.starmap(self._process_priority, priority_args)
+            # TODO: Needs some code refinement for bbox issue
+#            priority_args = list()
+#            for priority, dem_file in zip(priorities, dem_files):
+#                priority_args.append(
+#                    (priority, temp_dir, dem_file, chunk_size, overlap))
+#
+#            with Pool(processes=nprocs) as p:
+#                p.starmap(self._process_priority, priority_args)
 
             _logger.info("Processing DEM contours ...")
             # Process contours
@@ -152,7 +156,7 @@ class GeomCombine:
             # If a DEM doesn't intersect domain None will
             # be returned by worker
             poly_files_coll = [i for i in poly_files_coll if i]
-            if base_mesh_path is not None:
+            if base_mesh_path is not None and not ignore_mesh:
                 poly_files_coll.append(base_mesh_path)
 
             rasters_gdf = gpd.GeoDataFrame(
@@ -257,7 +261,7 @@ class GeomCombine:
                 dem_path,
                 chunk_size=chunk_size,
                 overlap=overlap)
-        rast.warp(dst_crs='EPSG:4326')
+#        rast.warp(dst_crs='EPSG:4326')
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
@@ -294,7 +298,7 @@ class GeomCombine:
                     dem_path,
                     chunk_size=chunk_size,
                     overlap=overlap)
-            rast.warp(dst_crs='EPSG:4326')
+#            rast.warp(dst_crs='EPSG:4326')
 
             _logger.info("Clipping to basemesh size if needed...")
             rast_box = box(*rast.src.bounds)
@@ -313,10 +317,9 @@ class GeomCombine:
 
             # Processing raster
             _logger.info("Creating geom from raster...")
-            geom = Geom(rast)
 
             _logger.info("Getting polygons from geom...")
-            geom_mult_poly = geom.get_multipolygon(**z_info)
+            geom_mult_poly = rast.get_multipolygon(**z_info)
             geom_mult_poly = self._get_valid_multipolygon(
                     geom_mult_poly)
 
@@ -337,42 +340,43 @@ class GeomCombine:
                 finally:
                     self._base_mesh_lock.release()
 
+            # TODO: Needs some code refinement due to bbox
             # Processing DEM priority
-            priority_geodf = gpd.GeoDataFrame(
-                    columns=['geometry'],
-                    crs='EPSG:4326')
-            for p in range(priority):
-                higher_pri_path = (
-                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
-            
-                if higher_pri_path.is_file():
-                    priority_geodf = priority_geodf.append(
-                             self._read_to_geodf(higher_pri_path))
-
-            if len(priority_geodf):
-                op_res = priority_geodf.unary_union
-                pri_mult_poly = MultiPolygon()
-                if isinstance(op_res, MultiPolygon):
-                    pri_mult_poly = op_res
-                else:
-                    pri_mult_poly = MultiPolygon([op_res])
-                    
-                 
-                if rast_box.within(pri_mult_poly):
-                    _logger.info(
-                        f"{dem_path} is ignored due to priority...")
-                    continue
-
-                if rast_box.intersects(pri_mult_poly):
-                    _logger.info(
-                        f"{dem_path} needs clipping by priority...")
-
-                    # Clipping raster can cause problem at
-                    # boundaries due to difference in pixel size
-                    # between high and low resolution rasters
-                    # so instead we operate on extracted polygons
-                    geom_mult_poly = geom_mult_poly.difference(
-                            pri_mult_poly)
+#            priority_geodf = gpd.GeoDataFrame(
+#                    columns=['geometry'],
+#                    crs='EPSG:4326')
+#            for p in range(priority):
+#                higher_pri_path = (
+#                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
+#            
+#                if higher_pri_path.is_file():
+#                    priority_geodf = priority_geodf.append(
+#                             self._read_to_geodf(higher_pri_path))
+#
+#            if len(priority_geodf):
+#                op_res = priority_geodf.unary_union
+#                pri_mult_poly = MultiPolygon()
+#                if isinstance(op_res, MultiPolygon):
+#                    pri_mult_poly = op_res
+#                else:
+#                    pri_mult_poly = MultiPolygon([op_res])
+#                    
+#                 
+#                if rast_box.within(pri_mult_poly):
+#                    _logger.info(
+#                        f"{dem_path} is ignored due to priority...")
+#                    continue
+#
+#                if rast_box.intersects(pri_mult_poly):
+#                    _logger.info(
+#                        f"{dem_path} needs clipping by priority...")
+#
+#                    # Clipping raster can cause problem at
+#                    # boundaries due to difference in pixel size
+#                    # between high and low resolution rasters
+#                    # so instead we operate on extracted polygons
+#                    geom_mult_poly = geom_mult_poly.difference(
+#                            pri_mult_poly)
 
 
             # Write geometry multipolygon to disk
@@ -445,6 +449,12 @@ class GeomCombine:
                     {'geometry': multi_polygon},
                     crs=crs
                     ).to_file(out_file)
+
+        elif out_format == "feather":
+            gpd.GeoDataFrame(
+                    {'geometry': multi_polygon},
+                    crs=crs
+                    ).to_feather(out_file)
 
         elif out_format in ("jigsaw", "vtk"):
             msh = jigsaw_msh_t()

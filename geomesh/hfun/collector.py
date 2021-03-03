@@ -175,8 +175,17 @@ class HfunCollector(BaseHfun):
         # Always lazy
         self._applied = False
 
+        levels = list()
+        if isinstance(level, (list, tuple)):
+            levels.extend(level)
+        else:
+            levels.append(level)
+
+
+        contour_defns = list()
         if contour_defn == None:
-            contour_defn = Contour(level=level)
+            for level in levels:
+                contour_defns.append(Contour(level=level))
 
         elif not isinstance(contour_defn, Contour):
             raise TypeError(
@@ -188,10 +197,14 @@ class HfunCollector(BaseHfun):
             warnings.warn(msg)
             _logger.info(msg)
 
-        self._contour_info_coll.add(
-            contour_defn, 
-            expansion_rate=expansion_rate,
-            target_size=target_size)
+        else:
+            contour_defns.append(contour_defn)
+
+        for contour_defn in contour_defns:
+            self._contour_info_coll.add(
+                contour_defn, 
+                expansion_rate=expansion_rate,
+                target_size=target_size)
 
 
 

@@ -6,6 +6,7 @@ from geomesh.geom.base import BaseGeom
 from geomesh.geom.raster import RasterGeom
 from geomesh.geom.mesh import MeshGeom
 from geomesh.geom.shapely import PolygonGeom, MultiPolygonGeom
+from geomesh.geom.collector import GeomCollector
 
 
 class Geom(BaseGeom):
@@ -33,6 +34,9 @@ class Geom(BaseGeom):
 
         elif isinstance(geom, MultiPolygon):
             return MultiPolygonGeom(geom, **kwargs)
+
+        elif isinstance(geom, (list, tuple)):
+            return GeomCollector(geom, **kwargs)
 
         else:
             raise TypeError(
