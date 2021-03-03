@@ -7,13 +7,14 @@ import tempfile
 import warnings
 from typing import Union, Sequence, Tuple, List
 
+import pandas as pd
 import geopandas as gpd
-from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 import numpy as np
 from shapely import ops
 from shapely.geometry import box, Polygon, MultiPolygon, LinearRing
 from shapely.validation import explain_validity
 
+from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 
 from geomesh import Raster, Geom
 from geomesh.mesh.mesh import Mesh
@@ -21,13 +22,12 @@ from geomesh.mesh.mesh import Mesh
 
 _logger = logging.getLogger(__name__)
 
-
 class GeomCombine:
 
     _base_mesh_lock = Lock()
     def __init__(
             self,
-            dem_files: Sequence[Union[str, os.PathLike]],
+            dem_files: Union[None, Sequence[Union[str, os.PathLike]]],
             out_file: Union[str, os.PathLike],
             out_format: str = "shapefile",
             mesh_file: Union[str, os.PathLike, None] = None,
@@ -39,6 +39,9 @@ class GeomCombine:
 
 
         self._base_exterior = None
+
+        nprocs = cpu_count() if nprocs == -1 else nprocs
+        dem_files = [] if dem_files is None else dem_files
 
         self._operation_info = dict(
             dem_files=dem_files,
@@ -63,8 +66,6 @@ class GeomCombine:
         overlap = self._operation_info['overlap']
         nprocs = self._operation_info['nprocs']
 
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        
         out_dir = pathlib.Path(out_file).parent
         out_dir.mkdir(exist_ok=True, parents=True)
 
@@ -84,6 +85,10 @@ class GeomCombine:
             # modification to basemesh happens (due to overlap
             # w/ DEM, etc.). Exterior of base mesh is used for
             # raster clipping
+            #
+            # TODO: Add buffer for base mesh exterior in case there
+            # was erosion and we want to make sure new DEMs futher
+            # inland are considered (?)
             self._base_exterior = MultiPolygon(
                     [i for i in ops.polygonize(
                         [poly.exterior for poly in base_mult_poly])])
@@ -102,36 +107,53 @@ class GeomCombine:
 
             if base_mult_poly:
                 base_mesh_path = base_file.name
-                gpd.GeoDataFrame(
-                        {'geometry': base_mult_poly}).to_feather(
-                            base_mesh_path)
+                self._multipolygon_to_disk(
+                    base_mesh_path, base_mult_poly, fix=False)
             else:
                 base_mesh_path = None
             base_mult_poly = None
 
+
+            _logger.info("Processing DEM priorities ...")
+            # Process priority: priority is based on order, the first
+            # has the highest priority (lower priority number)
+            priorities = list((range(len(dem_files))))
+            priority_args = list()
+            for priority, dem_file in zip(priorities, dem_files):
+                priority_args.append(
+                    (priority, temp_dir, dem_file, chunk_size, overlap))
+
+            with Pool(processes=nprocs) as p:
+                p.starmap(self._process_priority, priority_args)
+
+            _logger.info("Processing DEM contours ...")
+            # Process contours
             if nprocs > 1:
-                n_proc_dem = nprocs
-                if nprocs > len(dem_files):
-                    n_proc_dem = len(dem_files)
                 parallel_args = list()
-                for dem_file in dem_files:
+                for priority, dem_file in zip(priorities, dem_files):
                     parallel_args.append(
-                        (base_mesh_path, temp_dir, dem_file,
+                        (base_mesh_path, temp_dir,
+                         priority, dem_file,
                          z_info, chunk_size, overlap))
-                with Pool(processes=n_proc_dem) as p:
-                    poly_files_coll = p.starmap(
-                        self._parallel_get_polygon_worker, parallel_args)
-                    # If a DEM doesn't intersect domain None will
-                    # be returned by worker
-                    poly_files_coll = [
-                        i for i in poly_files_coll if i]
+                with Pool(processes=nprocs) as p:
+                    poly_files_coll.extend(
+                        p.starmap(
+                            self._parallel_get_polygon_worker,
+                            parallel_args))
             else:
-                poly_files_coll = self._serial_get_polygon(
-                    base_mesh_path, temp_dir, dem_files,
-                    z_info, chunk_size, overlap)
+                poly_files_coll.extend(
+                    self._serial_get_polygon(
+                        base_mesh_path, temp_dir,
+                        priorities, dem_files,
+                        z_info, chunk_size, overlap))
+
 
             _logger.info("Generating final boundary polygon...")
-            poly_coll = list()
+            # If a DEM doesn't intersect domain None will
+            # be returned by worker
+            poly_files_coll = [i for i in poly_files_coll if i]
+            if base_mesh_path is not None:
+                poly_files_coll.append(base_mesh_path)
 
             rasters_gdf = gpd.GeoDataFrame(
                     columns=['geometry'],
@@ -140,38 +162,21 @@ class GeomCombine:
             for feather_f in poly_files_coll:
                 rasters_gdf = rasters_gdf.append(
                     gpd.GeoDataFrame(
-                        {'geometry':self._get_valid_multipolygon(
-                            MultiPolygon([
-                                geom for geom in
-                                gpd.read_feather(feather_f).geometry]))}),
+                        {'geometry': self._read_multipolygon(
+                                                feather_f)
+                        }),
                     ignore_index=True)
 
-            # unary union of raster geoms
-            _logger.info('Generate unary union of raster geoms...')
-            poly_coll.append(MultiPolygon(
-                [geom for geom in rasters_gdf.unary_union.geoms]))
 
-            if base_mesh_path is not None:
-                
-                base_mult_poly = [i for i in gpd.read_feather(
-                        base_mesh_path).geometry]
-                poly_coll.extend(base_mult_poly)
-            fin_mult_poly = ops.unary_union(poly_coll)
-
+            # The assumption is this returns polygon or multipolygon
+            fin_mult_poly = rasters_gdf.unary_union
             _logger.info("Done")
-
-            if not fin_mult_poly:
-                # This should really happen in real-world scenarios!
-                if not poly_coll:
-                    raise ValueError("No polynomials to work with!")
-
-                fin_mult_poly = ops.unary_union(poly_coll)
 
 
         # Get a clean multipolygon to write to output
+        # Is this necessary? It can be expensive if geom is not valid
         fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
 
-        # TODO: Consider projection(?)
         self._write_to_file(
                 out_format, out_file, fin_mult_poly, 'EPSG:4326')
 
@@ -196,10 +201,78 @@ class GeomCombine:
 
         return polygon
 
+
+    def _multipolygon_to_disk(
+            self, 
+            path: Union[str, os.PathLike],
+            multipolygon: MultiPolygon,
+            fix: bool = True):
+
+        if fix:
+            multipolygon = self._get_valid_multipolygon(
+                    multipolygon)
+
+        if isinstance(multipolygon, Polygon):
+            # In case fix is not True, we need to make sure it's
+            # a multipolygon instead of polygon for dataframe creation
+            multipolygon = MultiPolygon([multipolygon])
+
+        gpd.GeoDataFrame({'geometry': multipolygon}).to_feather(path)
+
+
+    def _read_multipolygon(
+            self, 
+            path: Union[str, os.PathLike],
+            fix: bool = True
+            ) -> MultiPolygon:
+
+        multipolygon = MultiPolygon(
+                [i for i in gpd.read_feather(path).geometry])
+
+        if fix:
+            multipolygon = self._get_valid_multipolygon(
+                    multipolygon)
+
+        return multipolygon
+
+    def _read_to_geodf(
+            self, 
+            path: Union[str, os.PathLike],
+            ) -> gpd.GeoDataFrame:
+
+        gdf = gpd.read_feather(path)
+
+        return gdf
+
+
+    def _process_priority(
+            self,
+            priority: int,
+            temp_dir: Union[str, os.PathLike],
+            dem_path: Union[str, os.PathLike],
+            chunk_size: Union[int, None] = None,
+            overlap: Union[int, None] = None):
+
+        rast = Raster(
+                dem_path,
+                chunk_size=chunk_size,
+                overlap=overlap)
+        rast.warp(dst_crs='EPSG:4326')
+
+        pri_dt_path = (
+            pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
+        
+        pri_mult_poly = MultiPolygon([box(*rast.src.bounds)])
+
+        self._multipolygon_to_disk(
+                pri_dt_path, pri_mult_poly)
+
+
     def _serial_get_polygon(
             self,
-            base_mesh_path: Union[str, None],
+            base_mesh_path: Union[str, os.PathLike, None],
             temp_dir: Union[str, os.PathLike],
+            priorities: Sequence[int],
             dem_files: Sequence[Union[str, os.PathLike]],
             z_info: dict = dict(),
             chunk_size: Union[int, None] = None,
@@ -208,7 +281,7 @@ class GeomCombine:
 
         _logger.info("Getting DEM info")
         poly_coll = list()
-        for dem_path in dem_files:
+        for priority, dem_path in zip(priorities, dem_files):
             _logger.info(f"Processing {dem_path} ...")
             if not pathlib.Path(dem_path).is_file():
                 warnings.warn(f"File {dem_path} not found!")
@@ -221,6 +294,7 @@ class GeomCombine:
                     dem_path,
                     chunk_size=chunk_size,
                     overlap=overlap)
+            rast.warp(dst_crs='EPSG:4326')
 
             _logger.info("Clipping to basemesh size if needed...")
             rast_box = box(*rast.src.bounds)
@@ -228,54 +302,89 @@ class GeomCombine:
                 # NOTE: We use the exterior from the earlier calc
                 if not rast_box.within(self._base_exterior):
                     if not rast_box.intersects(self._base_exterior):
-                        _logger.info(f"{dem_path} is ignored ...")
+                        _logger.info(
+                            f"{dem_path} is ignored due to base mesh...")
                         continue
 
-                    _logger.info(f"{dem_path} needs clipping...")
+                    _logger.info(
+                        f"{dem_path} needs clipping by base mesh...")
                     rast.clip(self._base_exterior)
                     rast_box = box(*rast.src.bounds)
 
+            # Processing raster
             _logger.info("Creating geom from raster...")
             geom = Geom(rast)
 
             _logger.info("Getting polygons from geom...")
             geom_mult_poly = geom.get_multipolygon(**z_info)
+            geom_mult_poly = self._get_valid_multipolygon(
+                    geom_mult_poly)
 
             if base_mesh_path is not None:
                 _logger.info("Subtract DEM bounds from base mesh polygons...")
                 self._base_mesh_lock.acquire()
                 try:
                     # Get a valid multipolygon from disk
-                    base_mult_poly = MultiPolygon(
-                            [i for i in gpd.read_feather(
-                                base_mesh_path).geometry])
-                    base_mult_poly = self._get_valid_multipolygon(
-                            base_mult_poly)
+                    base_mult_poly = self._read_multipolygon(
+                            base_mesh_path)
 
                     # Get valid multipolygon after operation and write
                     base_mult_poly = base_mult_poly.difference(
                             rast_box)
-                    base_mult_poly = self._get_valid_multipolygon(
-                            base_mult_poly)
-                    gpd.GeoDataFrame(
-                            {'geometry': base_mult_poly}).to_feather(
-                                base_mesh_path)
+                    self._multipolygon_to_disk(
+                            base_mesh_path, base_mult_poly)
+
                 finally:
                     self._base_mesh_lock.release()
 
-            # Get a valid polygon from raster
-            geom_mult_poly = self._get_valid_multipolygon(
-                    geom_mult_poly)
+            # Processing DEM priority
+            priority_geodf = gpd.GeoDataFrame(
+                    columns=['geometry'],
+                    crs='EPSG:4326')
+            for p in range(priority):
+                higher_pri_path = (
+                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
+            
+                if higher_pri_path.is_file():
+                    priority_geodf = priority_geodf.append(
+                             self._read_to_geodf(higher_pri_path))
+
+            if len(priority_geodf):
+                op_res = priority_geodf.unary_union
+                pri_mult_poly = MultiPolygon()
+                if isinstance(op_res, MultiPolygon):
+                    pri_mult_poly = op_res
+                else:
+                    pri_mult_poly = MultiPolygon([op_res])
+                    
+                 
+                if rast_box.within(pri_mult_poly):
+                    _logger.info(
+                        f"{dem_path} is ignored due to priority...")
+                    continue
+
+                if rast_box.intersects(pri_mult_poly):
+                    _logger.info(
+                        f"{dem_path} needs clipping by priority...")
+
+                    # Clipping raster can cause problem at
+                    # boundaries due to difference in pixel size
+                    # between high and low resolution rasters
+                    # so instead we operate on extracted polygons
+                    geom_mult_poly = geom_mult_poly.difference(
+                            pri_mult_poly)
+
+
+            # Write geometry multipolygon to disk
             temp_path = (
                     pathlib.Path(temp_dir)
-                    / f'{pathlib.Path(dem_path).name}.shp')
+                    / f'{pathlib.Path(dem_path).name}.feather')
 
             try:
-                gpd.GeoDataFrame({'geometry': geom_mult_poly}
-                        ).to_feather(temp_path)
+                self._multipolygon_to_disk(temp_path, geom_mult_poly)
                 poly_coll.append(temp_path)
             except:
-                warnings.warn(f"Error writing shapefile for {temp_path}")
+                warnings.warn(f"Error writing {temp_path} to disk")
 
             # Multipolygon takes a lot of memory
             del geom_mult_poly
@@ -286,15 +395,16 @@ class GeomCombine:
 
     def _parallel_get_polygon_worker(
             self,
-            base_mesh_path: str,
+            base_mesh_path: Union[str, os.PathLike, None],
             temp_dir: Union[str, os.PathLike],
+            priority: int,
             dem_file: Union[str, os.PathLike],
             z_info: dict = dict(),
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
         poly_coll_files = self._serial_get_polygon(
-            base_mesh_path, temp_dir, [dem_file],
+            base_mesh_path, temp_dir, [priority], [dem_file],
             z_info, chunk_size, overlap)
 
         # Only one item passed to serial code at most
