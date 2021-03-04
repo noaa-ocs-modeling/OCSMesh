@@ -86,12 +86,18 @@ class HfunRaster(BaseHfun, Raster):
     def msh_t(self, window: rasterio.windows.Window = None,
               marche: bool = False, verbosity=None) -> jigsaw_msh_t:
 
+
         if window is None:
             iter_windows = list(self.iter_windows())
         else:
             iter_windows = [window]
 
         utm_crs = None
+
+        output_mesh = jigsaw_msh_t()
+        output_mesh.ndims = +2
+        output_mesh.mshID = "euclidean-mesh"
+        output_mesh.crs = self.crs
         for window in iter_windows:
 
             hfun = jigsaw_msh_t()
@@ -130,39 +136,31 @@ class HfunRaster(BaseHfun, Raster):
 
                 dim1 = window.width
                 dim2 = window.height
-                tria3 = []
-                for jpos in range(dim2 - 1):
 
-                    triaA = np.empty(
-                        (dim1 - 1),
-                        dtype=jigsaw_msh_t.TRIA3_t)
-
-                    index = triaA["index"]
-                    index[:, 0] = range(0, dim1 - 1)
-                    index[:, 0] += (jpos + 0) * dim1
-
-                    index[:, 1] = range(1, dim1 - 0)
-                    index[:, 1] += (jpos + 0) * dim1
-
-                    index[:, 2] = range(1, dim1 - 0)
-                    index[:, 2] += (jpos + 1) * dim1
-
-                    tria3.append(index)
-                    triaB = np.empty((dim1 - 1), dtype=jigsaw_msh_t.TRIA3_t)
-
-                    index = triaB["index"]
-                    index[:, 0] = range(0, dim1 - 1)
-                    index[:, 0] += (jpos + 0) * dim1
-
-                    index[:, 1] = range(1, dim1 - 0)
-                    index[:, 1] += (jpos + 1) * dim1
-
-                    index[:, 2] = range(0, dim1 - 1)
-                    index[:, 2] += (jpos + 1) * dim1
-                hfun.tria3 = np.array(
-                    [(index, 0) for index in np.vstack(tria3)],
+                tria3 = np.empty(
+                    ((dim1 - 1), (dim2  - 1)),
                     dtype=jigsaw_msh_t.TRIA3_t)
-                del tria3
+                index = tria3["index"]
+                helper_ary = np.ones(
+                        ((dim1 - 1), (dim2  - 1)),
+                        dtype=jigsaw_msh_t.INDEX_t).cumsum(1) - 1
+                index[:, :, 0] = np.arange(
+                        0, dim1 - 1,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 0] += (helper_ary + 0) * dim1
+
+                index[:, :, 1] = np.arange(
+                        1, dim1 - 0,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 1] += (helper_ary + 0) * dim1
+
+                index[:, :, 2] = np.arange(
+                        1, dim1 - 0,
+                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
+                index[:, :, 2] += (helper_ary + 1) * dim1
+
+                hfun.tria3 = tria3.ravel()
+                del tria3, helper_ary
                 gc.collect()
                 _logger.info('Done building hfun.tria3...')
 
@@ -234,30 +232,52 @@ class HfunRaster(BaseHfun, Raster):
             opts.verbosity = self.verbosity if verbosity is None else \
                 verbosity
 
-            # output mesh
-            output_mesh = jigsaw_msh_t()
-            output_mesh.mshID = 'euclidean-mesh'
-            output_mesh.ndims = +2
+            # mesh of hfun window
+
+            window_mesh = jigsaw_msh_t()
+            window_mesh.mshID = 'euclidean-mesh'
+            window_mesh.ndims = +2
 
             if marche is True:
                 libsaw.marche(opts, hfun)
 
-            libsaw.jigsaw(opts, geom, output_mesh, hfun=hfun)
+            libsaw.jigsaw(opts, geom, window_mesh, hfun=hfun)
 
             del geom
             # do post processing
             hfun.crs = utm_crs
-            utils.interpolate(hfun, output_mesh, **kwargs)
+            utils.interpolate(hfun, window_mesh, **kwargs)
 
+            # reproject and combine with other windows
+            # output_mesh is always in self.crs
             if utm_crs is not None:
-                output_mesh.crs = utm_crs
-                # utils.reproject(output_mesh, self.crs)
-            else:
-                output_mesh.crs = self.crs
+                window_mesh.crs = utm_crs
+                utils.reproject(window_mesh, self.crs)
 
-            if len(iter_windows) > 1:
-                raise NotImplementedError(
-                    'iter_windows > 1, need to collect hfuns')
+
+            # combine with results from previous windows
+            output_mesh.tria3 = np.append(
+                output_mesh.tria3,
+                np.array([((idx + len(output_mesh.vert2)), tag)
+                          for idx, tag in window_mesh.tria3],
+                         dtype=jigsaw_msh_t.TRIA3_t),
+                axis=0)
+            output_mesh.vert2 = np.append(
+                output_mesh.vert2,
+                np.array([(coo, tag)
+                          for coo, tag in window_mesh.vert2],
+                         dtype=jigsaw_msh_t.VERT2_t),
+                axis=0)
+            if output_mesh.value.size:
+                output_mesh.value = np.append(
+                    output_mesh.value,
+                    np.array([v for v in window_mesh.value],
+                             dtype=jigsaw_msh_t.REALS_t),
+                    axis=0)
+            else:
+                output_mesh.value = np.array(
+                        [v for v in window_mesh.value],
+                        dtype=jigsaw_msh_t.REALS_t)
 
         return output_mesh
 
@@ -494,10 +514,27 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info(f'Resampling features on nprocs {nprocs}...')
                 start = time()
                 with Pool(processes=nprocs) as pool:
+
+                    # We don't want to recreate the same transformation
+                    # many times (it takes time) and we can't pass
+                    # transformation object to subtask (cinit issue)
+                    transformer = None
+                    if utm_crs is not None:
+                        start2 = time()
+                        transformer = Transformer.from_crs(
+                            self.src.crs, utm_crs, always_xy=True)
+                        _logger.info(
+                                f"Transform creation took {time() - start2:f}")
+                        start2 = time()
+                        feature = [
+                            ops.transform(transformer.transform, linestring)
+                            for linestring in feature]
+                        _logger.info(
+                                f"Transform apply took {time() - start2:f}")
+
                     transformed_features = pool.starmap(
                         transform_linestring,
-                        [(linestring, target_size, self.src.crs, utm_crs) for
-                         linestring in feature]
+                        [(linestring, target_size) for linestring in feature]
                     )
                 pool.join()
                 _logger.info(f'Resampling features took {time()-start}.')
@@ -524,7 +561,15 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info(f'Transforming points took {time()-start}.')
                 _logger.info('Querying KDTree...')
                 start = time()
-                distances, _ = tree.query(xy, n_jobs=nprocs)
+                if self.hmax:
+                    r = (self.hmax - target_size) / (expansion_rate * target_size)
+                    near_dists, neighbors = tree.query(
+                        xy, workers=nprocs, distance_upper_bound=r)
+                    distances = r * np.ones(len(xy))
+                    mask = np.logical_not(np.isinf(near_dists))
+                    distances[mask] = near_dists[mask]
+                else:
+                    distances, _ = tree.query(xy, workers=nprocs)
                 _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(
@@ -704,14 +749,8 @@ def transform_point(x, y, src_crs, utm_crs):
 def transform_linestring(
     linestring: LineString,
     target_size: float,
-    src_crs: CRS = None,
-    utm_crs: CRS = None
 ):
     distances = [0.]
-    if utm_crs is not None:
-        transformer = Transformer.from_crs(
-            src_crs, utm_crs, always_xy=True)
-        linestring = ops.transform(transformer.transform, linestring)
     while distances[-1] + target_size < linestring.length:
         distances.append(distances[-1] + target_size)
     distances.append(linestring.length)

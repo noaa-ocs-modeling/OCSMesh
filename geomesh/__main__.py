@@ -18,7 +18,7 @@ from shapely.geometry import LineString, MultiLineString
 import geoalchemy2
 
 from . import cmd, db, JigsawDriver, Geom, Hfun, Raster
-from geomesh.ops import combine_geometry
+from geomesh.ops import combine_geometry, combine_hfun
 
 
 class Geomesh:
@@ -55,6 +55,26 @@ class Geomesh:
                     nprocs=nprocs)
                 combine_geometry(**arg_dict)
 
+        elif self._args.command == 'hfun':
+
+            nprocs = self._args.nprocs
+            if self._args.hfun_nprocs:
+                nprocs = self._args.hfun_nprocs
+            nprocs = -1 if nprocs == None else nprocs
+
+            if self._args.hfun_cmd == "build":
+                arg_dict = dict(
+                    dem_files=self._args.dem,
+                    out_file=self._args.output,
+                    out_format=self._args.output_format,
+                    mesh_file=self._args.mesh,
+                    hmin=self._args.hmin,
+                    hmax=self._args.hmax,
+                    contours=self._args.contour,
+                    chunk_size=self._args.chunk_size,
+                    overlap=self._args.overlap,
+                    nprocs=nprocs)
+                combine_hfun(**arg_dict)
 
     def generate_mesh(self):
         driver = JigsawDriver(
@@ -322,6 +342,24 @@ def parse_args():
     geom_bld.add_argument(
         'dem', nargs='+',
         help='Digital elevation model list to be used in geometry creation')
+
+    hfun_parser = subp.add_parser('hfun', **sub_parse_common)
+    hfun_subp = hfun_parser.add_subparsers(dest='hfun_cmd')
+    hfun_bld = hfun_subp.add_parser('build', **sub_parse_common)
+    hfun_bld.add_argument('-o', '--output', required=True)
+    hfun_bld.add_argument('-f', '--output-format', default="2dm")
+    hfun_bld.add_argument('--mesh', help='Base mesh size function')
+    hfun_bld.add_argument(
+        '--hmax', type=float, help='Maximum element size')
+    hfun_bld.add_argument(
+        '--hmin', type=float, help='Minimum element size')
+    hfun_bld.add_argument(
+        '--contour', action='append', nargs='+', type=float,
+        help="Each contour's (level, [expansion, target])"
+             " to be applied on all size functions in collector")
+    hfun_bld.add_argument(
+        'dem', nargs='+',
+        help='Digital elevation model list to be used in size function creation')
 
     return parser.parse_args()
 
