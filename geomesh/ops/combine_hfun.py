@@ -7,7 +7,8 @@ from typing import Union, Sequence, Tuple, List
 from pyproj import CRS
 from jigsawpy import savemsh, savevtk
 
-from geomesh import Raster, Hfun
+from geomesh.raster import Raster
+from geomesh.hfun.hfun import Hfun
 from geomesh.mesh.mesh import Mesh
 from geomesh import utils
 

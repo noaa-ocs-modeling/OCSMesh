@@ -8,7 +8,7 @@ from functools import reduce
 from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
-from copy import copy
+from copy import copy, deepcopy
 from typing import Union, Sequence, List
 
 import geopandas as gpd
@@ -175,8 +175,17 @@ class HfunCollector(BaseHfun):
         # Always lazy
         self._applied = False
 
+        levels = list()
+        if isinstance(level, (list, tuple)):
+            levels.extend(level)
+        else:
+            levels.append(level)
+
+
+        contour_defns = list()
         if contour_defn == None:
-            contour_defn = Contour(level=level)
+            for level in levels:
+                contour_defns.append(Contour(level=level))
 
         elif not isinstance(contour_defn, Contour):
             raise TypeError(
@@ -188,10 +197,14 @@ class HfunCollector(BaseHfun):
             warnings.warn(msg)
             _logger.info(msg)
 
-        self._contour_info_coll.add(
-            contour_defn, 
-            expansion_rate=expansion_rate,
-            target_size=target_size)
+        else:
+            contour_defns.append(contour_defn)
+
+        for contour_defn in contour_defns:
+            self._contour_info_coll.add(
+                contour_defn, 
+                expansion_rate=expansion_rate,
+                target_size=target_size)
 
 
 
@@ -266,10 +279,12 @@ class HfunCollector(BaseHfun):
         pid = os.getpid()
         bbox_list = list()
         # TODO: Should basemesh be included?
-        for hfun in [*self._hfun_list, self._base_mesh]:
+        for hfun in [*self._hfun_list]:
             # TODO: Calling msh_t() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
-            hfun_mesh = hfun.msh_t()
+
+            # To avoid removing verts and trias from mesh hfuns
+            hfun_mesh = deepcopy(hfun.msh_t())
             # If no CRS info, we assume EPSG:4326
             if hasattr(hfun_mesh, "crs"):
                 dst_crs = CRS.from_user_input("EPSG:4326")
