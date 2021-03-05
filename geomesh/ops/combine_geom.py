@@ -185,12 +185,15 @@ class GeomCombine:
             _logger.info("Done")
 
 
-        # Get a clean multipolygon to write to output
-        # Is this necessary? It can be expensive if geom is not valid
-        fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
+        # If DEM is not inside input base polygon, the end results
+        # is None
+        if fin_mult_poly:
+            # Get a clean multipolygon to write to output
+            # Is this necessary? It can be expensive if geom is not valid
+            fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
 
-        self._write_to_file(
-                out_format, out_file, fin_mult_poly, 'EPSG:4326')
+            self._write_to_file(
+                    out_format, out_file, fin_mult_poly, 'EPSG:4326')
 
         self._base_exterior = None
 
@@ -269,7 +272,8 @@ class GeomCombine:
                 dem_path,
                 chunk_size=chunk_size,
                 overlap=overlap)
-#        rast.warp(dst_crs='EPSG:4326')
+        # Can cause issue with bbox(?)
+        rast.warp(dst_crs='EPSG:4326')
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
@@ -306,7 +310,8 @@ class GeomCombine:
                     dem_path,
                     chunk_size=chunk_size,
                     overlap=overlap)
-#            rast.warp(dst_crs='EPSG:4326')
+            # Can cause issue with bbox(?)
+            rast.warp(dst_crs='EPSG:4326')
 
             _logger.info("Clipping to basemesh size if needed...")
             rast_box = box(*rast.src.bounds)

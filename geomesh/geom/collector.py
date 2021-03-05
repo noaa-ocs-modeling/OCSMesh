@@ -91,6 +91,7 @@ class GeomCollector(BaseGeom):
 
         # TODO: CRS considerations -- geom combine doesn't necessarily
         # return EPSG:4326 (unlike hfun collector msh_t)
+        self._crs = 'EPSG:4326'
         
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
@@ -253,6 +254,7 @@ class GeomCollector(BaseGeom):
         raster_files = self._get_raster_source_files()
         zmin = self._elev_info['zmin']
         zmax = self._elev_info['zmax']
+        _logger.info("Extracting global boundaries")
         combine_geometry(
             raster_files, geom_path, "feather",
             None, mesh_multipoly, False,
@@ -295,6 +297,7 @@ class GeomCollector(BaseGeom):
 
             # Pass patch shape instead of base mesh
             # See explanation in add_patch
+            _logger.info("Extracting patch contours")
             combine_poly = mesh_multipoly
             if ptch_defn:
                 patch_mp, crs = ptch_defn.get_multipolygon()
