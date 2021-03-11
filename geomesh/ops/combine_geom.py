@@ -126,9 +126,10 @@ class GeomCombine:
 
 
             _logger.info("Processing DEM priorities ...")
-            # Process priority: priority is based on order, the first
-            # has the highest priority (lower priority number)
-            priorities = list((range(len(dem_files))))
+            # Process priority: priority is based on the order,
+            # the last input has the highest priority
+            # (i.e. lowest priority number)
+            priorities = list((range(len(dem_files))))[::-1]
             # TODO: Needs some code refinement for bbox issue
 #            priority_args = list()
 #            for priority, dem_file in zip(priorities, dem_files):
