@@ -92,8 +92,9 @@ class ConstantValueContourInfoCollector:
     def __init__(self):
         self._contours_info = dict()
 
-    def add(self, contour_defn0, contour_defn1, value):
-        self._contours_info[(contour_defn0, contour_defn1)] = value 
+    def add(self, src_idx, contour_defn0, contour_defn1, value):
+        self._contours_info[
+                (tuple(src_idx), contour_defn0, contour_defn1)] = value 
 
     def __iter__(self):
         for defn, info in self._contours_info.items():
@@ -223,7 +224,11 @@ class HfunCollector(BaseHfun):
                 target_size=target_size)
 
 
-    def add_constant_value(self, value, lower_bound=None, upper_bound=None):
+    def add_constant_value(
+            self, value,
+            lower_bound=None,
+            upper_bound=None,
+            source_index: Union[List[int], int, None] =None):
 
         # TODO: Add sources arg?
 
@@ -236,8 +241,10 @@ class HfunCollector(BaseHfun):
         if upper_bound != None and not np.isinf(upper_bound):
             contour_defn1 = Contour(level=upper_bound)
 
+        if source_index != None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
         self._const_val_contour_coll.add(
-            contour_defn0, contour_defn1, value)
+            source_index, contour_defn0, contour_defn1, value)
 
 
     def add_patch(self, shape):
@@ -305,9 +312,10 @@ class HfunCollector(BaseHfun):
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
-        for hfun in contourable_list:
-            # TODO: Use source of counter
-            for (ctr0, ctr1), const_val in self._const_val_contour_coll:
+        for in_idx, hfun in enumerate(contourable_list):
+            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+                if src_idx != None and in_idx not in src_idx:
+                    continue
                 level0 = None
                 level1 =  None
                 if ctr0 != None:
