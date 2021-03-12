@@ -337,7 +337,9 @@ class HfunCollector(BaseHfun):
         pid = os.getpid()
         bbox_list = list()
         # TODO: Should basemesh be included?
-        for hfun in [*self._hfun_list]:
+        # Last user input item has the highest priority (its trias
+        # are not dropped) so process in reverse order
+        for hfun in self._hfun_list[::-1]:
             # TODO: Calling msh_t() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
 

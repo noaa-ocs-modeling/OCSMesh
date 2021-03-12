@@ -49,16 +49,17 @@ def main(args):
     hfun_hirast_list = list()
     hfun_lorast_list = list()
     interp_rast_list = list()
+    for dem_path in demlo_paths:
+        hfun_lorast_list.append(Raster(dem_path))
+        interp_rast_list.append(Raster(dem_path))
+
     for dem_path in demhi_paths:
         geom_rast_list.append(Raster(dem_path))
         hfun_hirast_list.append(Raster(dem_path))
         interp_rast_list.append(Raster(dem_path))
 
-    for dem_path in demlo_paths:
-        hfun_lorast_list.append(Raster(dem_path))
-        interp_rast_list.append(Raster(dem_path))
 
-    hfun_rast_list = [*hfun_hirast_list, *hfun_lorast_list]
+    hfun_rast_list = [*hfun_lorast_list, *hfun_hirast_list]
 
     geom = Geom(
         geom_rast_list, base_mesh=base_mesh_4_geom,
@@ -123,7 +124,7 @@ def main(args):
     mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
 
     ## Interpolate DEMs on the mesh
-    mesh.interpolate(interp_rast_list[::-1], nprocs=4)
+    mesh.interpolate(interp_rast_list, nprocs=4)
 
     ## Output
     mesh.write(out_path, format='2dm', overwrite=True)
