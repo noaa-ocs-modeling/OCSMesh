@@ -31,7 +31,7 @@ class RefinementContourInfoCollector:
         self._contours_info = dict()
 
     def add(self, contour_defn, **size_info):
-        self._contours_info[contour_defn]=size_info
+        self._contours_info[contour_defn] = size_info
 
     def __iter__(self):
         for defn, info in self._contours_info.items():
@@ -87,6 +87,22 @@ class RefinementContourCollector:
 
 
 
+class ConstantValueContourInfoCollector:
+
+    def __init__(self):
+        self._contours_info = dict()
+
+    def add(self, src_idx, contour_defn0, contour_defn1, value):
+        self._contours_info[
+                (tuple(src_idx), contour_defn0, contour_defn1)] = value 
+
+    def __iter__(self):
+        for defn, info in self._contours_info.items():
+            yield defn, info
+
+
+
+
 class HfunCollector(BaseHfun):
 
     def __init__(
@@ -116,6 +132,7 @@ class HfunCollector(BaseHfun):
         self._contour_info_coll = RefinementContourInfoCollector()
         self._contour_coll = RefinementContourCollector(
                 self._contour_info_coll)
+        self._const_val_contour_coll = ConstantValueContourInfoCollector()
 
         self._type_chk(in_list)
 
@@ -207,6 +224,28 @@ class HfunCollector(BaseHfun):
                 target_size=target_size)
 
 
+    def add_constant_value(
+            self, value,
+            lower_bound=None,
+            upper_bound=None,
+            source_index: Union[List[int], int, None] =None):
+
+        # TODO: Add sources arg?
+
+        self._applied = False
+
+        contour_defn0 = None
+        contour_defn1 = None
+        if lower_bound != None and not np.isinf(lower_bound):
+            contour_defn0 = Contour(level=lower_bound)
+        if upper_bound != None and not np.isinf(upper_bound):
+            contour_defn1 = Contour(level=upper_bound)
+
+        if source_index != None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+        self._const_val_contour_coll.add(
+            source_index, contour_defn0, contour_defn1, value)
+
 
     def add_patch(self, shape):
 
@@ -227,6 +266,7 @@ class HfunCollector(BaseHfun):
 
         if not self._applied:
             self._apply_contours()
+            self._apply_const_val()
             #self._apply_patch()
 
         self._applied = True
@@ -267,6 +307,24 @@ class HfunCollector(BaseHfun):
 #                    [(hfun, self._contour_coll, self._nprocs)
 #                     for hfun in contourable_list])
 
+    def _apply_const_val(self):
+
+        contourable_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(contourable_list):
+            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+                if src_idx != None and in_idx not in src_idx:
+                    continue
+                level0 = None
+                level1 =  None
+                if ctr0 != None:
+                    level0 = ctr0.level
+                if ctr1 != None:
+                    level1 = ctr1.level
+                hfun.add_constant_value(const_val, level0, level1)
+
+
     def _apply_patch(self):
         raise NotImplementedError(
             "Patch is not implemented for collector hfun!")
@@ -279,7 +337,9 @@ class HfunCollector(BaseHfun):
         pid = os.getpid()
         bbox_list = list()
         # TODO: Should basemesh be included?
-        for hfun in [*self._hfun_list]:
+        # Last user input item has the highest priority (its trias
+        # are not dropped) so process in reverse order
+        for hfun in self._hfun_list[::-1]:
             # TODO: Calling msh_t() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
 
