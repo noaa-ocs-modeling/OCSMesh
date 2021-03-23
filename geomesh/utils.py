@@ -584,7 +584,22 @@ def limgrad(mesh, dfdx, imax=100):
 
 
 def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
-    raise NotImplementedError('utils.msh_t_to_grd')
+    desc = "EPSG:4326"
+    if hasattr(msh, 'crs') and msh.crs:
+        desc = msh.crs.to_string()
+    nodes = {
+        i + 1: [tuple(p.tolist()), v] for i, (p, v) in
+            enumerate(zip(msh.vert2['coord'], -msh.value))} 
+    # NOTE: Node IDs are node index + 1
+    elements = {
+        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])} 
+    offset = len(elements)
+    elements.update({
+        offset + i + 1: v + 1 for i, v in enumerate(msh.quad4['index'])})
+
+    return {'description': desc,
+            'nodes': nodes,
+            'elements': elements}
 
 
 def grd_to_msh_t(_grd: Dict) -> jigsaw_msh_t:

@@ -3,6 +3,7 @@ from multiprocessing import Pool, cpu_count
 import os
 import pathlib
 from typing import Union, List
+from collections import defaultdict, namedtuple
 import warnings
 
 import geopandas as gpd
@@ -149,6 +150,7 @@ class Hull:
         return Triangulation(self.mesh.coord[:, 0], self.mesh.coord[:, 1], triangles)
 
 
+
 class Nodes:
 
     def __init__(self, mesh: "EuclideanMesh"):
@@ -269,6 +271,217 @@ class Elements:
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
 
+class Boundaries:
+
+    def __init__(self, mesh: "Mesh"):
+        # TODO: Add a way to manually initialize
+        self.mesh = mesh
+        self._data = defaultdict(defaultdict)
+
+    @lru_cache(maxsize=1)
+    def _init_dataframes(self):
+        boundaries = self._data
+        ocean_boundaries = []
+        land_boundaries = []
+        interior_boundaries = []
+        if boundaries is not None:
+            for ibtype, bnds in boundaries.items():
+                if ibtype is None:
+                    for id, data in bnds.items():
+                        indexes = list(map(self.mesh.nodes.get_index_by_id,
+                                       data['indexes']))
+                        ocean_boundaries.append({
+                            'id': id,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(self.mesh.coord[indexes])
+                            })
+
+                elif str(ibtype).endswith('1'):
+                    for id, data in bnds.items():
+                        indexes = list(map(self.mesh.nodes.get_index_by_id,
+                                       data['indexes']))
+                        interior_boundaries.append({
+                            'id': id,
+                            'ibtype': ibtype,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(self.mesh.coord[indexes])
+                            })
+                else:
+                    for id, data in bnds.items():
+                        _indexes = np.array(data['indexes'])
+                        if _indexes.ndim > 1:
+                            # ndim > 1 implies we're dealing with an ADCIRC
+                            # mesh that includes boundary pairs, such as weir
+                            new_indexes = []
+                            for i, line in enumerate(_indexes.T):
+                                if i % 2 != 0:
+                                    new_indexes.extend(np.flip(line))
+                                else:
+                                    new_indexes.extend(line)
+                            _indexes = np.array(new_indexes).flatten()
+                        else:
+                            _indexes = _indexes.flatten()
+                        indexes = list(map(self.mesh.nodes.get_index_by_id,
+                                       _indexes))
+
+                        land_boundaries.append({
+                            'id': id,
+                            'ibtype': ibtype,
+                            "index_id": data['indexes'],
+                            "indexes": indexes,
+                            'geometry': LineString(self.mesh.coord[indexes])
+                            })
+
+        self._ocean = gpd.GeoDataFrame(ocean_boundaries)
+        self._land = gpd.GeoDataFrame(land_boundaries)
+        self._interior = gpd.GeoDataFrame(interior_boundaries)
+
+    def ocean(self):
+        self._init_dataframes()
+        return self._ocean
+
+    def land(self):
+        self._init_dataframes()
+        return self._land
+
+    def interior(self):
+        self._init_dataframes()
+        return self._interior
+
+    @property
+    def data(self):
+        return self._data
+
+    @lru_cache(maxsize=1)
+    def __call__(self):
+        self._init_dataframes()
+        data = []
+        for bnd in self.ocean().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': None,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        for bnd in self.land().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': bnd.ibtype,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        for bnd in self.interior().itertuples():
+            data.append({
+                'id': bnd.id,
+                'ibtype': bnd.ibtype,
+                "index_id": bnd.index_id,
+                "indexes": bnd.indexes,
+                'geometry': bnd.geometry})
+
+        return gpd.GeoDataFrame(data, crs=self._hgrid.crs)
+
+    def __len__(self):
+        return len(self())
+
+    def auto_generate(
+            self,
+            threshold=0.,
+            land_ibtype=0,
+            interior_ibtype=1,
+            ):
+
+        values = self.mesh.value
+        if np.any(np.isnan(values)):
+            raise Exception(
+                "Mesh contains invalid values. Raster values must"
+                "be interpolated to the mesh before generating "
+                "boundaries.")
+
+        boundaries = defaultdict(defaultdict)
+        bdry_type = dict
+
+        tri = self.mesh.elements.triangulation()
+        idxs = np.vstack(list(np.where(tri.neighbors == -1))).T
+        boundary_edges = []
+        for i, j in idxs:
+            boundary_edges.append(
+                (tri.triangles[i, j], tri.triangles[i, (j+1) % 3]))
+        sorted_rings = sort_rings(edges_to_rings(boundary_edges),
+                                  self.mesh.coord)
+        get_id = self.mesh.nodes.get_id_by_index
+        # generate exterior boundaries
+        for bnd_id, rings in sorted_rings.items():
+            ext_ring = rings['exterior']
+
+            # find boundary edges
+            edge_tag = np.full(ext_ring.shape, 0)
+            edge_tag[
+                np.where(values[ext_ring[:, 0]] < threshold)[0], 0] = -1
+            edge_tag[
+                np.where(values[ext_ring[:, 1]] < threshold)[0], 1] = -1
+            edge_tag[
+                np.where(values[ext_ring[:, 0]] >= threshold)[0], 0] = 1
+            edge_tag[
+                np.where(values[ext_ring[:, 1]] >= threshold)[0], 1] = 1
+            # sort boundary edges
+            ocean_boundary = list()
+            land_boundary = list()
+            for i, (e0, e1) in enumerate(edge_tag):
+                if np.any(np.asarray((e0, e1)) == -1):
+                    ocean_boundary.append(tuple(ext_ring[i, :]))
+                elif np.any(np.asarray((e0, e1)) == 1):
+                    land_boundary.append(tuple(ext_ring[i, :]))
+            ocean_boundaries = edges_to_rings(ocean_boundary)
+            land_boundaries = edges_to_rings(land_boundary)
+            _bnd_id = len(boundaries[None])
+            for bnd in ocean_boundaries:
+                e0, e1 = [list(t) for t in zip(*bnd)]
+                e0 = [get_id(vert) for vert in e0]
+                data = e0 + [get_id(e1[-1])]
+                boundaries[None][_bnd_id] = bdry_type(
+                        indexes=data, properties={})
+                _bnd_id += 1
+
+            # add land boundaries
+            _bnd_id = len(boundaries[land_ibtype])
+            for bnd in land_boundaries:
+                e0, e1 = [list(t) for t in zip(*bnd)]
+                e0 = [get_id(vert) for vert in e0]
+                data = e0 + [get_id(e1[-1])]
+                boundaries[land_ibtype][_bnd_id] = bdry_type(
+                        indexes=data, properties={})
+
+                _bnd_id += 1
+
+        # generate interior boundaries
+        _bnd_id = 0
+        interior_boundaries = defaultdict()
+        for bnd_id, rings in sorted_rings.items():
+            interiors = rings['interiors']
+            for interior in interiors:
+                e0, e1 = [list(t) for t in zip(*interior)]
+                if signed_polygon_area(self.mesh.coord[e0, :]) < 0:
+                    e0 = e0[::-1]
+                    e1 = e1[::-1]
+                e0 = [get_id(vert) for vert in e0]
+                e0.append(e0[0])
+                interior_boundaries[_bnd_id] = e0
+                _bnd_id += 1
+
+        for bnd_id, data in interior_boundaries.items():
+            boundaries[interior_ibtype][bnd_id] = bdry_type(
+                        indexes=data, properties={})
+
+        self._data = boundaries
+        self._init_dataframes.cache_clear()
+        self.__call__.cache_clear()
+        self._init_dataframes()
+
+
 class EuclideanMesh(BaseMesh):
 
     def __init__(self, mesh: jigsaw_msh_t):
@@ -288,14 +501,20 @@ class EuclideanMesh(BaseMesh):
 
         self._msh_t = mesh
 
-    def write(self, path: Union[str, os.PathLike], overwrite: bool = False,
-              format='grd'):
+    def write(self,
+              path: Union[str, os.PathLike],
+              overwrite: bool = False,
+              format='grd',
+              ):
         path = pathlib.Path(path)
         if path.exists() and overwrite is not True:
             raise IOError(
                 f'File {str(path)} exists and overwrite is not True.')
         if format == 'grd':
-            grd.write(utils.msh_t_to_grd(self.msh_t), path, overwrite)
+            grd_dict = utils.msh_t_to_grd(self.msh_t)
+            if hasattr(self, '_boundaries') and self._boundaries.data:
+                grd_dict.update(boundaries=self._boundaries.data)
+            grd.write(grd_dict, path, overwrite)
 
         elif format == '2dm':
             sms2dm.writer(utils.msh_t_to_2dm(self.msh_t), path, overwrite)
@@ -384,6 +603,12 @@ class EuclideanMesh2D(EuclideanMesh):
                 'Argument output_type must a string literal \'polygon\' or '
                 '\'bbox\'')
 
+    @property
+    def boundaries(self):
+        if not hasattr(self, '_boundaries'):
+            self._boundaries = Boundaries(self)
+        return self._boundaries
+
     def tricontourf(self, **kwargs):
         return utils.tricontourf(self.msh_t, **kwargs)
 
@@ -448,7 +673,9 @@ class Mesh(BaseMesh):
     @staticmethod
     def open(path, crs=None):
         try:
-            return Mesh(utils.grd_to_msh_t(grd.read(path, crs=crs)))
+            msh_t = utils.grd_to_msh_t(grd.read(path, crs=crs))
+            msh_t.value = np.negative(msh_t.value)
+            return Mesh(msh_t)
         except Exception as e:
             if 'not a valid grd file' in str(e):
                 pass
