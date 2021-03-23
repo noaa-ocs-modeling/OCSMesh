@@ -590,12 +590,12 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
             enumerate(zip(msh.vert2['coord'], -msh.value))} 
-
+    # NOTE: Node IDs are node index + 1
     elements = {
-        i + 1: v for i, v in enumerate(msh.tria3['index'])} 
+        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])} 
     offset = len(elements)
     elements.update({
-        offset + i + 1: v for i, v in enumerate(msh.quad4['index'])})
+        offset + i + 1: v + 1 for i, v in enumerate(msh.quad4['index'])})
 
     return {'description': desc,
             'nodes': nodes,
