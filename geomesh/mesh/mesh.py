@@ -673,7 +673,9 @@ class Mesh(BaseMesh):
     @staticmethod
     def open(path, crs=None):
         try:
-            return Mesh(utils.grd_to_msh_t(grd.read(path, crs=crs)))
+            msh_t = utils.grd_to_msh_t(grd.read(path, crs=crs))
+            msh_t.value = np.negative(msh_t.value)
+            return Mesh(msh_t)
         except Exception as e:
             if 'not a valid grd file' in str(e):
                 pass
