@@ -52,7 +52,9 @@ class Geomesh:
                     zmax=self._args.zmax,
                     chunk_size=self._args.chunk_size,
                     overlap=self._args.overlap,
-                    nprocs=nprocs)
+                    nprocs=nprocs,
+                    out_crs=self._args.output_crs,
+                    base_crs=self._args.mesh_crs)
                 combine_geometry(**arg_dict)
 
         elif self._args.command == 'hfun':
@@ -332,7 +334,10 @@ def parse_args():
     geom_bld = geom_subp.add_parser('build', **sub_parse_common)
     geom_bld.add_argument('-o', '--output', required=True)
     geom_bld.add_argument('-f', '--output-format', default="shapefile")
+    geom_bld.add_argument('--output-crs', default="EPSG:4326")
     geom_bld.add_argument('--mesh', help='Mesh to extract hull from')
+    geom_bld.add_argument(
+        '--mesh-crs', help='CRS of the input base mesh (overrides)')
     geom_bld.add_argument(
         '--zmin', type=float,
         help='Maximum elevation to consider')
