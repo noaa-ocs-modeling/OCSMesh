@@ -16,6 +16,7 @@ from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
 from shapely import ops
 from jigsawpy import jigsaw_msh_t
+import utm
 
 from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
@@ -531,11 +532,10 @@ class HfunCollector(BaseHfun):
         # the bounding box of the hfun is used
         # Up until now all calculation was in EPSG:4326
         x0, y0, x1, y1 = (
-            np.min(composite_hfun[:, 0]),
-            np.min(composite_hfun[:, 1]),
-            np.max(composite_hfun[:, 0]),
-            np.max(composite_hfun[:, 1]))
-        print("BOUNDS",x0, y0, x1, y1)
+            np.min(composite_hfun.vert2['coord'][:, 0]),
+            np.min(composite_hfun.vert2['coord'][:, 1]),
+            np.max(composite_hfun.vert2['coord'][:, 0]),
+            np.max(composite_hfun.vert2['coord'][:, 1]))
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
         utm_crs = CRS(
@@ -553,7 +553,7 @@ class HfunCollector(BaseHfun):
                 composite_hfun.vert2['coord'][:, 0],
                 composite_hfun.vert2['coord'][:, 1]
                 )).T
-        composite_hfun = utm_crs
+        composite_hfun.crs = utm_crs
 
         return composite_hfun
 
