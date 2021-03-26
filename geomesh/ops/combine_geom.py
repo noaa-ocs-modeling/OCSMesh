@@ -518,8 +518,8 @@ class GeomCombine:
                     )
             if not crs.equals(self._calc_crs):
                 _logger.info(
-                    f"Project from {crs.to_string()} to"
-                    f" {self._calc_crs.to_string()} ...")
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
                 gdf = gdf.to_crs(crs)
             gdf.to_file(out_file)
 
@@ -530,8 +530,8 @@ class GeomCombine:
                     )
             if not crs.equals(self._calc_crs):
                 _logger.info(
-                    f"Project from {crs.to_string()} to"
-                    f" {self._calc_crs.to_string()} ...")
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
                 gdf = gdf.to_crs(crs)
             gdf.to_feather(out_file)
 
@@ -539,8 +539,8 @@ class GeomCombine:
 
             if not crs.equals(self._calc_crs):
                 _logger.info(
-                    f"Project from {crs.to_string()} to"
-                    f" {self._calc_crs.to_string()} ...")
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
                 transformer = Transformer.from_crs(
                     self._calc_crs, crs, always_xy=True)
                 multi_polygon = ops.transform(
