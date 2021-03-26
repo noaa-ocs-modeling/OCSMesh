@@ -279,6 +279,30 @@ class HfunRaster(BaseHfun, Raster):
                         [v for v in window_mesh.value],
                         dtype=jigsaw_msh_t.REALS_t)
 
+        # NOTE: In the end we need to return in a CRS that
+        # uses meters as units. UTM based on the center of
+        # the bounding box of the hfun is used
+        if self.crs.is_geographic:
+            x0, y0, x1, y1 = self.get_bbox().bounds
+            _, _, number, letter = utm.from_latlon(
+                    (y0 + y1)/2, (x0 + x1)/2)
+            utm_crs = CRS(
+                    proj='utm',
+                    zone=f'{number}{letter}',
+                    ellps={
+                        'GRS 1980': 'GRS80',
+                        'WGS 84': 'WGS84'
+                        }[self.crs.ellipsoid.name]
+                )
+            transformer = Transformer.from_crs(
+                self.crs, utm_crs, always_xy=True)
+            output_mesh.vert2['coord'] = np.vstack(
+                transformer.transform(
+                    output_mesh.vert2['coord'][:, 0],
+                    output_mesh.vert2['coord'][:, 1]
+                    )).T
+            output_mesh.crs = utm_crs
+
         return output_mesh
 
     def add_patch(

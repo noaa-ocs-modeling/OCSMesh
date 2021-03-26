@@ -198,7 +198,6 @@ class HfunCollector(BaseHfun):
         with tempfile.TemporaryDirectory() as temp_dir:
             hfun_path_list = self._write_hfun_to_disk(temp_dir)
             composite_hfun = self._get_hfun_composite(hfun_path_list)
-        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
         return composite_hfun
 
 
@@ -524,6 +523,37 @@ class HfunCollector(BaseHfun):
         composite_hfun.value = np.array(
                 np.vstack(value),
                 dtype=jigsaw_msh_t.REALS_t)
+
+        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
+
+        # NOTE: In the end we need to return in a CRS that
+        # uses meters as units. UTM based on the center of
+        # the bounding box of the hfun is used
+        # Up until now all calculation was in EPSG:4326
+        x0, y0, x1, y1 = (
+            np.min(composite_hfun[:, 0]),
+            np.min(composite_hfun[:, 1]),
+            np.max(composite_hfun[:, 0]),
+            np.max(composite_hfun[:, 1]))
+        print("BOUNDS",x0, y0, x1, y1)
+        _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[composite_hfun.crs.ellipsoid.name]
+            )
+        transformer = Transformer.from_crs(
+            composite_hfun.crs, utm_crs, always_xy=True)
+        composite_hfun.vert2['coord'] = np.vstack(
+            transformer.transform(
+                composite_hfun.vert2['coord'][:, 0],
+                composite_hfun.vert2['coord'][:, 1]
+                )).T
+        composite_hfun = utm_crs
 
         return composite_hfun
 

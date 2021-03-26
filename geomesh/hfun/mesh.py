@@ -30,7 +30,8 @@ class HfunMesh(BaseHfun):
                 )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            msh_t = self.mesh.msh_t
+            # Copy to avoid modifying the internal without
+            msh_t = self.mesh.msh_t.copy()
             msh_t.vert2['coord'] = np.vstack(
                 transformer.transform(
                     self.mesh.msh_t.vert2['coord'][:, 0],
