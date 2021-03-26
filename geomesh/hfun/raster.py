@@ -292,7 +292,8 @@ class HfunRaster(BaseHfun, Raster):
         # TODO: Support other shapes - call buffer(1) on non polygons(?)
         if not isinstance(multipolygon, (Polygon, MultiPolygon)):
             raise TypeError(
-                    f"Wrong type \"{type()}\" for multipolygon input.")
+                    f"Wrong type \"{type(multipolygon)}\""
+                    f" for multipolygon input.")
 
         if isinstance(multipolygon, Polygon):
             multipolygon = MultiPolygon([multipolygon])
@@ -327,46 +328,22 @@ class HfunRaster(BaseHfun, Raster):
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
-        utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile, 'w', **meta,) as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                if self.crs.is_geographic:
-                    x0, y0, x1, y1 = self.get_window_bounds(window)
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}{letter}',
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
-                else:
-                    utm_crs = None
-
-                _logger.info(f'Transforming polygons ...')
-                start = time()
-                with Pool(processes=nprocs) as pool:
-                    transformed_polygons = MultiPolygon(pool.starmap(
-                        transform_polygon,
-                        [(polygon, self.src.crs, utm_crs) for
-                         polygon in multipolygon]
-                    ))
-                _logger.info(f'Transforming took {time()-start}.')
+                # NOTE: We should NOT transform polygon, user just
+                # needs to make sure input polygon has the same CRS
+                # as the hfun (we don't calculate distances in this
+                # method)
 
                 _logger.info(f'Creating mask from shape ...')
                 start = time()
                 try:
                     mask, _, _ = rasterio.mask.raster_geometry_mask(
-                        self.src, transformed_polygons,
+                        self.src, multipolygon,
                         all_touched=True, invert=True)
-                    if not mask.any():
-                        # Ignore polygon that doesn't intersect the raster
-                        continue
                     mask = mask[rasterio.windows.window_index(window)]
 
                 except ValueError:
@@ -381,13 +358,16 @@ class HfunRaster(BaseHfun, Raster):
                     f'Creating mask from shape took {time()-start}.')
 
                 values = self.get_values(window=window).copy()
-                values[mask] = target_size
+                if mask.any():
+                    # NOTE: Don't continue, otherwise the final
+                    # destination file might end up being empty!
+                    values[mask] = target_size
                 if self.hmin is not None:
                     values[np.where(values < self.hmin)] = self.hmin
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-
+                
                 _logger.info(f'Write array to file {tmpfile.name}...')
                 start = time()
                 dst.write_band(1, values, window=window)

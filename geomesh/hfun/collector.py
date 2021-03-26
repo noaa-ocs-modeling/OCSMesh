@@ -14,6 +14,7 @@ from typing import Union, Sequence, List
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
+from shapely import ops
 from jigsawpy import jigsaw_msh_t
 
 from geomesh.hfun.base import BaseHfun
@@ -22,6 +23,7 @@ from geomesh.hfun.mesh import HfunMesh
 from geomesh.mesh.mesh import Mesh
 from geomesh.raster import Raster
 from geomesh.features.contour import Contour
+from geomesh.features.patch import Patch
 
 _logger = logging.getLogger(__name__)
 
@@ -203,7 +205,7 @@ class HfunCollector(BaseHfun):
     def add_contour(
             self,
             level: Union[List[float], float] = None,
-            expansion_rate: float = None,
+            expansion_rate: float = 0.01,
             target_size: float = None,
             contour_defn: Contour = None,
     ):
@@ -302,7 +304,7 @@ class HfunCollector(BaseHfun):
         if not self._applied:
             self._apply_contours()
             self._apply_const_val()
-            #self._apply_patch()
+            self._apply_patch()
 
         self._applied = True
 
@@ -368,10 +370,15 @@ class HfunCollector(BaseHfun):
         # TODO: Parallelize
         for hfun in contourable_list:
             for patch_defn, size_info in self._refine_patch_info_coll:
+                shape, crs = patch_defn.get_multipolygon()
+                if hfun.crs != crs:
+                    transformer = Transformer.from_crs(
+                        crs, hfun.crs, always_xy=True)
+                    shape = ops.transform(
+                            transformer.transform, shape)
+
                 hfun.add_patch(
-                        patch_defn.get_multipolygon(),
-                        nprocs=self._nprocs,
-                        **size_info)
+                        shape, nprocs=self._nprocs, **size_info)
 
 
     def _write_hfun_to_disk(self, out_path):
