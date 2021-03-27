@@ -48,7 +48,7 @@ class GeomCollector(BaseGeom):
             in_list: Sequence[
                 Union[str, Raster, RasterGeom, MeshGeom,
                       MultiPolygonGeom, PolygonGeom]],
-            base_mesh: Mesh,
+            base_mesh: Mesh = None,
             zmin: float = None,
             zmax: float = None,
             nprocs: int = None,
@@ -100,13 +100,15 @@ class GeomCollector(BaseGeom):
                 geom = in_item
 
             elif isinstance(in_item, Raster):
-                in_item.clip(self._base_mesh.get_bbox(crs=in_item.crs))
+                if self._base_mesh:
+                    in_item.clip(self._base_mesh.get_bbox(crs=in_item.crs))
                 geom = RasterGeom(in_item, **self._elev_info)
 
             elif isinstance(in_item, str):
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
-                    raster.clip(self._base_mesh.get_bbox(crs=raster.crs))
+                    if self._base_mesh:
+                        raster.clip(self._base_mesh.get_bbox(crs=raster.crs))
                     geom = RasterGeom(raster, **self._elev_info)
 
                 elif in_item.endswith(
@@ -136,7 +138,9 @@ class GeomCollector(BaseGeom):
 
             temp_path = Path(temp_dir)
 
-            mesh_multipoly = self._base_mesh.hull.multipolygon()
+            mesh_multipoly = None
+            if self._base_mesh:
+                mesh_multipoly = self._base_mesh.hull.multipolygon()
             feather_files.append(self._extract_global_boundary(
                 temp_path, mesh_multipoly))
             feather_files.extend(self._extract_features(
