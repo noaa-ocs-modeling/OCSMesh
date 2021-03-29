@@ -586,12 +586,12 @@ def limgrad(mesh, dfdx, imax=100):
 def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
 
     src_crs = msh.crs if hasattr(msh, 'crs') else None
+    coords = msh.vert2['coord']
     if src_crs is not None:
         EPSG_4326 = CRS.from_epsg(4326)
         if not src_crs.equals(EPSG_4326):
             transformer = Transformer.from_crs(
                 src_crs, EPSG_4326, always_xy=True)
-            coords = msh.vert2['coord']
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
 
