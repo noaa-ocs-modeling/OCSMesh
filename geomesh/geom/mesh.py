@@ -8,17 +8,18 @@ from typing import Union
 # from shapely import ops  # type: ignore[import]
 
 from geomesh.geom.base import BaseGeom
-from geomesh.mesh import Mesh
+from geomesh.mesh.mesh import Mesh
+from geomesh.mesh.base import BaseMesh
 
 
 class MeshDescriptor:
 
-    def __set__(self, obj, val: Union[Mesh, str, os.PathLike]):
+    def __set__(self, obj, val: Union[BaseMesh, str, os.PathLike]):
 
         if isinstance(val, (str, os.PathLike)):  # type: ignore[misc]
             val = Mesh.open(val)
 
-        if not isinstance(val, Mesh):
+        if not isinstance(val, BaseMesh):
             raise TypeError(f'Argument mesh must be of type {Mesh}, {str} '
                             f'or {os.PathLike}, not type {type(val)}')
 
@@ -32,7 +33,7 @@ class MeshGeom(BaseGeom):
 
     _mesh = MeshDescriptor()
 
-    def __init__(self, mesh: Union[Mesh, str, os.PathLike]):
+    def __init__(self, mesh: Union[BaseMesh, str, os.PathLike]):
         """
         Input parameters
         ----------------
@@ -42,8 +43,12 @@ class MeshGeom(BaseGeom):
         self._mesh = mesh
 
     def get_multipolygon(self):
-        self.mesh.get_multipolygon(self)
+        return self.mesh.hull.multipolygon()
 
     @property
     def mesh(self):
         return self._mesh
+
+    @property
+    def crs(self):
+        return self._mesh.crs
