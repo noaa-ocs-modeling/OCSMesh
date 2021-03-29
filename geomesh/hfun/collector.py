@@ -14,7 +14,9 @@ from typing import Union, Sequence, List
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
+from shapely import ops
 from jigsawpy import jigsaw_msh_t
+import utm
 
 from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
@@ -22,6 +24,7 @@ from geomesh.hfun.mesh import HfunMesh
 from geomesh.mesh.mesh import Mesh
 from geomesh.raster import Raster
 from geomesh.features.contour import Contour
+from geomesh.features.patch import Patch
 
 _logger = logging.getLogger(__name__)
 
@@ -102,6 +105,19 @@ class ConstantValueContourInfoCollector:
 
 
 
+class RefinementPatchInfoCollector:
+
+    def __init__(self):
+        self._patch_info = dict()
+
+    def add(self, patch_defn, **size_info):
+        self._patch_info[patch_defn] = size_info
+
+    def __iter__(self):
+        for defn, info in self._patch_info.items():
+            yield defn, info
+
+
 
 class HfunCollector(BaseHfun):
 
@@ -109,7 +125,7 @@ class HfunCollector(BaseHfun):
             self,
             in_list: Sequence[
                 Union[str, Raster, Mesh, HfunRaster, HfunMesh]],
-            base_mesh: Mesh,
+            base_mesh: Mesh = None,
             hmin: float = None,
             hmax: float = None,
             nprocs: int = None,
@@ -128,11 +144,14 @@ class HfunCollector(BaseHfun):
         self._hfun_list = list()
         # NOTE: Base mesh has to have a crs otherwise HfunMesh throws
         # exception
-        self._base_mesh = HfunMesh(base_mesh)
+        self._base_mesh = None
+        if base_mesh:
+            self._base_mesh = HfunMesh(base_mesh)
         self._contour_info_coll = RefinementContourInfoCollector()
         self._contour_coll = RefinementContourCollector(
                 self._contour_info_coll)
         self._const_val_contour_coll = ConstantValueContourInfoCollector()
+        self._refine_patch_info_coll = RefinementPatchInfoCollector()
 
         self._type_chk(in_list)
 
@@ -147,7 +166,8 @@ class HfunCollector(BaseHfun):
                 hfun = in_item
 
             elif isinstance(in_item, Raster):
-                in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
+                if self._base_mesh:
+                    in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
                 hfun = HfunRaster(in_item, **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
@@ -156,7 +176,8 @@ class HfunCollector(BaseHfun):
             elif isinstance(in_item, str):
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
-                    raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
+                    if self._base_mesh:
+                        raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
                     hfun = HfunRaster(raster, **self._size_info)
 
                 elif in_item.endswith(
@@ -178,14 +199,13 @@ class HfunCollector(BaseHfun):
         with tempfile.TemporaryDirectory() as temp_dir:
             hfun_path_list = self._write_hfun_to_disk(temp_dir)
             composite_hfun = self._get_hfun_composite(hfun_path_list)
-        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
         return composite_hfun
 
 
     def add_contour(
             self,
             level: Union[List[float], float] = None,
-            expansion_rate: float = None,
+            expansion_rate: float = 0.01,
             target_size: float = None,
             contour_defn: Contour = None,
     ):
@@ -247,12 +267,29 @@ class HfunCollector(BaseHfun):
             source_index, contour_defn0, contour_defn1, value)
 
 
-    def add_patch(self, shape):
+    def add_patch(
+            self,
+            shape: Union[MultiPolygon, Polygon] = None,
+            patch_defn: Patch = None,
+            shapefile: Union[None, str, Path] = None,
+            expansion_rate: float = None,
+            target_size: float = None,
+    ):
 
         self._applied = False
 
-        raise NotImplementedError(
-            "Patch is not implemented for collector hfun!")
+        if not patch_defn:
+            if shape:
+                patch_defn = Patch(shape=shape)
+
+            elif shapefile:
+                patch_defn = Patch(shapefile=shapefile)
+
+        self._refine_patch_info_coll.add(
+            patch_defn,
+            expansion_rate=expansion_rate,
+            target_size=target_size)
+
 
     def _type_chk(self, input_list):
         ''' Check the input type for constructor '''
@@ -267,7 +304,7 @@ class HfunCollector(BaseHfun):
         if not self._applied:
             self._apply_contours()
             self._apply_const_val()
-            #self._apply_patch()
+            self._apply_patch()
 
         self._applied = True
 
@@ -326,8 +363,23 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_patch(self):
-        raise NotImplementedError(
-            "Patch is not implemented for collector hfun!")
+
+        contourable_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        # TODO: Parallelize
+        for hfun in contourable_list:
+            for patch_defn, size_info in self._refine_patch_info_coll:
+                shape, crs = patch_defn.get_multipolygon()
+                if hfun.crs != crs:
+                    transformer = Transformer.from_crs(
+                        crs, hfun.crs, always_xy=True)
+                    shape = ops.transform(
+                            transformer.transform, shape)
+
+                hfun.add_patch(
+                        shape, nprocs=self._nprocs, **size_info)
+
 
     def _write_hfun_to_disk(self, out_path):
 
@@ -472,6 +524,36 @@ class HfunCollector(BaseHfun):
         composite_hfun.value = np.array(
                 np.vstack(value),
                 dtype=jigsaw_msh_t.REALS_t)
+
+        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
+
+        # NOTE: In the end we need to return in a CRS that
+        # uses meters as units. UTM based on the center of
+        # the bounding box of the hfun is used
+        # Up until now all calculation was in EPSG:4326
+        x0, y0, x1, y1 = (
+            np.min(composite_hfun.vert2['coord'][:, 0]),
+            np.min(composite_hfun.vert2['coord'][:, 1]),
+            np.max(composite_hfun.vert2['coord'][:, 0]),
+            np.max(composite_hfun.vert2['coord'][:, 1]))
+        _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[composite_hfun.crs.ellipsoid.name]
+            )
+        transformer = Transformer.from_crs(
+            composite_hfun.crs, utm_crs, always_xy=True)
+        composite_hfun.vert2['coord'] = np.vstack(
+            transformer.transform(
+                composite_hfun.vert2['coord'][:, 0],
+                composite_hfun.vert2['coord'][:, 1]
+                )).T
+        composite_hfun.crs = utm_crs
 
         return composite_hfun
 

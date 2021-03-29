@@ -584,12 +584,21 @@ def limgrad(mesh, dfdx, imax=100):
 
 
 def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
+
+    src_crs = msh.crs if hasattr(msh, 'crs') else None
+    coords = msh.vert2['coord']
+    if src_crs is not None:
+        EPSG_4326 = CRS.from_epsg(4326)
+        if not src_crs.equals(EPSG_4326):
+            transformer = Transformer.from_crs(
+                src_crs, EPSG_4326, always_xy=True)
+            coords = np.vstack(
+                transformer.transform(coords[:, 0], coords[:, 1])).T
+
     desc = "EPSG:4326"
-    if hasattr(msh, 'crs') and msh.crs:
-        desc = msh.crs.to_string()
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
-            enumerate(zip(msh.vert2['coord'], -msh.value))} 
+            enumerate(zip(coords, -msh.value))} 
     # NOTE: Node IDs are node index + 1
     elements = {
         i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])} 

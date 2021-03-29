@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from jigsawpy import jigsaw_msh_t
 import numpy as np
 from pyproj import CRS, Transformer
@@ -30,7 +32,8 @@ class HfunMesh(BaseHfun):
                 )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            msh_t = self.mesh.msh_t
+            # Copy to avoid modifying the internal without
+            msh_t = deepcopy(self.mesh.msh_t)
             msh_t.vert2['coord'] = np.vstack(
                 transformer.transform(
                     self.mesh.msh_t.vert2['coord'][:, 0],
