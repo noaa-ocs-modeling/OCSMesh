@@ -144,7 +144,8 @@ class HfunMesh(BaseHfun):
         _logger.info('Creating size value array for vertices...')
         vert_value = np.array(
                 [np.average(edge_lens[vert_to_edge[i]])
-                    for i in range(coord.shape[0])])
+                    if i in vert_to_edge else 0
+                        for i in range(coord.shape[0])])
 
         # Modifying self.mesh.msh_t values
         hfun_msh.value = vert_value
