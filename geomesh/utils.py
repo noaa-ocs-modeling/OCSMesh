@@ -481,17 +481,20 @@ def tricontourf(
     show=False,
     figsize=None,
     extend='both',
+    colorbar=False,
     **kwargs
 ):
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
-    ax.tricontourf(
+    tcf = ax.tricontourf(
         mesh.vert2['coord'][:, 0],
         mesh.vert2['coord'][:, 1],
         mesh.tria3['index'],
         mesh.value.flatten(),
         **kwargs)
+    if colorbar:
+        plt.colorbar(tcf)
     if show:
         plt.gca().axis('scaled')
         plt.show()
