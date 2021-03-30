@@ -1,7 +1,8 @@
 from collections import defaultdict
 from enum import Enum
 from itertools import permutations
-from typing import Union, Dict
+from typing import Union, Dict, Sequence
+from functools import reduce
 
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
@@ -11,7 +12,8 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
-from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
+from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+import geopandas as gpd
 
 from geomesh.mesh.parsers import grd, sms2dm
 
@@ -356,6 +358,125 @@ def vertices_around_vertex(mesh):
 # V-E     Both vertices of an edge
 # Flook   Find face with given vertices
 
+def clip_mesh_by_shape(
+        mesh: jigsaw_msh_t,
+        shape: Union[box, Polygon, MultiPolygon],
+        use_box_only: bool = False,
+        fit_inside: bool = True,
+        inverse: bool = False,
+        ) -> jigsaw_msh_t:
+
+    # First based on bounding box only
+    xmin, ymin, xmax, ymax = shape.bounds
+
+    # If we want to calculate inverse based on shape, calculating
+    # from bbox first results in the wrong result
+    if not inverse or use_box_only:
+        crd = mesh.vert2['coord']
+
+        in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
+        in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
+        in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
+        in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
+        in_box_idx = reduce(
+            np.intersect1d, (in_box_idx_1, in_box_idx_2,
+                             in_box_idx_3, in_box_idx_4))
+
+        mesh = clip_mesh_by_vertex(
+                mesh, in_box_idx, not fit_inside, inverse)
+
+        if use_box_only:
+            return mesh
+
+    pt_series = gpd.GeoSeries(gpd.points_from_xy(
+        mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
+    shp_series = gpd.GeoSeries(shape)
+
+    in_shp_idx = pt_series.sindex.query_bulk(
+            shp_series, predicate="intersects")
+
+    mesh = clip_mesh_by_vertex(
+            mesh, in_shp_idx, not fit_inside, inverse)
+
+    return mesh
+
+
+def clip_mesh_by_vertex(
+        mesh: jigsaw_msh_t,
+        is_vert_in: Sequence[bool],
+        can_use_other_verts: bool = False,
+        inverse: bool = False,
+        ) -> jigsaw_msh_t:
+
+    if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
+        coord = mesh.vert2['coord']
+        trias = mesh.tria3['index']
+        quads = mesh.quad4['index']
+
+        # Whether elements that include "in"-vertices can be created
+        # using vertices other than "in"-vertices
+        mark_func = np.all
+        if can_use_other_verts:
+            mark_func = np.any
+
+        mark_tria = mark_func(
+                (np.isin(trias.ravel(), is_vert_in).reshape(
+                    trias.shape)), 1)
+        mark_quad = mark_func(
+                (np.isin(quads.ravel(), is_vert_in).reshape(
+                    quads.shape)), 1)
+
+        # Whether to return elements found by "in" vertices or return
+        # all elements except them
+        if inverse:
+            mark_tria = np.logical_not(mark_tria)
+            mark_quad = np.logical_not(mark_quad)
+
+        # Find elements based on old vertex index
+        new_trias_unfinished = trias[mark_tria, :]
+        new_quads_unfinished = quads[mark_quad, :]
+
+        crd_old_to_new = {
+                index: i for i, index
+                in enumerate(
+                    sorted(np.unique(np.append(
+                        new_trias_unfinished, new_quads_unfinished))))
+            }
+
+        new_trias = np.array([
+                [crd_old_to_new[x] for x in  element]
+                    for element in new_trias_unfinished])
+        new_quads = np.array([
+                [crd_old_to_new[x] for x in  element]
+                    for element in new_quads_unfinished])
+
+        new_coord = coord[list(crd_old_to_new.keys()), :]
+        value = mesh.value[list(crd_old_to_new.keys())].copy()
+
+
+        mesh_out = jigsaw_msh_t()
+        mesh_out.mshID = mesh.mshID
+        mesh_out.ndims = mesh.ndims
+        mesh_out.value = mesh.value.copy()
+        mesh_out.value = value
+
+        mesh_out.vert2 = np.array(
+            [(coo, 0) for coo in new_coord],
+            dtype=jigsaw_msh_t.VERT2_t)
+        mesh_out.tria3 = np.array(
+            [(con, 0) for con in new_trias],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        mesh_out.quad4 = np.array(
+            [(con, 0) for con in new_quads],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        return mesh_out
+
+    msg = (f"Not implemented for"
+           f" mshID={mesh.mshID} and dim={mesh.ndims}")
+    raise NotImplementedError(msg)
+
+
+
 
 def must_be_euclidean_mesh(f):
     def decorator(mesh):
@@ -601,10 +722,10 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     desc = "EPSG:4326"
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
-            enumerate(zip(coords, -msh.value))} 
+            enumerate(zip(coords, -msh.value))}
     # NOTE: Node IDs are node index + 1
     elements = {
-        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])} 
+        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])}
     offset = len(elements)
     elements.update({
         offset + i + 1: v + 1 for i, v in enumerate(msh.quad4['index'])})
