@@ -148,7 +148,7 @@ class HfunMesh(BaseHfun):
                         for i in range(coord.shape[0])])
 
         # Modifying self.mesh.msh_t values
-        hfun_msh.value = vert_value
+        hfun_msh.value = vert_value.reshape(len(vert_value), 1)
 
 
     @property

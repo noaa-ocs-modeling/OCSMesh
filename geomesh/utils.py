@@ -3,6 +3,7 @@ from enum import Enum
 from itertools import permutations
 from typing import Union, Dict, Sequence
 from functools import reduce
+from copy import deepcopy
 
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
@@ -457,8 +458,9 @@ def clip_mesh_by_vertex(
         mesh_out = jigsaw_msh_t()
         mesh_out.mshID = mesh.mshID
         mesh_out.ndims = mesh.ndims
-        mesh_out.value = mesh.value.copy()
         mesh_out.value = value
+        if hasattr(mesh, "crs"):
+            mesh_out.crs = deepcopy(mesh.crs)
 
         mesh_out.vert2 = np.array(
             [(coo, 0) for coo in new_coord],
