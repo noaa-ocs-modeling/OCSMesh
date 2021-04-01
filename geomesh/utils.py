@@ -43,7 +43,7 @@ def cleanup_isolates(mesh):
     tria3 = tria3.reshape(mesh.tria3['index'].shape)
     mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs)
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
     mesh.tria3 = np.asarray(
         [(tuple(indices), mesh.tria3['IDtag'][i])
          for i, indices in enumerate(tria3)],
@@ -358,6 +358,37 @@ def vertices_around_vertex(mesh):
 # F-E     Both faces of an edge
 # V-E     Both vertices of an edge
 # Flook   Find face with given vertices
+def get_verts_in_shape(
+        mesh: jigsaw_msh_t,
+        shape: Union[box, Polygon, MultiPolygon],
+        from_box: bool = False,
+        ) -> Sequence[bool]:
+
+    if from_box:
+        crd = mesh.vert2['coord']
+
+        xmin, ymin, xmax, ymax = shape.bounds
+
+        in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
+        in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
+        in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
+        in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
+        in_box_idx = reduce(
+            np.intersect1d, (in_box_idx_1, in_box_idx_2,
+                             in_box_idx_3, in_box_idx_4))
+        return in_box_idx
+
+    else:
+
+        pt_series = gpd.GeoSeries(gpd.points_from_xy(
+            mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
+        shp_series = gpd.GeoSeries(shape)
+
+        in_shp_idx = pt_series.sindex.query_bulk(
+                shp_series, predicate="intersects")
+
+        return in_shp_idx
+
 
 def clip_mesh_by_shape(
         mesh: jigsaw_msh_t,
@@ -367,21 +398,14 @@ def clip_mesh_by_shape(
         inverse: bool = False,
         ) -> jigsaw_msh_t:
 
-    # First based on bounding box only
-    xmin, ymin, xmax, ymax = shape.bounds
-
     # If we want to calculate inverse based on shape, calculating
     # from bbox first results in the wrong result
     if not inverse or use_box_only:
-        crd = mesh.vert2['coord']
 
-        in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
-        in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
-        in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
-        in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
-        in_box_idx = reduce(
-            np.intersect1d, (in_box_idx_1, in_box_idx_2,
-                             in_box_idx_3, in_box_idx_4))
+        # First based on bounding box only
+        shape_box = box(*shape.bounds)
+
+        in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
         mesh = clip_mesh_by_vertex(
                 mesh, in_box_idx, not fit_inside, inverse)
@@ -389,12 +413,7 @@ def clip_mesh_by_shape(
         if use_box_only:
             return mesh
 
-    pt_series = gpd.GeoSeries(gpd.points_from_xy(
-        mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
-    shp_series = gpd.GeoSeries(shape)
-
-    in_shp_idx = pt_series.sindex.query_bulk(
-            shp_series, predicate="intersects")
+    in_shp_idx = get_verts_in_shape(mesh, shape, False)
 
     mesh = clip_mesh_by_vertex(
             mesh, in_shp_idx, not fit_inside, inverse)
