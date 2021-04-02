@@ -36,15 +36,14 @@ class HfunMesh(BaseHfun):
                 )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            # Copy to avoid modifying the internal msh_t
-            msh_t = deepcopy(self.mesh.msh_t)
-            msh_t.vert2['coord'] = np.vstack(
+            self.mesh.msh_t.vert2['coord'] = np.vstack(
                 transformer.transform(
                     self.mesh.msh_t.vert2['coord'][:, 0],
                     self.mesh.msh_t.vert2['coord'][:, 1]
                     )).T
-            msh_t.crs = utm_crs
-            return msh_t
+            self.mesh.msh_t.crs = utm_crs
+            self._crs = utm_crs
+            return self.mesh.msh_t
         else:
             return self.mesh.msh_t
 
@@ -150,6 +149,13 @@ class HfunMesh(BaseHfun):
         # Modifying self.mesh.msh_t values
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
 
+    @property
+    def hmin(self):
+        return np.min(self.mesh.msh_t.value)
+
+    @property
+    def hmax(self):
+        return np.max(self.mesh.msh_t.value)
 
     @property
     def mesh(self):

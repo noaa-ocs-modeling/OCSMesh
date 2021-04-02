@@ -296,8 +296,9 @@ class HfunCollector(BaseHfun):
         valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
-                f'Input list items must be of type {", ".join(valid_types)}'
-                f', or a derived type.')
+                f'Input list items must be of type' 
+                f' {", ".join(str(i) for i in valid_types)},'
+                f' or a derived type.')
 
     def _apply_features(self):
 

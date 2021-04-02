@@ -1,7 +1,7 @@
 from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
 
 from geomesh.raster import Raster
-from geomesh.mesh import Mesh
+from geomesh.mesh.base import BaseMesh
 from geomesh.geom.base import BaseGeom
 from geomesh.geom.raster import RasterGeom
 from geomesh.geom.mesh import MeshGeom
@@ -26,7 +26,7 @@ class Geom(BaseGeom):
         if isinstance(geom, Raster):
             return RasterGeom(geom, **kwargs)
 
-        elif isinstance(geom, Mesh):
+        elif isinstance(geom, BaseMesh):
             return MeshGeom(geom, **kwargs)
 
         elif isinstance(geom, Polygon):

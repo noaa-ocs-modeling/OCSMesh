@@ -63,6 +63,7 @@ def multipolygon_to_jigsaw_msh_t(
         crs: CRS
 ) -> jigsaw_msh_t:
     '''Casts shapely.geometry.MultiPolygon to jigsawpy.jigsaw_msh_t'''
+    utm_crs = None
     if crs.is_geographic:
         x0, y0, x1, y1 = multipolygon.bounds
         _, _, number, letter = utm.from_latlon(
@@ -113,4 +114,7 @@ def multipolygon_to_jigsaw_msh_t(
     geom.edge2 = np.asarray(
         [((e0, e1), 0) for e0, e1 in edge2],
         dtype=jigsaw_msh_t.EDGE2_t)
+    geom.crs = crs
+    if utm_crs is not None:
+        geom.crs = utm_crs
     return geom

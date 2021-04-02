@@ -398,6 +398,7 @@ def clip_mesh_by_shape(
         inverse: bool = False,
         ) -> jigsaw_msh_t:
 
+
     # If we want to calculate inverse based on shape, calculating
     # from bbox first results in the wrong result
     if not inverse or use_box_only:
@@ -405,6 +406,7 @@ def clip_mesh_by_shape(
         # First based on bounding box only
         shape_box = box(*shape.bounds)
 
+        # TODO: Optimize for multipolygons (use separate bboxes)
         in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
         mesh = clip_mesh_by_vertex(
