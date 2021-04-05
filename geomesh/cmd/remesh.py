@@ -29,6 +29,7 @@ _logger = logging.getLogger(__name__)
 
 def _read_geom_hfun(geom_file, hfun_file, hfun_crs):
     _logger.info("Read geom and hfun from disk")
+    _logger.info("Readng geometry...")
     gdf_geom = gpd.read_file(geom_file)
     poly_list = list()
     for i in gdf_geom.geometry:
@@ -37,10 +38,13 @@ def _read_geom_hfun(geom_file, hfun_file, hfun_crs):
         elif isinstance(i, Polygon):
             poly_list.append(i)
     geom = Geom(MultiPolygon(poly_list), crs=gdf_geom.crs)
+    _logger.info("Done")
 
+    _logger.info("Readng size function...")
     if hfun_crs is None:
         hfun_crs = "EPSG:4326"
     hfun = Hfun(Mesh.open(hfun_file, crs=hfun_crs))
+    _logger.info("Done")
 
     return geom, hfun
 
@@ -53,6 +57,7 @@ def main(args):
 
     dem_paths = args.dem
     contours = args.contours
+    constants = args.constants
     hmin = args.hmin
     zmax = args.zmax
     clip_by_mesh = args.clip_by_base
@@ -78,6 +83,11 @@ def main(args):
         level, expansion_rate, target_size = [
                 *contour, *[None]*(3-len(contour))]
         contour_defns.append((level, expansion_rate, target_size))
+    
+    constant_defns = list()
+    for lower_bound, target_size in constants:
+        constant_defns.append((lower_bound, target_size))
+   
 
     if out_path is None:
         out_path = base_path.parent / 'remeshed.' + out_format
@@ -89,23 +99,32 @@ def main(args):
     hfun_rast_list = list()
     interp_rast_list = list()
 
+    # Low priority interpolation. e.g. user remeshes based on NCEI
+    # but still wants to interpolate GEBCO on mesh
     for dem in interp:
         interp_rast_list.append(Raster(dem))
+
+    # NOTE: Region of interest is calculated from geom_rast_list
+    # so they're needed even if hfun and geom are read from file
+    _logger.info("Read DEM files")
+    for dem_path in dem_paths:
+        geom_rast_list.append(Raster(dem_path))
+        hfun_rast_list.append(Raster(dem_path))
+        interp_rast_list.append(Raster(dem_path))
         
     _logger.info("Read base mesh")
     if mesh_crs is None:
         mesh_crs = "EPSG:4326"
     init_mesh = Mesh.open(str(base_path), crs=mesh_crs)
     # TODO: Cleanup isolates?
+    
+    # Read geometry and hfun from files if provided
+    if (geom_file and hfun_file
+            and geom_file.is_file() and hfun_file.is_file()):
+        geom, hfun = _read_geom_hfun(geom_file, hfun_file, hfun_crs)
 
     # Create geometry and hfun from inputs
-    if dem_paths:
-
-        _logger.info("Read DEM files")
-        for dem_path in dem_paths:
-            geom_rast_list.append(Raster(dem_path))
-            hfun_rast_list.append(Raster(dem_path))
-            interp_rast_list.append(Raster(dem_path))
+    elif dem_paths:
 
         _logger.info("Creating geometry object")
         geom_base_mesh = None
@@ -134,6 +153,7 @@ def main(args):
             hmin=hmin,
             hmax=np.max(hfun_base_mesh.msh_t().value),
             nprocs=nprocs)
+
         for level, expansion_rate, target_size in contour_defns:
             if expansion_rate is None:
                 expansion_rate = 0.1
@@ -143,6 +163,10 @@ def main(args):
                          f" {level} {expansion_rate} {target_size}")
             hfun.add_contour(
                 level, expansion_rate, target_size)
+
+        for lower_bound, target_size in constant_defns:
+            hfun.add_constant_value(
+                    value=target_size, lower_bound=lower_bound)
 
 
         if write_intermediate:
@@ -170,11 +194,6 @@ def main(args):
                 str(out_path) + '.geom.shp',
                 str(out_path) + '.hfun.2dm',
                 "EPSG:4326")
-
-    # Read geometry and hfun from files
-    elif (geom_file and hfun_file
-            and geom_file.is_file() and hfun_file.is_file()):
-        geom, hfun = _read_geom_hfun(geom_file, hfun_file, hfun_crs)
 
     else:
         raise ValueError(
@@ -212,7 +231,7 @@ def main(args):
     # Prep for Remeshing
     boxes = [i.get_bbox(crs=jig_geom.crs) for i in geom_rast_list]
     region_of_interest = MultiPolygon(boxes)
-    roi_bnds =region_of_interest.bounds
+    roi_bnds = region_of_interest.bounds
     roi_s = max(roi_bnds[2] - roi_bnds[0], roi_bnds[3] - roi_bnds[1])
 
     _logger.info("Clip mesh by inverse of region of interest")
@@ -225,15 +244,16 @@ def main(args):
         jig_hfun, region_of_interest)
 
     fixed_mesh_w_hole.point['IDtag'][:] = -1
-#    fixed_mesh_w_hole.edge2['IDtag'][:] = -1
+    fixed_mesh_w_hole.edge2['IDtag'][:] = -1
 
     refine_opts = jigsawpy.jigsaw_jig_t()
     refine_opts.hfun_scal = "absolute"
     refine_opts.hfun_hmin = np.min(jig_hfun.value)
     refine_opts.hfun_hmax = np.max(jig_hfun.value)
     refine_opts.mesh_dims = +2
-    refine_opts.mesh_top1 = True
-    refine_opts.geom_feat = True
+    # Mesh becomes TOO refined on exact boundaries from DEM
+#    refine_opts.mesh_top1 = True
+#    refine_opts.geom_feat = True
 
     jig_remeshed = jigsawpy.jigsaw_msh_t()
     jig_remeshed.ndims = +2
@@ -249,6 +269,7 @@ def main(args):
     jig_remeshed.crs = fixed_mesh_w_hole.crs
     _logger.info("Done")
 
+    # TODO: Cleanup mesh/use Driver?
 
     _logger.info("Interpolating depths on mesh...")
     # Interpolation
@@ -289,6 +310,12 @@ if __name__ == "__main__":
         metavar='CONTOUR_DEFN', default=list(),
         help="Each contour's (level, [expansion, target])"
              " to be applied on all size functions in collector")
+    parser.add_argument(
+        '--constant',
+        action='append', nargs=2, type=float, dest='constants',
+        metavar='CONST_DEFN', default=list(),
+        help="Specify constant mesh size above a given contour level"
+             " by passing (lower_bound, target_size) for each constant")
     parser.add_argument('--hmin', type=float, default=250)
     parser.add_argument('--zmax', type=float, default=0)
     parser.add_argument(
@@ -309,7 +336,7 @@ if __name__ == "__main__":
     parser.add_argument('-k', '--keep-intermediate', action='store_true')
     parser.add_argument('--nprocs', type=int, default=-1)
 
-    parser.add_argument('dem', nargs='*', type=Path)
+    parser.add_argument('dem', nargs='+', type=Path)
 
     args = parser.parse_args()
     main(args)

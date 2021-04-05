@@ -96,8 +96,9 @@ class ConstantValueContourInfoCollector:
         self._contours_info = dict()
 
     def add(self, src_idx, contour_defn0, contour_defn1, value):
+        srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
-                (tuple(src_idx), contour_defn0, contour_defn1)] = value 
+                (srcs, contour_defn0, contour_defn1)] = value 
 
     def __iter__(self):
         for defn, info in self._contours_info.items():

@@ -36,6 +36,8 @@ class HfunMesh(BaseHfun):
                 )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
+            # TODO: This modifies the underlying mesh, is this
+            # intended?
             self.mesh.msh_t.vert2['coord'] = np.vstack(
                 transformer.transform(
                     self.mesh.msh_t.vert2['coord'][:, 0],
@@ -146,7 +148,7 @@ class HfunMesh(BaseHfun):
                     if i in vert_to_edge else 0
                         for i in range(coord.shape[0])])
 
-        # Modifying self.mesh.msh_t values
+        # NOTE: Modifying values of underlying mesh
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
 
     @property

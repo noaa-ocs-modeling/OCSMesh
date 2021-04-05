@@ -510,6 +510,82 @@ def must_be_euclidean_mesh(f):
         return f(mesh)
     return decorator
 
+@must_be_euclidean_mesh
+def calculate_tria_areas(mesh):
+
+    coord = mesh.vert2['coord']
+    trias = mesh.tria3['index']
+
+    tria_coo = coord[
+        np.sort(np.stack((trias, np.roll(trias, shift=1, axis=1)),
+                         axis=2),
+                axis=2)]
+    tria_side_components = np.diff(tria_coo, axis=2).squeeze()
+    tria_sides = np.sqrt(
+            np.sum(np.power(np.abs(tria_side_components), 2),
+                   axis=2).squeeze())
+    p = np.sum(tria_sides, axis=1) / 2
+    p = p.reshape(len(p), 1)
+    a, b, c = np.split(tria_sides, 3, axis=1)
+    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c))
+    return tria_areas
+
+@must_be_euclidean_mesh
+def calculate_edge_lengths(mesh):
+
+    # Taken from size_from_mesh method of hfun-mesh
+
+    coord = mesh.vert2['coord']
+
+    # NOTE: For msh_t type vertex id and index are the same
+    trias = mesh.tria3['index']
+    quads = mesh.quad4['index']
+
+    # Get unique set of edges by rolling connectivity
+    # and joining connectivities in 3rd dimension, then sorting
+    # to get all edges with lower index first
+    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
+    if trias.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (trias, np.roll(trias, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = np.unique(
+                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
+        all_edges = np.vstack((all_edges, edges))
+    if quads.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (quads, np.roll(quads, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = np.unique(
+                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
+        all_edges = np.vstack((all_edges, edges))
+
+    all_edges = np.sort(all_edges, axis=0)
+
+    # ONLY TESTED FOR TRIA AS OF NOW
+
+    # This part of the function is generic for tria and quad
+    
+    # Get coordinates for all edge vertices
+    edge_coords = coord[edges, :]
+
+    # Calculate length of all edges based on acquired coords
+    edge_lens = np.sqrt(
+            np.sum(
+                np.power(
+                    np.abs(np.diff(edge_coords, axis=1)), 2)
+                ,axis=2)).squeeze()
+
+    edge_dict = defaultdict(float)
+    for en, edge in enumerate(edges):
+        edge_dict[tuple(edge)] = edge_lens[en]
+
+    return edge_dict
+
 
 @must_be_euclidean_mesh
 def elements(mesh):
