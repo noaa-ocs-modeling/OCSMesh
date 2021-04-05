@@ -15,9 +15,11 @@ from typing import Union, Sequence, List, Tuple
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon
+from shapely import ops
 from jigsawpy import jigsaw_msh_t
 
 from geomesh.mesh import Mesh
+from geomesh.mesh.base import BaseMesh
 from geomesh.raster import Raster
 from geomesh.geom.base import BaseGeom
 from geomesh.geom.raster import RasterGeom
@@ -104,6 +106,9 @@ class GeomCollector(BaseGeom):
                     in_item.clip(self._base_mesh.get_bbox(crs=in_item.crs))
                 geom = RasterGeom(in_item, **self._elev_info)
 
+            elif isinstance(in_item, BaseMesh):
+                geom = MeshGeom(in_item)
+
             elif isinstance(in_item, str):
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
@@ -113,7 +118,7 @@ class GeomCollector(BaseGeom):
 
                 elif in_item.endswith(
                         ('.14', '.grd', '.gr3', '.msh', '.2dm')):
-                    geom = MeshGeom(path)
+                    geom = MeshGeom(Mesh.open(path))
 
                 else:
                     raise TypeError("Input file extension not supported!")
@@ -142,6 +147,8 @@ class GeomCollector(BaseGeom):
             if self._base_mesh:
                 mesh_multipoly = self._base_mesh.hull.multipolygon()
             feather_files.append(self._extract_global_boundary(
+                temp_path, mesh_multipoly))
+            feather_files.extend(self._extract_nonraster_boundary(
                 temp_path, mesh_multipoly))
             feather_files.extend(self._extract_features(
                 temp_path, mesh_multipoly))
@@ -216,7 +223,7 @@ class GeomCollector(BaseGeom):
 
     def _type_chk(self, input_list):
         ''' Check the input type for constructor '''
-        valid_types = (str, Raster, RasterGeom, MultiPolygonGeom, PolygonGeom)
+        valid_types = (str, Raster, BaseGeom, BaseMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
                 f'Input list items must be of type {", ".join(valid_types)}'
@@ -249,6 +256,26 @@ class GeomCollector(BaseGeom):
             i for i in self._geom_list if not isinstance(i, raster_types)]
         return non_rasters
 
+    def _get_valid_multipolygon(
+            self,
+            polygon: Union[Polygon, MultiPolygon]
+            ) -> MultiPolygon:
+
+        # TODO: Performance bottleneck for valid checks
+        if not polygon.is_valid:
+            polygon = ops.unary_union(polygon)
+
+            if not polygon.is_valid:
+                polygon = polygon.buffer(0)
+
+            if not polygon.is_valid:
+                raise ValueError(explain_validity(polygon))
+
+        if isinstance(polygon, Polygon):
+            polygon = MultiPolygon([polygon])
+
+        return polygon
+
     def _extract_global_boundary(self, out_dir, mesh_multipoly):
 
         out_path = Path(out_dir)
@@ -267,6 +294,32 @@ class GeomCollector(BaseGeom):
             self._nprocs)
 
         return geom_path
+
+    def _extract_nonraster_boundary(self, out_dir, mesh_multipoly):
+
+        out_path = Path(out_dir)
+
+        non_rasters = self._get_non_raster_sources()
+        feather_files = list()
+        for e, geom in enumerate(non_rasters):
+
+            geom_path = out_path / f'nonraster_{os.getpid()}_{e}.feather'
+
+            crs = geom.crs
+            multipoly = self._get_valid_multipolygon(
+                    geom.get_multipolygon())
+            gdf_non_raster = gpd.GeoDataFrame(
+                    {'geometry': multipoly}, crs=crs)
+            if crs != CRS.from_user_input("EPSG:4326"):
+                gdf_non_raster = gdf_non_raster.to_crs("EPSG:4326")
+
+            # TODO: Clip using mesh_multipoly?
+
+            gdf_non_raster.to_feather(geom_path)
+
+            feather_files.append(geom_path)
+
+        return feather_files
 
     def _extract_features(self, out_dir, mesh_multipoly):
 

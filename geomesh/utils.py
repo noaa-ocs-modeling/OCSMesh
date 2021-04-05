@@ -15,6 +15,7 @@ from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
 import geopandas as gpd
+import utm
 
 from geomesh.mesh.parsers import grd, sms2dm
 
@@ -830,3 +831,25 @@ def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
     if crs is not None:
         msh.crs = CRS.from_user_input(crs)
     return msh
+
+def msh_t_to_utm(msh):
+    if hasattr(msh, 'crs') and msh.crs.is_geographic:
+        x0, y0, x1, y1 = msh.get_bbox().bounds
+        _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[msh.crs.ellipsoid.name]
+            )
+        transformer = Transformer.from_crs(
+            msh.crs, utm_crs, always_xy=True)
+
+        coords = msh.msh_t.vert2['coord']
+        coords[:, 0], coords[:, 1] = transformer.transform(
+                coords[:, 0], coords[:, 1])
+        msh.msh_t.vert2['coord'][:] = coords
+        msh.msh_t.crs = utm_crs
