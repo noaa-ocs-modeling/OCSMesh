@@ -908,9 +908,13 @@ def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
         msh.crs = CRS.from_user_input(crs)
     return msh
 
+@must_be_euclidean_mesh
 def msh_t_to_utm(msh):
     if hasattr(msh, 'crs') and msh.crs.is_geographic:
-        x0, y0, x1, y1 = msh.get_bbox().bounds
+        coords = msh.vert2['coord']
+        x0, y0, x1, y1 = (
+            np.min(coords[:, 0]), np.min(coords[:, 1]),
+            np.max(coords[:, 0]), np.max(coords[:, 1]))
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
         utm_crs = CRS(
@@ -924,8 +928,7 @@ def msh_t_to_utm(msh):
         transformer = Transformer.from_crs(
             msh.crs, utm_crs, always_xy=True)
 
-        coords = msh.msh_t.vert2['coord']
         coords[:, 0], coords[:, 1] = transformer.transform(
                 coords[:, 0], coords[:, 1])
-        msh.msh_t.vert2['coord'][:] = coords
-        msh.msh_t.crs = utm_crs
+        msh.vert2['coord'][:] = coords
+        msh.crs = utm_crs

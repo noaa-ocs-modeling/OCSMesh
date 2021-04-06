@@ -119,10 +119,12 @@ def main(args):
     init_mesh = Mesh.open(str(base_path), crs=mesh_crs)
     # TODO: Cleanup isolates?
     
+    log_calculation = True
     # Read geometry and hfun from files if provided
     if (geom_file and hfun_file
             and geom_file.is_file() and hfun_file.is_file()):
         geom, hfun = _read_geom_hfun(geom_file, hfun_file, hfun_crs)
+        log_calculation = False
 
     # Create geometry and hfun from inputs
     elif dem_paths:
@@ -196,17 +198,18 @@ def main(args):
                 str(out_path) + '.hfun.2dm',
                 "EPSG:4326")
 
+            log_calculation = False
     else:
         raise ValueError(
             f"Input not valid to initialize geom and hfun")
 
 
-    if not write_intermediate:
+    if log_calculation:
         # NOTE: If intermediate files are written then we calculated
         # this in previous section
         _logger.info("Calculating final geometry")
     jig_geom = geom.msh_t()
-    if not write_intermediate:
+    if log_calculation:
         # NOTE: If intermediate files are written then we calculated
         # this in previous section
         _logger.info("Calculating final size function")
@@ -219,10 +222,10 @@ def main(args):
     _logger.info("Projecting size function to be in meters unit")
     utils.msh_t_to_utm(jig_hfun)
     _logger.info("Projecting initial mesh to be in meters unit")
-    utils.msh_t_to_utm(init_mesh)
+    utils.msh_t_to_utm(jig_init)
 
 
-    if not (jig_geom.crs == jig_hfun.crs == init_mesh.crs):
+    if not (jig_geom.crs == jig_hfun.crs == jig_init.crs):
         raise ValueError(
             f"Converted UTM CRS for geometry, hfun and init mesh"
             f"is not equivalent")
