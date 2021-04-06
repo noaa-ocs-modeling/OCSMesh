@@ -66,6 +66,7 @@ def main(args):
     hfun_file = args.hfun
     hfun_crs = args.hfun_crs
 
+    sieve = args.sieve
     interp = args.interpolate
 
     out_path = args.output
@@ -269,7 +270,18 @@ def main(args):
     jig_remeshed.crs = fixed_mesh_w_hole.crs
     _logger.info("Done")
 
-    # TODO: Cleanup mesh/use Driver?
+    if jig_remeshed.tria3['index'].shape[0] == 0:
+        _err = 'ERROR: Jigsaw returned empty mesh.'
+        _logger.error(_err)
+        raise ValueError(_err)
+
+    # TODO: This is irrelevant right now since output file is
+    # always is EPSG:4326, enable when APIs for remeshing is added
+#    if out_crs is not None:
+#        utils.reproject(jig_remeshed, out_crs)
+
+    _logger.info('Finalizing mesh...')
+    utils.finalize_mesh(jig_remeshed, sieve)
 
     _logger.info("Interpolating depths on mesh...")
     # Interpolation
@@ -295,6 +307,8 @@ if __name__ == "__main__":
     #   --contour <LEVEL0 [EXPAND0 SIZE0]> \
     #   --contour <LEVEL1 [EXPAND1 SIZE1]> \
     #   --contour <LEVELN [EXPANDN SIZEN]> \
+    #   --constant <ABOVELEVELA SIZEA> \
+    #   --constant <ABOVELEVELB SIZEB> \
     #   --zmax <MAX_ELEV_DEM> \
     #   <DEM_FILES>*.tif
 
@@ -326,6 +340,7 @@ if __name__ == "__main__":
     parser.add_argument('--hfun', type=Path)
     parser.add_argument('--hfun-crs', default='EPSG:4326')
 
+    parser.add_argument('-s', '--sieve', type=float)
     parser.add_argument(
         '--interpolate', nargs='+', type=Path, default=list(),
         help="To interpolate from depth of DEMs not involved in"

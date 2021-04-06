@@ -527,7 +527,7 @@ def calculate_tria_areas(mesh):
     p = np.sum(tria_sides, axis=1) / 2
     p = p.reshape(len(p), 1)
     a, b, c = np.split(tria_sides, 3, axis=1)
-    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c))
+    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c)).squeeze()
     return tria_areas
 
 @must_be_euclidean_mesh
