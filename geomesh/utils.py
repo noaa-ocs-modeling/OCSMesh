@@ -1,7 +1,9 @@
 from collections import defaultdict
 from enum import Enum
 from itertools import permutations
-from typing import Union, Dict
+from typing import Union, Dict, Sequence
+from functools import reduce
+from copy import deepcopy
 
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
@@ -11,7 +13,9 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
-from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
+from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+import geopandas as gpd
+import utm
 
 from geomesh.mesh.parsers import grd, sms2dm
 
@@ -40,7 +44,7 @@ def cleanup_isolates(mesh):
     tria3 = tria3.reshape(mesh.tria3['index'].shape)
     mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs)
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
     mesh.tria3 = np.asarray(
         [(tuple(indices), mesh.tria3['IDtag'][i])
          for i, indices in enumerate(tria3)],
@@ -355,6 +359,147 @@ def vertices_around_vertex(mesh):
 # F-E     Both faces of an edge
 # V-E     Both vertices of an edge
 # Flook   Find face with given vertices
+def get_verts_in_shape(
+        mesh: jigsaw_msh_t,
+        shape: Union[box, Polygon, MultiPolygon],
+        from_box: bool = False,
+        ) -> Sequence[bool]:
+
+    if from_box:
+        crd = mesh.vert2['coord']
+
+        xmin, ymin, xmax, ymax = shape.bounds
+
+        in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
+        in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
+        in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
+        in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
+        in_box_idx = reduce(
+            np.intersect1d, (in_box_idx_1, in_box_idx_2,
+                             in_box_idx_3, in_box_idx_4))
+        return in_box_idx
+
+    else:
+
+        pt_series = gpd.GeoSeries(gpd.points_from_xy(
+            mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
+        shp_series = gpd.GeoSeries(shape)
+
+        in_shp_idx = pt_series.sindex.query_bulk(
+                shp_series, predicate="intersects")
+
+        return in_shp_idx
+
+
+def clip_mesh_by_shape(
+        mesh: jigsaw_msh_t,
+        shape: Union[box, Polygon, MultiPolygon],
+        use_box_only: bool = False,
+        fit_inside: bool = True,
+        inverse: bool = False,
+        ) -> jigsaw_msh_t:
+
+
+    # If we want to calculate inverse based on shape, calculating
+    # from bbox first results in the wrong result
+    if not inverse or use_box_only:
+
+        # First based on bounding box only
+        shape_box = box(*shape.bounds)
+
+        # TODO: Optimize for multipolygons (use separate bboxes)
+        in_box_idx = get_verts_in_shape(mesh, shape_box, True)
+
+        mesh = clip_mesh_by_vertex(
+                mesh, in_box_idx, not fit_inside, inverse)
+
+        if use_box_only:
+            return mesh
+
+    in_shp_idx = get_verts_in_shape(mesh, shape, False)
+
+    mesh = clip_mesh_by_vertex(
+            mesh, in_shp_idx, not fit_inside, inverse)
+
+    return mesh
+
+
+def clip_mesh_by_vertex(
+        mesh: jigsaw_msh_t,
+        is_vert_in: Sequence[bool],
+        can_use_other_verts: bool = False,
+        inverse: bool = False,
+        ) -> jigsaw_msh_t:
+
+    if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
+        coord = mesh.vert2['coord']
+        trias = mesh.tria3['index']
+        quads = mesh.quad4['index']
+
+        # Whether elements that include "in"-vertices can be created
+        # using vertices other than "in"-vertices
+        mark_func = np.all
+        if can_use_other_verts:
+            mark_func = np.any
+
+        mark_tria = mark_func(
+                (np.isin(trias.ravel(), is_vert_in).reshape(
+                    trias.shape)), 1)
+        mark_quad = mark_func(
+                (np.isin(quads.ravel(), is_vert_in).reshape(
+                    quads.shape)), 1)
+
+        # Whether to return elements found by "in" vertices or return
+        # all elements except them
+        if inverse:
+            mark_tria = np.logical_not(mark_tria)
+            mark_quad = np.logical_not(mark_quad)
+
+        # Find elements based on old vertex index
+        new_trias_unfinished = trias[mark_tria, :]
+        new_quads_unfinished = quads[mark_quad, :]
+
+        crd_old_to_new = {
+                index: i for i, index
+                in enumerate(
+                    sorted(np.unique(np.append(
+                        new_trias_unfinished, new_quads_unfinished))))
+            }
+
+        new_trias = np.array([
+                [crd_old_to_new[x] for x in  element]
+                    for element in new_trias_unfinished])
+        new_quads = np.array([
+                [crd_old_to_new[x] for x in  element]
+                    for element in new_quads_unfinished])
+
+        new_coord = coord[list(crd_old_to_new.keys()), :]
+        value = mesh.value[list(crd_old_to_new.keys())].copy()
+
+
+        mesh_out = jigsaw_msh_t()
+        mesh_out.mshID = mesh.mshID
+        mesh_out.ndims = mesh.ndims
+        mesh_out.value = value
+        if hasattr(mesh, "crs"):
+            mesh_out.crs = deepcopy(mesh.crs)
+
+        mesh_out.vert2 = np.array(
+            [(coo, 0) for coo in new_coord],
+            dtype=jigsaw_msh_t.VERT2_t)
+        mesh_out.tria3 = np.array(
+            [(con, 0) for con in new_trias],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        mesh_out.quad4 = np.array(
+            [(con, 0) for con in new_quads],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        return mesh_out
+
+    msg = (f"Not implemented for"
+           f" mshID={mesh.mshID} and dim={mesh.ndims}")
+    raise NotImplementedError(msg)
+
+
 
 
 def must_be_euclidean_mesh(f):
@@ -364,6 +509,82 @@ def must_be_euclidean_mesh(f):
             raise NotImplementedError(msg)
         return f(mesh)
     return decorator
+
+@must_be_euclidean_mesh
+def calculate_tria_areas(mesh):
+
+    coord = mesh.vert2['coord']
+    trias = mesh.tria3['index']
+
+    tria_coo = coord[
+        np.sort(np.stack((trias, np.roll(trias, shift=1, axis=1)),
+                         axis=2),
+                axis=2)]
+    tria_side_components = np.diff(tria_coo, axis=2).squeeze()
+    tria_sides = np.sqrt(
+            np.sum(np.power(np.abs(tria_side_components), 2),
+                   axis=2).squeeze())
+    p = np.sum(tria_sides, axis=1) / 2
+    p = p.reshape(len(p), 1)
+    a, b, c = np.split(tria_sides, 3, axis=1)
+    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c)).squeeze()
+    return tria_areas
+
+@must_be_euclidean_mesh
+def calculate_edge_lengths(mesh):
+
+    # Taken from size_from_mesh method of hfun-mesh
+
+    coord = mesh.vert2['coord']
+
+    # NOTE: For msh_t type vertex id and index are the same
+    trias = mesh.tria3['index']
+    quads = mesh.quad4['index']
+
+    # Get unique set of edges by rolling connectivity
+    # and joining connectivities in 3rd dimension, then sorting
+    # to get all edges with lower index first
+    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
+    if trias.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (trias, np.roll(trias, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = np.unique(
+                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
+        all_edges = np.vstack((all_edges, edges))
+    if quads.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (quads, np.roll(quads, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = np.unique(
+                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
+        all_edges = np.vstack((all_edges, edges))
+
+    all_edges = np.sort(all_edges, axis=0)
+
+    # ONLY TESTED FOR TRIA AS OF NOW
+
+    # This part of the function is generic for tria and quad
+    
+    # Get coordinates for all edge vertices
+    edge_coords = coord[edges, :]
+
+    # Calculate length of all edges based on acquired coords
+    edge_lens = np.sqrt(
+            np.sum(
+                np.power(
+                    np.abs(np.diff(edge_coords, axis=1)), 2)
+                ,axis=2)).squeeze()
+
+    edge_dict = defaultdict(float)
+    for en, edge in enumerate(edges):
+        edge_dict[tuple(edge)] = edge_lens[en]
+
+    return edge_dict
 
 
 @must_be_euclidean_mesh
@@ -481,17 +702,20 @@ def tricontourf(
     show=False,
     figsize=None,
     extend='both',
+    colorbar=False,
     **kwargs
 ):
     if ax is None:
         fig = plt.figure(figsize=figsize)
         ax = fig.add_subplot(111)
-    ax.tricontourf(
+    tcf = ax.tricontourf(
         mesh.vert2['coord'][:, 0],
         mesh.vert2['coord'][:, 1],
         mesh.tria3['index'],
         mesh.value.flatten(),
         **kwargs)
+    if colorbar:
+        plt.colorbar(tcf)
     if show:
         plt.gca().axis('scaled')
         plt.show()
@@ -598,10 +822,10 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     desc = "EPSG:4326"
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
-            enumerate(zip(coords, -msh.value))} 
+            enumerate(zip(coords, -msh.value))}
     # NOTE: Node IDs are node index + 1
     elements = {
-        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])} 
+        i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])}
     offset = len(elements)
     elements.update({
         offset + i + 1: v + 1 for i, v in enumerate(msh.quad4['index'])})
@@ -683,3 +907,28 @@ def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
     if crs is not None:
         msh.crs = CRS.from_user_input(crs)
     return msh
+
+@must_be_euclidean_mesh
+def msh_t_to_utm(msh):
+    if hasattr(msh, 'crs') and msh.crs.is_geographic:
+        coords = msh.vert2['coord']
+        x0, y0, x1, y1 = (
+            np.min(coords[:, 0]), np.min(coords[:, 1]),
+            np.max(coords[:, 0]), np.max(coords[:, 1]))
+        _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[msh.crs.ellipsoid.name]
+            )
+        transformer = Transformer.from_crs(
+            msh.crs, utm_crs, always_xy=True)
+
+        coords[:, 0], coords[:, 1] = transformer.transform(
+                coords[:, 0], coords[:, 1])
+        msh.vert2['coord'][:] = coords
+        msh.crs = utm_crs

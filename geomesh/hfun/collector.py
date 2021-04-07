@@ -96,8 +96,9 @@ class ConstantValueContourInfoCollector:
         self._contours_info = dict()
 
     def add(self, src_idx, contour_defn0, contour_defn1, value):
+        srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
-                (tuple(src_idx), contour_defn0, contour_defn1)] = value 
+                (srcs, contour_defn0, contour_defn1)] = value 
 
     def __iter__(self):
         for defn, info in self._contours_info.items():
@@ -296,8 +297,9 @@ class HfunCollector(BaseHfun):
         valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
-                f'Input list items must be of type {", ".join(valid_types)}'
-                f', or a derived type.')
+                f'Input list items must be of type' 
+                f' {", ".join(str(i) for i in valid_types)},'
+                f' or a derived type.')
 
     def _apply_features(self):
 
