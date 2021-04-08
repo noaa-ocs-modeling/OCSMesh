@@ -322,22 +322,24 @@ class HfunCollector(BaseHfun):
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
-        with tempfile.TemporaryDirectory() as temp_path:
-            self._contour_coll.calculate(contourable_list, temp_path)
-            counter = 0
-            for hfun in contourable_list:
-                for gdf in self._contour_coll:
-                    for row in gdf.itertuples():
-                        _logger.debug(row)
-                        if isinstance(row.geometry, GeometryCollection):
-                            continue
-                        counter = counter + 1
-                        hfun.add_feature(**{
-                            'feature': row.geometry,
-                            'expansion_rate': row.expansion_rate,
-                            'target_size': row.target_size,
-                            'nprocs': self._nprocs
-                        })
+        with Pool(processes=self._nprocs) as p:
+            with tempfile.TemporaryDirectory() as temp_path:
+                self._contour_coll.calculate(contourable_list, temp_path)
+                counter = 0
+                for hfun in contourable_list:
+                    for gdf in self._contour_coll:
+                        for row in gdf.itertuples():
+                            _logger.debug(row)
+                            if isinstance(row.geometry, GeometryCollection):
+                                continue
+                            counter = counter + 1
+                            hfun.add_feature(**{
+                                'feature': row.geometry,
+                                'expansion_rate': row.expansion_rate,
+                                'target_size': row.target_size,
+                                'proc_pool': p
+                            })
+        p.join()
             # hfun objects cause issue with pickling
             # -> cannot be passed to pool
 #            with Pool(processes=self._nprocs) as p:
