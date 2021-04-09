@@ -322,8 +322,8 @@ class HfunCollector(BaseHfun):
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
-        with Pool(processes=self._nprocs) as p:
-            with tempfile.TemporaryDirectory() as temp_path:
+        with tempfile.TemporaryDirectory() as temp_path:
+            with Pool(processes=self._nprocs) as p:
                 self._contour_coll.calculate(contourable_list, temp_path)
                 counter = 0
                 for hfun in contourable_list:
@@ -339,7 +339,7 @@ class HfunCollector(BaseHfun):
                                 'target_size': row.target_size,
                                 'proc_pool': p
                             })
-        p.join()
+            p.join()
             # hfun objects cause issue with pickling
             # -> cannot be passed to pool
 #            with Pool(processes=self._nprocs) as p:
@@ -392,10 +392,16 @@ class HfunCollector(BaseHfun):
         file_counter = 0
         pid = os.getpid()
         bbox_list = list()
-        # TODO: Should basemesh be included?
+
+        # TODO: Ask for user input to consider size from mesh?
+        hfun_list = self._hfun_list[::-1]
+        if self._base_mesh:
+            self._base_mesh.size_from_mesh()
+            hfun_list = [*self._hfun_list[::-1], self._base_mesh]
+
         # Last user input item has the highest priority (its trias
         # are not dropped) so process in reverse order
-        for hfun in self._hfun_list[::-1]:
+        for hfun in hfun_list:
             # TODO: Calling msh_t() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
 

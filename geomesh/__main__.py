@@ -73,6 +73,7 @@ class Geomesh:
                     hmin=self._args.hmin,
                     hmax=self._args.hmax,
                     contours=self._args.contour,
+                    constants=self._args.constants,
                     chunk_size=self._args.chunk_size,
                     overlap=self._args.overlap,
                     nprocs=nprocs)
@@ -362,6 +363,12 @@ def parse_args():
         '--contour', action='append', nargs='+', type=float,
         help="Each contour's (level, [expansion, target])"
              " to be applied on all size functions in collector")
+    hfun_bld.add_argument(
+        '--constant',
+        action='append', nargs=2, type=float, dest='constants',
+        metavar='CONST_DEFN', default=list(),
+        help="Specify constant mesh size above a given contour level"
+             " by passing (lower_bound, target_size) for each constant")
     hfun_bld.add_argument(
         'dem', nargs='+',
         help='Digital elevation model list to be used in size function creation')

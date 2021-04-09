@@ -26,6 +26,7 @@ class HfunCombine:
             hmin: Union[float, None] = None,
             hmax: Union[float, None] = None,
             contours: List[List[float]] = None,
+            constants: List[List[float]] = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None,
             nprocs: int = -1):
@@ -41,6 +42,7 @@ class HfunCombine:
             hmin=hmin,
             hmax=hmax,
             contours=contours,
+            constants=constants,
             chunk_size=chunk_size,
             overlap=overlap,
             nprocs=nprocs)
@@ -54,6 +56,7 @@ class HfunCombine:
         hmin = self._operation_info['hmin']
         hmax = self._operation_info['hmax']
         contours = self._operation_info['contours']
+        constants = self._operation_info['constants']
         chunk_size = self._operation_info['chunk_size']
         overlap = self._operation_info['overlap']
         nprocs = self._operation_info['nprocs']
@@ -101,6 +104,10 @@ class HfunCombine:
 
             hfun_collector.add_contour(
                 level, expansion_rate, target_size)
+
+        for lower_bound, target_size in constants:
+            hfun_collector.add_constant_value(
+                    value=target_size, lower_bound=lower_bound)
 
         self._write_to_file(
                 out_format, out_file, hfun_collector, 'EPSG:4326')
