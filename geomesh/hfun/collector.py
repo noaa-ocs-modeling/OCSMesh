@@ -16,6 +16,9 @@ from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
 from shapely import ops
 from jigsawpy import jigsaw_msh_t
+from rasterio.transform import from_origin, Affine
+from rasterio.warp import reproject, Resampling
+import rasterio
 import utm
 
 from geomesh.hfun.base import BaseHfun
@@ -131,6 +134,7 @@ class HfunCollector(BaseHfun):
             hmax: float = None,
             nprocs: int = None,
             verbosity: int = 0,
+            method: str = 'exact'
             ):
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -143,6 +147,7 @@ class HfunCollector(BaseHfun):
         self._size_info = dict(hmin=hmin, hmax=hmax)
         self._nprocs = nprocs
         self._hfun_list = list()
+        self._method = method
         # NOTE: Base mesh has to have a crs otherwise HfunMesh throws
         # exception
         self._base_mesh = None
@@ -194,12 +199,26 @@ class HfunCollector(BaseHfun):
 
     def msh_t(self) -> jigsaw_msh_t:
 
-        self._apply_features()
-
         composite_hfun = jigsaw_msh_t()
-        with tempfile.TemporaryDirectory() as temp_dir:
-            hfun_path_list = self._write_hfun_to_disk(temp_dir)
-            composite_hfun = self._get_hfun_composite(hfun_path_list)
+
+        if self._method == 'exact':
+            self._apply_features()
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                hfun_path_list = self._write_hfun_to_disk(temp_dir)
+                composite_hfun = self._get_hfun_composite(hfun_path_list)
+        
+
+        elif self._method == 'fast':
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                rast = self._create_big_raster(temp_dir)
+                hfun = self._apply_features_fast(rast)
+                composite_hfun = self._get_hfun_composite_fast(hfun)
+
+        else:
+            raise ValueError(f"Invalid method specified: {self._method}")
+
         return composite_hfun
 
 
@@ -310,7 +329,7 @@ class HfunCollector(BaseHfun):
 
         self._applied = True
 
-    def _apply_contours(self):
+    def _apply_contours(self, apply_to=None):
 
         # TODO: Consider CRS before applying to different hfuns
         #
@@ -321,13 +340,18 @@ class HfunCollector(BaseHfun):
 
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if apply_to is None:
+            apply_to = contourable_list
 
         with tempfile.TemporaryDirectory() as temp_path:
             with Pool(processes=self._nprocs) as p:
                 self._contour_coll.calculate(contourable_list, temp_path)
                 counter = 0
-                for hfun in contourable_list:
+                for hfun in apply_to:
                     for gdf in self._contour_coll:
+                        if not gdf.crs.equals(hfun.crs):
+                            _logger.info(f"Reprojecting feature...")
+                            gdf = gdf.to_crs(hfun.crs)
                         for row in gdf.itertuples():
                             _logger.debug(row)
                             if isinstance(row.geometry, GeometryCollection):
@@ -346,9 +370,13 @@ class HfunCollector(BaseHfun):
 #                p.starmap(
 #                    _apply_contours_worker,
 #                    [(hfun, self._contour_coll, self._nprocs)
-#                     for hfun in contourable_list])
+#                     for hfun in apply_to])
 
     def _apply_const_val(self):
+
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
 
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
@@ -366,13 +394,15 @@ class HfunCollector(BaseHfun):
                 hfun.add_constant_value(const_val, level0, level1)
 
 
-    def _apply_patch(self):
+    def _apply_patch(self, apply_to=None):
 
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if apply_to is None:
+            apply_to = contourable_list
 
         # TODO: Parallelize
-        for hfun in contourable_list:
+        for hfun in apply_to:
             for patch_defn, size_info in self._refine_patch_info_coll:
                 shape, crs = patch_defn.get_multipolygon()
                 if hfun.crs != crs:
@@ -564,6 +594,108 @@ class HfunCollector(BaseHfun):
                 composite_hfun.vert2['coord'][:, 1]
                 )).T
         composite_hfun.crs = utm_crs
+
+        return composite_hfun
+
+
+    def _create_big_raster(self, out_path):
+
+        out_dir = Path(out_path)
+        out_rast = out_dir / 'big_raster.tif'
+
+
+        all_bounds = list()
+        for hfun_in in self._hfun_list:
+            all_bounds.append(hfun_in.get_bbox(crs='EPSG:4326').bounds)
+        all_bounds = np.array(all_bounds)
+        x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
+        x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
+
+        _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+        utm_crs = CRS(
+            proj='utm', zone=f'{number}{letter}', ellps='WGS84')
+        transformer = Transformer.from_crs(
+                'EPSG:4326', utm_crs, always_xy=True)
+        (x0, x1), (y0, y1) = transformer.transform(
+                [x0, x1], [y0, y1])
+
+        # TODO: What if no hmin? -> use smallest raster res!
+        g_hmin = self._size_info['hmin']
+        res = g_hmin / 2
+        shape0 = int(np.ceil(abs(x1 - x0) / res))
+        shape1 = int(np.ceil(abs(y1 - y0) / res))
+
+        # NOTE: Upper-left vs lower-left origin
+        # (this only works for upper-left)
+        transform = from_origin(x0 - res / 2, y1 + res / 2, res, res)
+
+        rast_profile = {
+                'driver': 'GTiff',
+                'dtype': np.float32,
+                'height': shape0,
+                'width': shape1,
+                'crs': utm_crs,
+                'transform': transform,
+                'count': 1,
+        }
+        with rasterio.open(str(out_rast), 'w', **rast_profile) as dst:
+            dst.write(np.zeros((shape0, shape1), dtype=np.float32), 1)
+
+            # Reproject if needed (for now only needed if constant
+            # value level is added)
+            contourable_list = [
+                i for i in self._hfun_list if isinstance(i, HfunRaster)]
+            for in_idx, hfun in enumerate(contourable_list):
+                ignore = True
+                for (src_idx, _, _), _ in self._const_val_contour_coll:
+                    if src_idx is None or in_idx in src_idx:
+                        ignore = False
+                        break
+                if ignore:
+                    continue
+
+                reproject(
+                    source=rasterio.band(hfun.raster.src, 1),
+                    destination=rasterio.band(dst, 1),
+                    resampling=Resampling.nearest,
+                    init_dest_nodata=False, # To avoid overwrite
+                    num_threads=self._nprocs)
+
+
+
+        return Raster(out_rast)
+
+    def _apply_features_fast(self, big_raster):
+        
+        hfun = HfunRaster(big_raster, **self._size_info)
+        self._apply_contours([hfun])
+        self._apply_const_val_fast(hfun)
+        self._apply_patch([hfun])
+
+        return hfun
+
+    def _apply_const_val_fast(self, big_hfun):
+
+        for (_, ctr0, ctr1), const_val in self._const_val_contour_coll:
+            level0 = None
+            level1 =  None
+            if ctr0 != None:
+                level0 = ctr0.level
+            if ctr1 != None:
+                level1 = ctr1.level
+            big_hfun.add_constant_value(const_val, level0, level1)
+
+
+    def _get_hfun_composite_fast(self, hfun):
+
+#        composite_hfun = jigsaw_msh_t()
+#        composite_hfun.mshID = 'euclidean-mesh'
+#        composite_hfun.ndims = 2
+
+        # TODO: Drop trias from base mesh NOT in INDIVIDUAL bbox
+        # TODO: Keep tria from big raster ARE in INDIVIDUAL bbox
+        composite_hfun = hfun.msh_t()
 
         return composite_hfun
 

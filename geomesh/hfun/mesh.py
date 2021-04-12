@@ -166,3 +166,6 @@ class HfunMesh(BaseHfun):
     @property
     def crs(self):
         return self._crs
+
+    def get_bbox(self, **kwargs):
+        return self.mesh.get_bbox(**kwargs)

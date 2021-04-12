@@ -211,7 +211,7 @@ class HfunRaster(BaseHfun, Raster):
                     np.flipud(self.get_values(window=window, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
-                geom = PolygonGeom(box(x0, y0, x1, y1), self.crs).msh_t()
+                geom = PolygonGeom(box(x0, y1, x1, y0), self.crs).msh_t()
 
             _logger.info(f'Initial hfun generation took {time()-start}.')
 
@@ -233,7 +233,6 @@ class HfunRaster(BaseHfun, Raster):
                 verbosity
 
             # mesh of hfun window
-
             window_mesh = jigsaw_msh_t()
             window_mesh.mshID = 'euclidean-mesh'
             window_mesh.ndims = +2
