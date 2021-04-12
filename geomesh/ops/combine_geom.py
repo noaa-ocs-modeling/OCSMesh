@@ -187,6 +187,7 @@ class GeomCombine:
 #
 #            with Pool(processes=nprocs) as p:
 #                p.starmap(self._process_priority, priority_args)
+#            p.join()
 
             _logger.info("Processing DEM contours ...")
             # Process contours
@@ -202,6 +203,7 @@ class GeomCombine:
                         p.starmap(
                             self._parallel_get_polygon_worker,
                             parallel_args))
+                p.join()
             else:
                 poly_files_coll.extend(
                     self._serial_get_polygon(
