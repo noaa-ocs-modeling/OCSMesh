@@ -363,7 +363,7 @@ def get_verts_in_shape(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
         from_box: bool = False,
-        ) -> Sequence[bool]:
+        ) -> Sequence[int]:
 
     if from_box:
         crd = mesh.vert2['coord']
@@ -426,7 +426,7 @@ def clip_mesh_by_shape(
 
 def clip_mesh_by_vertex(
         mesh: jigsaw_msh_t,
-        is_vert_in: Sequence[bool],
+        is_vert_in: Sequence[int],
         can_use_other_verts: bool = False,
         inverse: bool = False,
         ) -> jigsaw_msh_t:

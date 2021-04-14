@@ -29,6 +29,7 @@ class HfunCombine:
             constants: List[List[float]] = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None,
+            method: str = 'exact',
             nprocs: int = -1):
 
 
@@ -45,6 +46,7 @@ class HfunCombine:
             constants=constants,
             chunk_size=chunk_size,
             overlap=overlap,
+            method=method,
             nprocs=nprocs)
 
     def run(self):
@@ -59,6 +61,7 @@ class HfunCombine:
         constants = self._operation_info['constants']
         chunk_size = self._operation_info['chunk_size']
         overlap = self._operation_info['overlap']
+        method = self._operation_info['method']
         nprocs = self._operation_info['nprocs']
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -81,7 +84,7 @@ class HfunCombine:
         logging.info("Creating Hfun from rasters...")
         hfun_collector = Hfun(
                 rast_list, base_mesh=base_mesh,
-                hmin=hmin, hmax=hmax, nprocs=nprocs)
+                hmin=hmin, hmax=hmax, nprocs=nprocs, method=method)
 
         for contour in contours:
             logging.info("Adding contour refinement...")

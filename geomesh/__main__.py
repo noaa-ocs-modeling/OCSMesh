@@ -76,6 +76,7 @@ class Geomesh:
                     constants=self._args.constants,
                     chunk_size=self._args.chunk_size,
                     overlap=self._args.overlap,
+                    method=self._args.method,
                     nprocs=nprocs)
                 combine_hfun(**arg_dict)
 
@@ -369,6 +370,9 @@ def parse_args():
         metavar='CONST_DEFN', default=list(),
         help="Specify constant mesh size above a given contour level"
              " by passing (lower_bound, target_size) for each constant")
+    hfun_bld.add_argument(
+        '--method', type=str, default='exact',
+        help='Method used to calculate size function ({exact} |fast)')
     hfun_bld.add_argument(
         'dem', nargs='+',
         help='Digital elevation model list to be used in size function creation')

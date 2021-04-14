@@ -21,6 +21,7 @@ from rasterio.warp import reproject, Resampling
 import rasterio
 import utm
 
+from geomesh import utils
 from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
 from geomesh.hfun.mesh import HfunMesh
@@ -441,68 +442,19 @@ class HfunCollector(BaseHfun):
             if hasattr(hfun_mesh, "crs"):
                 dst_crs = CRS.from_user_input("EPSG:4326")
                 if hfun_mesh.crs != dst_crs:
-                    xx = hfun_mesh.vert2["coord"][:, 0]
-                    yy = hfun_mesh.vert2["coord"][:, 1]
-                    transformer = Transformer.from_crs(
-                        hfun_mesh.crs, dst_crs, always_xy=True)
-                    transformed_crd = np.vstack(
-                            transformer.transform(xx, yy)).T
-                    hfun_mesh.crs = dst_crs
-                    hfun_mesh.vert2 = np.array(
-                            [(coo, 0) for coo in np.vstack(transformed_crd)],
-                            dtype=jigsaw_msh_t.VERT2_t)
+                    utils.reproject(hfun_mesh, dst_crs)
 
             # Get all previous bbox and clip to resolve overlaps
             # removing all tria that have NODE in bbox because it's
             # faster and so we can resolve all overlaps
             _logger.info(f"Removing bounds from hfun mesh...")
-            for bounds in bbox_list:
-
-                xmin, ymin, xmax, ymax = bounds
-
-                cnn = hfun_mesh.tria3['index']
-                crd = hfun_mesh.vert2['coord']
-                _logger.info(f"# tria3: {len(cnn)}")
-
-                start = time()
-                in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
-                in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
-                in_box_idx_3 = np.arange(len(crd))[crd[:, 1] > ymin]
-                in_box_idx_4 = np.arange(len(crd))[crd[:, 1] < ymax]
-                in_box_idx = reduce(
-                    np.intersect1d,
-                    (in_box_idx_1, in_box_idx_2, in_box_idx_3, in_box_idx_4))
-                _logger.info(f"Find drop verts took {time() - start}")
-
-                start = time()
-                drop_tria = np.all(
-                    np.isin(cnn.ravel(), in_box_idx).reshape(cnn.shape),
-                    1)
-                _logger.info(f"Find drop trias took {time() - start}")
-
-                _logger.info(f"Dropping {np.sum(drop_tria)} triangles...")
-                start = time()
-                new_cnn_unfinished = cnn[np.logical_not(drop_tria), :]
-                _logger.info(f"Getting Unfinished CNN took {time() - start}")
-
-                start = time()
-                lookup_table = {
-                    index: i for i, index
-                    in enumerate(sorted(np.unique(new_cnn_unfinished.flatten())))}
-                new_cnn = np.array([list(map(lambda x: lookup_table[x], element))
-                                      for element in new_cnn_unfinished])
-                new_crd = crd[list(lookup_table.keys()), :]
-                value = hfun_mesh.value[list(lookup_table.keys()), :]
-                
-                _logger.info(f"# tria3: {len(new_cnn)}")
-
-                hfun_mesh.value = value
-                hfun_mesh.vert2 = np.array(
-                    [(coo, 0) for coo in new_crd], dtype=jigsaw_msh_t.VERT2_t)
-                hfun_mesh.tria3 = np.array(
-                    [(con, 0) for con in new_cnn], dtype=jigsaw_msh_t.TRIA3_t)
-
-                _logger.info(f"Getting new CRD and CNN took {time() - start}")
+            for ibox in bbox_list:
+                hfun_mesh = utils.clip_mesh_by_shape(
+                    hfun_mesh,
+                    ibox,
+                    use_box_only=True,
+                    fit_inside=True,
+                    inverse=True)
 
             if not len(hfun_mesh.vert2):
                 _logger.debug("Hfun ignored due to overlap")
@@ -517,7 +469,7 @@ class HfunCollector(BaseHfun):
                 hfun_mesh.value[hfun_mesh.value > hmax] = hmax
 
             mesh = Mesh(hfun_mesh)
-            bbox_list.append(mesh.get_bbox(crs="EPSG:4326").bounds)
+            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
@@ -571,29 +523,7 @@ class HfunCollector(BaseHfun):
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
         # Up until now all calculation was in EPSG:4326
-        x0, y0, x1, y1 = (
-            np.min(composite_hfun.vert2['coord'][:, 0]),
-            np.min(composite_hfun.vert2['coord'][:, 1]),
-            np.max(composite_hfun.vert2['coord'][:, 0]),
-            np.max(composite_hfun.vert2['coord'][:, 1]))
-        _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-        utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}{letter}',
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[composite_hfun.crs.ellipsoid.name]
-            )
-        transformer = Transformer.from_crs(
-            composite_hfun.crs, utm_crs, always_xy=True)
-        composite_hfun.vert2['coord'] = np.vstack(
-            transformer.transform(
-                composite_hfun.vert2['coord'][:, 0],
-                composite_hfun.vert2['coord'][:, 1]
-                )).T
-        composite_hfun.crs = utm_crs
+        utils.msh_t_to_utm(composite_hfun)
 
         return composite_hfun
 
@@ -633,14 +563,17 @@ class HfunCollector(BaseHfun):
         rast_profile = {
                 'driver': 'GTiff',
                 'dtype': np.float32,
-                'height': shape0,
-                'width': shape1,
+                'width': shape0,
+                'height': shape1,
                 'crs': utm_crs,
                 'transform': transform,
                 'count': 1,
         }
         with rasterio.open(str(out_rast), 'w', **rast_profile) as dst:
-            dst.write(np.zeros((shape0, shape1), dtype=np.float32), 1)
+            # For places where raster is DEM is not provided it's
+            # assumed deep ocean for contouring purposes
+            dst.write(
+                np.full((shape0, shape1), -99999, dtype=np.float32), 1)
 
             # Reproject if needed (for now only needed if constant
             # value level is added)
@@ -655,6 +588,8 @@ class HfunCollector(BaseHfun):
                 if ignore:
                     continue
 
+                # NOTE: Last one implicitely has highest priority in
+                # case of overlap
                 reproject(
                     source=rasterio.band(hfun.raster.src, 1),
                     destination=rasterio.band(dst, 1),
@@ -687,15 +622,107 @@ class HfunCollector(BaseHfun):
             big_hfun.add_constant_value(const_val, level0, level1)
 
 
-    def _get_hfun_composite_fast(self, hfun):
+    def _get_hfun_composite_fast(self, big_hfun):
 
-#        composite_hfun = jigsaw_msh_t()
-#        composite_hfun.mshID = 'euclidean-mesh'
-#        composite_hfun.ndims = 2
+        # In fast method all DEM hfuns have more priority than all
+        # other inputs
+        dem_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        nondem_hfun_list = [
+            i for i in self._hfun_list if not isinstance(i, HfunRaster)]
 
-        # TODO: Drop trias from base mesh NOT in INDIVIDUAL bbox
-        # TODO: Keep tria from big raster ARE in INDIVIDUAL bbox
-        composite_hfun = hfun.msh_t()
+        epsg4326 = CRS.from_user_input("EPSG:4326")
+
+        dem_box_list = list()
+        for hfun in dem_hfun_list:
+            dem_box_list.append(hfun.get_bbox(crs=epsg4326))
+
+
+        # Calculate multipoly and clip big hfun
+        dem_gdf = gpd.GeoDataFrame(
+                geometry=dem_box_list, crs=epsg4326)
+        big_cut_shape = dem_gdf.unary_union
+        big_msh_t = big_hfun.msh_t()
+        if hasattr(big_msh_t, "crs"):
+            if not epsg4326.equals(big_msh_t.crs):
+                utils.reproject(big_msh_t, epsg4326)
+        big_msh_t = utils.clip_mesh_by_shape(
+            big_msh_t,
+            big_cut_shape,
+            use_box_only=False,
+            fit_inside=False)
+
+
+        # TODO: User option to ignore base mesh
+        hfun_list = nondem_hfun_list[::-1]
+        if self._base_mesh:
+            self._base_mesh.size_from_mesh()
+            hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
+
+        index = [big_msh_t.tria3['index']]
+        coord = [big_msh_t.vert2['coord']]
+        value = [big_msh_t.value]
+        offset = coord[-1].shape[0]
+        nondem_box_list = list()
+        for hfun in hfun_list:
+            nondem_msh_t = deepcopy(hfun.msh_t())
+            if hasattr(nondem_msh_t, "crs"):
+                if not epsg4326.equals(nondem_msh_t.crs):
+                    utils.reproject(nondem_msh_t, epsg4326)
+            nondem_bbox = hfun.get_bbox(crs=epsg4326)
+            # In fast method all DEM hfuns have more priority than all
+            # other inputs
+            nondem_msh_t = utils.clip_mesh_by_shape(
+                nondem_msh_t,
+                big_cut_shape,
+                use_box_only=False,
+                fit_inside=True,
+                inverse=True)
+            for ibox in nondem_box_list:
+                nondem_msh_t = utils.clip_mesh_by_shape(
+                    nondem_msh_t,
+                    ibox,
+                    use_box_only=True,
+                    fit_inside=True,
+                    inverse=True)
+
+            nondem_box_list.append(nondem_bbox)
+
+            index.append(nondem_msh_t.tria3['index'] + offset)
+            coord.append(nondem_msh_t.vert2['coord'])
+            value.append(nondem_msh_t.value)
+            offset += coord[-1].shape[0]
+
+        composite_hfun = jigsaw_msh_t()
+        composite_hfun.mshID = 'euclidean-mesh'
+        composite_hfun.ndims = 2
+
+        composite_hfun.vert2 = np.array(
+                [(coord, 0) for coord in np.vstack(coord)],
+                dtype=jigsaw_msh_t.VERT2_t)
+        composite_hfun.tria3 = np.array(
+                [(index, 0) for index in np.vstack(index)],
+                dtype=jigsaw_msh_t.TRIA3_t)
+        composite_hfun.value = np.array(
+                np.vstack(value),
+                dtype=jigsaw_msh_t.REALS_t)
+
+        # TODO: Get user input for wether to force hmin and hmax on
+        # final hfun (which includes non-raster and basemesh sizes)
+        hmin = self._size_info['hmin']
+        hmax = self._size_info['hmax']
+        if hmin:
+            composite_hfun.value[composite_hfun.value < hmin] = hmin
+        if hmax:
+            composite_hfun.value[composite_hfun.value > hmax] = hmax
+
+        composite_hfun.crs = epsg4326
+
+        # NOTE: In the end we need to return in a CRS that
+        # uses meters as units. UTM based on the center of
+        # the bounding box of the hfun is used
+        # Up until now all calculation was in EPSG:4326
+        utils.msh_t_to_utm(composite_hfun)
 
         return composite_hfun
 
