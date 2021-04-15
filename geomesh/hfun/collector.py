@@ -350,16 +350,24 @@ class HfunCollector(BaseHfun):
                 counter = 0
                 for hfun in apply_to:
                     for gdf in self._contour_coll:
-                        if not gdf.crs.equals(hfun.crs):
-                            _logger.info(f"Reprojecting feature...")
-                            gdf = gdf.to_crs(hfun.crs)
                         for row in gdf.itertuples():
                             _logger.debug(row)
-                            if isinstance(row.geometry, GeometryCollection):
+                            shape = row.geometry
+                            if isinstance(shape, GeometryCollection):
                                 continue
+                            # NOTE: CRS check is done AFTER
+                            # GeometryCollection check because
+                            # gdf.to_crs results in an error in case
+                            # of empty GeometryCollection
+                            if not gdf.crs.equals(hfun.crs):
+                                _logger.info(f"Reprojecting feature...")
+                                transformer = Transformer.from_crs(
+                                    gdf.crs, hfun.crs, always_xy=True)
+                                shape = ops.transform(
+                                        transformer.transform, shape)
                             counter = counter + 1
                             hfun.add_feature(**{
-                                'feature': row.geometry,
+                                'feature': shape,
                                 'expansion_rate': row.expansion_rate,
                                 'target_size': row.target_size,
                                 'proc_pool': p
@@ -725,28 +733,3 @@ class HfunCollector(BaseHfun):
         utils.msh_t_to_utm(composite_hfun)
 
         return composite_hfun
-
-
-def _apply_contours_worker(hfun, contour_coll, nprocs):
-    # HfunRaster object cannot be passed to pool due to raster buffers
-    # issue with pickling -- TODO: Use hfuninfo objects?
-    for gdf in contour_coll:
-        for row in gdf.itertuples():
-            _logger.debug(row)
-            if isinstance(row.geometry, GeometryCollection):
-                continue
-            hfun.add_feature(**{
-                'feature': row.geometry,
-                'expansion_rate': row.expansion_rate,
-                'target_size': row.target_size,
-                'nprocs': nprocs
-            })
-
-def _find_exact_elements_to_discard(bbox, possible_elements_to_discard):
-    # NOTE: HfunCollector methods cannot be passed to pool due to 
-    # raster buffers issue with pickling
-    exact_elements_to_discard = set()
-    for row in possible_elements_to_discard.itertuples():
-        if row.geometry.within(bbox):
-            exact_elements_to_discard.add(row.Index)
-    return list(exact_elements_to_discard)
