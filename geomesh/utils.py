@@ -474,7 +474,9 @@ def clip_mesh_by_vertex(
                     for element in new_quads_unfinished])
 
         new_coord = coord[list(crd_old_to_new.keys()), :]
-        value = mesh.value[list(crd_old_to_new.keys())].copy()
+        value = np.zeros(shape=(0, 0), dtype=jigsaw_msh_t.REALS_t)
+        if len(mesh.value) == len(coord):
+            value = mesh.value[list(crd_old_to_new.keys())].copy()
 
 
         mesh_out = jigsaw_msh_t()
