@@ -147,7 +147,8 @@ def remesh_small_elements(opts, geom, mesh, hfun):
         fixed_mesh = jigsawpy.jigsaw_msh_t()
         fixed_mesh.mshID = 'euclidean-mesh'
         fixed_mesh.ndims = +2
-        fixed_mesh.crs = mesh.crs
+        if hasattr(mesh, 'crs'):
+            fixed_mesh.crs = mesh.crs
 
         jigsawpy.lib.jigsaw(
             opts, geom, fixed_mesh, init=mesh_clip, hfun=hfun)
