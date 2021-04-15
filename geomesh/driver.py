@@ -89,10 +89,12 @@ class JigsawDriver:
         self.opts.hfun_hmin = np.min(hfun_msh_t.value)
         self.opts.hfun_hmax = np.max(hfun_msh_t.value)
 
+        geom_msh_t = self.geom.msh_t()
+
         _logger.info('Calling libsaw.jigsaw() ...')
         libsaw.jigsaw(
             self.opts,
-            self.geom.msh_t(),
+            geom_msh_t,
             output_mesh,
             init=hfun_msh_t if self._init is True else None,
             hfun=hfun_msh_t
@@ -108,6 +110,9 @@ class JigsawDriver:
             utils.reproject(output_mesh, self._crs)
 
         _logger.info('Finalizing mesh...')
+        if self.opts.hfun_hmin > 0:
+            output_mesh = utils.remesh_small_elements(
+                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
         utils.finalize_mesh(output_mesh, sieve)
 
         _logger.info('done!')

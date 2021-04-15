@@ -5,6 +5,7 @@ from typing import Union, Dict, Sequence
 from functools import reduce
 from copy import deepcopy
 
+import jigsawpy
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
 import matplotlib.pyplot as plt  # type: ignore[import]
@@ -115,6 +116,44 @@ def finalize_mesh(mesh, sieve_area=None):
         sieve(mesh, sieve_area)
     # cleanup_isolates(mesh)
     put_IDtags(mesh)
+
+
+def remesh_small_elements(opts, geom, mesh, hfun):
+
+    """
+    This function uses all the inputs for a given jigsaw meshing
+    process and based on that finds and fixes tiny elements that
+    might occur during initial meshing by iteratively remeshing
+    """
+
+    # TODO: Implement for quad, etc.
+
+
+    hmin = np.min(hfun.value)
+    equilat_area = np.sqrt(3)/4 * hmin**2
+    # List of arbitrary coef of equilateral triangle area for a givven
+    # minimum mesh size to come up with a decent cut off.
+    coeffs = [0.5, 0.2, 0.1, 0.05]
+
+    fixed_mesh = mesh
+    for coef in coeffs:
+        tria_areas = calculate_tria_areas(fixed_mesh)
+        tiny_sz = coef * equilat_area
+        tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas < tiny_sz, :].ravel())
+        if not len(tiny_verts):
+            break
+        mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
+
+        fixed_mesh = jigsawpy.jigsaw_msh_t()
+        fixed_mesh.mshID = 'euclidean-mesh'
+        fixed_mesh.ndims = +2
+        fixed_mesh.crs = mesh.crs
+
+        jigsawpy.lib.jigsaw(
+            opts, geom, fixed_mesh, init=mesh_clip, hfun=hfun)
+
+
+    return fixed_mesh
 
 
 def sieve(mesh, area=None):
