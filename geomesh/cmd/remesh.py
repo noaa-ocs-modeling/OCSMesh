@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys
 import os
+import gc
 import logging
 import argparse
 from pathlib import Path
@@ -181,6 +182,8 @@ def main(args):
                     {'geometry': gpd.GeoSeries(poly_geom)},
                     crs=geom.crs
                 ).to_file(str(out_path)+'.geom.shp')
+            del poly_geom
+            gc.collect()
 
             _logger.info("Calculating final size function")
             jig_hfun = hfun.msh_t()
@@ -190,6 +193,8 @@ def main(args):
             Mesh(jig_hfun).write(
                 str(out_path)+'.hfun.2dm',
                 format='2dm', overwrite=True)
+            del jig_hfun
+            gc.collect()
 
             # Read back from file to avoid recalculation of hfun
             # and geom
