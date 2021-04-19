@@ -124,6 +124,25 @@ class RefinementPatchInfoCollector:
 
 
 
+class FlowLimiterInfoCollector:
+
+    def __init__(self):
+        self._flow_lim_info = list()
+
+    def add(self, src_idx, hmin, hmax, upper_bound, lower_bound):
+
+        srcs = tuple(src_idx) if src_idx is not None else None
+        self._flow_lim_info.append(
+                (src_idx, hmin, hmax, upper_bound, lower_bound))
+
+    def __iter__(self):
+
+        for src_idx, hmin, hmax, ub, lb in self._flow_lim_info:
+            yield src_idx, hmin, hmax, ub, lb
+
+
+
+
 class HfunCollector(BaseHfun):
 
     def __init__(
@@ -159,6 +178,7 @@ class HfunCollector(BaseHfun):
                 self._contour_info_coll)
         self._const_val_contour_coll = ConstantValueContourInfoCollector()
         self._refine_patch_info_coll = RefinementPatchInfoCollector()
+        self._flow_lim_coll = FlowLimiterInfoCollector()
 
         self._type_chk(in_list)
 
@@ -264,6 +284,28 @@ class HfunCollector(BaseHfun):
                 expansion_rate=expansion_rate,
                 target_size=target_size)
 
+    def add_subtidal_flow_limiter(
+            self,
+            hmin=None,
+            hmax=None,
+            upper_bound=None,
+            lower_bound=None,
+            source_index: Union[List[int], int, None] = None):
+
+        self._applied = False
+
+        if source_index != None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+
+        # TODO: Checks on hmin/hmax, etc?
+            
+        self._flow_lim_coll.add(
+            source_index,
+            hmin=hmin,
+            hmax=hmin,
+            upper_bound=upper_bound,
+            lower_bound=lower_bound)
+
 
     def add_constant_value(
             self, value,
@@ -271,7 +313,6 @@ class HfunCollector(BaseHfun):
             upper_bound=None,
             source_index: Union[List[int], int, None] =None):
 
-        # TODO: Add sources arg?
 
         self._applied = False
 
@@ -325,6 +366,7 @@ class HfunCollector(BaseHfun):
 
         if not self._applied:
             self._apply_contours()
+            self._apply_flow_limiters()
             self._apply_const_val()
             self._apply_patch()
 
@@ -380,6 +422,26 @@ class HfunCollector(BaseHfun):
 #                    _apply_contours_worker,
 #                    [(hfun, self._contour_coll, self._nprocs)
 #                     for hfun in apply_to])
+
+    def _apply_flow_limiters(self):
+
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
+
+        contourable_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(contourable_list):
+            for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+                if src_idx != None and in_idx not in src_idx:
+                    continue
+                if hmin is None:
+                    hmin = self._size_info['hmin']
+                if hmax is None:
+                    hmax = self._size_info['hmax']
+                hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+
 
     def _apply_const_val(self):
 
@@ -541,11 +603,14 @@ class HfunCollector(BaseHfun):
         out_dir = Path(out_path)
         out_rast = out_dir / 'big_raster.tif'
 
+        rast_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         all_bounds = list()
-        for hfun_in in self._hfun_list:
+        for hfun_in in rast_hfun_list:
             all_bounds.append(hfun_in.get_bbox(crs='EPSG:4326').bounds)
         all_bounds = np.array(all_bounds)
+
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
         x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
 
@@ -584,12 +649,14 @@ class HfunCollector(BaseHfun):
                 np.full((shape0, shape1), -99999, dtype=np.float32), 1)
 
             # Reproject if needed (for now only needed if constant
-            # value level is added)
-            contourable_list = [
-                i for i in self._hfun_list if isinstance(i, HfunRaster)]
-            for in_idx, hfun in enumerate(contourable_list):
+            # value levels or subtidal limiters are added)
+            for in_idx, hfun in enumerate(rast_hfun_list):
                 ignore = True
                 for (src_idx, _, _), _ in self._const_val_contour_coll:
+                    if src_idx is None or in_idx in src_idx:
+                        ignore = False
+                        break
+                for src_idx, _, _, _, _ in self._flow_lim_coll:
                     if src_idx is None or in_idx in src_idx:
                         ignore = False
                         break
@@ -611,16 +678,37 @@ class HfunCollector(BaseHfun):
 
     def _apply_features_fast(self, big_raster):
         
+        # NOTE: Caching applied doesn't work here since we apply
+        # everything on a temporary big raster
         hfun = HfunRaster(big_raster, **self._size_info)
         self._apply_contours([hfun])
+        self._apply_flow_limiters_fast(hfun)
         self._apply_const_val_fast(hfun)
         self._apply_patch([hfun])
 
         return hfun
 
+    def _apply_flow_limiters_fast(self, big_hfun):
+
+        for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+            # TODO: Account for source index
+            if hmin is None:
+                hmin = self._size_info['hmin']
+            if hmax is None:
+                hmax = self._size_info['hmax']
+
+            # To avoid sharp gradient where no raster is projected
+            if zmin is None:
+                zmin = -99990
+            else:
+                zmin = min(zmin, -99990)
+
+            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+
     def _apply_const_val_fast(self, big_hfun):
 
-        for (_, ctr0, ctr1), const_val in self._const_val_contour_coll:
+        for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+            # TODO: Account for source index
             level0 = None
             level1 =  None
             if ctr0 != None:
