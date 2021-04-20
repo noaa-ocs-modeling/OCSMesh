@@ -701,7 +701,7 @@ class HfunCollector(BaseHfun):
             if zmin is None:
                 zmin = -99990
             else:
-                zmin = min(zmin, -99990)
+                zmin = max(zmin, -99990)
 
             big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
 
