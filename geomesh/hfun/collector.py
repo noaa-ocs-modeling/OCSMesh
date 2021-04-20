@@ -13,7 +13,7 @@ from typing import Union, Sequence, List
 
 import geopandas as gpd
 from pyproj import CRS, Transformer
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
+from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, box
 from shapely import ops
 from jigsawpy import jigsaw_msh_t
 from rasterio.transform import from_origin, Affine
@@ -620,8 +620,10 @@ class HfunCollector(BaseHfun):
             proj='utm', zone=f'{number}{letter}', ellps='WGS84')
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
-        (x0, x1), (y0, y1) = transformer.transform(
-                [x0, x1], [y0, y1])
+
+        box_epsg4326 = box(x0, y0, x1, y1)
+        poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
+        x0, y0, x1, y1 = poly_utm.bounds
 
         # TODO: What if no hmin? -> use smallest raster res!
         g_hmin = self._size_info['hmin']
