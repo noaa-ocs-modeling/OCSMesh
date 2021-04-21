@@ -32,17 +32,20 @@ def mesh_to_tri(mesh):
 
 
 def cleanup_isolates(mesh):
+    
+    # For triangle only (TODO: add support for other types)
     node_indexes = np.arange(mesh.vert2['coord'].shape[0])
     used_indexes = np.unique(mesh.tria3['index'])
     vert2_idxs = np.where(
         np.isin(node_indexes, used_indexes, assume_unique=True))[0]
-    tria3_idxs = np.where(
-        ~np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+
+    # Since tria simplex refers to node index which always starts from
+    # 0 after removing isolate nodes we can use the map approach
     tria3 = mesh.tria3['index'].flatten()
-    for idx in reversed(tria3_idxs):
-        _idx = np.where(tria3 >= idx)
-        tria3[_idx] = tria3[_idx] - 1
+    renum = {old: new for new, old in enumerate(np.unique(tria3))}
+    tria3 = np.array([renum[i] for i in tria3])
     tria3 = tria3.reshape(mesh.tria3['index'].shape)
+
     mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
     if len(mesh.value) > 0:
         mesh.value = mesh.value.take(vert2_idxs, axis=0)
@@ -118,7 +121,7 @@ def finalize_mesh(mesh, sieve_area=None):
             can_use_other_verts=True, inverse=True, in_place=True)
         sieve(mesh, sieve_area)
         pinched_nodes = get_pinched_nodes(mesh)
-    # cleanup_isolates(mesh)
+    cleanup_isolates(mesh)
     put_IDtags(mesh)
 
 
@@ -221,7 +224,7 @@ def sieve(mesh, area=None):
 
     # update value
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs)
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
 
     # update tria3
     mesh.tria3 = np.array(
@@ -597,7 +600,8 @@ def clip_mesh_by_vertex(
         new_coord = coord[list(crd_old_to_new.keys()), :]
         value = np.zeros(shape=(0, 0), dtype=jigsaw_msh_t.REALS_t)
         if len(mesh.value) == len(coord):
-            value = mesh.value[list(crd_old_to_new.keys())].copy()
+            value = mesh.value.take(
+                    list(crd_old_to_new.keys()), axis=0).copy()
 
 
         mesh_out = mesh
