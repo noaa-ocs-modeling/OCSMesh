@@ -88,6 +88,7 @@ class HfunMesh(BaseHfun):
         # NOTE: For msh_t type vertex id and index are the same
         trias = hfun_msh.tria3['index']
         quads = hfun_msh.quad4['index']
+        hexas = hfun_msh.hexa8['index']
 
         _logger.info('Getting edges...')
         # Get unique set of edges by rolling connectivity
@@ -114,8 +115,18 @@ class HfunMesh(BaseHfun):
             edges = np.unique(
                     edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
             all_edges = np.vstack((all_edges, edges))
+        if hexas.shape[0]:
+            _logger.info('Getting quad edges...')
+            edges = np.sort(
+                    np.stack(
+                        (hexas, np.roll(hexas, shift=1, axis=1)),
+                        axis=2),
+                    axis=2)
+            edges = np.unique(
+                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
+            all_edges = np.vstack((all_edges, edges))
 
-        all_edges = np.sort(all_edges, axis=0)
+        all_edges = np.unique(all_edges, axis=0)
 
         # ONLY TESTED FOR TRIA FOR NOW
 
@@ -123,7 +134,7 @@ class HfunMesh(BaseHfun):
         
         # Get coordinates for all edge vertices
         _logger.info('Getting coordinate of edges...')
-        edge_coords = coord[edges, :]
+        edge_coords = coord[all_edges, :]
 
         # Calculate length of all edges based on acquired coords
         _logger.info('Getting length of edges...')
@@ -139,7 +150,7 @@ class HfunMesh(BaseHfun):
         # as of 04/21
         _logger.info('Creating vertex to edge map...')
         vert_to_edge = defaultdict(list)
-        for e, i in enumerate(edges.ravel()):
+        for e, i in enumerate(all_edges.ravel()):
             vert_to_edge[i].append(e // 2)
 
         _logger.info('Creating size value array for vertices...')
