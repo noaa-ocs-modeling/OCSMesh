@@ -111,7 +111,7 @@ def put_IDtags(mesh):
 
 def finalize_mesh(mesh, sieve_area=None):
     cleanup_isolates(mesh)
-    while needs_sieve(mesh) or has_pinched_nodes(mesh):
+    while needs_sieve(mesh, sieve_area) or has_pinched_nodes(mesh):
         cleanup_pinched_nodes(mesh)
         sieve(mesh, sieve_area)
     # cleanup_isolates(mesh)
@@ -183,16 +183,15 @@ def sieve(mesh, area=None):
 
     # select any connected nodes; these ones are missed by
     # path.contains_point() because they are at the path edges.
-    _node_neighbors = vertices_around_vertex(mesh)
     _idxs = np.where(vert2_mask)[0]
-    for _idx in _idxs:
-        vert2_mask[list(_node_neighbors[_idx])] = True
+    conn_verts = connected_component(mesh, _idxs)
+    vert2_mask[conn_verts] = True
 
-    # Also, there might be some dangling triangles without neighbors, which are
-    # also missed by path.contains_point()
-    for idx, neighbors in _node_neighbors.items():
-        if len(neighbors) <= 2:
-            vert2_mask[idx] = True
+    # Also, there might be some dangling triangles without neighbors,
+    # which are also missed by path.contains_point()
+    lone_verts = get_lone_element_verts(mesh)
+    vert2_mask[lone_verts] = True
+
 
     # Mask out elements containing the unwanted nodes.
     tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
@@ -388,6 +387,72 @@ def vertices_around_vertex(mesh):
     else:
         msg = f"Not implemented for mshID={mesh.mshID}"
         raise NotImplementedError(msg)
+
+def connected_component(mesh, in_vert):
+
+    '''
+    Find connected component for given nodes
+    '''
+
+    tria = mesh.tria3['index']
+    quad = mesh.quad4['index']
+    hexa = mesh.hexa8['index']
+
+    # NOTE: np.any is used so that vertices that are not in in_verts
+    # triangles but are part of the triangles that include in_verts
+    # are considered too
+    mark_tria = np.any(
+            (np.isin(tria.ravel(), in_vert).reshape(
+                tria.shape)), 1)
+    mark_quad = np.any(
+            (np.isin(quad.ravel(), in_vert).reshape(
+                quad.shape)), 1)
+    mark_hexa = np.any(
+            (np.isin(hexa.ravel(), in_vert).reshape(
+                hexa.shape)), 1)
+
+    conn_verts = np.unique(np.concatenate(
+        (tria[mark_tria, :].ravel(),
+         quad[mark_quad, :].ravel(),
+         hexa[mark_hexa, :].ravel())))
+
+    return conn_verts
+
+def get_lone_element_verts(mesh):
+
+    '''
+    Also, there might be some dangling triangles without neighbors,
+    which are also missed by path.contains_point()
+    '''
+
+    tria = mesh.tria3['index']
+    quad = mesh.quad4['index']
+    hexa = mesh.hexa8['index']
+
+    unq_verts, counts = np.unique(
+        np.concatenate((tria.ravel(), quad.ravel(), hexa.ravel())),
+        return_counts=True)
+    once_verts = unq_verts[counts == 1]
+
+    # NOTE: np.all so that lone elements are found vs elements that
+    # have nodes that are used only once
+    mark_tria = np.all(
+            (np.isin(tria.ravel(), once_verts).reshape(
+                tria.shape)), 1)
+    mark_quad = np.all(
+            (np.isin(quad.ravel(), once_verts).reshape(
+                quad.shape)), 1)
+    mark_hexa = np.all(
+            (np.isin(hexa.ravel(), once_verts).reshape(
+                hexa.shape)), 1)
+
+    lone_verts = np.unique(np.concatenate(
+        (tria[mark_tria, :].ravel(),
+         quad[mark_quad, :].ravel(),
+         hexa[mark_hexa, :].ravel())))
+
+    return lone_verts
+
 
 
 # https://en.wikipedia.org/wiki/Polygon_mesh#Summary_of_mesh_representation
