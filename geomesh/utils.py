@@ -15,6 +15,7 @@ from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
 
@@ -77,6 +78,42 @@ def geom_to_multipolygon(mesh):
     return MultiPolygon(polygon_collection)
 
 
+def get_mesh_polygons(mesh):
+
+    boundary_edges = get_boundary_edges(mesh)
+    poly_gen = polygonize(mesh.vert2['coord'][boundary_edges])
+    polys = [p for p in poly_gen]
+    polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+    # NOTE: The generated polygons contain ghost polygons (polygons
+    # whose exterior is a valid polygon's interior). To avoid valid
+    # node clipping more filtering is needed as follows:
+    rings = [p.exterior for p in polys]
+    
+    # Given that there are no crossing between polygons, it can be
+    # stated that polygons whose exterior ring is enclosed in 
+    # even number (including 0) of other polygon's exterior rings 
+    # are actual (vs ghost) polygons
+    n_parents = np.zeros((len(rings),))
+    # TODO: Test whether to use 1, 2 or 3 point check?
+    represent = np.array([[r.coords[i] for i in range(3)] for r in rings])
+#    represent = np.array([r.coords[0] for r in rings])
+    for e, ring in enumerate(rings[:-1]):
+        path = Path(ring, closed=True)
+        n_parents = n_parents + np.pad(
+#            np.array([
+#                path.contains_point(pt) for pt in represent[e+1:]]),
+            np.all(np.array([
+                path.contains_points(pts) for pts in represent[e+1:]]),
+                axis=1),
+            (e+1, 0), 'constant', constant_values=0)
+
+    # Get actual polygons based on logic described above
+    polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+
+    return polys
+
+
 def needs_sieve(mesh, area=None):
     areas = [polygon.area for polygon in geom_to_multipolygon(mesh)]
     if area is None:
@@ -112,16 +149,96 @@ def put_IDtags(mesh):
         )
 
 
+def _get_sieve_mask(mesh, polygons, sieve_area):
+
+    # NOTE: Some polygons are ghost polygons (interior)
+    areas = [p.area for p in polygons]
+    if sieve_area is None:
+        remove = np.where(areas < np.max(areas))[0].tolist()
+    else:
+        remove = list()
+        for idx, patch_area in enumerate(areas):
+            if patch_area <= sieve_area:
+                remove.append(idx)
+
+    # if the path surrounds the node, these need to be removed.
+    vert2_mask = np.full((mesh.vert2['coord'].shape[0],), False)
+    for idx in remove:
+        path = Path(polygons[idx].exterior.coords, closed=True)
+        vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
+
+    return vert2_mask
+
+
+def _sieve_by_mask(mesh, sieve_mask):
+
+    # if the path surrounds the node, these need to be removed.
+    vert2_mask = sieve_mask.copy()
+
+    # select any connected nodes; these ones are missed by
+    # path.contains_point() because they are at the path edges.
+    _idxs = np.where(vert2_mask)[0]
+    conn_verts = get_surrounding_elem_verts(mesh, _idxs)
+    vert2_mask[conn_verts] = True
+
+    # Also, there might be some dangling triangles without neighbors,
+    # which are also missed by path.contains_point()
+    lone_elem_verts = get_lone_element_verts(mesh)
+    vert2_mask[lone_elem_verts] = True
+
+    # Mask out elements containing the unwanted nodes.
+    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
+
+    # Tria and node removal and renumbering indexes ...
+    tria3_IDtag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
+    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
+    used_indexes = np.unique(tria3_index)
+    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
+    renum = {old: new for new, old in enumerate(np.unique(tria3_index))}
+    tria3_index = np.array([renum[i] for i in tria3_index])
+    tria3_index = tria3_index.reshape((tria3_IDtag.shape[0], 3))
+    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
+
+    # update vert2
+    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
+
+    # update value
+    if len(mesh.value) > 0:
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
+
+    # update tria3
+    mesh.tria3 = np.array(
+        [(tuple(indices), tria3_IDtag[i])
+         for i, indices in enumerate(tria3_index)],
+        dtype=jigsaw_msh_t.TRIA3_t)
+
+
 def finalize_mesh(mesh, sieve_area=None):
+
     cleanup_isolates(mesh)
+
+    # Checks
     pinched_nodes = get_pinched_nodes(mesh)
-    while needs_sieve(mesh, sieve_area) or len(pinched_nodes):
+    
+    boundary_polys = get_mesh_polygons(mesh)
+    sieve_mask = _get_sieve_mask(mesh, boundary_polys, sieve_area)
+
+    while np.any(sieve_mask) or len(pinched_nodes):
+
         clip_mesh_by_vertex(
             mesh, pinched_nodes,
-            can_use_other_verts=True, inverse=True, in_place=True)
-        sieve(mesh, sieve_area)
+            can_use_other_verts=True,
+            inverse=True, in_place=True)
+
+        _sieve_by_mask(mesh, sieve_mask)
+
+        # Checks
         pinched_nodes = get_pinched_nodes(mesh)
-    cleanup_isolates(mesh)
+
+        boundary_polys = get_mesh_polygons(mesh)
+        sieve_mask = _get_sieve_mask(mesh, boundary_polys, sieve_area)
+
+#    cleanup_isolates(mesh)
     put_IDtags(mesh)
 
 
@@ -331,6 +448,7 @@ def index_ring_collection(mesh):
                 _path = Path(vertices[e0 + [e0[0]], :], closed=True)
                 if _path.contains_point(vertices[_p_interior[0][0], :]):
                     has_parent = True
+                    break
             if not has_parent:
                 real_interiors.append(p_interior)
         # pop real rings from collection
@@ -509,6 +627,7 @@ def clip_mesh_by_shape(
         use_box_only: bool = False,
         fit_inside: bool = True,
         inverse: bool = False,
+        in_place: bool = False
         ) -> jigsaw_msh_t:
 
 
@@ -523,7 +642,7 @@ def clip_mesh_by_shape(
         in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
         mesh = clip_mesh_by_vertex(
-                mesh, in_box_idx, not fit_inside, inverse)
+                mesh, in_box_idx, not fit_inside, inverse, in_place)
 
         if use_box_only:
             return mesh
@@ -531,7 +650,7 @@ def clip_mesh_by_shape(
     in_shp_idx = get_verts_in_shape(mesh, shape, False)
 
     mesh = clip_mesh_by_vertex(
-            mesh, in_shp_idx, not fit_inside, inverse)
+            mesh, in_shp_idx, not fit_inside, inverse, in_place)
 
     return mesh
 
@@ -743,7 +862,6 @@ def faces_around_vertex(mesh):
     _elements = elements(mesh)
     length = max(map(len, _elements.values()))
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
-    print(y)
     faces_around_vertex = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
         np.isin(i, axis=0)
@@ -751,10 +869,11 @@ def faces_around_vertex(mesh):
 
     faces_around_vertex = defaultdict(set)
 
-def get_pinched_nodes(mesh):
+
+def get_boundary_edges(mesh):
 
     '''
-    Find nodes through which fluid cannot flow
+    Find internal and external boundaries of mesh
     '''
 
     coord = mesh.vert2['coord']
@@ -797,6 +916,17 @@ def get_pinched_nodes(mesh):
     all_edges, e_cnt = np.unique(all_edges, axis=0, return_counts=True)
     shared_edges = all_edges[e_cnt == 2]
     boundary_edges = all_edges[e_cnt == 1]
+
+    return boundary_edges
+
+
+def get_pinched_nodes(mesh):
+
+    '''
+    Find nodes through which fluid cannot flow
+    '''
+
+    boundary_edges = get_boundary_edges(mesh)
 
     # Node indices
     boundary_verts, vb_cnt = np.unique(boundary_edges, return_counts=True)
