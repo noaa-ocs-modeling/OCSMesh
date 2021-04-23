@@ -26,7 +26,7 @@ from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
 from geomesh.hfun.mesh import HfunMesh
 from geomesh.mesh.mesh import Mesh
-from geomesh.raster import Raster
+from geomesh.raster import Raster, get_iter_windows
 from geomesh.features.contour import Contour
 from geomesh.features.patch import Patch
 
@@ -608,13 +608,21 @@ class HfunCollector(BaseHfun):
 
         out_dir = Path(out_path)
         out_rast = out_dir / 'big_raster.tif'
+        out_mmap = out_dir / 'big_raster.mem'
 
         rast_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         all_bounds = list()
+        n_cell_lim = 0
         for hfun_in in rast_hfun_list:
-            all_bounds.append(hfun_in.get_bbox(crs='EPSG:4326').bounds)
+            n_cell_lim = max(
+                hfun_in.raster.src.shape[0]
+                    * hfun_in.raster.src.shape[1],
+                n_cell_lim)
+            all_bounds.append(
+                    hfun_in.get_bbox(crs='EPSG:4326').bounds)
+        n_cell_lim = n_cell_lim * self._nprocs
         all_bounds = np.array(all_bounds)
 
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
@@ -637,6 +645,15 @@ class HfunCollector(BaseHfun):
         shape0 = int(np.ceil(abs(x1 - x0) / res))
         shape1 = int(np.ceil(abs(y1 - y0) / res))
 
+        approx =  int(np.sqrt(n_cell_lim))
+        window_size = None #default of Geomesh.raster.Raster
+        mem_lim = 0 # default of rasterio
+        if approx < max(shape0, shape1):
+            window_size = np.min([shape0, shape1, approx])
+            # Memory limit in MB
+            mem_lim = n_cell_lim * np.float32(1).itemsize / 10e6
+
+
         # NOTE: Upper-left vs lower-left origin
         # (this only works for upper-left)
         transform = from_origin(x0 - res / 2, y1 + res / 2, res, res)
@@ -653,8 +670,27 @@ class HfunCollector(BaseHfun):
         with rasterio.open(str(out_rast), 'w', **rast_profile) as dst:
             # For places where raster is DEM is not provided it's
             # assumed deep ocean for contouring purposes
-            dst.write(
-                np.full((shape0, shape1), -99999, dtype=np.float32), 1)
+            if window_size is not None:
+                z = np.memmap(
+                    out_mmap, dtype='float32', mode='w+', shape=(shape0, shape1))
+                zview = z.view(np.float32).reshape(shape0*shape1,)
+                zwin = shape0 * shape1 // n_cell_lim
+                for i in range(zwin):
+                    zview[i*n_cell_lim : (i+1)*n_cell_lim] = -99999
+                # In case there are remainders
+                zview[-n_cell_lim:] = -99999
+                # TODO: window write
+                write_wins = get_iter_windows(
+                    shape0, shape1, chunk_size=window_size)
+                for win in write_wins:
+                    dst.write(z, 1, window=win)
+                del z, zview
+
+            else:
+                z = np.full((shape0, shape1), -99999, dtype=np.float32)
+                dst.write(z, 1)
+                del z
+
 
             # Reproject if needed (for now only needed if constant
             # value levels or subtidal limiters are added)
@@ -678,11 +714,12 @@ class HfunCollector(BaseHfun):
                     destination=rasterio.band(dst, 1),
                     resampling=Resampling.nearest,
                     init_dest_nodata=False, # To avoid overwrite
-                    num_threads=self._nprocs)
+                    num_threads=self._nprocs,
+                    warp_mem_limit=mem_lim)
 
 
 
-        return Raster(out_rast)
+        return Raster(out_rast, chunk_size=window_size)
 
     def _apply_features_fast(self, big_raster):
         
