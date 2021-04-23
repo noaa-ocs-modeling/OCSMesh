@@ -217,28 +217,28 @@ def finalize_mesh(mesh, sieve_area=None):
 
     cleanup_isolates(mesh)
 
-    # Checks
-    pinched_nodes = get_pinched_nodes(mesh)
-    
-    boundary_polys = get_mesh_polygons(mesh)
-    sieve_mask = _get_sieve_mask(mesh, boundary_polys, sieve_area)
+    while True:
+        no_op = True
 
-    while np.any(sieve_mask) or len(pinched_nodes):
-
-        clip_mesh_by_vertex(
-            mesh, pinched_nodes,
-            can_use_other_verts=True,
-            inverse=True, in_place=True)
-
-        _sieve_by_mask(mesh, sieve_mask)
-
-        # Checks
         pinched_nodes = get_pinched_nodes(mesh)
+        if len(pinched_nodes):
+            no_op = False
+            # TODO drop fewer elements for pinch
+            clip_mesh_by_vertex(
+                mesh, pinched_nodes,
+                can_use_other_verts=True,
+                inverse=True, in_place=True)
 
         boundary_polys = get_mesh_polygons(mesh)
         sieve_mask = _get_sieve_mask(mesh, boundary_polys, sieve_area)
+        if np.sum(sieve_mask):
+            no_op = False
+            _sieve_by_mask(mesh, sieve_mask)
 
-#    cleanup_isolates(mesh)
+        if no_op:
+            break;
+
+    cleanup_isolates(mesh)
     put_IDtags(mesh)
 
 
