@@ -384,7 +384,9 @@ class HfunCollector(BaseHfun):
         contourable_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
-            apply_to = contourable_list
+            mesh_hfun_list = [
+                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            apply_to = [*mesh_hfun_list, *contourable_list]
 
         with tempfile.TemporaryDirectory() as temp_path:
             with Pool(processes=self._nprocs) as p:
@@ -683,7 +685,10 @@ class HfunCollector(BaseHfun):
         # NOTE: Caching applied doesn't work here since we apply
         # everything on a temporary big raster
         hfun = HfunRaster(big_raster, **self._size_info)
-        self._apply_contours([hfun])
+
+        mesh_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunMesh)]
+        self._apply_contours([*mesh_hfun_list, hfun])
         self._apply_flow_limiters_fast(hfun)
         self._apply_const_val_fast(hfun)
         self._apply_patch([hfun])
