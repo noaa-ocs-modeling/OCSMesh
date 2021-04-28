@@ -608,7 +608,6 @@ class HfunCollector(BaseHfun):
 
         out_dir = Path(out_path)
         out_rast = out_dir / 'big_raster.tif'
-        out_mmap = out_dir / 'big_raster.mem'
 
         rast_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
@@ -622,7 +621,8 @@ class HfunCollector(BaseHfun):
                 n_cell_lim)
             all_bounds.append(
                     hfun_in.get_bbox(crs='EPSG:4326').bounds)
-        n_cell_lim = n_cell_lim * self._nprocs
+        # 3 is just a arbitray tolerance for memory limit calculations
+        n_cell_lim = n_cell_lim * self._nprocs / 3
         all_bounds = np.array(all_bounds)
 
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
@@ -671,18 +671,10 @@ class HfunCollector(BaseHfun):
             # For places where raster is DEM is not provided it's
             # assumed deep ocean for contouring purposes
             if window_size is not None:
-                z = np.memmap(
-                    out_mmap, dtype='float32', mode='w+', shape=(shape0, shape1))
-                zview = z.view(np.float32).reshape(shape0*shape1,)
-                zwin = shape0 * shape1 // n_cell_lim
-                for i in range(zwin):
-                    zview[i*n_cell_lim : (i+1)*n_cell_lim] = -99999
-                # In case there are remainders
-                zview[-n_cell_lim:] = -99999
-                # TODO: window write
                 write_wins = get_iter_windows(
                     shape0, shape1, chunk_size=window_size)
                 for win in write_wins:
+                    z = np.full((win.width, win.height), -99999, dtype=np.float32)
                     dst.write(z, 1, window=win)
                 del z, zview
 
