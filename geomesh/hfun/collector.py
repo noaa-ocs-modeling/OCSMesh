@@ -156,7 +156,9 @@ class HfunCollector(BaseHfun):
             nprocs: int = None,
             verbosity: int = 0,
             method: str = 'exact',
-            base_as_hfun: bool = True
+            base_as_hfun: bool = True,
+            base_shape: Union[Polygon, MultiPolygon] = None,
+            base_shape_crs: Union[str, CRS] = 'EPSG:4326'
             ):
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -170,6 +172,9 @@ class HfunCollector(BaseHfun):
         self._nprocs = nprocs
         self._hfun_list = list()
         self._method = method
+
+        self._base_shape = base_shape
+        self._base_shape_crs = CRS.from_user_input(base_shape_crs)
         self._base_as_hfun = base_as_hfun
 
         # NOTE: Base mesh has to have a crs otherwise HfunMesh throws
@@ -199,8 +204,28 @@ class HfunCollector(BaseHfun):
                 hfun = in_item
 
             elif isinstance(in_item, Raster):
-                if self._base_mesh:
-                    in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
+                if self._base_shape:
+                    clip_shape = self._base_shape
+                    if not self._base_shape_crs.equals(in_item.crs):
+                        transformer = Transformer.from_crs(
+                            self._base_shape_crs, in_item.crs, always_xy=True)
+                        clip_shape = ops.transform(
+                                transformer.transform, clip_shape)
+                    try:
+                        in_item.clip(clip_shape)
+                    except ValueError as err:
+                        # This raster does not intersect shape
+                        _logger.debug(err)
+                        continue
+
+                elif self._base_mesh:
+                    try:
+                        in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
+                    except ValueError as err:
+                        # This raster does not intersect shape
+                        _logger.debug(err)
+                        continue
+
                 hfun = HfunRaster(in_item, **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
@@ -209,8 +234,28 @@ class HfunCollector(BaseHfun):
             elif isinstance(in_item, str):
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
-                    if self._base_mesh:
-                        raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
+                    if self._base_shape:
+                        clip_shape = self._base_shape
+                        if not self._base_shape_crs.equals(raster.crs):
+                            transformer = Transformer.from_crs(
+                                self._base_shape_crs, raster.crs, always_xy=True)
+                            clip_shape = ops.transform(
+                                    transformer.transform, clip_shape)
+                        try:
+                            in_item.clip(clip_shape)
+                        except ValueError as err:
+                            # This raster does not intersect shape
+                            _logger.debug(err)
+                            continue
+
+                    elif self._base_mesh:
+                        try:
+                            raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
+                        except ValueError as err:
+                            # This raster does not intersect shape
+                            _logger.debug(err)
+                            continue
+
                     hfun = HfunRaster(raster, **self._size_info)
 
                 elif in_item.endswith(
