@@ -539,7 +539,7 @@ class HfunRaster(BaseHfun, Raster):
                     repartition_features,
                     [(linestring, max_verts) for linestring in feature]
                     )
-                feature = functools.reduce(operator.iconcat, res, [])
+                win_feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
 
                 _logger.info(f'Resampling features on ...')
@@ -556,15 +556,15 @@ class HfunRaster(BaseHfun, Raster):
                     _logger.info(
                             f"Transform creation took {time() - start2:f}")
                     start2 = time()
-                    feature = [
+                    win_feature = [
                         ops.transform(transformer.transform, linestring)
-                        for linestring in feature]
+                        for linestring in win_feature]
                     _logger.info(
                             f"Transform apply took {time() - start2:f}")
 
                 transformed_features = pool.starmap(
                     transform_linestring,
-                    [(linestring, target_size) for linestring in feature]
+                    [(linestring, target_size) for linestring in win_feature]
                 )
                 _logger.info(f'Resampling features took {time()-start}.')
                 _logger.info('Concatenating points...')
