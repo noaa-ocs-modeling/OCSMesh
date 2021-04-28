@@ -676,7 +676,6 @@ class HfunCollector(BaseHfun):
                 for win in write_wins:
                     z = np.full((win.width, win.height), -99999, dtype=np.float32)
                     dst.write(z, 1, window=win)
-                del z, zview
 
             else:
                 z = np.full((shape0, shape1), -99999, dtype=np.float32)
