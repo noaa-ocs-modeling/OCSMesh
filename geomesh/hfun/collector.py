@@ -59,6 +59,7 @@ class RefinementContourCollector:
         out_dir.mkdir(exist_ok=True, parents=True)
         file_counter = 0
         pid = os.getpid()
+        self._container.clear()
         for contour_defn, size_info in self._contours_info:
             if not contour_defn.has_source:
                 # Copy so that in case of a 2nd run the no-source 
@@ -154,7 +155,8 @@ class HfunCollector(BaseHfun):
             hmax: float = None,
             nprocs: int = None,
             verbosity: int = 0,
-            method: str = 'exact'
+            method: str = 'exact',
+            base_as_hfun: bool = True
             ):
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -168,11 +170,15 @@ class HfunCollector(BaseHfun):
         self._nprocs = nprocs
         self._hfun_list = list()
         self._method = method
+        self._base_as_hfun = base_as_hfun
+
         # NOTE: Base mesh has to have a crs otherwise HfunMesh throws
         # exception
         self._base_mesh = None
         if base_mesh:
             self._base_mesh = HfunMesh(base_mesh)
+            if self._base_as_hfun:
+                self._base_mesh.size_from_mesh()
         self._contour_info_coll = RefinementContourInfoCollector()
         self._contour_coll = RefinementContourCollector(
                 self._contour_info_coll)
@@ -376,8 +382,6 @@ class HfunCollector(BaseHfun):
 
         # TODO: Consider CRS before applying to different hfuns
         #
-        # TODO: Can add_feature be added to non-raster hfun?
-
         # NOTE: for parallelization make sure a single hfun is NOT
         # passed to multiple processes
 
@@ -386,6 +390,8 @@ class HfunCollector(BaseHfun):
         if apply_to is None:
             mesh_hfun_list = [
                 i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            if self._base_mesh and self._base_as_hfun:
+                mesh_hfun_list.insert(0, self._base_mesh)
             apply_to = [*mesh_hfun_list, *contourable_list]
 
         with tempfile.TemporaryDirectory() as temp_path:
@@ -496,10 +502,8 @@ class HfunCollector(BaseHfun):
         pid = os.getpid()
         bbox_list = list()
 
-        # TODO: Ask for user input to consider size from mesh?
         hfun_list = self._hfun_list[::-1]
-        if self._base_mesh:
-            self._base_mesh.size_from_mesh()
+        if self._base_mesh and self._base_as_hfun:
             hfun_list = [*self._hfun_list[::-1], self._base_mesh]
 
         # Last user input item has the highest priority (its trias
@@ -688,6 +692,8 @@ class HfunCollector(BaseHfun):
 
         mesh_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunMesh)]
+        if self._base_mesh and self._base_as_hfun:
+            mesh_hfun_list.insert(0, self._base_mesh)
         self._apply_contours([*mesh_hfun_list, hfun])
         self._apply_flow_limiters_fast(hfun)
         self._apply_const_val_fast(hfun)
@@ -756,10 +762,8 @@ class HfunCollector(BaseHfun):
             fit_inside=False)
 
 
-        # TODO: User option to ignore base mesh
         hfun_list = nondem_hfun_list[::-1]
-        if self._base_mesh:
-            self._base_mesh.size_from_mesh()
+        if self._base_mesh and self._base_as_hfun:
             hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
 
         index = [big_msh_t.tria3['index']]
