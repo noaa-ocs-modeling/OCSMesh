@@ -461,18 +461,23 @@ class Boundaries:
                     ocean_boundary.append(tuple(ext_ring[i, :]))
 #            ocean_boundaries = edges_to_rings(ocean_boundary)
 #            land_boundaries = edges_to_rings(land_boundary)
-            ocean_segs = linemerge(coords[np.array(ocean_boundary)])
-            ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
-            ocean_boundaries = [
-                    [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                     for e, coo in enumerate(seg.coords[:-1])]
-                    for seg in ocean_segs]
-            land_segs = linemerge(coords[np.array(land_boundary)])
-            land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
-            land_boundaries = [
-                    [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                     for e, coo in enumerate(seg.coords[:-1])]
-                    for seg in land_segs]
+            ocean_boundaries = list()
+            if len(ocean_boundary):
+                ocean_segs = linemerge(coords[np.array(ocean_boundary)])
+                ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
+                ocean_boundaries = [
+                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                         for e, coo in enumerate(seg.coords[:-1])]
+                        for seg in ocean_segs]
+            land_boundaries = list()
+            if len(land_boundary):
+                land_segs = linemerge(coords[np.array(land_boundary)])
+                land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
+                land_boundaries = [
+                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                         for e, coo in enumerate(seg.coords[:-1])]
+                        for seg in land_segs]
+
             _bnd_id = 0
             for bnd in ocean_boundaries:
                 e0, e1 = [list(t) for t in zip(*bnd)]
