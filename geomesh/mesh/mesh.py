@@ -478,7 +478,7 @@ class Boundaries:
                          for e, coo in enumerate(seg.coords[:-1])]
                         for seg in land_segs]
 
-            _bnd_id = 0
+            _bnd_id = len(boundaries[None])
             for bnd in ocean_boundaries:
                 e0, e1 = [list(t) for t in zip(*bnd)]
                 e0 = [get_id(vert) for vert in e0]
@@ -488,7 +488,7 @@ class Boundaries:
                 _bnd_id += 1
 
             # add land boundaries
-            _bnd_id = 0
+            _bnd_id = len(boundaries[land_ibtype])
             for bnd in land_boundaries:
                 e0, e1 = [list(t) for t in zip(*bnd)]
                 e0 = [get_id(vert) for vert in e0]
