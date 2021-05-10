@@ -31,31 +31,43 @@ class Rings:
 
     @lru_cache(maxsize=1)
     def __call__(self):
-        tri = self.mesh.elements.triangulation()
-        idxs = np.vstack(list(np.where(tri.neighbors == -1))).T
-        boundary_edges = []
-        for i, j in idxs:
-            boundary_edges.append(
-                (tri.triangles[i, j], tri.triangles[i, (j+1) % 3]))
-        sorted_rings = sort_rings(edges_to_rings(boundary_edges),
-                                  self.mesh.coord)
+        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+        poly_gen = polygonize(coords[boundary_edges])
+        polys = [p for p in poly_gen]
+        polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+        rings = [p.exterior for p in polys]
+        n_parents = np.zeros((len(rings),))
+        represent = np.array([r.coords[0] for r in rings])
+        for e, ring in enumerate(rings[:-1]):
+            path = Path(ring, closed=True)
+            n_parents = n_parents + np.pad(
+                np.array([
+                    path.contains_point(pt) for pt in represent[e+1:]]),
+                (e+1, 0), 'constant', constant_values=0)
+
+        # Get actual polygons based on logic described above
+        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+
         data = []
-        for bnd_id, rings in sorted_rings.items():
-            coords = self.mesh.coord[rings['exterior'][:, 0], :]
-            geometry = LinearRing(coords)
+        bnd_id = 0
+        for poly in polys:
             data.append({
-                    "geometry": geometry,
+                    "geometry": poly.exterior,
                     "bnd_id": bnd_id,
                     "type": 'exterior'
                 })
-            for interior in rings['interiors']:
-                coords = self.mesh.coord[interior[:, 0], :]
-                geometry = LinearRing(coords)
+            for interior in poly.interiors:
                 data.append({
-                    "geometry": geometry,
+                    "geometry": interior,
                     "bnd_id": bnd_id,
                     "type": 'interior'
                 })
+            bnd_id = bnd_id + 1
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
     def exterior(self):
