@@ -26,8 +26,10 @@ class HfunCombine:
             hmin: Union[float, None] = None,
             hmax: Union[float, None] = None,
             contours: List[List[float]] = None,
+            constants: List[List[float]] = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None,
+            method: str = 'exact',
             nprocs: int = -1):
 
 
@@ -41,8 +43,10 @@ class HfunCombine:
             hmin=hmin,
             hmax=hmax,
             contours=contours,
+            constants=constants,
             chunk_size=chunk_size,
             overlap=overlap,
+            method=method,
             nprocs=nprocs)
 
     def run(self):
@@ -54,8 +58,10 @@ class HfunCombine:
         hmin = self._operation_info['hmin']
         hmax = self._operation_info['hmax']
         contours = self._operation_info['contours']
+        constants = self._operation_info['constants']
         chunk_size = self._operation_info['chunk_size']
         overlap = self._operation_info['overlap']
+        method = self._operation_info['method']
         nprocs = self._operation_info['nprocs']
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -78,7 +84,7 @@ class HfunCombine:
         logging.info("Creating Hfun from rasters...")
         hfun_collector = Hfun(
                 rast_list, base_mesh=base_mesh,
-                hmin=hmin, hmax=hmax, nprocs=nprocs)
+                hmin=hmin, hmax=hmax, nprocs=nprocs, method=method)
 
         for contour in contours:
             logging.info("Adding contour refinement...")
@@ -101,6 +107,10 @@ class HfunCombine:
 
             hfun_collector.add_contour(
                 level, expansion_rate, target_size)
+
+        for lower_bound, target_size in constants:
+            hfun_collector.add_constant_value(
+                    value=target_size, lower_bound=lower_bound)
 
         self._write_to_file(
                 out_format, out_file, hfun_collector, 'EPSG:4326')

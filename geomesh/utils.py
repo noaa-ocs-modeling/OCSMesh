@@ -5,6 +5,7 @@ from typing import Union, Dict, Sequence
 from functools import reduce
 from copy import deepcopy
 
+import jigsawpy
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
 import matplotlib.pyplot as plt  # type: ignore[import]
@@ -14,6 +15,7 @@ from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
 
@@ -31,17 +33,20 @@ def mesh_to_tri(mesh):
 
 
 def cleanup_isolates(mesh):
+    
+    # For triangle only (TODO: add support for other types)
     node_indexes = np.arange(mesh.vert2['coord'].shape[0])
     used_indexes = np.unique(mesh.tria3['index'])
     vert2_idxs = np.where(
         np.isin(node_indexes, used_indexes, assume_unique=True))[0]
-    tria3_idxs = np.where(
-        ~np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+
+    # Since tria simplex refers to node index which always starts from
+    # 0 after removing isolate nodes we can use the map approach
     tria3 = mesh.tria3['index'].flatten()
-    for idx in reversed(tria3_idxs):
-        _idx = np.where(tria3 >= idx)
-        tria3[_idx] = tria3[_idx] - 1
+    renum = {old: new for new, old in enumerate(np.unique(tria3))}
+    tria3 = np.array([renum[i] for i in tria3])
     tria3 = tria3.reshape(mesh.tria3['index'].shape)
+
     mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
     if len(mesh.value) > 0:
         mesh.value = mesh.value.take(vert2_idxs, axis=0)
@@ -71,6 +76,42 @@ def geom_to_multipolygon(mesh):
             interiors.append(vertices[interior[:, 0], :])
         polygon_collection.append(Polygon(exterior, interiors))
     return MultiPolygon(polygon_collection)
+
+
+def get_mesh_polygons(mesh):
+
+    boundary_edges = get_boundary_edges(mesh)
+    poly_gen = polygonize(mesh.vert2['coord'][boundary_edges])
+    polys = [p for p in poly_gen]
+    polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+    # NOTE: The generated polygons contain ghost polygons (polygons
+    # whose exterior is a valid polygon's interior). To avoid valid
+    # node clipping more filtering is needed as follows:
+    rings = [p.exterior for p in polys]
+    
+    # Given that there are no crossing between polygons, it can be
+    # stated that polygons whose exterior ring is enclosed in 
+    # even number (including 0) of other polygon's exterior rings 
+    # are actual (vs ghost) polygons
+    n_parents = np.zeros((len(rings),))
+    # TODO: Test whether to use 1, 2 or 3 point check?
+    represent = np.array([[r.coords[i] for i in range(3)] for r in rings])
+#    represent = np.array([r.coords[0] for r in rings])
+    for e, ring in enumerate(rings[:-1]):
+        path = Path(ring, closed=True)
+        n_parents = n_parents + np.pad(
+#            np.array([
+#                path.contains_point(pt) for pt in represent[e+1:]]),
+            np.all(np.array([
+                path.contains_points(pts) for pts in represent[e+1:]]),
+                axis=1),
+            (e+1, 0), 'constant', constant_values=0)
+
+    # Get actual polygons based on logic described above
+    polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+
+    return polys
 
 
 def needs_sieve(mesh, area=None):
@@ -108,13 +149,136 @@ def put_IDtags(mesh):
         )
 
 
+def _get_sieve_mask(mesh, polygons, sieve_area):
+
+    # NOTE: Some polygons are ghost polygons (interior)
+    areas = [p.area for p in polygons]
+    if sieve_area is None:
+        remove = np.where(areas < np.max(areas))[0].tolist()
+    else:
+        remove = list()
+        for idx, patch_area in enumerate(areas):
+            if patch_area <= sieve_area:
+                remove.append(idx)
+
+    # if the path surrounds the node, these need to be removed.
+    vert2_mask = np.full((mesh.vert2['coord'].shape[0],), False)
+    for idx in remove:
+        path = Path(polygons[idx].exterior.coords, closed=True)
+        vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
+
+    return vert2_mask
+
+
+def _sieve_by_mask(mesh, sieve_mask):
+
+    # if the path surrounds the node, these need to be removed.
+    vert2_mask = sieve_mask.copy()
+
+    # select any connected nodes; these ones are missed by
+    # path.contains_point() because they are at the path edges.
+    _idxs = np.where(vert2_mask)[0]
+    conn_verts = get_surrounding_elem_verts(mesh, _idxs)
+    vert2_mask[conn_verts] = True
+
+    # Also, there might be some dangling triangles without neighbors,
+    # which are also missed by path.contains_point()
+    lone_elem_verts = get_lone_element_verts(mesh)
+    vert2_mask[lone_elem_verts] = True
+
+    # Mask out elements containing the unwanted nodes.
+    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
+
+    # Tria and node removal and renumbering indexes ...
+    tria3_IDtag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
+    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
+    used_indexes = np.unique(tria3_index)
+    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
+    renum = {old: new for new, old in enumerate(np.unique(tria3_index))}
+    tria3_index = np.array([renum[i] for i in tria3_index])
+    tria3_index = tria3_index.reshape((tria3_IDtag.shape[0], 3))
+    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
+
+    # update vert2
+    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
+
+    # update value
+    if len(mesh.value) > 0:
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
+
+    # update tria3
+    mesh.tria3 = np.array(
+        [(tuple(indices), tria3_IDtag[i])
+         for i, indices in enumerate(tria3_index)],
+        dtype=jigsaw_msh_t.TRIA3_t)
+
+
 def finalize_mesh(mesh, sieve_area=None):
+
     cleanup_isolates(mesh)
-    while needs_sieve(mesh) or has_pinched_nodes(mesh):
-        cleanup_pinched_nodes(mesh)
-        sieve(mesh, sieve_area)
-    # cleanup_isolates(mesh)
+
+    while True:
+        no_op = True
+
+        pinched_nodes = get_pinched_nodes(mesh)
+        if len(pinched_nodes):
+            no_op = False
+            # TODO drop fewer elements for pinch
+            clip_mesh_by_vertex(
+                mesh, pinched_nodes,
+                can_use_other_verts=True,
+                inverse=True, in_place=True)
+
+        boundary_polys = get_mesh_polygons(mesh)
+        sieve_mask = _get_sieve_mask(mesh, boundary_polys, sieve_area)
+        if np.sum(sieve_mask):
+            no_op = False
+            _sieve_by_mask(mesh, sieve_mask)
+
+        if no_op:
+            break;
+
+    cleanup_isolates(mesh)
     put_IDtags(mesh)
+
+
+def remesh_small_elements(opts, geom, mesh, hfun):
+
+    """
+    This function uses all the inputs for a given jigsaw meshing
+    process and based on that finds and fixes tiny elements that
+    might occur during initial meshing by iteratively remeshing
+    """
+
+    # TODO: Implement for quad, etc.
+
+
+    hmin = np.min(hfun.value)
+    equilat_area = np.sqrt(3)/4 * hmin**2
+    # List of arbitrary coef of equilateral triangle area for a givven
+    # minimum mesh size to come up with a decent cut off.
+    coeffs = [0.5, 0.2, 0.1, 0.05]
+
+    fixed_mesh = mesh
+    for coef in coeffs:
+        tria_areas = calculate_tria_areas(fixed_mesh)
+        tiny_sz = coef * equilat_area
+        tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas < tiny_sz, :].ravel())
+        if not len(tiny_verts):
+            break
+        mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
+
+        fixed_mesh = jigsawpy.jigsaw_msh_t()
+        fixed_mesh.mshID = 'euclidean-mesh'
+        fixed_mesh.ndims = +2
+        if hasattr(mesh, 'crs'):
+            fixed_mesh.crs = mesh.crs
+
+        jigsawpy.lib.jigsaw(
+            opts, geom, fixed_mesh, init=mesh_clip, hfun=hfun)
+
+
+    return fixed_mesh
 
 
 def sieve(mesh, area=None):
@@ -143,16 +307,15 @@ def sieve(mesh, area=None):
 
     # select any connected nodes; these ones are missed by
     # path.contains_point() because they are at the path edges.
-    _node_neighbors = vertices_around_vertex(mesh)
     _idxs = np.where(vert2_mask)[0]
-    for _idx in _idxs:
-        vert2_mask[list(_node_neighbors[_idx])] = True
+    conn_verts = get_surrounding_elem_verts(mesh, _idxs)
+    vert2_mask[conn_verts] = True
 
-    # Also, there might be some dangling triangles without neighbors, which are
-    # also missed by path.contains_point()
-    for idx, neighbors in _node_neighbors.items():
-        if len(neighbors) <= 2:
-            vert2_mask[idx] = True
+    # Also, there might be some dangling triangles without neighbors,
+    # which are also missed by path.contains_point()
+    lone_elem_verts = get_lone_element_verts(mesh)
+    vert2_mask[lone_elem_verts] = True
+
 
     # Mask out elements containing the unwanted nodes.
     tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
@@ -178,7 +341,7 @@ def sieve(mesh, area=None):
 
     # update value
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs)
+        mesh.value = mesh.value.take(vert2_idxs, axis=0)
 
     # update tria3
     mesh.tria3 = np.array(
@@ -285,6 +448,7 @@ def index_ring_collection(mesh):
                 _path = Path(vertices[e0 + [e0[0]], :], closed=True)
                 if _path.contains_point(vertices[_p_interior[0][0], :]):
                     has_parent = True
+                    break
             if not has_parent:
                 real_interiors.append(p_interior)
         # pop real rings from collection
@@ -349,6 +513,72 @@ def vertices_around_vertex(mesh):
         msg = f"Not implemented for mshID={mesh.mshID}"
         raise NotImplementedError(msg)
 
+def get_surrounding_elem_verts(mesh, in_vert):
+
+    '''
+    Find vertices of elements connected to input vertices
+    '''
+
+    tria = mesh.tria3['index']
+    quad = mesh.quad4['index']
+    hexa = mesh.hexa8['index']
+
+    # NOTE: np.any is used so that vertices that are not in in_verts
+    # triangles but are part of the triangles that include in_verts
+    # are considered too
+    mark_tria = np.any(
+            (np.isin(tria.ravel(), in_vert).reshape(
+                tria.shape)), 1)
+    mark_quad = np.any(
+            (np.isin(quad.ravel(), in_vert).reshape(
+                quad.shape)), 1)
+    mark_hexa = np.any(
+            (np.isin(hexa.ravel(), in_vert).reshape(
+                hexa.shape)), 1)
+
+    conn_verts = np.unique(np.concatenate(
+        (tria[mark_tria, :].ravel(),
+         quad[mark_quad, :].ravel(),
+         hexa[mark_hexa, :].ravel())))
+
+    return conn_verts
+
+def get_lone_element_verts(mesh):
+
+    '''
+    Also, there might be some dangling triangles without neighbors,
+    which are also missed by path.contains_point()
+    '''
+
+    tria = mesh.tria3['index']
+    quad = mesh.quad4['index']
+    hexa = mesh.hexa8['index']
+
+    unq_verts, counts = np.unique(
+        np.concatenate((tria.ravel(), quad.ravel(), hexa.ravel())),
+        return_counts=True)
+    once_verts = unq_verts[counts == 1]
+
+    # NOTE: np.all so that lone elements are found vs elements that
+    # have nodes that are used only once
+    mark_tria = np.all(
+            (np.isin(tria.ravel(), once_verts).reshape(
+                tria.shape)), 1)
+    mark_quad = np.all(
+            (np.isin(quad.ravel(), once_verts).reshape(
+                quad.shape)), 1)
+    mark_hexa = np.all(
+            (np.isin(hexa.ravel(), once_verts).reshape(
+                hexa.shape)), 1)
+
+    lone_elem_verts = np.unique(np.concatenate(
+        (tria[mark_tria, :].ravel(),
+         quad[mark_quad, :].ravel(),
+         hexa[mark_hexa, :].ravel())))
+
+    return lone_elem_verts
+
+
 
 # https://en.wikipedia.org/wiki/Polygon_mesh#Summary_of_mesh_representation
 # V-V     All vertices around vertex
@@ -363,7 +593,7 @@ def get_verts_in_shape(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
         from_box: bool = False,
-        ) -> Sequence[bool]:
+        ) -> Sequence[int]:
 
     if from_box:
         crd = mesh.vert2['coord']
@@ -397,6 +627,7 @@ def clip_mesh_by_shape(
         use_box_only: bool = False,
         fit_inside: bool = True,
         inverse: bool = False,
+        in_place: bool = False
         ) -> jigsaw_msh_t:
 
 
@@ -411,7 +642,7 @@ def clip_mesh_by_shape(
         in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
         mesh = clip_mesh_by_vertex(
-                mesh, in_box_idx, not fit_inside, inverse)
+                mesh, in_box_idx, not fit_inside, inverse, in_place)
 
         if use_box_only:
             return mesh
@@ -419,22 +650,24 @@ def clip_mesh_by_shape(
     in_shp_idx = get_verts_in_shape(mesh, shape, False)
 
     mesh = clip_mesh_by_vertex(
-            mesh, in_shp_idx, not fit_inside, inverse)
+            mesh, in_shp_idx, not fit_inside, inverse, in_place)
 
     return mesh
 
 
 def clip_mesh_by_vertex(
         mesh: jigsaw_msh_t,
-        is_vert_in: Sequence[bool],
+        vert_in: Sequence[int],
         can_use_other_verts: bool = False,
         inverse: bool = False,
+        in_place: bool = False
         ) -> jigsaw_msh_t:
 
     if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
         coord = mesh.vert2['coord']
         trias = mesh.tria3['index']
         quads = mesh.quad4['index']
+        hexas = mesh.hexa8['index']
 
         # Whether elements that include "in"-vertices can be created
         # using vertices other than "in"-vertices
@@ -443,27 +676,34 @@ def clip_mesh_by_vertex(
             mark_func = np.any
 
         mark_tria = mark_func(
-                (np.isin(trias.ravel(), is_vert_in).reshape(
+                (np.isin(trias.ravel(), vert_in).reshape(
                     trias.shape)), 1)
         mark_quad = mark_func(
-                (np.isin(quads.ravel(), is_vert_in).reshape(
+                (np.isin(quads.ravel(), vert_in).reshape(
                     quads.shape)), 1)
+        mark_hexa = mark_func(
+                (np.isin(hexas.ravel(), vert_in).reshape(
+                    hexas.shape)), 1)
 
         # Whether to return elements found by "in" vertices or return
         # all elements except them
         if inverse:
             mark_tria = np.logical_not(mark_tria)
             mark_quad = np.logical_not(mark_quad)
+            mark_hexa = np.logical_not(mark_hexa)
 
         # Find elements based on old vertex index
         new_trias_unfinished = trias[mark_tria, :]
         new_quads_unfinished = quads[mark_quad, :]
+        new_hexas_unfinished = hexas[mark_hexa, :]
 
         crd_old_to_new = {
                 index: i for i, index
-                in enumerate(
-                    sorted(np.unique(np.append(
-                        new_trias_unfinished, new_quads_unfinished))))
+                in enumerate(sorted(np.unique(np.concatenate(
+                        (new_trias_unfinished.ravel(),
+                         new_quads_unfinished.ravel(),
+                         new_hexas_unfinished.ravel())
+                        ))))
             }
 
         new_trias = np.array([
@@ -472,18 +712,28 @@ def clip_mesh_by_vertex(
         new_quads = np.array([
                 [crd_old_to_new[x] for x in  element]
                     for element in new_quads_unfinished])
+        new_hexas = np.array([
+                [crd_old_to_new[x] for x in  element]
+                    for element in new_hexas_unfinished])
 
         new_coord = coord[list(crd_old_to_new.keys()), :]
-        value = mesh.value[list(crd_old_to_new.keys())].copy()
+        value = np.zeros(shape=(0, 0), dtype=jigsaw_msh_t.REALS_t)
+        if len(mesh.value) == len(coord):
+            value = mesh.value.take(
+                    list(crd_old_to_new.keys()), axis=0).copy()
 
 
-        mesh_out = jigsaw_msh_t()
-        mesh_out.mshID = mesh.mshID
-        mesh_out.ndims = mesh.ndims
+        mesh_out = mesh
+        if not in_place:
+            mesh_out = jigsaw_msh_t()
+            mesh_out.mshID = mesh.mshID
+            mesh_out.ndims = mesh.ndims
+            if hasattr(mesh, "crs"):
+                mesh_out.crs = deepcopy(mesh.crs)
+
         mesh_out.value = value
-        if hasattr(mesh, "crs"):
-            mesh_out.crs = deepcopy(mesh.crs)
 
+        # TODO: What about edge2 if in_place?
         mesh_out.vert2 = np.array(
             [(coo, 0) for coo in new_coord],
             dtype=jigsaw_msh_t.VERT2_t)
@@ -492,6 +742,9 @@ def clip_mesh_by_vertex(
             dtype=jigsaw_msh_t.TRIA3_t)
         mesh_out.quad4 = np.array(
             [(con, 0) for con in new_quads],
+            dtype=jigsaw_msh_t.TRIA3_t)
+        mesh_out.hexa8 = np.array(
+            [(con, 0) for con in new_hexas],
             dtype=jigsaw_msh_t.TRIA3_t)
         return mesh_out
 
@@ -564,7 +817,7 @@ def calculate_edge_lengths(mesh):
                 edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
         all_edges = np.vstack((all_edges, edges))
 
-    all_edges = np.sort(all_edges, axis=0)
+    all_edges = np.unique(all_edges, axis=0)
 
     # ONLY TESTED FOR TRIA AS OF NOW
 
@@ -609,7 +862,6 @@ def faces_around_vertex(mesh):
     _elements = elements(mesh)
     length = max(map(len, _elements.values()))
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
-    print(y)
     faces_around_vertex = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
         np.isin(i, axis=0)
@@ -618,7 +870,78 @@ def faces_around_vertex(mesh):
     faces_around_vertex = defaultdict(set)
 
 
+def get_boundary_edges(mesh):
+
+    '''
+    Find internal and external boundaries of mesh
+    '''
+
+    coord = mesh.vert2['coord']
+
+    # NOTE: For msh_t type vertex id and index are the same
+    trias = mesh.tria3['index']
+    quads = mesh.quad4['index']
+    hexas = mesh.hexa8['index']
+
+    # Get unique set of edges by rolling connectivity
+    # and joining connectivities in 3rd dimension, then sorting
+    # to get all edges with lower index first
+    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
+    if trias.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (trias, np.roll(trias, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+    if quads.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (quads, np.roll(quads, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+    if hexas.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (hexas, np.roll(hexas, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+
+    # Simplexes (list of node indices)
+    all_edges, e_cnt = np.unique(all_edges, axis=0, return_counts=True)
+    shared_edges = all_edges[e_cnt == 2]
+    boundary_edges = all_edges[e_cnt == 1]
+
+    return boundary_edges
+
+
+def get_pinched_nodes(mesh):
+
+    '''
+    Find nodes through which fluid cannot flow
+    '''
+
+    boundary_edges = get_boundary_edges(mesh)
+
+    # Node indices
+    boundary_verts, vb_cnt = np.unique(boundary_edges, return_counts=True)
+
+    # vertices/nodes that have more than 2 boundary edges are pinch
+    pinch_verts = boundary_verts[vb_cnt > 2]
+
+    return pinch_verts
+
+
 def has_pinched_nodes(mesh):
+
+    # Older function: computationally more expensive and missing some
+    # nodes
+
     _inner_ring_collection = inner_ring_collection(mesh)
     all_nodes = list()
     for inner_rings in _inner_ring_collection.values():
@@ -632,6 +955,10 @@ def has_pinched_nodes(mesh):
 
 
 def cleanup_pinched_nodes(mesh):
+
+    # Older function: computationally more expensive and missing some
+    # nodes
+
     _inner_ring_collection = inner_ring_collection(mesh)
     all_nodes = list()
     for inner_rings in _inner_ring_collection.values():

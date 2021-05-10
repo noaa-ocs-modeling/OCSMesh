@@ -10,6 +10,7 @@ from typing import Union, Sequence, Tuple, List
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import box, Polygon, MultiPolygon, LinearRing
 from shapely.validation import explain_validity
@@ -37,9 +38,11 @@ class GeomCombine:
             zmax: Union[float, None] = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None,
-            nprocs: int = -1):
+            nprocs: int = -1,
+            out_crs: Union[str, CRS] = "EPSG:4326",
+            base_crs: Union[str, CRS] = None):
 
-
+        self._calc_crs = None
         self._base_exterior = None
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -56,7 +59,9 @@ class GeomCombine:
             zmax=zmax,
             chunk_size=chunk_size,
             overlap=overlap,
-            nprocs=nprocs)
+            nprocs=nprocs,
+            out_crs=out_crs,
+            base_crs=base_crs)
 
     def run(self):
 
@@ -71,17 +76,61 @@ class GeomCombine:
         chunk_size = self._operation_info['chunk_size']
         overlap = self._operation_info['overlap']
         nprocs = self._operation_info['nprocs']
+        out_crs = self._operation_info['out_crs']
+        base_crs = self._operation_info['base_crs']
 
         out_dir = pathlib.Path(out_file).parent
         out_dir.mkdir(exist_ok=True, parents=True)
 
+        # Warping takes time; to optimize, only warp rasters
+        # during calculation of polygons if needed. Otherwise
+        # only warp polygon before writing to file
+        if isinstance(out_crs, str):
+            out_crs = CRS.from_user_input(out_crs)
+        if isinstance(base_crs, str):
+            base_crs = CRS.from_user_input(base_crs)
+        all_crs = set(Raster(dem).crs for dem in dem_files)
+        self._calc_crs = out_crs
+        if len(all_crs) == 1:
+            self._calc_crs = list(all_crs)[0]
+            _logger.info(
+                f"All DEMs have the same CRS:"
+                f" {self._calc_crs.to_string()}")
+            
         base_mult_poly = None
         if mesh_mp_in:
+            # Assumption: If base_mult_poly is provided, it's in 
+            # base_crs if not None, else in out_crs
             base_mult_poly = self._get_valid_multipolygon(mesh_mp_in)
+            if base_crs == None:
+                base_crs = out_crs
+            if not base_crs.equals(self._calc_crs):
+                _logger.info("Reprojecting base polygon...")
+                transformer = Transformer.from_crs(
+                    base_crs, self._calc_crs, always_xy=True)
+                base_mult_poly = ops.transform(
+                        transformer.transform, base_mult_poly)
 
         elif mesh_file and pathlib.Path(mesh_file).is_file():
             _logger.info("Creating mesh object from file...")
-            base_mesh = Mesh.open(mesh_file)
+            base_mesh = Mesh.open(mesh_file, crs=base_crs)
+            mesh_crs = base_mesh.crs
+            # Assumption: If mesh_crs is not defined, mesh is in
+            # base_crs if not None, else inout_crs
+            if base_crs == None:
+                if mesh_crs:
+                    base_crs = mesh_crs
+                else:
+                    base_crs = out_crs
+            if not self._calc_crs.equals(base_crs):
+                _logger.info("Reprojecting base mesh...")
+                transformer = Transformer.from_crs(
+                    base_crs, self._calc_crs, always_xy=True)
+                xy = base_mesh.coord
+                xy = np.vstack(
+                    transformer.transform(xy[:, 0], xy[:, 1])).T
+                base_mesh.coord[:] = xy
+
             _logger.info("Done")
 
             _logger.info("Getting mesh hull polygons...")
@@ -138,6 +187,7 @@ class GeomCombine:
 #
 #            with Pool(processes=nprocs) as p:
 #                p.starmap(self._process_priority, priority_args)
+#            p.join()
 
             _logger.info("Processing DEM contours ...")
             # Process contours
@@ -153,6 +203,7 @@ class GeomCombine:
                         p.starmap(
                             self._parallel_get_polygon_worker,
                             parallel_args))
+                p.join()
             else:
                 poly_files_coll.extend(
                     self._serial_get_polygon(
@@ -170,14 +221,16 @@ class GeomCombine:
 
             rasters_gdf = gpd.GeoDataFrame(
                     columns=['geometry'],
-                    crs='EPSG:4326'
+                    crs=self._calc_crs
                 )
             for feather_f in poly_files_coll:
                 rasters_gdf = rasters_gdf.append(
                     gpd.GeoDataFrame(
                         {'geometry': self._read_multipolygon(
                                                 feather_f)
-                        }),
+                        },
+                        crs=self._calc_crs
+                        ),
                     ignore_index=True)
 
 
@@ -194,7 +247,7 @@ class GeomCombine:
             fin_mult_poly = self._get_valid_multipolygon(fin_mult_poly)
 
             self._write_to_file(
-                    out_format, out_file, fin_mult_poly, 'EPSG:4326')
+                    out_format, out_file, fin_mult_poly, out_crs)
 
         self._base_exterior = None
 
@@ -274,7 +327,8 @@ class GeomCombine:
                 chunk_size=chunk_size,
                 overlap=overlap)
         # Can cause issue with bbox(?)
-        rast.warp(dst_crs='EPSG:4326')
+        if not self._calc_crs.equals(rast.crs):
+            rast.warp(dst_crs=self._calc_crs)
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
@@ -312,7 +366,8 @@ class GeomCombine:
                     chunk_size=chunk_size,
                     overlap=overlap)
             # Can cause issue with bbox(?)
-            rast.warp(dst_crs='EPSG:4326')
+            if not self._calc_crs.equals(rast.crs):
+                rast.warp(dst_crs=self._calc_crs)
 
             _logger.info("Clipping to basemesh size if needed...")
             rast_box = box(*rast.src.bounds)
@@ -358,7 +413,7 @@ class GeomCombine:
             # Processing DEM priority
 #            priority_geodf = gpd.GeoDataFrame(
 #                    columns=['geometry'],
-#                    crs='EPSG:4326')
+#                    crs=self._calc_crs)
 #            for p in range(priority):
 #                higher_pri_path = (
 #                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
@@ -459,18 +514,40 @@ class GeomCombine:
 
         # TODO: Check for correct extension on out_file
         if out_format == "shapefile":
-            gpd.GeoDataFrame(
+            gdf = gpd.GeoDataFrame(
                     {'geometry': multi_polygon},
-                    crs=crs
-                    ).to_file(out_file)
+                    crs=self._calc_crs
+                    )
+            if not crs.equals(self._calc_crs):
+                _logger.info(
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
+                gdf = gdf.to_crs(crs)
+            gdf.to_file(out_file)
 
         elif out_format == "feather":
-            gpd.GeoDataFrame(
+            gdf = gpd.GeoDataFrame(
                     {'geometry': multi_polygon},
-                    crs=crs
-                    ).to_feather(out_file)
+                    crs=self._calc_crs
+                    )
+            if not crs.equals(self._calc_crs):
+                _logger.info(
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
+                gdf = gdf.to_crs(crs)
+            gdf.to_feather(out_file)
 
         elif out_format in ("jigsaw", "vtk"):
+
+            if not crs.equals(self._calc_crs):
+                _logger.info(
+                    f"Project from {self._calc_crs.to_string()} to"
+                    f" {crs.to_string()} ...")
+                transformer = Transformer.from_crs(
+                    self._calc_crs, crs, always_xy=True)
+                multi_polygon = ops.transform(
+                        transformer.transform, multi_polygon)
+
             msh = jigsaw_msh_t()
             msh.ndims = +2
             msh.mshID = 'euclidean-mesh'

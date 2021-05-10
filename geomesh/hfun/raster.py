@@ -211,7 +211,7 @@ class HfunRaster(BaseHfun, Raster):
                     np.flipud(self.get_values(window=window, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
-                geom = PolygonGeom(box(x0, y0, x1, y1), self.crs).msh_t()
+                geom = PolygonGeom(box(x0, y1, x1, y0), self.crs).msh_t()
 
             _logger.info(f'Initial hfun generation took {time()-start}.')
 
@@ -233,7 +233,6 @@ class HfunRaster(BaseHfun, Raster):
                 verbosity
 
             # mesh of hfun window
-
             window_mesh = jigsaw_msh_t()
             window_mesh.mshID = 'euclidean-mesh'
             window_mesh.ndims = +2
@@ -312,6 +311,8 @@ class HfunRaster(BaseHfun, Raster):
             target_size: float = None,
             nprocs: int = None
     ):
+
+        # TODO: Add pool input support like add_feature for performance
 
         # TODO: Support other shapes - call buffer(1) on non polygons(?)
         if not isinstance(multipolygon, (Polygon, MultiPolygon)):
@@ -439,6 +440,38 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: float,
             target_size: float = None,
             nprocs=None,
+            max_verts=200,
+            proc_pool=None
+    ):
+        if proc_pool is not None:
+            self._add_feature_internal(
+                feature=feature,
+                expansion_rate=expansion_rate,
+                target_size=target_size,
+                pool=proc_pool,
+                max_verts=max_verts)
+
+        else:
+            # Check nprocs
+            nprocs = -1 if nprocs is None else nprocs
+            nprocs = cpu_count() if nprocs == -1 else nprocs
+            _logger.debug(f'Using nprocs={nprocs}')
+
+            with Pool(processes=nprocs) as pool:
+                self._add_feature_internal(
+                    feature=feature,
+                    expansion_rate=expansion_rate,
+                    target_size=target_size,
+                    pool=pool,
+                    max_verts=max_verts)
+            pool.join()
+
+    def _add_feature_internal(
+            self,
+            feature: Union[LineString, MultiLineString],
+            expansion_rate: float,
+            target_size: float = None,
+            pool: Pool = None,
             max_verts=200
     ):
         '''Adds a linear distance size function constraint to the mesh.
@@ -459,10 +492,6 @@ class HfunRaster(BaseHfun, Raster):
         # improvement for parallel pool. E.g. if a feature is too long, 1
         # processor will be busy and the rest will be idle.
 
-        # Check nprocs
-        nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        _logger.debug(f'Using nprocs={nprocs}')
         if not isinstance(feature, (LineString, MultiLineString)):
             raise TypeError(
                 f'Argument feature must be of type {LineString} or '
@@ -506,41 +535,37 @@ class HfunRaster(BaseHfun, Raster):
                     utm_crs = None
                 _logger.info('Repartitioning features...')
                 start = time()
-                with Pool(processes=nprocs) as pool:
-                    res = pool.starmap(
-                        repartition_features,
-                        [(linestring, max_verts) for linestring in feature]
-                        )
-                pool.join()
-                feature = functools.reduce(operator.iconcat, res, [])
+                res = pool.starmap(
+                    repartition_features,
+                    [(linestring, max_verts) for linestring in feature]
+                    )
+                win_feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
 
-                _logger.info(f'Resampling features on nprocs {nprocs}...')
+                _logger.info(f'Resampling features on ...')
                 start = time()
-                with Pool(processes=nprocs) as pool:
 
-                    # We don't want to recreate the same transformation
-                    # many times (it takes time) and we can't pass
-                    # transformation object to subtask (cinit issue)
-                    transformer = None
-                    if utm_crs is not None:
-                        start2 = time()
-                        transformer = Transformer.from_crs(
-                            self.src.crs, utm_crs, always_xy=True)
-                        _logger.info(
-                                f"Transform creation took {time() - start2:f}")
-                        start2 = time()
-                        feature = [
-                            ops.transform(transformer.transform, linestring)
-                            for linestring in feature]
-                        _logger.info(
-                                f"Transform apply took {time() - start2:f}")
+                # We don't want to recreate the same transformation
+                # many times (it takes time) and we can't pass
+                # transformation object to subtask (cinit issue)
+                transformer = None
+                if utm_crs is not None:
+                    start2 = time()
+                    transformer = Transformer.from_crs(
+                        self.src.crs, utm_crs, always_xy=True)
+                    _logger.info(
+                            f"Transform creation took {time() - start2:f}")
+                    start2 = time()
+                    win_feature = [
+                        ops.transform(transformer.transform, linestring)
+                        for linestring in win_feature]
+                    _logger.info(
+                            f"Transform apply took {time() - start2:f}")
 
-                    transformed_features = pool.starmap(
-                        transform_linestring,
-                        [(linestring, target_size) for linestring in feature]
-                    )
-                pool.join()
+                transformed_features = pool.starmap(
+                    transform_linestring,
+                    [(linestring, target_size) for linestring in win_feature]
+                )
                 _logger.info(f'Resampling features took {time()-start}.')
                 _logger.info('Concatenating points...')
                 start = time()
@@ -568,12 +593,12 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax:
                     r = (self.hmax - target_size) / (expansion_rate * target_size)
                     near_dists, neighbors = tree.query(
-                        xy, workers=nprocs, distance_upper_bound=r)
+                        xy, workers=pool._processes, distance_upper_bound=r)
                     distances = r * np.ones(len(xy))
                     mask = np.logical_not(np.isinf(near_dists))
                     distances[mask] = near_dists[mask]
                 else:
-                    distances, _ = tree.query(xy, workers=nprocs)
+                    distances, _ = tree.query(xy, workers=pool._processes)
                 _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(

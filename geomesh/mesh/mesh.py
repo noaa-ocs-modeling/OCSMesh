@@ -15,6 +15,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import RectBivariateSpline
 from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
+from shapely.ops import polygonize, linemerge
 
 
 from geomesh import utils
@@ -401,21 +402,44 @@ class Boundaries:
                 "be interpolated to the mesh before generating "
                 "boundaries.")
 
+
+        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+        poly_gen = polygonize(coords[boundary_edges])
+        polys = [p for p in poly_gen]
+        polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+        # Method 1 count how many "parents" each exterior ring has
+        rings = [p.exterior for p in polys]
+        n_parents = np.zeros((len(rings),))
+        represent = np.array([r.coords[0] for r in rings])
+        for e, ring in enumerate(rings[:-1]):
+            path = Path(ring, closed=True)
+            n_parents = n_parents + np.pad(
+                np.array([
+                    path.contains_point(pt) for pt in represent[e+1:]]),
+                (e+1, 0), 'constant', constant_values=0)
+
+        # Get actual polygons based on logic described above
+        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+
+
+        # TODO: Split using shapely to get bdry segments
+
         boundaries = defaultdict(defaultdict)
         bdry_type = dict
 
-        tri = self.mesh.elements.triangulation()
-        idxs = np.vstack(list(np.where(tri.neighbors == -1))).T
-        boundary_edges = []
-        for i, j in idxs:
-            boundary_edges.append(
-                (tri.triangles[i, j], tri.triangles[i, (j+1) % 3]))
-        sorted_rings = sort_rings(edges_to_rings(boundary_edges),
-                                  self.mesh.coord)
         get_id = self.mesh.nodes.get_id_by_index
         # generate exterior boundaries
-        for bnd_id, rings in sorted_rings.items():
-            ext_ring = rings['exterior']
+        for poly in polys:
+            ext_ring_coo = poly.exterior.coords
+            ext_ring = np.array([
+                    (coo_to_idx[ext_ring_coo[e]],
+                     coo_to_idx[ext_ring_coo[e + 1]])
+                    for e, coo in enumerate(ext_ring_coo[:-1])])
 
             # find boundary edges
             edge_tag = np.full(ext_ring.shape, 0)
@@ -431,12 +455,29 @@ class Boundaries:
             ocean_boundary = list()
             land_boundary = list()
             for i, (e0, e1) in enumerate(edge_tag):
-                if np.any(np.asarray((e0, e1)) == -1):
-                    ocean_boundary.append(tuple(ext_ring[i, :]))
-                elif np.any(np.asarray((e0, e1)) == 1):
+                if np.any(np.asarray((e0, e1)) == 1):
                     land_boundary.append(tuple(ext_ring[i, :]))
-            ocean_boundaries = edges_to_rings(ocean_boundary)
-            land_boundaries = edges_to_rings(land_boundary)
+                elif np.any(np.asarray((e0, e1)) == -1):
+                    ocean_boundary.append(tuple(ext_ring[i, :]))
+#            ocean_boundaries = edges_to_rings(ocean_boundary)
+#            land_boundaries = edges_to_rings(land_boundary)
+            ocean_boundaries = list()
+            if len(ocean_boundary):
+                ocean_segs = linemerge(coords[np.array(ocean_boundary)])
+                ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
+                ocean_boundaries = [
+                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                         for e, coo in enumerate(seg.coords[:-1])]
+                        for seg in ocean_segs]
+            land_boundaries = list()
+            if len(land_boundary):
+                land_segs = linemerge(coords[np.array(land_boundary)])
+                land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
+                land_boundaries = [
+                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                         for e, coo in enumerate(seg.coords[:-1])]
+                        for seg in land_segs]
+
             _bnd_id = len(boundaries[None])
             for bnd in ocean_boundaries:
                 e0, e1 = [list(t) for t in zip(*bnd)]
@@ -460,10 +501,17 @@ class Boundaries:
         # generate interior boundaries
         _bnd_id = 0
         interior_boundaries = defaultdict()
-        for bnd_id, rings in sorted_rings.items():
-            interiors = rings['interiors']
+        for poly in polys:
+            interiors = poly.interiors
             for interior in interiors:
-                e0, e1 = [list(t) for t in zip(*interior)]
+                int_ring_coo = interior.coords
+                int_ring = [
+                        (coo_to_idx[int_ring_coo[e]],
+                         coo_to_idx[int_ring_coo[e + 1]])
+                        for e, coo in enumerate(int_ring_coo[:-1])]
+
+                # TODO: Do we still need these?
+                e0, e1 = [list(t) for t in zip(*int_ring)]
                 if signed_polygon_area(self.mesh.coord[e0, :]) < 0:
                     e0 = e0[::-1]
                     e1 = e1[::-1]
