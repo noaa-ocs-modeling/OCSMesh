@@ -84,12 +84,17 @@ class JigsawDriver:
         output_mesh = jigsaw_msh_t()
         output_mesh.mshID = 'euclidean-mesh'
         output_mesh.ndims = 2
-        output_mesh.crs = hfun_msh_t.crs
 
         self.opts.hfun_hmin = np.min(hfun_msh_t.value)
         self.opts.hfun_hmax = np.max(hfun_msh_t.value)
 
         geom_msh_t = self.geom.msh_t()
+
+        # When the center of geom and hfun are NOT the same, utm
+        # zones would be different for resulting msh_t.
+        if geom_msh_t.crs != hfun_msh_t.crs:
+            utils.reproject(hfun_msh_t, geom_msh_t.crs)
+        output_mesh.crs = hfun_msh_t.crs
 
         _logger.info('Calling libsaw.jigsaw() ...')
         libsaw.jigsaw(
