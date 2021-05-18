@@ -115,9 +115,12 @@ class JigsawDriver:
             utils.reproject(output_mesh, self._crs)
 
         _logger.info('Finalizing mesh...')
-        if self.opts.hfun_hmin > 0:
-            output_mesh = utils.remesh_small_elements(
-                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
+        # Don't need to use ad-hoc fix since Jigsaw tiny element
+        # issue is resolve. In case needed add a flag for remesh
+        # since it's computationally expensive
+#        if self.opts.hfun_hmin > 0:
+#            output_mesh = utils.remesh_small_elements(
+#                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
         utils.finalize_mesh(output_mesh, sieve)
 
         _logger.info('done!')
