@@ -308,7 +308,7 @@ def main(args):
 
 if __name__ == "__main__":
     # e.g 
-    # ./remesh
+    # ./remesh \
     #   --mesh <MESH_ADD> \
     #   --output <OUT_FILE_ADDR> \
     #   --hmin <GLOBAL_MIN_SIZE> \
