@@ -1,9 +1,11 @@
 from functools import lru_cache
+import logging
 from multiprocessing import Pool, cpu_count
 import os
 import pathlib
 from typing import Union, List
 from collections import defaultdict, namedtuple
+from copy import deepcopy
 import warnings
 
 import geopandas as gpd
@@ -11,6 +13,7 @@ from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
 from matplotlib.path import Path
 from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
+import matplotlib.pyplot as plt
 import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import RectBivariateSpline
@@ -23,6 +26,7 @@ from geomesh.raster import Raster
 from geomesh.mesh.base import BaseMesh
 from geomesh.mesh.parsers import grd, sms2dm
 
+_logger = logging.getLogger(__name__)
 
 class Rings:
 
@@ -395,7 +399,7 @@ class Boundaries:
                 "indexes": bnd.indexes,
                 'geometry': bnd.geometry})
 
-        return gpd.GeoDataFrame(data, crs=self._hgrid.crs)
+        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
     def __len__(self):
         return len(self())
@@ -696,6 +700,84 @@ class EuclideanMesh2D(EuclideanMesh):
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
+        
+
+    def get_contour(self, level: float):
+
+        # ONLY SUPPORTS TRIANGLES
+        for attr in ['quad4', 'hexa8']:
+            if len(getattr(self.msh_t, attr)) > 0:
+                warnings.warn(
+                    'Mesh contour extraction only supports triangles')
+
+        coords = self.msh_t.vert2['coord']
+        values = self.msh_t.value
+        trias = self.msh_t.tria3['index']
+        if np.any(np.isnan(values)):
+            raise Exception(
+                "Mesh contains invalid values. Raster values must"
+                "be interpolated to the mesh before generating "
+                "boundaries.")
+
+        x, y = coords[:, 0], coords[:, 1]
+        features = []
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)
+            _logger.debug('Computing contours...')
+            fig, ax = plt.subplots()
+            ax.tricontour(
+                x, y, trias, values.ravel(), levels=[level])
+            plt.close(fig)
+        for path_collection in ax.collections:
+            for path in path_collection.get_paths():
+                try:
+                    features.append(LineString(path.vertices))
+                except ValueError:
+                    # LineStrings must have at least 2 coordinate tuples
+                    pass
+        return linemerge(features)
+
+
+    def get_multipolygon(self, zmin=None, zmax=None):
+        
+        values = self.msh_t.value
+        mask = np.ones(values.shape)
+        if zmin is not None:
+            mask = np.logical_and(mask, values > zmin)
+        if zmax is not None:
+            mask = np.logical_and(mask, values < zmax)
+
+        # Assuming value is of shape (N, 1)
+        # ravel to make sure it's 1D
+        verts_in = np.argwhere(mask).ravel()
+
+        clipped_mesh = utils.clip_mesh_by_vertex(
+            self.msh_t, verts_in,
+            can_use_other_verts=True)
+
+        boundary_edges = utils.get_boundary_edges(clipped_mesh)
+        coords = clipped_mesh.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+        poly_gen = polygonize(coords[boundary_edges])
+        polys = [p for p in poly_gen]
+        polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+        rings = [p.exterior for p in polys]
+        n_parents = np.zeros((len(rings),))
+        represent = np.array([r.coords[0] for r in rings])
+        for e, ring in enumerate(rings[:-1]):
+            path = Path(ring, closed=True)
+            n_parents = n_parents + np.pad(
+                np.array([
+                    path.contains_point(pt) for pt in represent[e+1:]]),
+                (e+1, 0), 'constant', constant_values=0)
+
+        # Get actual polygons based on logic described above
+        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+    
+        return MultiPolygon(polys)
 
     @property
     def vert2(self):
