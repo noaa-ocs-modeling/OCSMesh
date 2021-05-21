@@ -28,120 +28,125 @@ logging.basicConfig(
     datefmt='%Y-%m-%d:%H:%M:%S'
     )
 #logging.getLogger().setLevel(logging.DEBUG)
-logging.getLogger().setLevel(logging.INFO)
-
-def main(args):
-
-    logging.info(args)
-
-    base_path = pathlib.Path(args.basemesh)
-    demlo_paths = args.demlo
-    demhi_paths = args.demhi
-    out_path = pathlib.Path(args.out)
-
-    out_path.parent.mkdir(exist_ok=True, parents=True)
-
-    base_mesh_4_hfun = Mesh.open(base_path, crs="EPSG:4326")
-    base_mesh_4_geom = Mesh.open(base_path, crs="EPSG:4326")
-
-    geom_rast_list = list()
-    hfun_rast_list = list()
-    hfun_hirast_list = list()
-    hfun_lorast_list = list()
-    interp_rast_list = list()
-    for dem_path in demlo_paths:
-        hfun_lorast_list.append(Raster(dem_path))
-        interp_rast_list.append(Raster(dem_path))
-
-    for dem_path in demhi_paths:
-        geom_rast_list.append(Raster(dem_path))
-        hfun_hirast_list.append(Raster(dem_path))
-        interp_rast_list.append(Raster(dem_path))
+#logging.getLogger().setLevel(logging.INFO)
 
 
-    hfun_rast_list = [*hfun_lorast_list, *hfun_hirast_list]
+class MeshUpgrader:
 
-    geom = Geom(
-        geom_rast_list, base_mesh=base_mesh_4_geom,
-        zmax=15, nprocs=4)
+    @property
+    def script_name(self):
+        return 'mesh_upgrader'
 
-    hfun = Hfun(
-        hfun_rast_list, base_mesh=base_mesh_4_hfun,
-        hmin=30, hmax=15000, nprocs=4)
+    def __init__(self, sub_parser):
+        # e.g 
+        # ./multi_dem_mesh_2.py \
+        #       --basemesh data/prusvi/mesh/PRUSVI_COMT.14 \
+        #       --demlo gebco_2020_n90.0_s0.0_w-90.0_e0.0.tif \
+        #       --demhi ncei19_*.tif \
+        #       --out demo/final_mesh.2dm
 
-    ## Add contour refinements at 0 separately for GEBCO and NCEI
-    ctr1 = Contour(level=0, sources=hfun_hirast_list)
-    hfun.add_contour(None, 1e-3, 30, contour_defn=ctr1)
+        this_parser = sub_parser.add_parser(self.script_name)
 
-    ctr2 = Contour(level=0, sources=hfun_lorast_list)
-    hfun.add_contour(None, 1e-2, 500, contour_defn=ctr2)
+        this_parser.add_argument('--basemesh', required=True)
+        this_parser.add_argument('--demlo', nargs='*', required=True)
+        this_parser.add_argument('--demhi', nargs='*', required=True)
+        this_parser.add_argument('--out', required=True)
 
-    ## Add constant values from 0 to inf on hi-res rasters
-    hfun.add_constant_value(30, 0, source_index=list(range(len(demhi_paths))))
+    def run(args):
 
+        logging.info(args)
 
-    # Calculate geom
-    geom_mp = geom.get_multipolygon()
-    # Write to disk
-    gpd.GeoDataFrame(
-            {'geometry': geom_mp},
-            crs="EPSG:4326"
-            ).to_file(str(out_path) + '.geom.shp')
-    del geom_mp
+        base_path = pathlib.Path(args.basemesh)
+        demlo_paths = args.demlo
+        demhi_paths = args.demhi
+        out_path = pathlib.Path(args.out)
 
-    # Calculate hfun
-    hfun_msh_t = hfun.msh_t()
-    # Write to disk
-    sms2dm.writer(
-            msh_t_to_2dm(hfun_msh_t),
-            str(out_path) + '.hfun.2dm',
-            True)
-    del hfun_msh_t
+        out_path.parent.mkdir(exist_ok=True, parents=True)
 
+        base_mesh_4_hfun = Mesh.open(base_path, crs="EPSG:4326")
+        base_mesh_4_geom = Mesh.open(base_path, crs="EPSG:4326")
 
-    # Read back stored values to pass to mesh driver
-    read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
-    geom_from_disk = MultiPolygonGeom(
-        MultiPolygon([geom for geom in read_gdf.geometry]),
-        crs=read_gdf.crs)
+        geom_rast_list = list()
+        hfun_rast_list = list()
+        hfun_hirast_list = list()
+        hfun_lorast_list = list()
+        interp_rast_list = list()
+        for dem_path in demlo_paths:
+            hfun_lorast_list.append(Raster(dem_path))
+            interp_rast_list.append(Raster(dem_path))
 
-    read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
-    hfun_from_disk = HfunMesh(read_hfun)
-
-    jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
-    jigsaw.verbosity = 1
-
-    ## Execute mesher (processing of geom and hfun happens here)
-    mesh = jigsaw.run()
-
-    ## Free-up memory
-    del read_gdf
-    del geom_from_disk
-    del read_hfun
-    del hfun_from_disk
-    gc.collect()
-
-    mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
-
-    ## Interpolate DEMs on the mesh
-    mesh.interpolate(interp_rast_list, nprocs=4)
-
-    ## Output
-    mesh.write(out_path, format='2dm', overwrite=True)
+        for dem_path in demhi_paths:
+            geom_rast_list.append(Raster(dem_path))
+            hfun_hirast_list.append(Raster(dem_path))
+            interp_rast_list.append(Raster(dem_path))
 
 
-if __name__ == "__main__":
-    # e.g 
-    # ./multi_dem_mesh_2.py \
-    #       --basemesh data/prusvi/mesh/PRUSVI_COMT.14 \
-    #       --demlo gebco_2020_n90.0_s0.0_w-90.0_e0.0.tif \
-    #       --demhi ncei19_*.tif \
-    #       --out demo/final_mesh.2dm
+        hfun_rast_list = [*hfun_lorast_list, *hfun_hirast_list]
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--basemesh', required=True)
-    parser.add_argument('--demlo', nargs='*', required=True)
-    parser.add_argument('--demhi', nargs='*', required=True)
-    parser.add_argument('--out', required=True)
-    args = parser.parse_args()
-    main(args)
+        geom = Geom(
+            geom_rast_list, base_mesh=base_mesh_4_geom,
+            zmax=15, nprocs=4)
+
+        hfun = Hfun(
+            hfun_rast_list, base_mesh=base_mesh_4_hfun,
+            hmin=30, hmax=15000, nprocs=4)
+
+        ## Add contour refinements at 0 separately for GEBCO and NCEI
+        ctr1 = Contour(level=0, sources=hfun_hirast_list)
+        hfun.add_contour(None, 1e-3, 30, contour_defn=ctr1)
+
+        ctr2 = Contour(level=0, sources=hfun_lorast_list)
+        hfun.add_contour(None, 1e-2, 500, contour_defn=ctr2)
+
+        ## Add constant values from 0 to inf on hi-res rasters
+        hfun.add_constant_value(30, 0, source_index=list(range(len(demhi_paths))))
+
+
+        # Calculate geom
+        geom_mp = geom.get_multipolygon()
+        # Write to disk
+        gpd.GeoDataFrame(
+                {'geometry': geom_mp},
+                crs="EPSG:4326"
+                ).to_file(str(out_path) + '.geom.shp')
+        del geom_mp
+
+        # Calculate hfun
+        hfun_msh_t = hfun.msh_t()
+        # Write to disk
+        sms2dm.writer(
+                msh_t_to_2dm(hfun_msh_t),
+                str(out_path) + '.hfun.2dm',
+                True)
+        del hfun_msh_t
+
+
+        # Read back stored values to pass to mesh driver
+        read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
+        geom_from_disk = MultiPolygonGeom(
+            MultiPolygon([geom for geom in read_gdf.geometry]),
+            crs=read_gdf.crs)
+
+        read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
+        hfun_from_disk = HfunMesh(read_hfun)
+
+        jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
+        jigsaw.verbosity = 1
+
+        ## Execute mesher (processing of geom and hfun happens here)
+        mesh = jigsaw.run()
+
+        ## Free-up memory
+        del read_gdf
+        del geom_from_disk
+        del read_hfun
+        del hfun_from_disk
+        gc.collect()
+
+        mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
+
+        ## Interpolate DEMs on the mesh
+        mesh.interpolate(interp_rast_list, nprocs=4)
+
+        ## Output
+        mesh.write(out_path, format='2dm', overwrite=True)
