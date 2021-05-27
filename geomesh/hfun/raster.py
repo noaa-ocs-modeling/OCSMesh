@@ -434,6 +434,50 @@ class HfunRaster(BaseHfun, Raster):
         _logger.info('Adding contours as features...')
         self.add_feature(contours, expansion_rate, target_size, nprocs)
 
+    def add_channel(
+            self,
+            level: float = 0,
+            width: float = 1000, # in meters
+            target_size: float = 200,
+            expansion_rate: float = None,
+            nprocs: int = None,
+            tolerance: Union[None, float] = None
+    ):
+
+        multipoly = self.raster.get_multipolygon(zmax=level)
+
+        utm_crs = None
+        if self.crs.is_geographic:
+            # Input sizes are in meters, so crs should NOT
+            # be geographic
+            x0, y0, x1, y1 = self.get_bbox().bounds
+            _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+            utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[self.crs.ellipsoid.name]
+            )
+
+        if utm_crs:
+            transformer = Transformer.from_crs(
+                self.src.crs, utm_crs, always_xy=True)
+            multipoly = ops.transform(transformer.transform, multipoly)
+        channels = utils.get_polygon_channels(
+                multipoly, width, simplify=tolerance)
+        if channels is None:
+            return
+
+        if utm_crs:
+            transformer = Transformer.from_crs(
+                utm_crs, self.src.crs, always_xy=True)
+            channels = ops.transform(transformer.transform, channels)
+        self.add_patch(
+            channels, expansion_rate, target_size, nprocs)
+
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],

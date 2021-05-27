@@ -14,7 +14,8 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
-from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+from shapely.geometry import ( # type: ignore[import]
+        Polygon, MultiPolygon, box, GeometryCollection)
 from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
@@ -1259,3 +1260,47 @@ def msh_t_to_utm(msh):
                 coords[:, 0], coords[:, 1])
         msh.vert2['coord'][:] = coords
         msh.crs = utm_crs
+
+
+def get_polygon_channels(polygon, width, simplify=None, join_style=3):
+
+    # Operations are done without any CRS info consideration
+
+    polys_gdf = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(polygon))
+
+    if isinstance(simplify, (int, float)):
+        polys_gdf = gpd.GeoDataFrame(
+                geometry=polys_gdf.simplify(
+                    tolerance=simplify,
+                    preserve_topology=False))
+
+    buffer_size = width/2
+    buffered_gdf = gpd.GeoDataFrame(
+            geometry=polys_gdf.buffer(-buffer_size).buffer(
+                    buffer_size,
+                    join_style=join_style))
+
+    buffered_gdf = buffered_gdf[~buffered_gdf.is_empty]
+    if not len(buffered_gdf):
+        # All is channel!
+        return polygon
+    channels_gdf = gpd.overlay(
+            polys_gdf, buffered_gdf, how='difference')
+
+    # Use square - 1/4 circle as cleanup criteria
+    channels_gdf = gpd.GeoDataFrame(
+           geometry=gpd.GeoSeries(
+               [p for i in channels_gdf.geometry
+                   for p in i.geoms
+                   if p.area > width**2 * (1-np.pi/4)]))
+
+
+    ret_val = channels_gdf.unary_union
+    if isinstance(ret_val, GeometryCollection):
+        return None
+
+    if isinstance(ret_val, Polygon):
+        ret_val = MultiPolygon([ret_val])
+
+    return ret_val
