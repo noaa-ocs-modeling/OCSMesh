@@ -20,8 +20,6 @@ from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
 
-from geomesh.mesh.parsers import grd, sms2dm
-
 
 def mesh_to_tri(mesh):
     """

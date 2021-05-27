@@ -9,6 +9,7 @@ class Patch:
     
     def __init__(self,
                  shape: Union[None, MultiPolygon, Polygon] = None,
+                 shape_crs: CRS = CRS.from_user_input("EPSG:4326"),
                  shapefile: Union[None, str, Path] = None
                  ):
 
@@ -16,6 +17,9 @@ class Patch:
             raise ValueError(
                 "No patch input provided")
 
+        # crs input is only for shape, shapefile needs to provide
+        # its own crs
+        self._shape_crs = shape_crs
         self._shape = None
         self._shapefile = Path(shapefile)
         if isinstance(shape, Polygon):
@@ -37,8 +41,7 @@ class Patch:
     def get_multipolygon(self) -> MultiPolygon:
 
         if self._shape:
-            dst_crs = CRS.from_user_input("EPSG:4326")
-            return self._shape, dst_crs
+            return self._shape, self._shape_crs
 
         elif self._shapefile.is_file():
             gdf = gpd.read_file(self._shapefile)

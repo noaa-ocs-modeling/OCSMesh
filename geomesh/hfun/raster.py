@@ -444,39 +444,15 @@ class HfunRaster(BaseHfun, Raster):
             tolerance: Union[None, float] = None
     ):
 
-        multipoly = self.raster.get_multipolygon(zmax=level)
+        channels = self.raster.get_channels(
+                level=level, width=width, tolerance=tolerance)
 
-        utm_crs = None
-        if self.crs.is_geographic:
-            # Input sizes are in meters, so crs should NOT
-            # be geographic
-            x0, y0, x1, y1 = self.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-            utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}{letter}',
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[self.crs.ellipsoid.name]
-            )
-
-        if utm_crs:
-            transformer = Transformer.from_crs(
-                self.src.crs, utm_crs, always_xy=True)
-            multipoly = ops.transform(transformer.transform, multipoly)
-        channels = utils.get_polygon_channels(
-                multipoly, width, simplify=tolerance)
-        if channels is None:
+        if channels == None:
             return
 
-        if utm_crs:
-            transformer = Transformer.from_crs(
-                utm_crs, self.src.crs, always_xy=True)
-            channels = ops.transform(transformer.transform, channels)
         self.add_patch(
             channels, expansion_rate, target_size, nprocs)
+
 
     def add_feature(
             self,
