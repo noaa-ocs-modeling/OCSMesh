@@ -414,7 +414,7 @@ class HfunCollector(BaseHfun):
             width: float = 1000, # in meters
             target_size: float = 200,
             expansion_rate: float = None,
-            tolerance: Union[None, float] = None,
+            tolerance: Union[None, float] = 10,
             channel_defn = None):
 
         self._applied = False
@@ -422,6 +422,10 @@ class HfunCollector(BaseHfun):
         # Always lazy
         self._applied = False
 
+        # Even a tolerance of 1 for simplifying polygon for channel 
+        # calculations is much faster than no simplification. 10 
+        # is much faster than 1. The reason is in simplify we don't
+        # preserve topology
         if channel_defn == None:
             channel_defn = Channel(
                 level=level, width=width, tolerance=tolerance)
