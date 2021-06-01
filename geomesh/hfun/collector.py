@@ -353,7 +353,7 @@ class HfunCollector(BaseHfun):
         self._flow_lim_coll.add(
             source_index,
             hmin=hmin,
-            hmax=hmin,
+            hmax=hmax,
             upper_bound=upper_bound,
             lower_bound=lower_bound)
 
