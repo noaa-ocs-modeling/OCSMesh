@@ -21,7 +21,7 @@ class Patch:
         # its own crs
         self._shape_crs = shape_crs
         self._shape = None
-        self._shapefile = Path(shapefile)
+        self._shapefile = Path(shapefile if shapefile else "")
         if isinstance(shape, Polygon):
             self._shape = MultiPolygon([shape])
 
