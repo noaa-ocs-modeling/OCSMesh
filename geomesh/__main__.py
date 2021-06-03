@@ -48,6 +48,7 @@ class Geomesh:
                     out_file=self._args.output,
                     out_format=self._args.output_format,
                     mesh_file=self._args.mesh,
+                    ignore_mesh_final_boundary=self._args.ignore_mesh_boundary,
                     zmin=self._args.zmin,
                     zmax=self._args.zmax,
                     chunk_size=self._args.chunk_size,
@@ -338,6 +339,9 @@ def parse_args():
     geom_bld.add_argument('-f', '--output-format', default="shapefile")
     geom_bld.add_argument('--output-crs', default="EPSG:4326")
     geom_bld.add_argument('--mesh', help='Mesh to extract hull from')
+    geom_bld.add_argument(
+        '--ignore-mesh-boundary', action='store_true',
+        help='Flag to ignore mesh boundary for final boundary union')
     geom_bld.add_argument(
         '--mesh-crs', help='CRS of the input base mesh (overrides)')
     geom_bld.add_argument(
