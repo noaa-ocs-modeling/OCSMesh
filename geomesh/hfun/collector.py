@@ -414,7 +414,7 @@ class HfunCollector(BaseHfun):
             width: float = 1000, # in meters
             target_size: float = 200,
             expansion_rate: float = None,
-            tolerance: Union[None, float] = 10,
+            tolerance: Union[None, float] = 50,
             channel_defn = None):
 
         self._applied = False
@@ -423,7 +423,7 @@ class HfunCollector(BaseHfun):
         self._applied = False
 
         # Even a tolerance of 1 for simplifying polygon for channel 
-        # calculations is much faster than no simplification. 10 
+        # calculations is much faster than no simplification. 50 
         # is much faster than 1. The reason is in simplify we don't
         # preserve topology
         if channel_defn == None:
@@ -837,9 +837,24 @@ class HfunCollector(BaseHfun):
         poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
         x0, y0, x1, y1 = poly_utm.bounds
 
+        worst_res = 0
+        for hfun_in in rast_hfun_list:
+            bnd1 = hfun_in.get_bbox(crs=utm_crs).bounds
+            dim1 = np.max([bnd1[2] - bnd1[0], bnd1[3] - bnd1[1]])
+            bnd2 = hfun_in.get_bbox(crs='EPSG:4326').bounds
+            dim2 = np.max([bnd2[2] - bnd2[0], bnd2[3] - bnd2[1]])
+            ratio = dim1 / dim2
+            pixel_size_x = hfun_in.raster.src.transform[0] * ratio
+            pixel_size_y = -hfun_in.raster.src.transform[4] * ratio
+            
+            worst_res = np.max([worst_res, pixel_size_x, pixel_size_y])
+
         # TODO: What if no hmin? -> use smallest raster res!
         g_hmin = self._size_info['hmin']
-        res = g_hmin / 2
+        res = np.max([g_hmin / 2, worst_res])
+        _logger.info(
+                f"Spatial resolution"
+                f" chosen: {res}, worst: {worst_res}")
         shape0 = int(np.ceil(abs(x1 - x0) / res))
         shape1 = int(np.ceil(abs(y1 - y0) / res))
 
