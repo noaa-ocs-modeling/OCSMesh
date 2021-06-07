@@ -14,12 +14,11 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
-from shapely.geometry import Polygon, MultiPolygon, box  # type: ignore[import]
+from shapely.geometry import ( # type: ignore[import]
+        Polygon, MultiPolygon, box, GeometryCollection)
 from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
-
-from geomesh.mesh.parsers import grd, sms2dm
 
 
 def mesh_to_tri(mesh):
@@ -1259,3 +1258,106 @@ def msh_t_to_utm(msh):
                 coords[:, 0], coords[:, 1])
         msh.vert2['coord'][:] = coords
         msh.crs = utm_crs
+
+def get_polygon_channels(polygon, width, simplify=None, join_style=3):
+
+    # Operations are done without any CRS info consideration
+
+    polys_gdf = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(polygon))
+
+    if isinstance(simplify, (int, float)):
+        polys_gdf = gpd.GeoDataFrame(
+                geometry=polys_gdf.simplify(
+                    tolerance=simplify,
+                    preserve_topology=False))
+
+    buffer_size = width/2
+    buffered_gdf = gpd.GeoDataFrame(
+            geometry=polys_gdf.buffer(-buffer_size).buffer(
+                    buffer_size,
+                    join_style=join_style))
+
+    buffered_gdf = buffered_gdf[~buffered_gdf.is_empty]
+    if not len(buffered_gdf):
+        # All is channel!
+        return polygon
+    channels_gdf = gpd.overlay(
+            polys_gdf, buffered_gdf, how='difference')
+
+    # Use square - 1/4 circle as cleanup criteria
+    channels_gdf = gpd.GeoDataFrame(
+           geometry=gpd.GeoSeries(
+               [p for i in channels_gdf.geometry
+                   for p in i.geoms
+                   if p.area > width**2 * (1-np.pi/4)]))
+
+
+    ret_val = channels_gdf.unary_union
+    if isinstance(ret_val, GeometryCollection):
+        return None
+
+    if isinstance(ret_val, Polygon):
+        ret_val = MultiPolygon([ret_val])
+
+    return ret_val
+
+
+def merge_msh_t(*mesh_list, out_crs="EPSG:4326", drop_by_bbox=True):
+
+    # TODO: Add support for quad4 and hexa8
+
+    dst_crs = CRS.from_user_input(out_crs)
+    
+    coord = list()
+    index = list()
+    value = list()
+    offset = 0
+
+    mesh_shape_list = list()
+    # Last has the highest priority
+    for mesh in mesh_list[::-1]:
+        if not dst_crs.equals(mesh.crs):
+            # To avoid modifying inputs
+            mesh = deepcopy(mesh)
+            reproject(mesh, dst_crs)
+
+        if drop_by_bbox:
+            x = mesh.vert2['coord'][:, 0]
+            y = mesh.vert2['coord'][:, 1]
+            mesh_shape = box(np.min(x), np.min(y), np.max(x), np.max(y))
+        else:
+            mesh_shape = get_mesh_polygons(mesh)
+
+        for ishp in mesh_shape_list:
+            mesh = clip_mesh_by_shape(
+                mesh, ishp,
+                use_box_only=drop_by_bbox,
+                fit_inside=True,
+                inverse=True)
+
+        mesh_shape_list.append(mesh_shape)
+
+
+        index.append(mesh.tria3['index'] + offset)
+        coord.append(mesh.vert2['coord'])
+        value.append(mesh.value)
+        offset += coord[-1].shape[0]
+
+    composite_mesh = jigsaw_msh_t()
+    composite_mesh.mshID = 'euclidean-mesh'
+    composite_mesh.ndims = 2
+
+    composite_mesh.vert2 = np.array(
+            [(coord, 0) for coord in np.vstack(coord)],
+            dtype=jigsaw_msh_t.VERT2_t)
+    composite_mesh.tria3 = np.array(
+            [(index, 0) for index in np.vstack(index)],
+            dtype=jigsaw_msh_t.TRIA3_t)
+    composite_mesh.value = np.array(
+            np.vstack(value),
+            dtype=jigsaw_msh_t.REALS_t)
+
+    composite_mesh.crs = dst_crs
+
+    return composite_mesh

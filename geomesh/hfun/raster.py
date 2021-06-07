@@ -434,6 +434,26 @@ class HfunRaster(BaseHfun, Raster):
         _logger.info('Adding contours as features...')
         self.add_feature(contours, expansion_rate, target_size, nprocs)
 
+    def add_channel(
+            self,
+            level: float = 0,
+            width: float = 1000, # in meters
+            target_size: float = 200,
+            expansion_rate: float = None,
+            nprocs: int = None,
+            tolerance: Union[None, float] = None
+    ):
+
+        channels = self.raster.get_channels(
+                level=level, width=width, tolerance=tolerance)
+
+        if channels == None:
+            return
+
+        self.add_patch(
+            channels, expansion_rate, target_size, nprocs)
+
+
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],

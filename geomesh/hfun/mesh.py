@@ -19,6 +19,7 @@ from shapely.geometry import (
 
 from geomesh.hfun.base import BaseHfun
 from geomesh.crs import CRS as CRSDescriptor
+from geomesh import utils
 
 
 _logger = logging.getLogger(__name__)
@@ -171,6 +172,77 @@ class HfunMesh(BaseHfun):
 
         # NOTE: Modifying values of underlying mesh
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
+
+
+    def add_patch(
+            self,
+            multipolygon: Union[MultiPolygon, Polygon],
+            expansion_rate: float = None,
+            target_size: float = None,
+            nprocs: int = None
+    ):
+
+        # TODO: Add pool input support like add_feature for performance
+
+        # TODO: Support other shapes - call buffer(1) on non polygons(?)
+        if not isinstance(multipolygon, (Polygon, MultiPolygon)):
+            raise TypeError(
+                    f"Wrong type \"{type(multipolygon)}\""
+                    f" for multipolygon input.")
+
+        if isinstance(multipolygon, Polygon):
+            multipolygon = MultiPolygon([multipolygon])
+
+        # Check nprocs
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = cpu_count() if nprocs == -1 else nprocs
+        _logger.debug(f'Using nprocs={nprocs}')
+
+
+        # check target size
+        target_size = self.hmin if target_size is None else target_size
+        if target_size is None:
+            # TODO: Is this relevant for mesh type?
+            raise ValueError('Argument target_size must be specified if no '
+                             'global hmin has been set.')
+        if target_size <= 0:
+            raise ValueError("Argument target_size must be greater than zero.")
+
+        # For expansion_rate
+        if expansion_rate != None:
+            exteriors = [ply.exterior for ply in multipolygon]
+            interiors = [
+                inter for ply in multipolygon for inter in ply.interiors]
+            
+            features = MultiLineString([*exteriors, *interiors])
+            self.add_feature(
+                feature=features,
+                expansion_rate=expansion_rate,
+                target_size=target_size,
+                nprocs=nprocs)
+
+        coords = self.mesh.msh_t.vert2['coord']
+        values = self.mesh.msh_t.value
+
+        verts_in = utils.get_verts_in_shape(
+            self.mesh.msh_t, shape=multipolygon, from_box=False)
+
+        if len(verts_in):
+            # NOTE: Don't continue, otherwise the final
+            # destination file might end up being empty!
+            values[verts_in, :] = target_size
+
+        # NOTE: unlike raster self.hmin is based on values of this
+        # hfun before applying feature; it is ignored so that
+        # the new self.hmin becomes equal to "target" specified
+#        if self.hmin is not None:
+#            values[np.where(values < self.hmin)] = self.hmin
+        if self.hmax is not None:
+            values[np.where(values > self.hmax)] = self.hmax
+        values = np.minimum(self.mesh.msh_t.value, values)
+        values = values.reshape(self.mesh.msh_t.value.shape)
+        
+        self.mesh.msh_t.value = values
 
     def add_feature(
             self,

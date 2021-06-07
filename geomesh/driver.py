@@ -84,12 +84,17 @@ class JigsawDriver:
         output_mesh = jigsaw_msh_t()
         output_mesh.mshID = 'euclidean-mesh'
         output_mesh.ndims = 2
-        output_mesh.crs = hfun_msh_t.crs
 
         self.opts.hfun_hmin = np.min(hfun_msh_t.value)
         self.opts.hfun_hmax = np.max(hfun_msh_t.value)
 
         geom_msh_t = self.geom.msh_t()
+
+        # When the center of geom and hfun are NOT the same, utm
+        # zones would be different for resulting msh_t.
+        if geom_msh_t.crs != hfun_msh_t.crs:
+            utils.reproject(hfun_msh_t, geom_msh_t.crs)
+        output_mesh.crs = hfun_msh_t.crs
 
         _logger.info('Calling libsaw.jigsaw() ...')
         libsaw.jigsaw(
@@ -110,9 +115,12 @@ class JigsawDriver:
             utils.reproject(output_mesh, self._crs)
 
         _logger.info('Finalizing mesh...')
-        if self.opts.hfun_hmin > 0:
-            output_mesh = utils.remesh_small_elements(
-                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
+        # Don't need to use ad-hoc fix since Jigsaw tiny element
+        # issue is resolve. In case needed add a flag for remesh
+        # since it's computationally expensive
+#        if self.opts.hfun_hmin > 0:
+#            output_mesh = utils.remesh_small_elements(
+#                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
         utils.finalize_mesh(output_mesh, sieve)
 
         _logger.info('done!')

@@ -9,6 +9,7 @@ class Patch:
     
     def __init__(self,
                  shape: Union[None, MultiPolygon, Polygon] = None,
+                 shape_crs: CRS = CRS.from_user_input("EPSG:4326"),
                  shapefile: Union[None, str, Path] = None
                  ):
 
@@ -16,27 +17,44 @@ class Patch:
             raise ValueError(
                 "No patch input provided")
 
+        # crs input is only for shape, shapefile needs to provide
+        # its own crs
+        self._shape_crs = shape_crs
         self._shape = None
-        self._shapefile = Path(shapefile)
+        self._shapefile = Path(shapefile if shapefile else "")
         if isinstance(shape, Polygon):
             self._shape = MultiPolygon([shape])
+
         elif isinstance(shape, MultiPolygon):
             self._shape = shape
+
         elif shape != None:
             raise TypeError(
                 f"Type of shape input must be either {MultiPolygon}"
                 f" or {Polygon}")
+            
+        elif not self._shapefile.is_file():
+            raise ValueError(
+                f"Not shape input for patch definition")
+
 
     def get_multipolygon(self) -> MultiPolygon:
 
         if self._shape:
-            return self._shape
+            return self._shape, self._shape_crs
 
         elif self._shapefile.is_file():
             gdf = gpd.read_file(self._shapefile)
-            dst_crs = CRS.from_user_input("EPSG:4326")
-            if gdf.crs != dst_crs:
-                gdf = gdf.to_crs(dst_crs)
-            multipolygon = MultiPolygon([i for i in gdf.geometry])
+            poly_list = list()
+            for shp in gdf.geometry:
+                if isinstance(shp, Polygon):
+                    poly_list.append(shp)
+                elif isinstance(shp, MultiPolygon):
+                    poly_list.extend([pl for pl in shp.geoms])
+
+            multipolygon = MultiPolygon(poly_list)
             
-            return multipolygon, dst_crs
+            return multipolygon, gdf.crs
+
+        raise ValueError(
+            f"Error retrieving shape information for patch")

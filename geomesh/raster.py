@@ -18,6 +18,7 @@ from matplotlib.transforms import Bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from pyproj import CRS, Transformer
+import utm
 import rasterio
 from rasterio import warp
 from rasterio.mask import mask
@@ -33,6 +34,7 @@ from shapely.geometry import (
 # from geomesh.geom import Geom
 # from geomesh.hfun import Hfun
 from geomesh import figures
+from geomesh import utils
 
 _logger = logging.getLogger(__name__)
 
@@ -537,6 +539,47 @@ class Raster:
             return self._get_raster_contour_feathered(level, iter_windows)
         else:
             return self._get_raster_contour_windowed(level, window)
+
+    def get_channels(
+            self,
+            level: float = 0,
+            width: float = 1000, # in meters
+            tolerance: Union[None, float] = None
+    ):
+
+        multipoly = self.get_multipolygon(zmax=level)
+
+        utm_crs = None
+        if self.crs.is_geographic:
+            # Input sizes are in meters, so crs should NOT
+            # be geographic
+            x0, y0, x1, y1 = self.get_bbox().bounds
+            _, _, number, letter = utm.from_latlon(
+                (y0 + y1)/2, (x0 + x1)/2)
+            utm_crs = CRS(
+                proj='utm',
+                zone=f'{number}{letter}',
+                ellps={
+                    'GRS 1980': 'GRS80',
+                    'WGS 84': 'WGS84'
+                    }[self.crs.ellipsoid.name]
+            )
+
+        if utm_crs:
+            transformer = Transformer.from_crs(
+                self.src.crs, utm_crs, always_xy=True)
+            multipoly = ops.transform(transformer.transform, multipoly)
+        channels = utils.get_polygon_channels(
+                multipoly, width, simplify=tolerance)
+        if channels is None:
+            return None
+
+        if utm_crs:
+            transformer = Transformer.from_crs(
+                utm_crs, self.src.crs, always_xy=True)
+            channels = ops.transform(transformer.transform, channels)
+
+        return channels
 
     def _get_raster_contour_windowed(self, level, window):
         x, y = self.get_x(), self.get_y()

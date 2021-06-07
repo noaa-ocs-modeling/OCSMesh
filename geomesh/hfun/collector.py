@@ -29,6 +29,7 @@ from geomesh.mesh.mesh import Mesh
 from geomesh.raster import Raster, get_iter_windows
 from geomesh.features.contour import Contour
 from geomesh.features.patch import Patch
+from geomesh.features.channel import Channel
 
 _logger = logging.getLogger(__name__)
 
@@ -143,6 +144,64 @@ class FlowLimiterInfoCollector:
 
 
 
+class ChannelRefineInfoCollector:
+
+    def __init__(self):
+        self._ch_info_dict = dict()
+
+    def add(self, channel_defn, **size_info):
+
+        self._ch_info_dict[channel_defn] = size_info
+
+    def __iter__(self):
+        for defn, info in self._ch_info_dict.items():
+            yield defn, info
+
+
+class ChannelRefineCollector:
+
+    def __init__(self, channels_info):
+        self._channels_info = channels_info
+        self._container: List[Union[Tuple, None]] = []
+
+    def calculate(self, source_list, out_path):
+
+        out_dir = Path(out_path)
+        out_dir.mkdir(exist_ok=True, parents=True)
+        file_counter = 0
+        pid = os.getpid()
+        self._container.clear()
+        for channel_defn, size_info in self._channels_info:
+            if not channel_defn.has_source:
+                # Copy so that in case of a 2nd run the no-source 
+                # channel still gets all current sources
+                channel_defn = copy(channel_defn)
+                for source in source_list:
+                    channel_defn.add_source(source)
+
+            for channels, crs in channel_defn.iter_channels():
+                file_counter = file_counter + 1
+                feather_path = out_dir / f"channels_{pid}_{file_counter}.feather"
+                crs_path = out_dir / f"crs_{pid}_{file_counter}.json"
+                gpd.GeoDataFrame(
+                    { 'geometry': [channels],
+                      'expansion_rate': size_info['expansion_rate'],
+                      'target_size': size_info['target_size'],
+                    },
+                    crs=crs).to_feather(feather_path)
+                gc.collect()
+                with open(crs_path, 'w') as fp:
+                    fp.write(crs.to_json())
+                self._container.append((feather_path, crs_path))
+
+    def __iter__(self):
+        for raster_data in self._container:
+            feather_path, crs_path = raster_data
+            gdf = gpd.read_feather(feather_path)
+            with open(crs_path) as fp:
+                gdf.set_crs(CRS.from_json(fp.read()))
+            yield gdf
+
 
 class HfunCollector(BaseHfun):
 
@@ -184,12 +243,20 @@ class HfunCollector(BaseHfun):
             self._base_mesh = HfunMesh(base_mesh)
             if self._base_as_hfun:
                 self._base_mesh.size_from_mesh()
+
         self._contour_info_coll = RefinementContourInfoCollector()
         self._contour_coll = RefinementContourCollector(
                 self._contour_info_coll)
+
         self._const_val_contour_coll = ConstantValueContourInfoCollector()
+
         self._refine_patch_info_coll = RefinementPatchInfoCollector()
+
         self._flow_lim_coll = FlowLimiterInfoCollector()
+
+        self._ch_info_coll = ChannelRefineInfoCollector()
+        self._channels_coll = ChannelRefineCollector(
+                self._ch_info_coll)
 
         self._type_chk(in_list)
 
@@ -301,6 +368,12 @@ class HfunCollector(BaseHfun):
             target_size: float = None,
             contour_defn: Contour = None,
     ):
+
+        '''
+        Contours are defined by contour defn or by raster sources only,
+        but are applied on both raster and mesh hfun
+        '''
+
         # Always lazy
         self._applied = False
 
@@ -335,6 +408,39 @@ class HfunCollector(BaseHfun):
                 expansion_rate=expansion_rate,
                 target_size=target_size)
 
+    def add_channel(
+            self,
+            level: float = 0,
+            width: float = 1000, # in meters
+            target_size: float = 200,
+            expansion_rate: float = None,
+            tolerance: Union[None, float] = 50,
+            channel_defn = None):
+
+        self._applied = False
+
+        # Always lazy
+        self._applied = False
+
+        # Even a tolerance of 1 for simplifying polygon for channel 
+        # calculations is much faster than no simplification. 50 
+        # is much faster than 1. The reason is in simplify we don't
+        # preserve topology
+        if channel_defn == None:
+            channel_defn = Channel(
+                level=level, width=width, tolerance=tolerance)
+
+        elif not isinstance(channel_defn, Channel):
+            raise TypeError(
+                f"Channel definition must be of type {Channel} not"
+                f" {type(channel_defn)}!")
+
+        self._ch_info_coll.add(
+            channel_defn, 
+            expansion_rate=expansion_rate,
+            target_size=target_size)
+
+
     def add_subtidal_flow_limiter(
             self,
             hmin=None,
@@ -353,7 +459,7 @@ class HfunCollector(BaseHfun):
         self._flow_lim_coll.add(
             source_index,
             hmin=hmin,
-            hmax=hmin,
+            hmax=hmax,
             upper_bound=upper_bound,
             lower_bound=lower_bound)
 
@@ -420,6 +526,7 @@ class HfunCollector(BaseHfun):
             self._apply_flow_limiters()
             self._apply_const_val()
             self._apply_patch()
+            self._apply_channels()
 
         self._applied = True
 
@@ -430,18 +537,19 @@ class HfunCollector(BaseHfun):
         # NOTE: for parallelization make sure a single hfun is NOT
         # passed to multiple processes
 
-        contourable_list = [
+        raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
             mesh_hfun_list = [
                 i for i in self._hfun_list if isinstance(i, HfunMesh)]
             if self._base_mesh and self._base_as_hfun:
                 mesh_hfun_list.insert(0, self._base_mesh)
-            apply_to = [*mesh_hfun_list, *contourable_list]
+            apply_to = [*mesh_hfun_list, *raster_hfun_list]
 
         with tempfile.TemporaryDirectory() as temp_path:
             with Pool(processes=self._nprocs) as p:
-                self._contour_coll.calculate(contourable_list, temp_path)
+                # Contours are ONLY extracted from raster sources
+                self._contour_coll.calculate(raster_hfun_list, temp_path)
                 counter = 0
                 for hfun in apply_to:
                     for gdf in self._contour_coll:
@@ -476,16 +584,57 @@ class HfunCollector(BaseHfun):
 #                    [(hfun, self._contour_coll, self._nprocs)
 #                     for hfun in apply_to])
 
+    def _apply_channels(self, apply_to=None):
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if apply_to is None:
+            mesh_hfun_list = [
+                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            if self._base_mesh and self._base_as_hfun:
+                mesh_hfun_list.insert(0, self._base_mesh)
+            apply_to = [*mesh_hfun_list, *raster_hfun_list]
+
+        with tempfile.TemporaryDirectory() as temp_path:
+            # Channels are ONLY extracted from raster sources
+            self._channels_coll.calculate(raster_hfun_list, temp_path)
+            counter = 0
+            for hfun in apply_to:
+                for gdf in self._channels_coll:
+                    for row in gdf.itertuples():
+                        _logger.debug(row)
+                        shape = row.geometry
+                        if isinstance(shape, GeometryCollection):
+                            continue
+                        # NOTE: CRS check is done AFTER
+                        # GeometryCollection check because
+                        # gdf.to_crs results in an error in case
+                        # of empty GeometryCollection
+                        if not gdf.crs.equals(hfun.crs):
+                            _logger.info(f"Reprojecting feature...")
+                            transformer = Transformer.from_crs(
+                                gdf.crs, hfun.crs, always_xy=True)
+                            shape = ops.transform(
+                                    transformer.transform, shape)
+                        counter = counter + 1
+                        hfun.add_patch(**{
+                            'multipolygon': shape,
+                            'expansion_rate': row.expansion_rate,
+                            'target_size': row.target_size,
+                            'nprocs': self._nprocs
+                        })
+
+
     def _apply_flow_limiters(self):
 
         if self._method == 'fast':
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
-        contourable_list = [
+        raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
-        for in_idx, hfun in enumerate(contourable_list):
+        for in_idx, hfun in enumerate(raster_hfun_list):
             for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
                 if src_idx != None and in_idx not in src_idx:
                     continue
@@ -502,10 +651,10 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
-        contourable_list = [
+        raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
-        for in_idx, hfun in enumerate(contourable_list):
+        for in_idx, hfun in enumerate(raster_hfun_list):
             for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
                 if src_idx != None and in_idx not in src_idx:
                     continue
@@ -520,10 +669,14 @@ class HfunCollector(BaseHfun):
 
     def _apply_patch(self, apply_to=None):
 
-        contourable_list = [
+        raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
-            apply_to = contourable_list
+            mesh_hfun_list = [
+                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            if self._base_mesh and self._base_as_hfun:
+                mesh_hfun_list.insert(0, self._base_mesh)
+            apply_to = [*mesh_hfun_list, *raster_hfun_list]
 
         # TODO: Parallelize
         for hfun in apply_to:
@@ -684,9 +837,24 @@ class HfunCollector(BaseHfun):
         poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
         x0, y0, x1, y1 = poly_utm.bounds
 
+        worst_res = 0
+        for hfun_in in rast_hfun_list:
+            bnd1 = hfun_in.get_bbox(crs=utm_crs).bounds
+            dim1 = np.max([bnd1[2] - bnd1[0], bnd1[3] - bnd1[1]])
+            bnd2 = hfun_in.get_bbox(crs='EPSG:4326').bounds
+            dim2 = np.max([bnd2[2] - bnd2[0], bnd2[3] - bnd2[1]])
+            ratio = dim1 / dim2
+            pixel_size_x = hfun_in.raster.src.transform[0] * ratio
+            pixel_size_y = -hfun_in.raster.src.transform[4] * ratio
+            
+            worst_res = np.max([worst_res, pixel_size_x, pixel_size_y])
+
         # TODO: What if no hmin? -> use smallest raster res!
         g_hmin = self._size_info['hmin']
-        res = g_hmin / 2
+        res = np.max([g_hmin / 2, worst_res])
+        _logger.info(
+                f"Spatial resolution"
+                f" chosen: {res}, worst: {worst_res}")
         shape0 = int(np.ceil(abs(x1 - x0) / res))
         shape1 = int(np.ceil(abs(y1 - y0) / res))
 
@@ -770,7 +938,8 @@ class HfunCollector(BaseHfun):
         self._apply_contours([*mesh_hfun_list, hfun])
         self._apply_flow_limiters_fast(hfun)
         self._apply_const_val_fast(hfun)
-        self._apply_patch([hfun])
+        self._apply_patch([*mesh_hfun_list, hfun])
+        self._apply_channels([*mesh_hfun_list, hfun])
 
         return hfun
 
