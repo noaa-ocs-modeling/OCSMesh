@@ -1303,7 +1303,11 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
     return ret_val
 
 
-def merge_msh_t(*mesh_list, out_crs="EPSG:4326", drop_by_bbox=True):
+def merge_msh_t(
+        *mesh_list,
+        out_crs="EPSG:4326",
+        drop_by_bbox=True,
+        can_overlap=True):
 
     # TODO: Add support for quad4 and hexa8
 
@@ -1330,10 +1334,12 @@ def merge_msh_t(*mesh_list, out_crs="EPSG:4326", drop_by_bbox=True):
             mesh_shape = get_mesh_polygons(mesh)
 
         for ishp in mesh_shape_list:
+            # NOTE: fit_inside = True w/ inverse = True results
+            # in overlap when clipping low-priority mesh
             mesh = clip_mesh_by_shape(
                 mesh, ishp,
                 use_box_only=drop_by_bbox,
-                fit_inside=True,
+                fit_inside=can_overlap,
                 inverse=True)
 
         mesh_shape_list.append(mesh_shape)
