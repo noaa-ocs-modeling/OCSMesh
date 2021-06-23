@@ -527,6 +527,70 @@ class Raster:
             dest.write(out_image)
         self._tmpfile = tmpfile
 
+
+    def adjust(
+            self,
+            geom: Union[Polygon, MultiPolygon],
+            inside_min=0.5,
+            outside_max=-0.5):
+
+        if isinstance(geom, Polygon):
+            geom = MultiPolygon([geom])
+
+        tmpfile = tempfile.NamedTemporaryFile()
+        meta = self.src.meta.copy()
+        meta.update({'driver': 'GTiff'})
+        with rasterio.open(tmpfile, 'w', **meta,) as dst:
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+            for i, window in enumerate(iter_windows):
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+
+                # NOTE: We should NOT transform polygon, user just
+                # needs to make sure input polygon has the same CRS
+                # as the hfun (we don't calculate distances in this
+                # method)
+
+                _logger.info(f'Creating mask from shape ...')
+                start = time()
+                values = self.get_values(window=window).copy()
+                mask = np.zeros_like(values)
+                try:
+                    mask, _, _ = rasterio.mask.raster_geometry_mask(
+                        self.src, geom,
+                        all_touched=True, invert=True)
+                    mask = mask[rasterio.windows.window_index(window)]
+
+                except ValueError:
+                    # If there's no overlap between the raster and
+                    # shapes then it throws ValueError, instead of
+                    # checking for intersection, if there's a value
+                    # error we assume there's no overlap
+                    _logger.debug(
+                        'Polygons don\'t intersect with the raster')
+
+                _logger.info(
+                    f'Creating mask from shape took {time()-start}.')
+
+                if mask.any():
+                    values[np.where(np.logical_and(
+                            values < inside_min, mask)
+                            )] = inside_min
+
+                    values[np.where(np.logical_and(
+                            values > outside_max, np.logical_not(mask))
+                            )] = outside_max
+                else:
+                    values[values > outside_max] = outside_max
+
+                _logger.info(f'Write array to file {tmpfile.name}...')
+                start = time()
+                dst.write_band(1, values, window=window)
+                _logger.info(f'Write array to file took {time()-start}.')
+
+        self._tmpfile = tmpfile
+
+
     def get_contour(
             self,
             level: float,
