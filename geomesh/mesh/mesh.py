@@ -7,6 +7,7 @@ from typing import Union, List
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 import warnings
+from time import time
 
 import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
@@ -17,8 +18,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import RectBivariateSpline
-from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
-from shapely.ops import polygonize, linemerge
+from shapely.geometry import (
+        LineString, LinearRing, MultiLineString,
+        box, Polygon, MultiPolygon)
+from shapely.ops import polygonize, linemerge, unary_union
 
 
 from geomesh import utils

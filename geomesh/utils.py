@@ -14,10 +14,11 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
+from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
-        Polygon, MultiPolygon, box, GeometryCollection,
-        MultiLineString)
-from shapely.ops import polygonize, linemerge
+        Polygon, MultiPolygon, MultiLineString,
+        box, GeometryCollection, Point, MultiPoint)
+from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
 import utm
 
@@ -89,40 +90,125 @@ def geom_to_multipolygon(mesh):
     return MultiPolygon(polygon_collection)
 
 
+def get_boundary_segments(mesh):
+
+    coords = mesh.vert2['coord']
+    boundary_edges = get_boundary_edges(mesh)
+    boundary_verts = np.unique(boundary_edges)
+    boundary_coords = coords[boundary_verts]
+
+    vert_map = {
+            orig: new for new, orig in enumerate(boundary_verts)}
+    new_boundary_edges = np.array(
+        [vert_map[v] for v in boundary_edges.ravel()]).reshape(
+                boundary_edges.shape)
+
+    graph = sparse.lil_matrix(
+            (len(boundary_verts), len(boundary_verts)))
+    for v1, v2 in new_boundary_edges:
+        graph[v1, v2] = 1
+
+    n_components, labels = sparse.csgraph.connected_components(
+            graph, directed=False)
+
+    segments = list()
+    for i in range(n_components):
+        conn_mask = np.any(np.isin(
+                new_boundary_edges, np.nonzero(labels == i)),
+                axis=1)
+        conn_edges = new_boundary_edges[conn_mask]
+        this_segment = linemerge(boundary_coords[conn_edges])
+        if not this_segment.is_simple:
+            # Pinched nodes also result in non-simple linestring,
+            # but they can be handled gracefully, here we are looking
+            # for other issues like folded elements
+            test_polys = [p for p in polygonize(this_segment)]
+            if not len(test_polys):
+                raise ValueError(
+                    "Mesh boundary crosses itself! Folded element(s)!")
+        segments.append(this_segment)
+
+    return segments
+
+
 def get_mesh_polygons(mesh):
 
-    boundary_edges = get_boundary_edges(mesh)
-    poly_gen = polygonize(mesh.vert2['coord'][boundary_edges])
-    polys = [p for p in poly_gen]
-    polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-    # NOTE: The generated polygons contain ghost polygons (polygons
-    # whose exterior is a valid polygon's interior). To avoid valid
-    # node clipping more filtering is needed as follows:
-    rings = [p.exterior for p in polys]
-    
-    # Given that there are no crossing between polygons, it can be
-    # stated that polygons whose exterior ring is enclosed in 
-    # even number (including 0) of other polygon's exterior rings 
-    # are actual (vs ghost) polygons
-    n_parents = np.zeros((len(rings),))
-    # TODO: Test whether to use 1, 2 or 3 point check?
-    represent = np.array([[r.coords[i] for i in range(3)] for r in rings])
-#    represent = np.array([r.coords[0] for r in rings])
-    for e, ring in enumerate(rings[:-1]):
-        path = Path(ring, closed=True)
-        n_parents = n_parents + np.pad(
-#            np.array([
-#                path.contains_point(pt) for pt in represent[e+1:]]),
-            np.all(np.array([
-                path.contains_points(pts) for pts in represent[e+1:]]),
-                axis=1),
-            (e+1, 0), 'constant', constant_values=0)
+    # TODO: Copy mesh?
+    target_mesh = mesh
+    result_polys = list()
 
-    # Get actual polygons based on logic described above
-    polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+    # 2-pass find, first find using polygons that intersect non-boundary
+    # vertices, then from the rest of the mesh find polygons that
+    # intersect any vertex
+    for find_pass in range(2):
 
-    return polys
+
+        coords = target_mesh.vert2['coord']
+
+        if not len(coords): 
+            continue
+
+        boundary_edges = get_boundary_edges(target_mesh)
+
+        lines = get_boundary_segments(target_mesh)
+
+        poly_gen = polygonize(lines)
+        polys = [p for p in poly_gen]
+        polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+
+        bndry_verts = np.unique(boundary_edges)
+
+        if find_pass == 0:
+            non_bndry_verts = np.setdiff1d(
+                    np.arange(len(coords)), bndry_verts)
+            pts = MultiPoint(coords[non_bndry_verts])
+        else:
+            pts = MultiPoint(coords[bndry_verts])
+
+
+        # NOTE: This logic requires polygons to be sorted by area
+        pass_valid_polys = list()
+        while len(pts):
+
+
+            idx = np.random.randint(len(pts))
+            pt = pts[idx]
+
+            polys_gdf = gpd.GeoDataFrame(
+                {'geometry': polys, 'list_index': range(len(polys))})
+
+
+            res_gdf = polys_gdf[polys_gdf.intersects(pt)]
+            if not len(res_gdf):
+                # How is this possible?!
+                pts = MultiPoint([*pts[:idx], *pts[idx + 1:]])
+                if pts.is_empty:
+                    break
+
+                continue
+
+            poly = res_gdf.geometry.iloc[0]
+            polys.pop(res_gdf.iloc[0].list_index)
+
+
+
+            pass_valid_polys.append(poly)
+            pts = pts.difference(poly)
+            if pts.is_empty:
+                break
+
+
+        result_polys.extend(pass_valid_polys)
+        target_mesh = clip_mesh_by_shape(
+            target_mesh,
+            shape=MultiPolygon(pass_valid_polys),
+            inverse=True, fit_inside=True)
+
+
+
+    return MultiPolygon(result_polys)
 
 
 def needs_sieve(mesh, area=None):
@@ -1249,7 +1335,10 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
 
     src_crs = msh.crs if hasattr(msh, 'crs') else None
     coords = msh.vert2['coord']
+    desc = "EPSG:4326"
     if src_crs is not None:
+        # TODO: Support non EPSG:4326 CRS
+#        desc = src_crs.to_string()
         EPSG_4326 = CRS.from_epsg(4326)
         if not src_crs.equals(EPSG_4326):
             transformer = Transformer.from_crs(
@@ -1257,7 +1346,6 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
 
-    desc = "EPSG:4326"
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
             enumerate(zip(coords, -msh.value))}
