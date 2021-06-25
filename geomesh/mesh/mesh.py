@@ -35,27 +35,8 @@ class Rings:
 
     @lru_cache(maxsize=1)
     def __call__(self):
-        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
-        coords = self.mesh.msh_t.vert2['coord']
-        coo_to_idx = {
-            tuple(coo): idx
-            for idx, coo in enumerate(coords)}
-        poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-        rings = [p.exterior for p in polys]
-        n_parents = np.zeros((len(rings),))
-        represent = np.array([r.coords[0] for r in rings])
-        for e, ring in enumerate(rings[:-1]):
-            path = Path(ring, closed=True)
-            n_parents = n_parents + np.pad(
-                np.array([
-                    path.contains_point(pt) for pt in represent[e+1:]]),
-                (e+1, 0), 'constant', constant_values=0)
-
-        # Get actual polygons based on logic described above
-        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+        polys = utils.get_mesh_polygons(self.mesh.msh_t)
 
         data = []
         bnd_id = 0
@@ -419,29 +400,12 @@ class Boundaries:
                 "boundaries.")
 
 
-        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
         coords = self.mesh.msh_t.vert2['coord']
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
-        poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-        # Method 1 count how many "parents" each exterior ring has
-        rings = [p.exterior for p in polys]
-        n_parents = np.zeros((len(rings),))
-        represent = np.array([r.coords[0] for r in rings])
-        for e, ring in enumerate(rings[:-1]):
-            path = Path(ring, closed=True)
-            n_parents = n_parents + np.pad(
-                np.array([
-                    path.contains_point(pt) for pt in represent[e+1:]]),
-                (e+1, 0), 'constant', constant_values=0)
-
-        # Get actual polygons based on logic described above
-        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
-
+        polys = utils.get_mesh_polygons(self.mesh.msh_t)
 
         # TODO: Split using shapely to get bdry segments
 
