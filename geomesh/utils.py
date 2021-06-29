@@ -1,7 +1,7 @@
 from collections import defaultdict
 from enum import Enum
 from itertools import permutations
-from typing import Union, Dict, Sequence
+from typing import Union, Dict, Sequence, Tuple
 from functools import reduce
 from copy import deepcopy
 
@@ -21,6 +21,8 @@ from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
 
+
+ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
 
 def must_be_euclidean_mesh(f):
     def decorator(mesh, *args, **kwargs):
@@ -631,32 +633,73 @@ def get_verts_in_shape(
 
 
 @must_be_euclidean_mesh
-def get_edges_intersecting_shape(
+def get_cross_edges(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
-        ) -> Sequence[int]:
+        ) -> Sequence[Tuple[int, int]]:
 
-    # THIS IS VERY SLOW FOR LARGE MESH -- REDUCE SEARCH AREA
+    '''
+    Return the list of edges crossing the input shape exterior
+    '''
 
-    coord = mesh.vert2['coord']
+    coords = mesh.vert2['coord']
 
-    exterior = list()
-    if isinstance(shape, (Polygon, box)):
-        exteriors = [shape.exterior]
-    elif isinstance(shape, MultiPolygon):
-        exteriors = [pl.exterior for pl in shape]
-    gdf_ext = gpd.GeoDataFrame(geometry=exteriors)
+    coord_dict = dict()
+    for i, coo in enumerate(coords):
+        coord_dict[tuple(coo)] = i
 
+    gdf_shape = gpd.GeoDataFrame(
+            geometry=gpd.GeoSeries(shape))
+    exteriors = [pl.exterior for pl in gdf_shape.explode().geometry]
+
+    # TODO: Reduce domain of search for faster results
     all_edges = get_mesh_edges(mesh, unique=True)
-    edge_coords = coord[all_edges, :]
+    edge_coords = coords[all_edges, :]
     gdf_edg = gpd.GeoDataFrame(
-        geometry=[ln for ln in MultiLineString(edge_coords.tolist())])
-    gdf_edg[['idx0', 'idx1']] = all_edges
-    gdf_x_edg = gdf_edg[
-            gdf_edg.geometry.intersects(gdf_ext.unary_union)]
+        geometry=gpd.GeoSeries(linemerge(edge_coords)))
 
-    return gdf_x_edg[['idx0', 'idx1']].values
+    gdf_x = gpd.sjoin(
+            gdf_edg.explode(),
+            gpd.GeoDataFrame(geometry=gpd.GeoSeries(exteriors)),
+            how='inner', op='intersects')
 
+
+    cut_coords = [
+        [coo for coo in cooseq]
+        for cooseq in gdf_x.geometry.apply(lambda i: i.coords).values]
+
+    cut_edges = np.array([
+        (coo_list[i], coo_list[i+1])
+        for coo_list in cut_coords
+        for i in range(len(coo_list)-1) ])
+
+    cut_edge_idx = np.array(
+            [coord_dict[tuple(coo)]
+             for coo in cut_edges.reshape(-1, 2)]).reshape(
+                     cut_edges.shape[:2])
+
+    return cut_edge_idx
+
+
+def get_vertex_neighbor(
+        mesh,
+        vert_in: Sequence[int],
+        steps: int = 1):
+
+    elem_types = ['tria3', 'quad4', 'hexa8']
+    elem_dict = dict()
+    for etype in elem_types:
+        elem_dict[etype] = getattr(mesh, etype)['index']
+
+    all_verts = np.array(vert_in).copy()
+    for i in range(steps):
+        neighbors = np.array()
+        for elems in elem_dict.values():
+            elem_mark = np.any(np.isin(elems, all_verts, axis=1))
+            neighbors.append(np.unqiue(elemns[elem_mark]))
+        all_verts.append(neighbors)
+
+    return np.setdiff1d(all_verts, vert_in, assume_unique=False)
 
 
 def clip_mesh_by_shape(
@@ -665,9 +708,14 @@ def clip_mesh_by_shape(
         use_box_only: bool = False,
         fit_inside: bool = True,
         inverse: bool = False,
-        in_place: bool = False
+        in_place: bool = False,
+        check_cross_edges: bool = False
         ) -> jigsaw_msh_t:
 
+
+    # NOTE: Checking cross edge is only meaningful when
+    # fit inside flag is NOT set
+    edge_flag = check_cross_edges and not fit_inside
 
     # If we want to calculate inverse based on shape, calculating
     # from bbox first results in the wrong result
@@ -679,18 +727,63 @@ def clip_mesh_by_shape(
         # TODO: Optimize for multipolygons (use separate bboxes)
         in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
+        if edge_flag and not inverse:
+            x_edge_idx = get_cross_edges(mesh, shape_box)
+            in_box_idx = np.append(in_box_idx, np.unique(x_edge_idx))
+
         mesh = clip_mesh_by_vertex(
                 mesh, in_box_idx, not fit_inside, inverse, in_place)
 
         if use_box_only:
+            if edge_flag and inverse:
+                x_edge_idx = get_cross_edges(mesh, shape_box)
+                mesh = remove_mesh_by_edge(
+                        mesh, x_edge_idx, in_place)
             return mesh
 
     in_shp_idx = get_verts_in_shape(mesh, shape, False)
 
+    if edge_flag and not inverse:
+        x_edge_idx = get_cross_edges(mesh, shape)
+        in_shp_idx = np.append(in_shp_idx, np.unique(x_edge_idx))
+
     mesh = clip_mesh_by_vertex(
             mesh, in_shp_idx, not fit_inside, inverse, in_place)
 
+    if edge_flag and inverse:
+        x_edge_idx = get_cross_edges(mesh, shape)
+        mesh = remove_mesh_by_edge(mesh, x_edge_idx, in_place)
+
     return mesh
+
+
+def remove_mesh_by_edge(
+        mesh: jigsaw_msh_t,
+        edges: Sequence[Tuple[int, int]],
+        in_place: bool = False
+        ) -> jigsaw_msh_t:
+
+    mesh_out = mesh
+    if not in_place:
+        mesh_out = deepcopy(mesh)
+
+    # NOTE: This method selects more elements than needed as it 
+    # uses only existance of more than two of the vertices attached
+    # to the input edges in the element as criteria.
+    edge_verts = np.unique(edges)
+
+    for etype in ELEM_2D_TYPES:
+        elems = getattr(mesh, etype)['index']
+        # If a given element contains to vertices from
+        # a crossing edge, it is selected
+        test = np.sum(np.isin(elems, edge_verts), axis=1)
+        elems = elems[test < 2]
+        setattr(mesh_out, etype, np.array(
+                [(idx, 0) for idx in elems],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
+
+    return mesh_out
 
 
 def clip_mesh_by_vertex(
