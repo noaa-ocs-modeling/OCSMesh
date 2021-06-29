@@ -1419,7 +1419,8 @@ def merge_msh_t(
         *mesh_list,
         out_crs="EPSG:4326",
         drop_by_bbox=True,
-        can_overlap=True):
+        can_overlap=True,
+        check_cross_edges=False):
 
     # TODO: Add support for quad4 and hexa8
 
@@ -1452,7 +1453,8 @@ def merge_msh_t(
                 mesh, ishp,
                 use_box_only=drop_by_bbox,
                 fit_inside=can_overlap,
-                inverse=True)
+                inverse=True,
+                check_cross_edges=check_cross_edges)
 
         mesh_shape_list.append(mesh_shape)
 
