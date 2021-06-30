@@ -198,6 +198,8 @@ def get_mesh_polygons(mesh):
             pts = pts.difference(poly)
             if pts.is_empty:
                 break
+            if isinstance(pts, Point):
+                pts = MultiPoint([pts])
 
 
         result_polys.extend(pass_valid_polys)
