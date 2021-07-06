@@ -22,6 +22,7 @@ from shapely.geometry import (
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.geom.shapely import PolygonGeom
+from ocsmesh.features.constraint import TopoConstraint
 from ocsmesh import utils
 
 # supress feather warning
@@ -85,6 +86,8 @@ class HfunRaster(BaseHfun, Raster):
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
+        self._constraints = list()
+
 
     def msh_t(self, window: rasterio.windows.Window = None,
               marche: bool = False, verbosity=None) -> jigsaw_msh_t:
@@ -288,6 +291,67 @@ class HfunRaster(BaseHfun, Raster):
 
         return output_mesh
 
+
+    def _apply_constraints(method):
+
+        # TODO: Validate conflicting constraints
+        def wrapper(self, *args, **kwargs):
+            rv = method(self, *args, **kwargs)
+            
+            # Apply constraints
+            tmpfile = tempfile.NamedTemporaryFile()
+            with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+                iter_windows = list(self.iter_windows())
+                tot = len(iter_windows)
+
+                for i, window in enumerate(iter_windows):
+                    hfun_values = self.get_values(band=1, window=window)
+                    rast_values = self.raster.get_values(band=1, window=window)
+
+                    # Apply custom constraints
+                    for constraint in self._constraints:
+                        if constraint.type == TopoConstraint:
+                            lower_bound, upper_bound = constraint.topo_bounds
+
+                            _logger.debug(f'Processing window {i+1}/{tot}.')
+                            hfun_values[
+                                (rast_values > lower_bound) &
+                                (rast_values < upper_bound) &
+                                (np.logical_not(constraint.check(hfun_values)))
+                                ] = constraint.value
+
+                    # Apply global constraints
+                    if self.hmin is not None:
+                        hfun_values[hfun_values < self.hmin] = self.hmin
+                    if self.hmax is not None:
+                        hfun_values[hfun_values > self.hmax] = self.hmax
+
+                    dst.write_band(1, hfun_values, window=window)
+                    del rast_values
+                    gc.collect()
+
+            self._tmpfile = tmpfile
+
+                
+            return rv
+
+        return wrapper
+
+
+    @_apply_constraints
+    def add_topo_constraint(
+            self,
+            value,
+            upper_bound=np.inf,
+            lower_bound=-np.inf,
+            value_type: str = 'min'):
+
+        # TODO: Validate conflicting constraints
+        self._constraints.append(TopoConstraint(
+            value, upper_bound, lower_bound, value_type))
+
+
+    @_apply_constraints
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
@@ -387,6 +451,7 @@ class HfunRaster(BaseHfun, Raster):
         self._tmpfile = tmpfile
 
 
+    @_apply_constraints
     def add_contour(
             self,
             level: Union[List[float], float],
@@ -425,6 +490,7 @@ class HfunRaster(BaseHfun, Raster):
                 contours, expansion_rate, target_size,
                 nprocs=nprocs)
 
+    @_apply_constraints
     def add_channel(
             self,
             level: float = 0,
@@ -446,6 +512,7 @@ class HfunRaster(BaseHfun, Raster):
 
 
 
+    @_apply_constraints
     @utils.add_pool_args
     def add_feature(
             self,
@@ -607,6 +674,7 @@ class HfunRaster(BaseHfun, Raster):
         return np.memmap(tmpfile, dtype='float32', mode='r',
                          shape=((window.width*window.height), 2))[:]
 
+    @_apply_constraints
     def add_subtidal_flow_limiter(
             self,
             hmin=None,
@@ -679,6 +747,7 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, hfun_values, window=window)
         self._tmpfile = tmpfile
 
+    @_apply_constraints
     def add_constant_value(self, value, lower_bound=None, upper_bound=None):
         lower_bound = -float('inf') if lower_bound is None \
             else float(lower_bound)
