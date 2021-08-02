@@ -1,7 +1,7 @@
 from collections import defaultdict
 from enum import Enum
 from itertools import permutations
-from typing import Union, Dict, Sequence
+from typing import Union, Dict, Sequence, Tuple
 from functools import reduce
 from copy import deepcopy
 
@@ -14,11 +14,24 @@ import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
+from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
-        Polygon, MultiPolygon, box, GeometryCollection)
-from shapely.ops import polygonize, linemerge
+        Polygon, MultiPolygon, MultiLineString,
+        box, GeometryCollection, Point, MultiPoint)
+from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
 import utm
+
+
+ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
+
+def must_be_euclidean_mesh(f):
+    def decorator(mesh, *args, **kwargs):
+        if mesh.mshID.lower() != 'euclidean-mesh':
+            msg = f"Not implemented for mshID={mesh.mshID}"
+            raise NotImplementedError(msg)
+        return f(mesh, *args, **kwargs)
+    return decorator
 
 
 def mesh_to_tri(mesh):
@@ -77,40 +90,127 @@ def geom_to_multipolygon(mesh):
     return MultiPolygon(polygon_collection)
 
 
+def get_boundary_segments(mesh):
+
+    coords = mesh.vert2['coord']
+    boundary_edges = get_boundary_edges(mesh)
+    boundary_verts = np.unique(boundary_edges)
+    boundary_coords = coords[boundary_verts]
+
+    vert_map = {
+            orig: new for new, orig in enumerate(boundary_verts)}
+    new_boundary_edges = np.array(
+        [vert_map[v] for v in boundary_edges.ravel()]).reshape(
+                boundary_edges.shape)
+
+    graph = sparse.lil_matrix(
+            (len(boundary_verts), len(boundary_verts)))
+    for v1, v2 in new_boundary_edges:
+        graph[v1, v2] = 1
+
+    n_components, labels = sparse.csgraph.connected_components(
+            graph, directed=False)
+
+    segments = list()
+    for i in range(n_components):
+        conn_mask = np.any(np.isin(
+                new_boundary_edges, np.nonzero(labels == i)),
+                axis=1)
+        conn_edges = new_boundary_edges[conn_mask]
+        this_segment = linemerge(boundary_coords[conn_edges])
+        if not this_segment.is_simple:
+            # Pinched nodes also result in non-simple linestring,
+            # but they can be handled gracefully, here we are looking
+            # for other issues like folded elements
+            test_polys = [p for p in polygonize(this_segment)]
+            if not len(test_polys):
+                raise ValueError(
+                    "Mesh boundary crosses itself! Folded element(s)!")
+        segments.append(this_segment)
+
+    return segments
+
+
 def get_mesh_polygons(mesh):
 
-    boundary_edges = get_boundary_edges(mesh)
-    poly_gen = polygonize(mesh.vert2['coord'][boundary_edges])
-    polys = [p for p in poly_gen]
-    polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-    # NOTE: The generated polygons contain ghost polygons (polygons
-    # whose exterior is a valid polygon's interior). To avoid valid
-    # node clipping more filtering is needed as follows:
-    rings = [p.exterior for p in polys]
-    
-    # Given that there are no crossing between polygons, it can be
-    # stated that polygons whose exterior ring is enclosed in 
-    # even number (including 0) of other polygon's exterior rings 
-    # are actual (vs ghost) polygons
-    n_parents = np.zeros((len(rings),))
-    # TODO: Test whether to use 1, 2 or 3 point check?
-    represent = np.array([[r.coords[i] for i in range(3)] for r in rings])
-#    represent = np.array([r.coords[0] for r in rings])
-    for e, ring in enumerate(rings[:-1]):
-        path = Path(ring, closed=True)
-        n_parents = n_parents + np.pad(
-#            np.array([
-#                path.contains_point(pt) for pt in represent[e+1:]]),
-            np.all(np.array([
-                path.contains_points(pts) for pts in represent[e+1:]]),
-                axis=1),
-            (e+1, 0), 'constant', constant_values=0)
+    # TODO: Copy mesh?
+    target_mesh = mesh
+    result_polys = list()
 
-    # Get actual polygons based on logic described above
-    polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+    # 2-pass find, first find using polygons that intersect non-boundary
+    # vertices, then from the rest of the mesh find polygons that
+    # intersect any vertex
+    for find_pass in range(2):
 
-    return polys
+
+        coords = target_mesh.vert2['coord']
+
+        if not len(coords): 
+            continue
+
+        boundary_edges = get_boundary_edges(target_mesh)
+
+        lines = get_boundary_segments(target_mesh)
+
+        poly_gen = polygonize(lines)
+        polys = [p for p in poly_gen]
+        polys = sorted(polys, key=lambda p: p.area, reverse=True)
+
+
+        bndry_verts = np.unique(boundary_edges)
+
+        if find_pass == 0:
+            non_bndry_verts = np.setdiff1d(
+                    np.arange(len(coords)), bndry_verts)
+            pts = MultiPoint(coords[non_bndry_verts])
+        else:
+            pts = MultiPoint(coords[bndry_verts])
+
+
+        # NOTE: This logic requires polygons to be sorted by area
+        pass_valid_polys = list()
+        while len(pts):
+
+
+            idx = np.random.randint(len(pts))
+            pt = pts[idx]
+
+            polys_gdf = gpd.GeoDataFrame(
+                {'geometry': polys, 'list_index': range(len(polys))})
+
+
+            res_gdf = polys_gdf[polys_gdf.intersects(pt)]
+            if not len(res_gdf):
+                # How is this possible?!
+                pts = MultiPoint([*pts[:idx], *pts[idx + 1:]])
+                if pts.is_empty:
+                    break
+
+                continue
+
+            poly = res_gdf.geometry.iloc[0]
+            polys.pop(res_gdf.iloc[0].list_index)
+
+
+
+            pass_valid_polys.append(poly)
+            pts = pts.difference(poly)
+            if pts.is_empty:
+                break
+            if isinstance(pts, Point):
+                pts = MultiPoint([pts])
+
+
+        result_polys.extend(pass_valid_polys)
+        target_mesh = clip_mesh_by_shape(
+            target_mesh,
+            shape=MultiPolygon(pass_valid_polys),
+            inverse=True, fit_inside=True)
+
+
+
+    return MultiPolygon(result_polys)
 
 
 def needs_sieve(mesh, area=None):
@@ -620,15 +720,90 @@ def get_verts_in_shape(
         return in_shp_idx
 
 
+@must_be_euclidean_mesh
+def get_cross_edges(
+        mesh: jigsaw_msh_t,
+        shape: Union[box, Polygon, MultiPolygon],
+        ) -> Sequence[Tuple[int, int]]:
+
+    '''
+    Return the list of edges crossing the input shape exterior
+    '''
+
+    coords = mesh.vert2['coord']
+
+    coord_dict = dict()
+    for i, coo in enumerate(coords):
+        coord_dict[tuple(coo)] = i
+
+    gdf_shape = gpd.GeoDataFrame(
+            geometry=gpd.GeoSeries(shape))
+    exteriors = [pl.exterior for pl in gdf_shape.explode().geometry]
+
+    # TODO: Reduce domain of search for faster results
+    all_edges = get_mesh_edges(mesh, unique=True)
+    edge_coords = coords[all_edges, :]
+    gdf_edg = gpd.GeoDataFrame(
+        geometry=gpd.GeoSeries(linemerge(edge_coords)))
+
+    gdf_x = gpd.sjoin(
+            gdf_edg.explode(),
+            gpd.GeoDataFrame(geometry=gpd.GeoSeries(exteriors)),
+            how='inner', op='intersects')
+
+
+    cut_coords = [
+        [coo for coo in cooseq]
+        for cooseq in gdf_x.geometry.apply(lambda i: i.coords).values]
+
+    cut_edges = np.array([
+        (coo_list[i], coo_list[i+1])
+        for coo_list in cut_coords
+        for i in range(len(coo_list)-1) ])
+
+    cut_edge_idx = np.array(
+            [coord_dict[tuple(coo)]
+             for coo in cut_edges.reshape(-1, 2)]).reshape(
+                     cut_edges.shape[:2])
+
+    return cut_edge_idx
+
+
+def get_vertex_neighbor(
+        mesh,
+        vert_in: Sequence[int],
+        steps: int = 1):
+
+    elem_types = ['tria3', 'quad4', 'hexa8']
+    elem_dict = dict()
+    for etype in elem_types:
+        elem_dict[etype] = getattr(mesh, etype)['index']
+
+    all_verts = np.array(vert_in).copy()
+    for i in range(steps):
+        neighbors = np.array()
+        for elems in elem_dict.values():
+            elem_mark = np.any(np.isin(elems, all_verts, axis=1))
+            neighbors.append(np.unqiue(elemns[elem_mark]))
+        all_verts.append(neighbors)
+
+    return np.setdiff1d(all_verts, vert_in, assume_unique=False)
+
+
 def clip_mesh_by_shape(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
         use_box_only: bool = False,
         fit_inside: bool = True,
         inverse: bool = False,
-        in_place: bool = False
+        in_place: bool = False,
+        check_cross_edges: bool = False
         ) -> jigsaw_msh_t:
 
+
+    # NOTE: Checking cross edge is only meaningful when
+    # fit inside flag is NOT set
+    edge_flag = check_cross_edges and not fit_inside
 
     # If we want to calculate inverse based on shape, calculating
     # from bbox first results in the wrong result
@@ -640,18 +815,63 @@ def clip_mesh_by_shape(
         # TODO: Optimize for multipolygons (use separate bboxes)
         in_box_idx = get_verts_in_shape(mesh, shape_box, True)
 
+        if edge_flag and not inverse:
+            x_edge_idx = get_cross_edges(mesh, shape_box)
+            in_box_idx = np.append(in_box_idx, np.unique(x_edge_idx))
+
         mesh = clip_mesh_by_vertex(
                 mesh, in_box_idx, not fit_inside, inverse, in_place)
 
         if use_box_only:
+            if edge_flag and inverse:
+                x_edge_idx = get_cross_edges(mesh, shape_box)
+                mesh = remove_mesh_by_edge(
+                        mesh, x_edge_idx, in_place)
             return mesh
 
     in_shp_idx = get_verts_in_shape(mesh, shape, False)
 
+    if edge_flag and not inverse:
+        x_edge_idx = get_cross_edges(mesh, shape)
+        in_shp_idx = np.append(in_shp_idx, np.unique(x_edge_idx))
+
     mesh = clip_mesh_by_vertex(
             mesh, in_shp_idx, not fit_inside, inverse, in_place)
 
+    if edge_flag and inverse:
+        x_edge_idx = get_cross_edges(mesh, shape)
+        mesh = remove_mesh_by_edge(mesh, x_edge_idx, in_place)
+
     return mesh
+
+
+def remove_mesh_by_edge(
+        mesh: jigsaw_msh_t,
+        edges: Sequence[Tuple[int, int]],
+        in_place: bool = False
+        ) -> jigsaw_msh_t:
+
+    mesh_out = mesh
+    if not in_place:
+        mesh_out = deepcopy(mesh)
+
+    # NOTE: This method selects more elements than needed as it 
+    # uses only existance of more than two of the vertices attached
+    # to the input edges in the element as criteria.
+    edge_verts = np.unique(edges)
+
+    for etype in ELEM_2D_TYPES:
+        elems = getattr(mesh, etype)['index']
+        # If a given element contains to vertices from
+        # a crossing edge, it is selected
+        test = np.sum(np.isin(elems, edge_verts), axis=1)
+        elems = elems[test < 2]
+        setattr(mesh_out, etype, np.array(
+                [(idx, 0) for idx in elems],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
+
+    return mesh_out
 
 
 def clip_mesh_by_vertex(
@@ -662,11 +882,18 @@ def clip_mesh_by_vertex(
         in_place: bool = False
         ) -> jigsaw_msh_t:
 
+
     if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
         coord = mesh.vert2['coord']
-        trias = mesh.tria3['index']
-        quads = mesh.quad4['index']
-        hexas = mesh.hexa8['index']
+
+        # TODO: What about edge2 if in_place?
+        mesh_types = {
+            'tria3': 'TRIA3_t',
+            'quad4': 'QUAD4_t',
+            'hexa8': 'HEXA8_t'
+        }
+        elm_dict = {
+            key: getattr(mesh, key)['index'] for key in mesh_types}
 
         # Whether elements that include "in"-vertices can be created
         # using vertices other than "in"-vertices
@@ -674,46 +901,39 @@ def clip_mesh_by_vertex(
         if can_use_other_verts:
             mark_func = np.any
 
-        mark_tria = mark_func(
-                (np.isin(trias.ravel(), vert_in).reshape(
-                    trias.shape)), 1)
-        mark_quad = mark_func(
-                (np.isin(quads.ravel(), vert_in).reshape(
-                    quads.shape)), 1)
-        mark_hexa = mark_func(
-                (np.isin(hexas.ravel(), vert_in).reshape(
-                    hexas.shape)), 1)
+        mark_dict = {
+            key: mark_func(
+                (np.isin(elems.ravel(), vert_in).reshape(
+                    elems.shape)), 1)
+            for key, elems in elm_dict.items()}
+
 
         # Whether to return elements found by "in" vertices or return
         # all elements except them
         if inverse:
-            mark_tria = np.logical_not(mark_tria)
-            mark_quad = np.logical_not(mark_quad)
-            mark_hexa = np.logical_not(mark_hexa)
+            mark_dict = {
+                key: np.logical_not(mark)
+                for key, mark in mark_dict.items()}
 
         # Find elements based on old vertex index
-        new_trias_unfinished = trias[mark_tria, :]
-        new_quads_unfinished = quads[mark_quad, :]
-        new_hexas_unfinished = hexas[mark_hexa, :]
+        elem_draft_dict = {
+                key: elm_dict[key][mark_dict[key], :]
+                for key in elm_dict}
 
         crd_old_to_new = {
                 index: i for i, index
                 in enumerate(sorted(np.unique(np.concatenate(
-                        (new_trias_unfinished.ravel(),
-                         new_quads_unfinished.ravel(),
-                         new_hexas_unfinished.ravel())
+                        [draft.ravel()
+                            for draft in elem_draft_dict.values()]
                         ))))
             }
 
-        new_trias = np.array([
-                [crd_old_to_new[x] for x in  element]
-                    for element in new_trias_unfinished])
-        new_quads = np.array([
-                [crd_old_to_new[x] for x in  element]
-                    for element in new_quads_unfinished])
-        new_hexas = np.array([
-                [crd_old_to_new[x] for x in  element]
-                    for element in new_hexas_unfinished])
+        elem_final_dict = {
+            key: np.array(
+                [[crd_old_to_new[x] for x in  element]
+                 for element in draft])
+            for key, draft in elem_draft_dict.items()
+        }
 
         new_coord = coord[list(crd_old_to_new.keys()), :]
         value = np.zeros(shape=(0, 0), dtype=jigsaw_msh_t.REALS_t)
@@ -732,19 +952,18 @@ def clip_mesh_by_vertex(
 
         mesh_out.value = value
 
-        # TODO: What about edge2 if in_place?
         mesh_out.vert2 = np.array(
             [(coo, 0) for coo in new_coord],
             dtype=jigsaw_msh_t.VERT2_t)
-        mesh_out.tria3 = np.array(
-            [(con, 0) for con in new_trias],
-            dtype=jigsaw_msh_t.TRIA3_t)
-        mesh_out.quad4 = np.array(
-            [(con, 0) for con in new_quads],
-            dtype=jigsaw_msh_t.TRIA3_t)
-        mesh_out.hexa8 = np.array(
-            [(con, 0) for con in new_hexas],
-            dtype=jigsaw_msh_t.TRIA3_t)
+
+        for key, elem_type in mesh_types.items():
+            setattr(
+                mesh_out,
+                key, 
+                np.array(
+                    [(con, 0) for con in elem_final_dict[key]],
+                    dtype=getattr(jigsaw_msh_t, elem_type)))
+
         return mesh_out
 
     msg = (f"Not implemented for"
@@ -754,13 +973,50 @@ def clip_mesh_by_vertex(
 
 
 
-def must_be_euclidean_mesh(f):
-    def decorator(mesh):
-        if mesh.mshID.lower() != 'euclidean-mesh':
-            msg = f"Not implemented for mshID={mesh.mshID}"
-            raise NotImplementedError(msg)
-        return f(mesh)
-    return decorator
+
+
+@must_be_euclidean_mesh
+def get_mesh_edges(mesh: jigsaw_msh_t, unique=True):
+
+    # NOTE: For msh_t type vertex id and index are the same
+    trias = mesh.tria3['index']
+    quads = mesh.quad4['index']
+    hexas = mesh.hexa8['index']
+
+    # Get unique set of edges by rolling connectivity
+    # and joining connectivities in 3rd dimension, then sorting
+    # to get all edges with lower index first
+    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
+    if trias.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (trias, np.roll(trias, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+    if quads.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (quads, np.roll(quads, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+    if hexas.shape[0]:
+        edges = np.sort(
+                np.stack(
+                    (hexas, np.roll(hexas, shift=1, axis=1)),
+                    axis=2),
+                axis=2)
+        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+        all_edges = np.vstack((all_edges, edges))
+
+    if unique:
+        all_edges = np.unique(all_edges, axis=0)
+
+    return all_edges
+
 
 @must_be_euclidean_mesh
 def calculate_tria_areas(mesh):
@@ -789,41 +1045,17 @@ def calculate_edge_lengths(mesh):
 
     coord = mesh.vert2['coord']
 
-    # NOTE: For msh_t type vertex id and index are the same
-    trias = mesh.tria3['index']
-    quads = mesh.quad4['index']
-
     # Get unique set of edges by rolling connectivity
     # and joining connectivities in 3rd dimension, then sorting
     # to get all edges with lower index first
-    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-    if trias.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (trias, np.roll(trias, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = np.unique(
-                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-        all_edges = np.vstack((all_edges, edges))
-    if quads.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (quads, np.roll(quads, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = np.unique(
-                edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-        all_edges = np.vstack((all_edges, edges))
-
-    all_edges = np.unique(all_edges, axis=0)
+    all_edges = get_mesh_edges(mesh, unique=True)
 
     # ONLY TESTED FOR TRIA AS OF NOW
 
     # This part of the function is generic for tria and quad
     
     # Get coordinates for all edge vertices
-    edge_coords = coord[edges, :]
+    edge_coords = coord[all_edges, :]
 
     # Calculate length of all edges based on acquired coords
     edge_lens = np.sqrt(
@@ -833,7 +1065,7 @@ def calculate_edge_lengths(mesh):
                 ,axis=2)).squeeze()
 
     edge_dict = defaultdict(float)
-    for en, edge in enumerate(edges):
+    for en, edge in enumerate(all_edges):
         edge_dict[tuple(edge)] = edge_lens[en]
 
     return edge_dict
@@ -877,39 +1109,7 @@ def get_boundary_edges(mesh):
 
     coord = mesh.vert2['coord']
 
-    # NOTE: For msh_t type vertex id and index are the same
-    trias = mesh.tria3['index']
-    quads = mesh.quad4['index']
-    hexas = mesh.hexa8['index']
-
-    # Get unique set of edges by rolling connectivity
-    # and joining connectivities in 3rd dimension, then sorting
-    # to get all edges with lower index first
-    all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-    if trias.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (trias, np.roll(trias, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if quads.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (quads, np.roll(quads, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if hexas.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (hexas, np.roll(hexas, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
+    all_edges = get_mesh_edges(mesh, unique=False)
 
     # Simplexes (list of node indices)
     all_edges, e_cnt = np.unique(all_edges, axis=0, return_counts=True)
@@ -1137,7 +1337,10 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
 
     src_crs = msh.crs if hasattr(msh, 'crs') else None
     coords = msh.vert2['coord']
+    desc = "EPSG:4326"
     if src_crs is not None:
+        # TODO: Support non EPSG:4326 CRS
+#        desc = src_crs.to_string()
         EPSG_4326 = CRS.from_epsg(4326)
         if not src_crs.equals(EPSG_4326):
             transformer = Transformer.from_crs(
@@ -1145,7 +1348,6 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
 
-    desc = "EPSG:4326"
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
             enumerate(zip(coords, -msh.value))}
@@ -1303,7 +1505,12 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
     return ret_val
 
 
-def merge_msh_t(*mesh_list, out_crs="EPSG:4326", drop_by_bbox=True):
+def merge_msh_t(
+        *mesh_list,
+        out_crs="EPSG:4326",
+        drop_by_bbox=True,
+        can_overlap=True,
+        check_cross_edges=False):
 
     # TODO: Add support for quad4 and hexa8
 
@@ -1330,11 +1537,14 @@ def merge_msh_t(*mesh_list, out_crs="EPSG:4326", drop_by_bbox=True):
             mesh_shape = get_mesh_polygons(mesh)
 
         for ishp in mesh_shape_list:
+            # NOTE: fit_inside = True w/ inverse = True results
+            # in overlap when clipping low-priority mesh
             mesh = clip_mesh_by_shape(
                 mesh, ishp,
                 use_box_only=drop_by_bbox,
-                fit_inside=True,
-                inverse=True)
+                fit_inside=can_overlap,
+                inverse=True,
+                check_cross_edges=check_cross_edges)
 
         mesh_shape_list.append(mesh_shape)
 

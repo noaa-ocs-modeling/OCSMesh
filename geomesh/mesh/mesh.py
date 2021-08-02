@@ -7,6 +7,7 @@ from typing import Union, List
 from collections import defaultdict, namedtuple
 from copy import deepcopy
 import warnings
+from time import time
 
 import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
@@ -16,9 +17,12 @@ from matplotlib.tri import Triangulation
 import matplotlib.pyplot as plt
 import numpy as np
 from pyproj import CRS, Transformer
-from scipy.interpolate import RectBivariateSpline
-from shapely.geometry import Polygon, box, LineString, LinearRing, MultiPolygon
-from shapely.ops import polygonize, linemerge
+from scipy.interpolate import (
+        RectBivariateSpline, RegularGridInterpolator)
+from shapely.geometry import (
+        LineString, LinearRing, MultiLineString,
+        box, Polygon, MultiPolygon)
+from shapely.ops import polygonize, linemerge, unary_union
 
 
 from geomesh import utils
@@ -35,27 +39,8 @@ class Rings:
 
     @lru_cache(maxsize=1)
     def __call__(self):
-        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
-        coords = self.mesh.msh_t.vert2['coord']
-        coo_to_idx = {
-            tuple(coo): idx
-            for idx, coo in enumerate(coords)}
-        poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-        rings = [p.exterior for p in polys]
-        n_parents = np.zeros((len(rings),))
-        represent = np.array([r.coords[0] for r in rings])
-        for e, ring in enumerate(rings[:-1]):
-            path = Path(ring, closed=True)
-            n_parents = n_parents + np.pad(
-                np.array([
-                    path.contains_point(pt) for pt in represent[e+1:]]),
-                (e+1, 0), 'constant', constant_values=0)
-
-        # Get actual polygons based on logic described above
-        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
+        polys = utils.get_mesh_polygons(self.mesh.msh_t)
 
         data = []
         bnd_id = 0
@@ -419,29 +404,12 @@ class Boundaries:
                 "boundaries.")
 
 
-        boundary_edges = utils.get_boundary_edges(self.mesh.msh_t)
         coords = self.mesh.msh_t.vert2['coord']
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
-        poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
-        # Method 1 count how many "parents" each exterior ring has
-        rings = [p.exterior for p in polys]
-        n_parents = np.zeros((len(rings),))
-        represent = np.array([r.coords[0] for r in rings])
-        for e, ring in enumerate(rings[:-1]):
-            path = Path(ring, closed=True)
-            n_parents = n_parents + np.pad(
-                np.array([
-                    path.contains_point(pt) for pt in represent[e+1:]]),
-                (e+1, 0), 'constant', constant_values=0)
-
-        # Get actual polygons based on logic described above
-        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
-
+        polys = utils.get_mesh_polygons(self.mesh.msh_t)
 
         # TODO: Split using shapely to get bdry segments
 
@@ -677,7 +645,7 @@ class EuclideanMesh2D(EuclideanMesh):
         return utils.tricontourf(self.msh_t, **kwargs)
 
     def interpolate(self, raster: Union[Raster, List[Raster]],
-                    method='nearest', nprocs=None):
+                    method='spline', nprocs=None):
 
         if isinstance(raster, Raster):
             raster = [raster]
@@ -689,7 +657,7 @@ class EuclideanMesh2D(EuclideanMesh):
             res = pool.starmap(
                 _mesh_interpolate_worker,
                 [(self.vert2['coord'], self.crs,
-                    _raster.tmpfile, _raster.chunk_size)
+                    _raster.tmpfile, _raster.chunk_size, method)
                  for _raster in raster]
                 )
 
@@ -961,7 +929,12 @@ def signed_polygon_area(vertices):
         return area / 2.0
 
 
-def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size):
+def _mesh_interpolate_worker(
+        coords,
+        coords_crs,
+        raster_path,
+        chunk_size,
+        method):
     coords = np.array(coords)
     raster = Raster(raster_path)
     idxs = []
@@ -976,13 +949,6 @@ def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size):
         xi = raster.get_x(window)
         yi = raster.get_y(window)
         zi = raster.get_values(window=window)
-        f = RectBivariateSpline(
-            xi,
-            np.flip(yi),
-            np.flipud(zi).T,
-            kx=3, ky=3, s=0,
-            # bbox=[min(x), max(x), min(y), max(y)]  # ??
-        )
         _idxs = np.where(
             np.logical_and(
                 np.logical_and(
@@ -991,7 +957,29 @@ def _mesh_interpolate_worker(coords, coords_crs, raster_path, chunk_size):
                 np.logical_and(
                     np.min(yi) <= coords[:, 1],
                     np.max(yi) >= coords[:, 1])))[0]
-        _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
+
+        if method == 'spline':
+            f = RectBivariateSpline(
+                xi,
+                np.flip(yi),
+                np.flipud(zi).T,
+                kx=3, ky=3, s=0,
+                # bbox=[min(x), max(x), min(y), max(y)]  # ??
+            )
+            _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
+
+        elif method in ['nearest', 'linear']:
+            f = RegularGridInterpolator(
+                (xi, np.flip(yi)),
+                np.flipud(zi).T,
+                method=method
+            )
+            _values = f(coords[_idxs])
+
+        else:
+            raise ValueError(
+                    f"Invalid value method specified <{method}>!")
+
         idxs.append(_idxs)
         values.append(_values)
 
