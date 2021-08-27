@@ -948,15 +948,27 @@ def _mesh_interpolate_worker(
                 coords[:, 0], coords[:, 1])
         xi = raster.get_x(window)
         yi = raster.get_y(window)
-        zi = raster.get_values(window=window)
-        _idxs = np.where(
+        # Use masked array to ignore missing values from DEM
+        zi = raster.get_values(window=window, masked=True)
+
+        _idxs = np.logical_and(
             np.logical_and(
-                np.logical_and(
-                    np.min(xi) <= coords[:, 0],
-                    np.max(xi) >= coords[:, 0]),
-                np.logical_and(
-                    np.min(yi) <= coords[:, 1],
-                    np.max(yi) >= coords[:, 1])))[0]
+                np.min(xi) <= coords[:, 0],
+                np.max(xi) >= coords[:, 0]),
+            np.logical_and(
+                np.min(yi) <= coords[:, 1],
+                np.max(yi) >= coords[:, 1]))
+
+        # Inspired by StackOverflow 35807321
+        interp_mask = None
+        if np.any(zi.mask):
+            m_interp = RegularGridInterpolator(
+                (xi, np.flip(yi)),
+                np.flipud(zi.mask).T.astype(bool),
+                method=method
+            )
+            # Pick nodes NOT "contaminated" by masked values
+            interp_mask = m_interp(coords[_idxs]) > 0
 
         if method == 'spline':
             f = RectBivariateSpline(
@@ -980,6 +992,12 @@ def _mesh_interpolate_worker(
             raise ValueError(
                     f"Invalid value method specified <{method}>!")
 
+        if interp_mask is not None:
+            helper = np.ones_like(_values).astype(bool)
+            helper[interp_mask] = False
+            # _idxs is inverse mask
+            _idxs[_idxs] = helper
+            _values = _values[~interp_mask]
         idxs.append(_idxs)
         values.append(_values)
 
