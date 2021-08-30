@@ -22,7 +22,8 @@ from shapely.geometry import (
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.geom.shapely import PolygonGeom
-from ocsmesh.features.constraint import TopoConstraint
+from ocsmesh.features.constraint import (
+        TopoConstConstraint, TopoFuncConstraint)
 from ocsmesh import utils
 
 # supress feather warning
@@ -294,52 +295,49 @@ class HfunRaster(BaseHfun, Raster):
 
     def _apply_constraints(method):
 
-        # TODO: Validate conflicting constraints
         def wrapper(self, *args, **kwargs):
             rv = method(self, *args, **kwargs)
-            
-            # Apply constraints
-            tmpfile = tempfile.NamedTemporaryFile()
-            with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
-                iter_windows = list(self.iter_windows())
-                tot = len(iter_windows)
-
-                for i, window in enumerate(iter_windows):
-                    hfun_values = self.get_values(band=1, window=window)
-                    rast_values = self.raster.get_values(band=1, window=window)
-
-                    # Apply custom constraints
-                    for constraint in self._constraints:
-                        if constraint.type == TopoConstraint:
-                            lower_bound, upper_bound = constraint.topo_bounds
-
-                            _logger.debug(f'Processing window {i+1}/{tot}.')
-                            hfun_values[
-                                (rast_values > lower_bound) &
-                                (rast_values < upper_bound) &
-                                (np.logical_not(constraint.check(hfun_values)))
-                                ] = constraint.value
-
-                    # Apply global constraints
-                    if self.hmin is not None:
-                        hfun_values[hfun_values < self.hmin] = self.hmin
-                    if self.hmax is not None:
-                        hfun_values[hfun_values > self.hmax] = self.hmax
-
-                    dst.write_band(1, hfun_values, window=window)
-                    del rast_values
-                    gc.collect()
-
-            self._tmpfile = tmpfile
-
-                
+            self.apply_constraints(self._constraints)
             return rv
 
         return wrapper
 
 
+    def apply_constraints(self, constraint_list):
+
+        # TODO: Validate conflicting constraints
+        
+        # Apply constraints
+        tmpfile = tempfile.NamedTemporaryFile()
+        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+            iter_windows = list(self.iter_windows())
+            tot = len(iter_windows)
+
+            for i, window in enumerate(iter_windows):
+                hfun_values = self.get_values(band=1, window=window)
+                rast_values = self.raster.get_values(band=1, window=window)
+
+                # Apply custom constraints
+                _logger.debug(f'Processing window {i+1}/{tot}.')
+                for constraint in constraint_list:
+                    hfun_values = constraint.apply(
+                            rast_values, hfun_values)
+
+                # Apply global constraints
+                if self.hmin is not None:
+                    hfun_values[hfun_values < self.hmin] = self.hmin
+                if self.hmax is not None:
+                    hfun_values[hfun_values > self.hmax] = self.hmax
+
+                dst.write_band(1, hfun_values, window=window)
+                del rast_values
+                gc.collect()
+
+        self._tmpfile = tmpfile
+
+
     @_apply_constraints
-    def add_topo_constraint(
+    def add_topo_bound_constraint(
             self,
             value,
             upper_bound=np.inf,
@@ -347,8 +345,22 @@ class HfunRaster(BaseHfun, Raster):
             value_type: str = 'min'):
 
         # TODO: Validate conflicting constraints
-        self._constraints.append(TopoConstraint(
+        self._constraints.append(TopoConstConstraint(
             value, upper_bound, lower_bound, value_type))
+
+
+    @_apply_constraints
+    def add_topo_func_constraint(
+            self,
+            func=lambda i: i / 2.0,
+            upper_bound=np.inf,
+            lower_bound=-np.inf,
+            value_type: str = 'min'):
+
+        # TODO: Validate conflicting constraints
+        self._constraints.append(TopoFuncConstraint(
+            func, upper_bound, lower_bound, value_type))
+
 
 
     @_apply_constraints

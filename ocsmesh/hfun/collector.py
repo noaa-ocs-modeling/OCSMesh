@@ -28,7 +28,8 @@ from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
 from ocsmesh.features.channel import Channel
-from ocsmesh.features.constraint import TopoConstraint
+from ocsmesh.features.constraint import (
+    TopoConstConstraint, TopoFuncConstraint)
 
 _logger = logging.getLogger(__name__)
 
@@ -377,7 +378,7 @@ class HfunCollector(BaseHfun):
         return composite_hfun
 
 
-    def add_topo_constraint(
+    def add_topo_bound_constraint(
             self,
             value,
             upper_bound=np.inf,
@@ -387,8 +388,26 @@ class HfunCollector(BaseHfun):
 
         self._applied = False
 
-        constraint_defn = TopoConstraint(
+        constraint_defn = TopoConstConstraint(
             value, upper_bound, lower_bound, value_type)
+
+        if source_index != None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+        self._constraint_info_coll.add(source_index, constraint_defn)
+
+
+    def add_topo_func_constraint(
+            self,
+            func=lambda i: i / 2.0,
+            upper_bound=np.inf,
+            lower_bound=-np.inf,
+            value_type: str = 'min',
+            source_index: Union[List[int], int, None] = None):
+
+        self._applied = False
+
+        constraint_defn = TopoFuncConstraint(
+            func, upper_bound, lower_bound, value_type)
 
         if source_index != None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
@@ -579,15 +598,15 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
+            constraint_list = list()
             for src_idx, constraint_defn in self._constraint_info_coll:
                 if src_idx != None and in_idx not in src_idx:
                     continue
-                if constraint_defn.type == TopoConstraint:
-                    hfun.add_topo_constraint(
-                        constraint_defn.value,
-                        upper_bound=constraint_defn.topo_bounds[1],
-                        lower_bound=constraint_defn.topo_bounds[0],
-                        value_type=constraint_defn.value_type)
+
+                constraint_list.append(constraint_defn)
+
+            if constraint_list:
+                hfun.apply_constraints(constraint_list)
 
 
     def _apply_contours(self, apply_to=None):
@@ -998,12 +1017,14 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunMesh)]
         if self._base_mesh and self._base_as_hfun:
             mesh_hfun_list.insert(0, self._base_mesh)
+
         self._apply_contours([*mesh_hfun_list, hfun])
         self._apply_flow_limiters_fast(hfun)
         self._apply_const_val_fast(hfun)
-        self._apply_constraints_fast(hfun)
         self._apply_patch([*mesh_hfun_list, hfun])
         self._apply_channels([*mesh_hfun_list, hfun])
+
+        self._apply_constraints_fast(hfun)
 
         return hfun
 
@@ -1039,14 +1060,13 @@ class HfunCollector(BaseHfun):
 
     def _apply_constraints_fast(self, big_hfun):
 
+        constraint_list = list()
         for src_idx, constraint_defn in self._constraint_info_coll:
             # TODO: Account for source index
-            if constraint_defn.type == TopoConstraint:
-                big_hfun.add_topo_constraint(
-                    constraint_defn.value,
-                    upper_bound=constraint_defn.topo_bounds[1],
-                    lower_bound=constraint_defn.topo_bounds[0],
-                    value_type=constraint_defn.value_type)
+            constraint_list.append(constraint_defn)
+
+        if constraint_list:
+            big_hfun.apply_constraints(constraint_list)
 
 
     def _get_hfun_composite_fast(self, big_hfun):
