@@ -3,7 +3,7 @@ name: Pylint
 on: [push]
 
 jobs:
-  build:
+  format-check:
 
     runs-on: ubuntu-latest
 
@@ -13,10 +13,13 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: 3.8
+    - name: Add conda to system path
+      run: |
+        # $CONDA is an environment variable pointing to the root of the miniconda directory
+        echo $CONDA/bin >> $GITHUB_PATH
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install pylint
+        conda env update --file environment.yml
     - name: Analysing the code with pylint
       run: |
         pylint ${{ github.event.repository.name }}
