@@ -1,3 +1,5 @@
+![example workflow](https://github.com/noaa-ocs-modeling/geomesh/actions/workflows/pylint.yml/badge.svg)
+
 ## Geomesh
 ### A Python package for processing DEM data into georeferenced unstructured meshes using the [jigsaw-python](https://github.com/dengwirda/jigsaw-python) library.
 
