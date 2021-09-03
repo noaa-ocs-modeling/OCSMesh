@@ -6,8 +6,9 @@ import logging, sys
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import MultiPolygon, box, Polygon
-from shapely.ops import polygonize
+from shapely.ops import polygonize, transform
 import jigsawpy
+from pyproj import Transformer
 
 from geomesh import Raster, Geom, Hfun, Mesh
 from geomesh import utils
@@ -76,7 +77,7 @@ class RemeshByShape:
         this_parser.add_argument('mesh', type=Path)
 
 
-    def run(args):
+    def run(self, args):
 
         # Get inputs
         mesh_file = args.mesh

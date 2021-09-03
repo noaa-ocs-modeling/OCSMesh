@@ -112,24 +112,6 @@ class RasterGeom(BaseGeom):
 
         return plt.gca()
 
-    def triplot(
-        self,
-        show=False,
-        linewidth=0.07,
-        color='black',
-        alpha=0.5,
-        **kwargs
-    ):
-        plt.triplot(
-            self.triangulation,
-            linewidth=linewidth,
-            color=color,
-            alpha=alpha,
-            **kwargs
-            )
-        if show:
-            plt.axis('scaled')
-            plt.show()
 
 
 def get_multipolygon_from_axes(ax):

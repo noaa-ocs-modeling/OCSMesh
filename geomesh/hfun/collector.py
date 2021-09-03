@@ -9,7 +9,7 @@ from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
-from typing import Union, Sequence, List
+from typing import Union, Sequence, List, Tuple
 
 import geopandas as gpd
 from pyproj import CRS, Transformer
@@ -25,7 +25,7 @@ from geomesh import utils
 from geomesh.hfun.base import BaseHfun
 from geomesh.hfun.raster import HfunRaster
 from geomesh.hfun.mesh import HfunMesh
-from geomesh.mesh.mesh import Mesh
+from geomesh.mesh.mesh import Mesh, EuclideanMesh2D
 from geomesh.raster import Raster, get_iter_windows
 from geomesh.features.contour import Contour
 from geomesh.features.patch import Patch
@@ -327,7 +327,7 @@ class HfunCollector(BaseHfun):
 
                 elif in_item.endswith(
                         ('.14', '.grd', '.gr3', '.msh', '.2dm')):
-                    mesh = Mesh.open(path)
+                    mesh = Mesh.open(in_item)
                     hfun = HfunMesh(mesh)
 
                 else:

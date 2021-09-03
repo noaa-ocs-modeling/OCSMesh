@@ -470,10 +470,8 @@ class Raster:
         if resampling_method is None:
             resampling_method = self.resampling_method
         else:
-            msg = "resampling_method must be None or one of "
-            msg += f"{self._resampling_methods.keys()}"
-            assert resampling_method in self._resampling_methods.keys(), msg
-            resampling_method = self._resampling_methods[resampling_method]
+            msg = "resampling_method must be a valid name or None"
+            raise ValueError(msg)
 
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         # resample data to target shape

@@ -8,6 +8,8 @@ from geomesh.raster import Raster
 
 class Hfun:
 
+    # pylint: disable=no-member
+
     def __new__(cls, hfun, **kwargs):
         """
         Input parameters

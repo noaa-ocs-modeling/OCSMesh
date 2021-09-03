@@ -447,6 +447,7 @@ class Boundaries:
 #            land_boundaries = edges_to_rings(land_boundary)
             ocean_boundaries = list()
             if len(ocean_boundary):
+                #pylint: disable=not-an-iterable
                 ocean_segs = linemerge(coords[np.array(ocean_boundary)])
                 ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
                 ocean_boundaries = [
@@ -455,6 +456,7 @@ class Boundaries:
                         for seg in ocean_segs]
             land_boundaries = list()
             if len(land_boundary):
+                #pylint: disable=not-an-iterable
                 land_segs = linemerge(coords[np.array(land_boundary)])
                 land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
                 land_boundaries = [
@@ -993,11 +995,13 @@ def _mesh_interpolate_worker(
                     f"Invalid value method specified <{method}>!")
 
         if interp_mask is not None:
+            # pylint: disable=invalid-unary-operand-type
+
             helper = np.ones_like(_values).astype(bool)
             helper[interp_mask] = False
             # _idxs is inverse mask
             _idxs[_idxs] = helper
-            _values = _values[~interp_mask]
+            _values = _values[~interp_mask] 
         idxs.append(_idxs)
         values.append(_values)
 

@@ -143,7 +143,7 @@ def parse_args():
 
     # Scripts don't use common arguments as they are standalon code
     scripts_parser = subp.add_parser('scripts')
-    CmdCli(scripts_parser)
+    self._cmd_cli = CmdCli(scripts_parser)
 
     return parser.parse_args()
 

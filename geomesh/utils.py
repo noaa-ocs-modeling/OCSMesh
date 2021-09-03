@@ -1095,8 +1095,10 @@ def faces_around_vertex(mesh):
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
     faces_around_vertex = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
-        np.isin(i, axis=0)
-        faces_around_vertex[i].add()
+        # TODO:
+        pass
+#        np.isin(i, axis=0)
+#        faces_around_vertex[i].add()
 
     faces_around_vertex = defaultdict(set)
 

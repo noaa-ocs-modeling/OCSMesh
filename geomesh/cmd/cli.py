@@ -16,7 +16,7 @@ class CmdCli:
             item = cls(scripts_subp)
             self._script_dict[item.script_name] = item
 
-    def execute(args):
+    def execute(self, args):
 
         warnings.warn(
             "Scripts CLI is used for experimental new features"

@@ -191,7 +191,7 @@ class Interp:
                         # finally make sure the vertices are ordered.
                         vertices = list(polygon_sort(vertices))
                         vertices.append(vertices[0])
-                        path = Path(vertices, closed=True)
+                        path = pathlib.Path(vertices, closed=True)
                         xin, yin = np.meshgrid(raster.x, raster.y)
                         xy_in = np.vstack([xin.flatten(), yin.flatten()]).T
                         ridxs = np.where(
@@ -247,6 +247,7 @@ class Interp:
     #     tgtraster.save(target_path)
         raster = Raster(target_path)
         bbox = raster.bbox
+        # pylint: disable=no-member
         geom = box(
                 bbox.xmin,
                 bbox.ymin,
