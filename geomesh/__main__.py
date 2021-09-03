@@ -9,8 +9,9 @@ from geomesh.cmd.cli import CmdCli
 
 class Geomesh:
 
-    def __init__(self, args):
+    def __init__(self, args, geomesh_cli):
         self._args = args
+        self._cmd_cli = geomesh_cli
 
     def main(self):
 
@@ -61,10 +62,10 @@ class Geomesh:
                 combine_hfun(**arg_dict)
 
         elif self._args.command == 'scripts':
-            cmd_cli.execute(self._args)
+            self._cmd_cli.execute(self._args)
 
 
-def parse_args():
+def create_parser():
     common_parser = argparse.ArgumentParser()
 
     common_parser.add_argument("--log-level", choices=["info", "debug", "warning"])
@@ -143,15 +144,15 @@ def parse_args():
 
     # Scripts don't use common arguments as they are standalon code
     scripts_parser = subp.add_parser('scripts')
-    self._cmd_cli = CmdCli(scripts_parser)
+    cmd_cli = CmdCli(scripts_parser)
 
-    return parser.parse_args()
+    return parser, cmd_cli
 
 
 def main():
-    args = parse_args()
+    parser, geomesh_cli = create_parser()
 #    logger.init(args.log_level)
-    Geomesh(args).main()
+    Geomesh(parser.parse_args(), geomesh_cli).main()
 
 
 if __name__ == '__main__':

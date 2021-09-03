@@ -8,6 +8,7 @@ from tqdm import tqdm
 import sys
 from functools import lru_cache
 import numpy as np
+from matplotlib.path import Path  # type: ignore[import]
 import fiona
 from multiprocessing import Pool
 import requests
@@ -191,7 +192,7 @@ class Interp:
                         # finally make sure the vertices are ordered.
                         vertices = list(polygon_sort(vertices))
                         vertices.append(vertices[0])
-                        path = pathlib.Path(vertices, closed=True)
+                        path = Path(vertices, closed=True)
                         xin, yin = np.meshgrid(raster.x, raster.y)
                         xy_in = np.vstack([xin.flatten(), yin.flatten()]).T
                         ridxs = np.where(
