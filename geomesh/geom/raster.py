@@ -8,12 +8,12 @@ from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LinearRing)
 
-from geomesh.geom.base import BaseGeom
-from geomesh.raster import Raster
+from ocsmesh.geom.base import BaseGeom
+from ocsmesh.raster import Raster
 
 
 class SourceRaster:
-    '''Descriptor class used for referencing a :class:`geomesh.Raster`
+    '''Descriptor class used for referencing a :class:`ocsmesh.Raster`
     object.'''
 
     def __set__(self, obj, val: Union[Raster, str, os.PathLike]):

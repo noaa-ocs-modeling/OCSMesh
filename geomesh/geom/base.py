@@ -8,11 +8,11 @@ from shapely import ops
 from shapely.geometry import MultiPolygon
 import utm
 
-from geomesh.crs import CRS as CRSDescriptor
+from ocsmesh.crs import CRS as CRSDescriptor
 
 
 class BaseGeom(ABC):
-    '''Abstract base class used to construct geomesh "geom" objects.
+    '''Abstract base class used to construct ocsmesh "geom" objects.
 
     More concretely, a "geom" object can be visualized as a collection of
     polygons. In terms of data structures, a collection of polygons can be
@@ -23,7 +23,7 @@ class BaseGeom(ABC):
     this should not be confused with the convex hull (the geom object does not
     have to be convex).
 
-    Derived classes from :class:`geomesh.geom.BaseGeom` expose the concrete
+    Derived classes from :class:`ocsmesh.geom.BaseGeom` expose the concrete
     implementation of how to compute this hull based on inputs provided by the
     users.
     '''

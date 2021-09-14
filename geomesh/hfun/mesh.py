@@ -17,9 +17,9 @@ from shapely.geometry import (
     LineString, MultiLineString, box, GeometryCollection,
     Polygon, MultiPolygon)
 
-from geomesh.hfun.base import BaseHfun
-from geomesh.crs import CRS as CRSDescriptor
-from geomesh import utils
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.crs import CRS as CRSDescriptor
+from ocsmesh import utils
 
 
 _logger = logging.getLogger(__name__)

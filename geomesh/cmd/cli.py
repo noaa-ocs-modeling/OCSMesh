@@ -1,8 +1,8 @@
 import warnings
 
-from geomesh.cmd.remesh_by_shape_factor import RemeshByShape
-from geomesh.cmd.remesh import RemeshByDEM
-from geomesh.cmd.mesh_upgrader import MeshUpgrader
+from ocsmesh.cmd.remesh_by_shape_factor import RemeshByShape
+from ocsmesh.cmd.remesh import RemeshByDEM
+from ocsmesh.cmd.mesh_upgrader import MeshUpgrader
 
 class CmdCli:
 

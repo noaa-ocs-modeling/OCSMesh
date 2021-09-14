@@ -14,8 +14,8 @@ import geopandas as gpd
 from shapely.geometry import Polygon, MultiPolygon, box
 from pyproj import CRS, Transformer
 
-from geomesh import Raster, Geom, Hfun, Mesh
-from geomesh import utils
+from ocsmesh import Raster, Geom, Hfun, Mesh
+from ocsmesh import utils
 
 
 logging.basicConfig(

@@ -7,12 +7,12 @@ from pyproj import CRS
 from typing import Union
 
 
-from geomesh import utils
-from geomesh.mesh import Mesh
-from geomesh.hfun import Hfun
-from geomesh.hfun.base import BaseHfun
-from geomesh.geom import Geom
-from geomesh.geom.base import BaseGeom
+from ocsmesh import utils
+from ocsmesh.mesh import Mesh
+from ocsmesh.hfun import Hfun
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.geom import Geom
+from ocsmesh.geom.base import BaseGeom
 
 _logger = logging.getLogger(__name__)
 

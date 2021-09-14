@@ -1,5 +1,5 @@
-from geomesh.ops.combine_geom import GeomCombine
-from geomesh.ops.combine_hfun import HfunCombine
+from ocsmesh.ops.combine_geom import GeomCombine
+from ocsmesh.ops.combine_hfun import HfunCombine
 
 combine_geometry = lambda *args, **kwargs: GeomCombine(
         *args, **kwargs).run()

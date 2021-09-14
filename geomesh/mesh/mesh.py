@@ -25,10 +25,10 @@ from shapely.geometry import (
 from shapely.ops import polygonize, linemerge, unary_union
 
 
-from geomesh import utils
-from geomesh.raster import Raster
-from geomesh.mesh.base import BaseMesh
-from geomesh.mesh.parsers import grd, sms2dm
+from ocsmesh import utils
+from ocsmesh.raster import Raster
+from ocsmesh.mesh.base import BaseMesh
+from ocsmesh.mesh.parsers import grd, sms2dm
 
 _logger = logging.getLogger(__name__)
 

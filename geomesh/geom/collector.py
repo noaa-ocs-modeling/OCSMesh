@@ -18,16 +18,16 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely import ops
 from jigsawpy import jigsaw_msh_t
 
-from geomesh.mesh import Mesh
-from geomesh.mesh.base import BaseMesh
-from geomesh.raster import Raster
-from geomesh.geom.base import BaseGeom
-from geomesh.geom.raster import RasterGeom
-from geomesh.geom.shapely import MultiPolygonGeom, PolygonGeom
-from geomesh.geom.mesh import MeshGeom
-from geomesh.features.contour import FilledContour, Contour
-from geomesh.features.patch import Patch
-from geomesh.ops import combine_geometry
+from ocsmesh.mesh import Mesh
+from ocsmesh.mesh.base import BaseMesh
+from ocsmesh.raster import Raster
+from ocsmesh.geom.base import BaseGeom
+from ocsmesh.geom.raster import RasterGeom
+from ocsmesh.geom.shapely import MultiPolygonGeom, PolygonGeom
+from ocsmesh.geom.mesh import MeshGeom
+from ocsmesh.features.contour import FilledContour, Contour
+from ocsmesh.features.patch import Patch
+from ocsmesh.ops import combine_geometry
 
 _logger = logging.getLogger(__name__)
 

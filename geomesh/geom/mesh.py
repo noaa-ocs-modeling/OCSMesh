@@ -7,9 +7,9 @@ from typing import Union
 # import numpy as np  # type: ignore[import]
 # from shapely import ops  # type: ignore[import]
 
-from geomesh.geom.base import BaseGeom
-from geomesh.mesh.mesh import Mesh
-from geomesh.mesh.base import BaseMesh
+from ocsmesh.geom.base import BaseGeom
+from ocsmesh.mesh.mesh import Mesh
+from ocsmesh.mesh.base import BaseMesh
 
 
 class MeshDescriptor:

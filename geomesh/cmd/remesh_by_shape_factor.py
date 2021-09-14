@@ -9,8 +9,8 @@ from shapely.geometry import MultiPolygon, box, Polygon
 from shapely.ops import polygonize
 import jigsawpy
 
-from geomesh import Raster, Geom, Hfun, Mesh
-from geomesh import utils
+from ocsmesh import Raster, Geom, Hfun, Mesh
+from ocsmesh import utils
 
 logging.basicConfig(
     stream=sys.stdout,

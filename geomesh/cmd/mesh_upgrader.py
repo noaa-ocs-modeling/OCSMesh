@@ -12,14 +12,14 @@ from shapely import ops
 from shapely.geometry import mapping, box, MultiPolygon, Polygon
 
 import jigsawpy
-from geomesh import Raster, Geom, Hfun, JigsawDriver
-from geomesh.mesh.mesh import Mesh
-from geomesh.geom.shapely import MultiPolygonGeom
-from geomesh.hfun.mesh import HfunMesh
-from geomesh.features.contour import Contour
-from geomesh.features.patch import Patch
-from geomesh.mesh.parsers import sms2dm
-from geomesh.utils import msh_t_to_2dm
+from ocsmesh import Raster, Geom, Hfun, JigsawDriver
+from ocsmesh.mesh.mesh import Mesh
+from ocsmesh.geom.shapely import MultiPolygonGeom
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.features.contour import Contour
+from ocsmesh.features.patch import Patch
+from ocsmesh.mesh.parsers import sms2dm
+from ocsmesh.utils import msh_t_to_2dm
 
 
 logging.basicConfig(

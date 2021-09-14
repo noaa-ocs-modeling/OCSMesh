@@ -17,8 +17,8 @@ from shapely.validation import explain_validity
 
 from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 
-from geomesh.raster import Raster
-from geomesh.mesh.mesh import Mesh
+from ocsmesh.raster import Raster
+from ocsmesh.mesh.mesh import Mesh
 
 
 _logger = logging.getLogger(__name__)

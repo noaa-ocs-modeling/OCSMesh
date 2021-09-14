@@ -1,5 +1,5 @@
-from geomesh.geom.geom import Geom
-from geomesh.geom.raster import RasterGeom
+from ocsmesh.geom.geom import Geom
+from ocsmesh.geom.raster import RasterGeom
 __all__ = [
     "Geom",
     "RasterGeom"

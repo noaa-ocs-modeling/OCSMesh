@@ -31,15 +31,15 @@ from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LinearRing, LineString, MultiLineString, box)
 
-# from geomesh.geom import Geom
-# from geomesh.hfun import Hfun
-from geomesh import figures
-from geomesh import utils
+# from ocsmesh.geom import Geom
+# from ocsmesh.hfun import Hfun
+from ocsmesh import figures
+from ocsmesh import utils
 
 _logger = logging.getLogger(__name__)
 
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/geomesh'))+'/'
+tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 

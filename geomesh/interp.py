@@ -18,7 +18,7 @@ from shapely.geometry import box
 from geoalchemy2.shape import from_shape
 from shapely.ops import transform
 from pyproj import CRS, Transformer
-from geomesh import Mesh, Raster, db
+from ocsmesh import Mesh, Raster, db
 
 
 def _mesh_interpolate_worker(args):

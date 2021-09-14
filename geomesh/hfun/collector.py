@@ -21,15 +21,15 @@ from rasterio.warp import reproject, Resampling
 import rasterio
 import utm
 
-from geomesh import utils
-from geomesh.hfun.base import BaseHfun
-from geomesh.hfun.raster import HfunRaster
-from geomesh.hfun.mesh import HfunMesh
-from geomesh.mesh.mesh import Mesh
-from geomesh.raster import Raster, get_iter_windows
-from geomesh.features.contour import Contour
-from geomesh.features.patch import Patch
-from geomesh.features.channel import Channel
+from ocsmesh import utils
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.hfun.raster import HfunRaster
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.mesh.mesh import Mesh
+from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.features.contour import Contour
+from ocsmesh.features.patch import Patch
+from ocsmesh.features.channel import Channel
 
 _logger = logging.getLogger(__name__)
 
@@ -859,7 +859,7 @@ class HfunCollector(BaseHfun):
         shape1 = int(np.ceil(abs(y1 - y0) / res))
 
         approx =  int(np.sqrt(n_cell_lim))
-        window_size = None #default of Geomesh.raster.Raster
+        window_size = None #default of OCSMesh.raster.Raster
         mem_lim = 0 # default of rasterio
         if approx < max(shape0, shape1):
             window_size = np.min([shape0, shape1, approx])

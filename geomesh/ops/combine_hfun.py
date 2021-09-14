@@ -7,10 +7,10 @@ from typing import Union, Sequence, Tuple, List
 from pyproj import CRS
 from jigsawpy import savemsh, savevtk
 
-from geomesh.raster import Raster
-from geomesh.hfun.hfun import Hfun
-from geomesh.mesh.mesh import Mesh
-from geomesh import utils
+from ocsmesh.raster import Raster
+from ocsmesh.hfun.hfun import Hfun
+from ocsmesh.mesh.mesh import Mesh
+from ocsmesh import utils
 
 _logger = logging.getLogger(__name__)
 

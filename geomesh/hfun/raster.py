@@ -20,10 +20,10 @@ from shapely.geometry import (
     Polygon, MultiPolygon)
 import utm
 
-from geomesh.hfun.base import BaseHfun
-from geomesh.raster import Raster, get_iter_windows
-from geomesh.geom.shapely import PolygonGeom
-from geomesh import utils
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.geom.shapely import PolygonGeom
+from ocsmesh import utils
 
 # supress feather warning
 warnings.filterwarnings(

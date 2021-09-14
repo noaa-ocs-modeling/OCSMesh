@@ -12,7 +12,7 @@ from shapely.geometry import MultiPolygon, box
 import fiona
 import geoalchemy2
 
-from geomesh import Hfun, Geom, Raster, db
+from ocsmesh import Hfun, Geom, Raster, db
 
 
 class _ConfigManager:

@@ -1,9 +1,9 @@
-from geomesh.hfun.base import BaseHfun
-from geomesh.hfun.raster import HfunRaster
-from geomesh.hfun.mesh import HfunMesh
-from geomesh.hfun.collector import HfunCollector
-from geomesh.mesh.mesh import EuclideanMesh2D
-from geomesh.raster import Raster
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.hfun.raster import HfunRaster
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.hfun.collector import HfunCollector
+from ocsmesh.mesh.mesh import EuclideanMesh2D
+from ocsmesh.raster import Raster
 
 
 class Hfun:

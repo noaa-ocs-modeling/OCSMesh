@@ -120,8 +120,8 @@ setuptools.setup(
                       ],
     entry_points={
         'console_scripts': [
-            "geomesh=geomesh.__main__:main",
-            "interp=geomesh.interp:main"
+            "ocsmesh=ocsmesh.__main__:main",
+            "interp=ocsmesh.interp:main"
         ]
     },
     tests_require=['nose'],

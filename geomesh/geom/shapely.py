@@ -2,7 +2,7 @@ from pyproj import CRS
 from shapely.geometry import Polygon, MultiPolygon
 from typing import Union
 
-from geomesh.geom.base import BaseGeom
+from ocsmesh.geom.base import BaseGeom
 
 
 class ShapelyGeom(BaseGeom):

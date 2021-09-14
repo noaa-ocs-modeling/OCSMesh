@@ -3,11 +3,11 @@
 import argparse
 import logging
 
-from geomesh.ops import combine_geometry, combine_hfun
-from geomesh.cmd.cli import CmdCli
+from ocsmesh.ops import combine_geometry, combine_hfun
+from ocsmesh.cmd.cli import CmdCli
 
 
-class Geomesh:
+class OCSMesh:
 
     def __init__(self, args):
         self._args = args
@@ -151,7 +151,7 @@ def parse_args():
 def main():
     args = parse_args()
 #    logger.init(args.log_level)
-    Geomesh(args).main()
+    OCSMesh(args).main()
 
 
 if __name__ == '__main__':
