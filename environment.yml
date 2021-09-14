@@ -1,4 +1,4 @@
-name: geomesh-env
+name: ocsmesh-env
 channels:
   - conda-forge
 dependencies:

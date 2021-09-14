@@ -1,9 +1,9 @@
 [TYPECHECK]
 ignored-modules=matplotlib
-generated-members=geomesh.driver.JigsawDriver.hfun,
-                  geomesh.driver.JigsawDriver.geom,
-                  geomesh.driver.JigsawDriver.opts,
-                  geomesh.hfun.hfun.Hfun.*
-                  geomesh.mesh.base.BaseMesh._msh_t
-                  geomesh.mesh.mesh.EuclideanMesh._boundaries
-                  geomesh.mesh.mesh.Mesh.*
+generated-members=ocsmesh.driver.JigsawDriver.hfun,
+                  ocsmesh.driver.JigsawDriver.geom,
+                  ocsmesh.driver.JigsawDriver.opts,
+                  ocsmesh.hfun.hfun.Hfun.*
+                  ocsmesh.mesh.base.BaseMesh._msh_t
+                  ocsmesh.mesh.mesh.EuclideanMesh._boundaries
+                  ocsmesh.mesh.mesh.Mesh.*
