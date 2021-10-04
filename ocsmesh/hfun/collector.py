@@ -384,12 +384,13 @@ class HfunCollector(BaseHfun):
             upper_bound=np.inf,
             lower_bound=-np.inf,
             value_type: str = 'min',
+            rate=0.01,
             source_index: Union[List[int], int, None] = None):
 
         self._applied = False
 
         constraint_defn = TopoConstConstraint(
-            value, upper_bound, lower_bound, value_type)
+            value, upper_bound, lower_bound, value_type, rate)
 
         if source_index != None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
@@ -402,12 +403,13 @@ class HfunCollector(BaseHfun):
             upper_bound=np.inf,
             lower_bound=-np.inf,
             value_type: str = 'min',
+            rate=0.01,
             source_index: Union[List[int], int, None] = None):
 
         self._applied = False
 
         constraint_defn = TopoFuncConstraint(
-            func, upper_bound, lower_bound, value_type)
+            func, upper_bound, lower_bound, value_type, rate)
 
         if source_index != None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]

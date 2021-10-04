@@ -317,11 +317,34 @@ class HfunRaster(BaseHfun, Raster):
                 hfun_values = self.get_values(band=1, window=window)
                 rast_values = self.raster.get_values(band=1, window=window)
 
+
+                # Get locations
+                if self.crs.is_geographic:
+                    x0, y0, x1, y1 = self.get_window_bounds(window)
+                    _, _, number, letter = utm.from_latlon(
+                        (y0 + y1)/2, (x0 + x1)/2)
+                    utm_crs = CRS(
+                        proj='utm',
+                        zone=f'{number}{letter}',
+                        ellps={
+                            'GRS 1980': 'GRS80',
+                            'WGS 84': 'WGS84'
+                            }[self.crs.ellipsoid.name]
+                    )
+                else:
+                    utm_crs = None
+
+                if utm_crs is not None:
+                    xy = self.get_xy_memcache(window, utm_crs)
+                else:
+                    xy = self.get_xy(window)
+
+
                 # Apply custom constraints
                 _logger.debug(f'Processing window {i+1}/{tot}.')
                 for constraint in constraint_list:
                     hfun_values = constraint.apply(
-                            rast_values, hfun_values)
+                            rast_values, hfun_values, locations=xy)
 
                 # Apply global constraints
                 if self.hmin is not None:
@@ -342,11 +365,12 @@ class HfunRaster(BaseHfun, Raster):
             value,
             upper_bound=np.inf,
             lower_bound=-np.inf,
-            value_type: str = 'min'):
+            value_type: str = 'min',
+            rate=0.01):
 
-        # TODO: Validate conflicting constraints
+        # TODO: Validate conflicting constraints, right now last one wins
         self._constraints.append(TopoConstConstraint(
-            value, upper_bound, lower_bound, value_type))
+            value, upper_bound, lower_bound, value_type, rate))
 
 
     @_apply_constraints
@@ -355,11 +379,13 @@ class HfunRaster(BaseHfun, Raster):
             func=lambda i: i / 2.0,
             upper_bound=np.inf,
             lower_bound=-np.inf,
-            value_type: str = 'min'):
+            value_type: str = 'min',
+            rate=0.01):
 
-        # TODO: Validate conflicting constraints
+
+        # TODO: Validate conflicting constraints, right now last one wins
         self._constraints.append(TopoFuncConstraint(
-            func, upper_bound, lower_bound, value_type))
+            func, upper_bound, lower_bound, value_type, rate))
 
 
 
