@@ -1,8 +1,8 @@
 [TYPECHECK]
-ignored-modules=matplotlib
-generated-members=ocsmesh.driver.JigsawDriver.hfun,
-                  ocsmesh.driver.JigsawDriver.geom,
-                  ocsmesh.driver.JigsawDriver.opts,
+ignored-modules=matplotlib, matplotlib.cm
+generated-members=ocsmesh.driver.JigsawDriver.hfun
+                  ocsmesh.driver.JigsawDriver.geom
+                  ocsmesh.driver.JigsawDriver.opts
                   ocsmesh.hfun.hfun.Hfun.*
                   ocsmesh.mesh.base.BaseMesh._msh_t
                   ocsmesh.mesh.mesh.EuclideanMesh._boundaries

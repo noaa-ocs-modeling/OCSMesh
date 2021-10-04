@@ -102,7 +102,7 @@ class _ConfigManager:
         self._logger.debug('get_geom(): apply unary_union...')
         mp = ops.unary_union(mpc)
 
-        return Geom(mp, self._crs)
+        return Geom(mp, crs=self._crs)
 
     def get_hfun(self, geom=None):
         self._logger.debug('get_hfun()')
@@ -128,7 +128,7 @@ class _ConfigManager:
         if 'features' in self._hfun:
             raise NotImplementedError("config.hfun.features not implemented")
 
-        return Hfun(mesh, self._crs)
+        return Hfun(mesh, crs=self._crs)
 
     def _certify_config(self):
         self._config
