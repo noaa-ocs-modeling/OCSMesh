@@ -4,14 +4,14 @@ import argparse
 import logging
 
 from ocsmesh.ops import combine_geometry, combine_hfun
-from ocsmesh.cmd.cli import CmdCli
+from ocsmesh.cli.cli import CmdCli
 
 
 class OCSMesh:
 
     def __init__(self, args, ocsmesh_cli):
         self._args = args
-        self._cmd_cli = ocsmesh_cli
+        self._cli = ocsmesh_cli
 
     def main(self):
 
@@ -62,7 +62,7 @@ class OCSMesh:
                 combine_hfun(**arg_dict)
 
         elif self._args.command == 'scripts':
-            self._cmd_cli.execute(self._args)
+            self._cli.execute(self._args)
 
 
 def create_parser():
