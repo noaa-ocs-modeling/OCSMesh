@@ -1427,9 +1427,11 @@ def msh_t_to_utm(msh):
             np.max(coords[:, 0]), np.max(coords[:, 1]))
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
+        # PyProj 3.2.1 throws error if letter is provided
         utm_crs = CRS(
                 proj='utm',
-                zone=f'{number}{letter}',
+                zone=f'{number}',
+                south=(y0 + y1)/2 < 0,
                 ellps={
                     'GRS 1980': 'GRS80',
                     'WGS 84': 'WGS84'

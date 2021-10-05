@@ -68,9 +68,11 @@ def multipolygon_to_jigsaw_msh_t(
         x0, y0, x1, y1 = multipolygon.bounds
         _, _, number, letter = utm.from_latlon(
             (y0 + y1)/2, (x0 + x1)/2)
+        # PyProj 3.2.1 throws error if letter is provided
         utm_crs = CRS(
             proj='utm',
-            zone=f'{number}{letter}',
+            zone=f'{number}',
+            south=(y0 + y1)/2 < 0,
             ellps={
                 'GRS 1980': 'GRS80',
                 'WGS 84': 'WGS84'
