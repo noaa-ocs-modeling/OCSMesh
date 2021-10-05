@@ -8,6 +8,7 @@ from tqdm import tqdm
 import sys
 from functools import lru_cache
 import numpy as np
+from matplotlib.path import Path  # type: ignore[import]
 import fiona
 from multiprocessing import Pool
 import requests
@@ -247,6 +248,7 @@ class Interp:
     #     tgtraster.save(target_path)
         raster = Raster(target_path)
         bbox = raster.bbox
+        # pylint: disable=no-member
         geom = box(
                 bbox.xmin,
                 bbox.ymin,

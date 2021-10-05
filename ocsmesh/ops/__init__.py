@@ -8,6 +8,6 @@ combine_hfun = lambda *args, **kwargs: HfunCombine(
         *args, **kwargs).run()
 
 __all__ = [
-        "combine_geometry"
+        "combine_geometry",
         "combine_hfun"
 ]

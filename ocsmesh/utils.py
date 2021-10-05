@@ -769,26 +769,6 @@ def get_cross_edges(
     return cut_edge_idx
 
 
-def get_vertex_neighbor(
-        mesh,
-        vert_in: Sequence[int],
-        steps: int = 1):
-
-    elem_types = ['tria3', 'quad4', 'hexa8']
-    elem_dict = dict()
-    for etype in elem_types:
-        elem_dict[etype] = getattr(mesh, etype)['index']
-
-    all_verts = np.array(vert_in).copy()
-    for i in range(steps):
-        neighbors = np.array()
-        for elems in elem_dict.values():
-            elem_mark = np.any(np.isin(elems, all_verts, axis=1))
-            neighbors.append(np.unqiue(elemns[elem_mark]))
-        all_verts.append(neighbors)
-
-    return np.setdiff1d(all_verts, vert_in, assume_unique=False)
-
 
 def clip_mesh_by_shape(
         mesh: jigsaw_msh_t,
@@ -1095,8 +1075,10 @@ def faces_around_vertex(mesh):
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
     faces_around_vertex = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
-        np.isin(i, axis=0)
-        faces_around_vertex[i].add()
+        # TODO:
+        pass
+#        np.isin(i, axis=0)
+#        faces_around_vertex[i].add()
 
     faces_around_vertex = defaultdict(set)
 

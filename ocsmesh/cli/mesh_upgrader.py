@@ -52,7 +52,7 @@ class MeshUpgrader:
         this_parser.add_argument('--demhi', nargs='*', required=True)
         this_parser.add_argument('--out', required=True)
 
-    def run(args):
+    def run(self, args):
 
         logging.info(args)
 

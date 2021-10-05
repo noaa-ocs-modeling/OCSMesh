@@ -102,7 +102,7 @@ class _ConfigManager:
         self._logger.debug('get_geom(): apply unary_union...')
         mp = ops.unary_union(mpc)
 
-        return Geom(mp, self._crs)
+        return Geom(mp, crs=self._crs)
 
     def get_hfun(self, geom=None):
         self._logger.debug('get_hfun()')
@@ -128,7 +128,7 @@ class _ConfigManager:
         if 'features' in self._hfun:
             raise NotImplementedError("config.hfun.features not implemented")
 
-        return Hfun(mp, self._crs)
+        return Hfun(mesh, crs=self._crs)
 
     def _certify_config(self):
         self._config
@@ -412,9 +412,6 @@ class _ConfigManager:
     @property
     def _hfun_raster_opts(self):
         opts = self._config["hfun"]["rasters"]
-        assert isinstance(contours, (list, dict)), \
-            "config.hfun.rasters.contours must be a dictionary or "\
-            "list of dictionaries."
 
     @property
     @lru_cache(maxsize=None)
@@ -494,9 +491,9 @@ def _geom_raster_processing_worker(
     _apply_raster_opts(raster, raster_opts)
     geom = Geom(raster.get_multipolygon(
         zmin=zmin,
-        zmax=zmax,
+        zmax=zmax),
         join_method=join_method,
         driver=driver,
-        nprocs=1))
+        nprocs=1)
 
     return geom

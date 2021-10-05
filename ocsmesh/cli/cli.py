@@ -1,8 +1,8 @@
 import warnings
 
-from ocsmesh.cmd.remesh_by_shape_factor import RemeshByShape
-from ocsmesh.cmd.remesh import RemeshByDEM
-from ocsmesh.cmd.mesh_upgrader import MeshUpgrader
+from ocsmesh.cli.remesh_by_shape_factor import RemeshByShape
+from ocsmesh.cli.remesh import RemeshByDEM
+from ocsmesh.cli.mesh_upgrader import MeshUpgrader
 
 class CmdCli:
 
@@ -16,7 +16,7 @@ class CmdCli:
             item = cls(scripts_subp)
             self._script_dict[item.script_name] = item
 
-    def execute(args):
+    def execute(self, args):
 
         warnings.warn(
             "Scripts CLI is used for experimental new features"

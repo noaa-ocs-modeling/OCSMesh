@@ -4,13 +4,14 @@ import argparse
 import logging
 
 from ocsmesh.ops import combine_geometry, combine_hfun
-from ocsmesh.cmd.cli import CmdCli
+from ocsmesh.cli.cli import CmdCli
 
 
 class OCSMesh:
 
-    def __init__(self, args):
+    def __init__(self, args, ocsmesh_cli):
         self._args = args
+        self._cli = ocsmesh_cli
 
     def main(self):
 
@@ -61,10 +62,10 @@ class OCSMesh:
                 combine_hfun(**arg_dict)
 
         elif self._args.command == 'scripts':
-            cmd_cli.execute(self._args)
+            self._cli.execute(self._args)
 
 
-def parse_args():
+def create_parser():
     common_parser = argparse.ArgumentParser()
 
     common_parser.add_argument("--log-level", choices=["info", "debug", "warning"])
@@ -125,7 +126,7 @@ def parse_args():
     hfun_bld.add_argument(
         '--hmin', type=float, help='Minimum element size')
     hfun_bld.add_argument(
-        '--contour', action='append', nargs='+', type=float,
+        '--contour', action='append', nargs='+', type=float, default=list(),
         help="Each contour's (level, [expansion, target])"
              " to be applied on all size functions in collector")
     hfun_bld.add_argument(
@@ -143,15 +144,15 @@ def parse_args():
 
     # Scripts don't use common arguments as they are standalon code
     scripts_parser = subp.add_parser('scripts')
-    CmdCli(scripts_parser)
+    cmd_cli = CmdCli(scripts_parser)
 
-    return parser.parse_args()
+    return parser, cmd_cli
 
 
 def main():
-    args = parse_args()
+    parser, ocsmesh_cli = create_parser()
 #    logger.init(args.log_level)
-    OCSMesh(args).main()
+    OCSMesh(parser.parse_args(), ocsmesh_cli).main()
 
 
 if __name__ == '__main__':

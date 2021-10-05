@@ -16,6 +16,7 @@ import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon
 from shapely import ops
+from shapely.validation import explain_validity
 from jigsawpy import jigsaw_msh_t
 
 from ocsmesh.mesh import Mesh
@@ -164,7 +165,7 @@ class GeomCollector(BaseGeom):
 
                 elif in_item.endswith(
                         ('.14', '.grd', '.gr3', '.msh', '.2dm')):
-                    geom = MeshGeom(Mesh.open(path))
+                    geom = MeshGeom(Mesh.open(in_item))
 
                 else:
                     raise TypeError("Input file extension not supported!")
@@ -213,8 +214,15 @@ class GeomCollector(BaseGeom):
             gdf = gpd.GeoDataFrame(columns=['geometry'], crs=epsg4326)
             for f in feather_files:
                 gdf = gdf.append(gpd.read_feather(f))
-            mp = MultiPolygon(
-                [geom for geom in gdf.unary_union.geoms])
+
+            mp = gdf.unary_union
+            if isinstance(mp, Polygon):
+                mp = MultiPolygon([mp])
+
+            elif not isinstance(mp, MultiPolygon):
+                raise ValueError(
+                    "Union of all shapes resulted in invalid geometry"
+                    + " type")
 
         return mp
 
@@ -242,7 +250,7 @@ class GeomCollector(BaseGeom):
                     "Level must be specified either by min and max values"
                     " or by only max value ")
 
-            contour_defn = FilledContour(level=level)
+            contour_defn = FilledContour(level1=level)
             level0, level1
 
         elif isinstance(contour_defn, Contour):

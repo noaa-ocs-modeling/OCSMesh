@@ -91,7 +91,7 @@ class RemeshByDEM:
         this_parser.add_argument('dem', nargs='+', type=Path)
 
 
-    def _read_geom_hfun(geom_file, hfun_file, hfun_crs):
+    def _read_geom_hfun(self, geom_file, hfun_file, hfun_crs):
         _logger.info("Read geom and hfun from disk")
         _logger.info("Readng geometry...")
         gdf_geom = gpd.read_file(geom_file)
@@ -113,7 +113,7 @@ class RemeshByDEM:
         return geom, hfun
 
 
-    def run(args):
+    def run(self, args):
 
         # Get inputs
         base_path = args.mesh
@@ -155,7 +155,7 @@ class RemeshByDEM:
        
 
         if out_path is None:
-            out_path = base_path.parent / 'remeshed.' + out_format
+            out_path = base_path.parent / ('remeshed.' + out_format)
         out_path.parent.mkdir(exist_ok=True, parents=True)
 
         nprocs = -1 if nprocs == None else nprocs
@@ -187,7 +187,7 @@ class RemeshByDEM:
         # Read geometry and hfun from files if provided
         if (geom_file and hfun_file
                 and geom_file.is_file() and hfun_file.is_file()):
-            geom, hfun = _read_geom_hfun(geom_file, hfun_file, hfun_crs)
+            geom, hfun = self._read_geom_hfun(geom_file, hfun_file, hfun_crs)
             log_calculation = False
 
         # Create geometry and hfun from inputs
@@ -261,7 +261,7 @@ class RemeshByDEM:
 
                 # Read back from file to avoid recalculation of hfun
                 # and geom
-                geom, hfun = _read_geom_hfun(
+                geom, hfun = self._read_geom_hfun(
                     str(out_path) + '.geom.shp',
                     str(out_path) + '.hfun.2dm',
                     "EPSG:4326")
