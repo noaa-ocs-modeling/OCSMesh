@@ -64,7 +64,7 @@ class HfunMesh(BaseHfun):
 
     def size_from_mesh(self):
 
-        ''' 
+        '''
         Get size function values based on the mesh underlying
         this size function. This method overwrites the values
         in underlying msh_t.
@@ -95,7 +95,7 @@ class HfunMesh(BaseHfun):
                 )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            # Note self.mesh.msh_t is NOT overwritten as coord is 
+            # Note self.mesh.msh_t is NOT overwritten as coord is
             # being reassigned, not modified
             coord = np.vstack(
                 transformer.transform(coord[:, 0], coord[:, 1])).T
@@ -146,7 +146,7 @@ class HfunMesh(BaseHfun):
         # ONLY TESTED FOR TRIA FOR NOW
 
         # This part of the function is generic for tria and quad
-        
+
         # Get coordinates for all edge vertices
         _logger.info('Getting coordinate of edges...')
         edge_coords = coord[all_edges, :]
@@ -217,7 +217,7 @@ class HfunMesh(BaseHfun):
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
-            
+
             features = MultiLineString([*exteriors, *interiors])
             self.add_feature(
                 feature=features,
@@ -245,7 +245,7 @@ class HfunMesh(BaseHfun):
             values[np.where(values > self.hmax)] = self.hmax
         values = np.minimum(self.mesh.msh_t.value, values)
         values = values.reshape(self.mesh.msh_t.value.shape)
-        
+
         self.mesh.msh_t.value = values
 
     def add_feature(
@@ -312,7 +312,7 @@ class HfunMesh(BaseHfun):
             raise ValueError("Argument target_size must be greater than zero.")
 
         utm_crs: Union[CRS, None] = None
-        
+
         if self.crs.is_geographic:
             x0, y0, x1, y1 = self.mesh.get_bbox().bounds
             _, _, number, letter = utm.from_latlon(
@@ -380,7 +380,7 @@ class HfunMesh(BaseHfun):
         tree = cKDTree(np.array(points))
         _logger.info(f'Generating KDTree took {time()-start}.')
 
-        # We call msh_t() so that it also takes care of utm 
+        # We call msh_t() so that it also takes care of utm
         # transformation
         xy = self.msh_t().vert2['coord']
 

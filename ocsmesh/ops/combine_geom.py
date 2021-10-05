@@ -96,10 +96,10 @@ class GeomCombine:
             _logger.info(
                 f"All DEMs have the same CRS:"
                 f" {self._calc_crs.to_string()}")
-            
+
         base_mult_poly = None
         if mesh_mp_in:
-            # Assumption: If base_mult_poly is provided, it's in 
+            # Assumption: If base_mult_poly is provided, it's in
             # base_crs if not None, else in out_crs
             base_mult_poly = self._get_valid_multipolygon(mesh_mp_in)
             if base_crs == None:
@@ -272,7 +272,7 @@ class GeomCombine:
 
 
     def _multipolygon_to_disk(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             multipolygon: MultiPolygon,
             fix: bool = True):
@@ -290,7 +290,7 @@ class GeomCombine:
 
 
     def _read_multipolygon(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             fix: bool = True
             ) -> MultiPolygon:
@@ -305,7 +305,7 @@ class GeomCombine:
         return multipolygon
 
     def _read_to_geodf(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             ) -> gpd.GeoDataFrame:
 
@@ -332,7 +332,7 @@ class GeomCombine:
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
-        
+
         pri_mult_poly = MultiPolygon([box(*rast.src.bounds)])
 
         self._multipolygon_to_disk(
@@ -417,7 +417,7 @@ class GeomCombine:
 #            for p in range(priority):
 #                higher_pri_path = (
 #                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
-#            
+#
 #                if higher_pri_path.is_file():
 #                    priority_geodf = priority_geodf.append(
 #                             self._read_to_geodf(higher_pri_path))
@@ -429,8 +429,8 @@ class GeomCombine:
 #                    pri_mult_poly = op_res
 #                else:
 #                    pri_mult_poly = MultiPolygon([op_res])
-#                    
-#                 
+#
+#
 #                if rast_box.within(pri_mult_poly):
 #                    _logger.info(
 #                        f"{dem_path} is ignored due to priority...")

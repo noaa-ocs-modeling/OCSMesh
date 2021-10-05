@@ -346,7 +346,7 @@ class HfunRaster(BaseHfun, Raster):
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
-            
+
             features = MultiLineString([*exteriors, *interiors])
             self.add_feature(
                 feature=features,
@@ -378,7 +378,7 @@ class HfunRaster(BaseHfun, Raster):
                 except ValueError:
                     # If there's no overlap between the raster and
                     # shapes then it throws ValueError, instead of
-                    # checking for intersection, if there's a value 
+                    # checking for intersection, if there's a value
                     # error we assume there's no overlap
                     _logger.debug(
                         'Polygons don\'t intersect with the raster')
@@ -396,7 +396,7 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                
+
                 _logger.info(f'Write array to file {tmpfile.name}...')
                 start = time()
                 dst.write_band(1, values, window=window)

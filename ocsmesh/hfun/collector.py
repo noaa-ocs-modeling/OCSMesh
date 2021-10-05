@@ -63,7 +63,7 @@ class RefinementContourCollector:
         self._container.clear()
         for contour_defn, size_info in self._contours_info:
             if not contour_defn.has_source:
-                # Copy so that in case of a 2nd run the no-source 
+                # Copy so that in case of a 2nd run the no-source
                 # contour still gets all current sources
                 contour_defn = copy(contour_defn)
                 for source in source_list:
@@ -104,7 +104,7 @@ class ConstantValueContourInfoCollector:
     def add(self, src_idx, contour_defn0, contour_defn1, value):
         srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
-                (srcs, contour_defn0, contour_defn1)] = value 
+                (srcs, contour_defn0, contour_defn1)] = value
 
     def __iter__(self):
         for defn, info in self._contours_info.items():
@@ -173,7 +173,7 @@ class ChannelRefineCollector:
         self._container.clear()
         for channel_defn, size_info in self._channels_info:
             if not channel_defn.has_source:
-                # Copy so that in case of a 2nd run the no-source 
+                # Copy so that in case of a 2nd run the no-source
                 # channel still gets all current sources
                 channel_defn = copy(channel_defn)
                 for source in source_list:
@@ -263,7 +263,7 @@ class HfunCollector(BaseHfun):
         # TODO: Interpolate max size on base mesh basemesh?
         #
         # TODO: CRS considerations
-        
+
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -346,7 +346,7 @@ class HfunCollector(BaseHfun):
             with tempfile.TemporaryDirectory() as temp_dir:
                 hfun_path_list = self._write_hfun_to_disk(temp_dir)
                 composite_hfun = self._get_hfun_composite(hfun_path_list)
-        
+
 
         elif self._method == 'fast':
 
@@ -404,7 +404,7 @@ class HfunCollector(BaseHfun):
 
         for contour_defn in contour_defns:
             self._contour_info_coll.add(
-                contour_defn, 
+                contour_defn,
                 expansion_rate=expansion_rate,
                 target_size=target_size)
 
@@ -422,8 +422,8 @@ class HfunCollector(BaseHfun):
         # Always lazy
         self._applied = False
 
-        # Even a tolerance of 1 for simplifying polygon for channel 
-        # calculations is much faster than no simplification. 50 
+        # Even a tolerance of 1 for simplifying polygon for channel
+        # calculations is much faster than no simplification. 50
         # is much faster than 1. The reason is in simplify we don't
         # preserve topology
         if channel_defn == None:
@@ -436,7 +436,7 @@ class HfunCollector(BaseHfun):
                 f" {type(channel_defn)}!")
 
         self._ch_info_coll.add(
-            channel_defn, 
+            channel_defn,
             expansion_rate=expansion_rate,
             target_size=target_size)
 
@@ -455,7 +455,7 @@ class HfunCollector(BaseHfun):
             source_index = [source_index]
 
         # TODO: Checks on hmin/hmax, etc?
-            
+
         self._flow_lim_coll.add(
             source_index,
             hmin=hmin,
@@ -515,7 +515,7 @@ class HfunCollector(BaseHfun):
         valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
-                f'Input list items must be of type' 
+                f'Input list items must be of type'
                 f' {", ".join(str(i) for i in valid_types)},'
                 f' or a derived type.')
 
@@ -754,7 +754,7 @@ class HfunCollector(BaseHfun):
             gc.collect()
         return path_list
 
-                        
+
 
     def _get_hfun_composite(self, hfun_path_list):
 
@@ -848,7 +848,7 @@ class HfunCollector(BaseHfun):
             ratio = dim1 / dim2
             pixel_size_x = hfun_in.raster.src.transform[0] * ratio
             pixel_size_y = -hfun_in.raster.src.transform[4] * ratio
-            
+
             worst_res = np.max([worst_res, pixel_size_x, pixel_size_y])
 
         # TODO: What if no hmin? -> use smallest raster res!
@@ -928,7 +928,7 @@ class HfunCollector(BaseHfun):
         return Raster(out_rast, chunk_size=window_size)
 
     def _apply_features_fast(self, big_raster):
-        
+
         # NOTE: Caching applied doesn't work here since we apply
         # everything on a temporary big raster
         hfun = HfunRaster(big_raster, **self._size_info)

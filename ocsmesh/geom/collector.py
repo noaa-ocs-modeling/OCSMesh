@@ -101,7 +101,7 @@ class GeomCollector(BaseGeom):
         # TODO: CRS considerations -- geom combine doesn't necessarily
         # return EPSG:4326 (unlike hfun collector msh_t)
         self._crs = 'EPSG:4326'
-        
+
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -279,7 +279,7 @@ class GeomCollector(BaseGeom):
                 f" {type(patch_defn)}!")
 
 
-        # If patch defn is None it means the patch applies to 
+        # If patch defn is None it means the patch applies to
         # all the sources of the accompanying contour
         self._contour_patch_info_coll.add(
             contour_defn, patch_defn)
@@ -300,7 +300,7 @@ class GeomCollector(BaseGeom):
         return rasters
 
     def _get_raster_source_files(self):
-        
+
         rasters = self._get_raster_sources()
         return self._get_raster_files_from_source(rasters)
 
@@ -311,9 +311,9 @@ class GeomCollector(BaseGeom):
                 raster_files.append(r.path)
             elif isinstance(r, RasterGeom):
                 raster_files.append(r.raster.path)
-            
+
         return raster_files
-        
+
     def _get_non_raster_sources(self):
         raster_types = (RasterGeom, Raster)
         non_rasters = [
@@ -403,7 +403,7 @@ class GeomCollector(BaseGeom):
 
         feather_files = list()
         for e, (ctr_defn, ptch_defn) in enumerate(self._contour_patch_info_coll):
-            
+
             patch_zmin, patch_zmax = ctr_defn.level
             if not patch_zmin:
                 patch_zmin = zmin

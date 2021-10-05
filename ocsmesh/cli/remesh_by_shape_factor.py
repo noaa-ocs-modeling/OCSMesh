@@ -114,7 +114,7 @@ class RemeshByShape:
         patch_defns = list()
         for lower_bound, target_size in patches:
             patch_defns.append((lower_bound, expansion_rate, target_size))
-        
+
         constant_defns = list()
         for lower_bound, target_size in constants:
             constant_defns.append((lower_bound, target_size))
@@ -241,7 +241,7 @@ class RemeshByShape:
 
             refine_ctr = mesh.get_contour(level=level)
             refine_ctr = transform(transformer.transform, refine_ctr)
-            
+
             hfun_refine.add_feature(
                     refine_ctr, expansion_rate, target_size, nprocs)
 
@@ -279,8 +279,8 @@ class RemeshByShape:
         opts.mesh_dims = +2
 
         remesh_jig = jigsawpy.jigsaw_msh_t()
-        remesh_jig.mshID = 'euclidean-mesh'                           
-        remesh_jig.ndims = 2                                          
+        remesh_jig.mshID = 'euclidean-mesh'
+        remesh_jig.ndims = 2
         remesh_jig.crs = init_jig.crs
 
         jigsawpy.lib.jigsaw(

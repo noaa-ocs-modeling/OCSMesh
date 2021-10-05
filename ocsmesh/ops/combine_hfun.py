@@ -65,7 +65,7 @@ class HfunCombine:
         nprocs = self._operation_info['nprocs']
 
         nprocs = cpu_count() if nprocs == -1 else nprocs
-        
+
         out_dir = pathlib.Path(out_file).parent
         out_dir.mkdir(exist_ok=True, parents=True)
 

@@ -6,7 +6,7 @@ from pyproj import CRS
 from shapely.geometry import MultiPolygon, Polygon
 
 class Patch:
-    
+
     def __init__(self,
                  shape: Union[None, MultiPolygon, Polygon] = None,
                  shape_crs: CRS = CRS.from_user_input("EPSG:4326"),
@@ -32,7 +32,7 @@ class Patch:
             raise TypeError(
                 f"Type of shape input must be either {MultiPolygon}"
                 f" or {Polygon}")
-            
+
         elif not self._shapefile.is_file():
             raise ValueError(
                 f"Not shape input for patch definition")
@@ -53,7 +53,7 @@ class Patch:
                     poly_list.extend([pl for pl in shp.geoms])
 
             multipolygon = MultiPolygon(poly_list)
-            
+
             return multipolygon, gdf.crs
 
         raise ValueError(

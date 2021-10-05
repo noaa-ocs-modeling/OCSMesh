@@ -36,7 +36,7 @@ class RemeshByDEM:
 
     def __init__(self, sub_parser):
 
-        # e.g 
+        # e.g
         # ./remesh \
         #   --mesh <MESH_ADD> \
         #   --output <OUT_FILE_ADDR> \
@@ -148,11 +148,11 @@ class RemeshByDEM:
             level, expansion_rate, target_size = [
                     *contour, *[None]*(3-len(contour))]
             contour_defns.append((level, expansion_rate, target_size))
-        
+
         constant_defns = list()
         for lower_bound, target_size in constants:
             constant_defns.append((lower_bound, target_size))
-       
+
 
         if out_path is None:
             out_path = base_path.parent / ('remeshed.' + out_format)
@@ -176,13 +176,13 @@ class RemeshByDEM:
             geom_rast_list.append(Raster(dem_path))
             hfun_rast_list.append(Raster(dem_path))
             interp_rast_list.append(Raster(dem_path))
-            
+
         _logger.info("Read base mesh")
         if mesh_crs is None:
             mesh_crs = "EPSG:4326"
         init_mesh = Mesh.open(str(base_path), crs=mesh_crs)
         # TODO: Cleanup isolates?
-        
+
         log_calculation = True
         # Read geometry and hfun from files if provided
         if (geom_file and hfun_file

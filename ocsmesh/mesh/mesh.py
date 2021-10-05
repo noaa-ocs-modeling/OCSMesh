@@ -671,7 +671,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
-        
+
 
     def get_contour(self, level: float):
 
@@ -710,7 +710,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
 
     def get_multipolygon(self, zmin=None, zmax=None):
-        
+
         values = self.msh_t.value
         mask = np.ones(values.shape)
         if zmin is not None:
@@ -747,7 +747,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
         # Get actual polygons based on logic described above
         polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
-    
+
         return MultiPolygon(polys)
 
     @property
@@ -1003,7 +1003,7 @@ def _mesh_interpolate_worker(
             helper[interp_mask] = False
             # _idxs is inverse mask
             _idxs[_idxs] = helper
-            _values = _values[~interp_mask] 
+            _values = _values[~interp_mask]
         idxs.append(_idxs)
         values.append(_values)
 

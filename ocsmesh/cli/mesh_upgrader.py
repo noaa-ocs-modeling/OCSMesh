@@ -38,7 +38,7 @@ class MeshUpgrader:
         return 'mesh_upgrader'
 
     def __init__(self, sub_parser):
-        # e.g 
+        # e.g
         # ./multi_dem_mesh_2.py \
         #       --basemesh data/prusvi/mesh/PRUSVI_COMT.14 \
         #       --demlo gebco_2020_n90.0_s0.0_w-90.0_e0.0.tif \
