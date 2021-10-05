@@ -9,10 +9,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python 3.8
+    - name: Set up Python 3.9
       uses: actions/setup-python@v2
       with:
-        python-version: 3.8
+        python-version: 3.9
     - name: Add conda to system path
       run: |
         # $CONDA is an environment variable pointing to the root of the miniconda directory
@@ -22,5 +22,5 @@ jobs:
         conda env update --file environment.yml --name base
     - name: Analysing the code with pylint
       run: |
-        conda install -cconda-forge pylint=2.11 # For fail-on option
+        conda install -cconda-forge pylint=2.11.1 # For fail-on option
         pylint --fail-on E --fail-under 7.40 ocsmesh

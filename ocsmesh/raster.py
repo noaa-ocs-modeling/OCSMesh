@@ -258,6 +258,7 @@ class Raster:
             if not self.crs.equals(crs):
                 transformer = Transformer.from_crs(
                     self.crs, crs, always_xy=True)
+                # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
         if output_type == 'polygon':
