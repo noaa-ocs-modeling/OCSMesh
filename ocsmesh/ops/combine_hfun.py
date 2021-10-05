@@ -70,7 +70,9 @@ class HfunCombine:
         out_dir.mkdir(exist_ok=True, parents=True)
 
         logging.info("Loading base mesh...")
-        base_mesh = Mesh.open(mesh_file, crs="EPSG:4326")
+        base_mesh = None
+        if mesh_file:
+            base_mesh = Mesh.open(mesh_file, crs="EPSG:4326")
 
         rast_list = list()
         for dem_path in dem_files:

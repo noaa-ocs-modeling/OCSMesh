@@ -126,7 +126,7 @@ def create_parser():
     hfun_bld.add_argument(
         '--hmin', type=float, help='Minimum element size')
     hfun_bld.add_argument(
-        '--contour', action='append', nargs='+', type=float,
+        '--contour', action='append', nargs='+', type=float, default=list(),
         help="Each contour's (level, [expansion, target])"
              " to be applied on all size functions in collector")
     hfun_bld.add_argument(
