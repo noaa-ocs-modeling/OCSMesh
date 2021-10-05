@@ -214,8 +214,15 @@ class GeomCollector(BaseGeom):
             gdf = gpd.GeoDataFrame(columns=['geometry'], crs=epsg4326)
             for f in feather_files:
                 gdf = gdf.append(gpd.read_feather(f))
-            mp = MultiPolygon(
-                [geom for geom in gdf.unary_union.geoms])
+
+            mp = gdf.unary_union
+            if isinstance(mp, Polygon):
+                mp = MultiPolygon([mp])
+
+            elif not isinstance(mp, MultiPolygon):
+                raise ValueError(
+                    "Union of all shapes resulted in invalid geometry"
+                    + " type")
 
         return mp
 

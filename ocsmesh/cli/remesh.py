@@ -155,7 +155,7 @@ class RemeshByDEM:
        
 
         if out_path is None:
-            out_path = base_path.parent / 'remeshed.' + out_format
+            out_path = base_path.parent / ('remeshed.' + out_format)
         out_path.parent.mkdir(exist_ok=True, parents=True)
 
         nprocs = -1 if nprocs == None else nprocs
