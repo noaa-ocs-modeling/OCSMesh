@@ -1262,6 +1262,7 @@ def reproject(
     src_crs = mesh.crs
     dst_crs = CRS.from_user_input(dst_crs)
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    # pylint: disable=E0633
     x, y = transformer.transform(
         mesh.vert2['coord'][:, 0], mesh.vert2['coord'][:, 1])
     mesh.vert2 = np.array(
@@ -1427,9 +1428,11 @@ def msh_t_to_utm(msh):
             np.max(coords[:, 0]), np.max(coords[:, 1]))
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
+        # PyProj 3.2.1 throws error if letter is provided
         utm_crs = CRS(
                 proj='utm',
-                zone=f'{number}{letter}',
+                zone=f'{number}',
+                south=(y0 + y1)/2 < 0,
                 ellps={
                     'GRS 1980': 'GRS80',
                     'WGS 84': 'WGS84'
@@ -1438,6 +1441,7 @@ def msh_t_to_utm(msh):
         transformer = Transformer.from_crs(
             msh.crs, utm_crs, always_xy=True)
 
+        # pylint: disable=E0633
         coords[:, 0], coords[:, 1] = transformer.transform(
                 coords[:, 0], coords[:, 1])
         msh.vert2['coord'][:] = coords

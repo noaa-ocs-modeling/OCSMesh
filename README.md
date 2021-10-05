@@ -1,4 +1,4 @@
-![example workflow](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg)
+![lint workflow](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main)
 
 ## OCSMesh
 ### A Python package for processing DEM data into georeferenced unstructured meshes using the [jigsaw-python](https://github.com/dengwirda/jigsaw-python) library.
@@ -12,6 +12,6 @@ The Jigsaw library must be initialized first by running `./setup.py install_jigs
 ./setup.py develop # run this if you are a developer.
 ```
 #### Requirements
-* Python>=3.6
+* 3.7 <= Python < 3.10
 * CMake 
 * C/C++ compilers

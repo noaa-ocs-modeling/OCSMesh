@@ -828,8 +828,10 @@ class HfunCollector(BaseHfun):
 
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
+        # PyProj 3.2.1 throws error if letter is provided
         utm_crs = CRS(
-            proj='utm', zone=f'{number}{letter}', ellps='WGS84')
+            proj='utm', zone=f'{number}',
+            south=(y0 + y1)/2 < 0, ellps='WGS84')
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
 
