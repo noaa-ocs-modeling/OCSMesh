@@ -54,7 +54,8 @@ class RemeshByShape:
         this_parser.add_argument(
             '--patch',
             action='append', nargs=3, type=float, dest='patches',
-            metavar='PATCH_DEFN', default=[[]            help="Specify patch mesh size above a given contour level"
+            metavar='PATCH_DEFN', default=[],
+            help="Specify patch mesh size above a given contour level"
                  " by passing (lower_bound, expansion, target_size)"
                  " for each patch")
         this_parser.add_argument(

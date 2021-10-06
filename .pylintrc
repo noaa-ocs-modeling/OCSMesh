@@ -1,6 +1,6 @@
 [MASTER]
 fail-on=E
-fail-under=9.30
+fail-under=9.50
 py-version=3.9.7
 
 [MESSAGES CONTROL]

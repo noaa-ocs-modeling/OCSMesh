@@ -550,7 +550,7 @@ class EuclideanMesh(BaseMesh):
                 f'File {str(path)} exists and overwrite is not True.')
         if format == 'grd':
             grd_dict = utils.msh_t_to_grd(self.msh_t)
-            if hasattr(self, '_boundaries') and self._boundaries.data:
+            if self._boundaries and self._boundaries.data:
                 grd_dict.update(boundaries=self._boundaries.data)
             grd.write(grd_dict, path, overwrite)
 
@@ -609,6 +609,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
     def __init__(self, mesh: jigsaw_msh_t):
         super().__init__(mesh)
+        self._boundaries = None
 
         if mesh.ndims != +2:
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
@@ -645,7 +646,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
     @property
     def boundaries(self):
-        if self._boundaries is None
+        if self._boundaries is None:
             self._boundaries = Boundaries(self)
         return self._boundaries
 
