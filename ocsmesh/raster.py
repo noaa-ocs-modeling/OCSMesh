@@ -78,15 +78,15 @@ class Crs:
             tmpfile = tempfile.NamedTemporaryFile()
             with rasterio.open(obj.path) as src:
                 if obj.chunk_size is not None:
-                    windows = get_iter_windows(
+                    wins = get_iter_windows(
                         src.width, src.height, chunk_size=obj.chunk_size)
                 else:
-                    windows = [rasterio.windows.Window(
+                    wins = [windows.Window(
                         0, 0, src.width, src.height)]
                 meta = src.meta.copy()
                 meta.update({'crs': val, 'driver': 'GTiff'})
                 with rasterio.open(tmpfile, 'w', **meta,) as dst:
-                    for window in windows:
+                    for window in wins:
                         dst.write(src.read(window=window), window=window)
             obj._tmpfile = tmpfile
 
@@ -218,8 +218,8 @@ class Raster:
         else:
             iter_windows = [window]
 
-        for window in iter_windows:
-            x, y, z = self.get_window_data(window, band=band)
+        for win in iter_windows:
+            x, y, z = self.get_window_data(win, band=band)
             new_mask = np.full(z.mask.shape, 0)
             new_mask[np.where(z.mask)] = -1
             new_mask[np.where(~z.mask)] = 1
@@ -233,12 +233,11 @@ class Raster:
             if np.all(new_mask == -1):  # or not new_mask.any():
                 continue
 
-            else:
-                fig, ax = plt.subplots()
-                ax.contourf(
-                    x, y, new_mask, levels=[0, 1])
-                plt.close(fig)
-                polygon_collection.extend(get_multipolygon_from_axes(ax))
+            fig, ax = plt.subplots()
+            ax.contourf(
+                x, y, new_mask, levels=[0, 1])
+            plt.close(fig)
+            polygon_collection.extend(get_multipolygon_from_axes(ax))
 
         geom = ops.unary_union(polygon_collection)
         if not isinstance(geom, MultiPolygon):
@@ -265,10 +264,10 @@ class Raster:
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
             return Bbox([[xmin, ymin], [xmax, ymax]])
-        else:
-            raise TypeError(
-                'Argument output_type must a string literal \'polygon\' or '
-                '\'bbox\'')
+
+        raise TypeError(
+            'Argument output_type must a string literal \'polygon\' or '
+            '\'bbox\'')
 
     def contourf(
             self,
@@ -335,8 +334,7 @@ class Raster:
     def tags(self, i=None):
         if i is None:
             return self.src.tags()
-        else:
-            return self.src.tags(i)
+        return self.src.tags(i)
 
     def read(self, i, masked=True, **kwargs):
         return self.src.read(i, masked=masked, **kwargs)
@@ -351,7 +349,7 @@ class Raster:
         return self.src.sample(xy, i)
 
     def close(self):
-        del(self._src)
+        del self._src
 
     def add_band(self, values,  **tags):
         kwargs = self.src.meta.copy()
@@ -536,8 +534,8 @@ class Raster:
             iter_windows = [window]
         if len(iter_windows) > 1:
             return self._get_raster_contour_feathered(level, iter_windows)
-        else:
-            return self._get_raster_contour_windowed(level, window)
+
+        return self._get_raster_contour_windowed(level, window)
 
     def get_channels(
             self,
@@ -680,7 +678,7 @@ class Raster:
 
     def get_window_transform(self, window):
         if window is None:
-            return
+            return None
         return windows.transform(window, self.transform)
 
     @property
@@ -835,7 +833,7 @@ def get_iter_windows(
 
 def get_multipolygon_from_axes(ax):
     # extract linear_rings from plot
-    linear_ring_collection = list()
+    linear_ring_collection = []
     for path_collection in ax.collections:
         for path in path_collection.get_paths():
             polygons = path.to_polygons(closed_only=True)
@@ -848,11 +846,11 @@ def get_multipolygon_from_axes(ax):
         areas = [Polygon(linear_ring).area
                  for linear_ring in linear_ring_collection]
         idx = np.where(areas == np.max(areas))[0][0]
-        polygon_collection = list()
+        polygon_collection = []
         outer_ring = linear_ring_collection.pop(idx)
         path = Path(np.asarray(outer_ring.coords), closed=True)
         while len(linear_ring_collection) > 0:
-            inner_rings = list()
+            inner_rings = []
             for i, linear_ring in reversed(
                     list(enumerate(linear_ring_collection))):
                 xy = np.asarray(linear_ring.coords)[0, :]
@@ -885,4 +883,4 @@ def redistribute_vertices(geom, distance):
                  for part in geom]
         return type(geom)([p for p in parts if not p.is_empty])
     else:
-        raise ValueError('unhandled geometry %s', (geom.geom_type,))
+        raise ValueError(f'unhandled geometry {geom.geom_type}')

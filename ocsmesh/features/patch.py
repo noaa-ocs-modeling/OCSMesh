@@ -28,14 +28,14 @@ class Patch:
         elif isinstance(shape, MultiPolygon):
             self._shape = shape
 
-        elif shape != None:
+        elif shape is not None:
             raise TypeError(
                 f"Type of shape input must be either {MultiPolygon}"
                 f" or {Polygon}")
 
         elif not self._shapefile.is_file():
             raise ValueError(
-                f"Not shape input for patch definition")
+                "Not shape input for patch definition")
 
 
     def get_multipolygon(self) -> MultiPolygon:
@@ -45,16 +45,16 @@ class Patch:
 
         elif self._shapefile.is_file():
             gdf = gpd.read_file(self._shapefile)
-            poly_list = list()
+            poly_list = []
             for shp in gdf.geometry:
                 if isinstance(shp, Polygon):
                     poly_list.append(shp)
                 elif isinstance(shp, MultiPolygon):
-                    poly_list.extend([pl for pl in shp.geoms])
+                    poly_list.extend(list(shp.geoms))
 
             multipolygon = MultiPolygon(poly_list)
 
             return multipolygon, gdf.crs
 
         raise ValueError(
-            f"Error retrieving shape information for patch")
+            "Error retrieving shape information for patch")

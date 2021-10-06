@@ -78,9 +78,9 @@ def put_edge2(mesh):
 
 def geom_to_multipolygon(mesh):
     vertices = mesh.vert2['coord']
-    _index_ring_collection = index_ring_collection(mesh)
+    idx_ring_coll = index_ring_collection(mesh)
     polygon_collection = []
-    for polygon in _index_ring_collection.values():
+    for polygon in idx_ring_coll.values():
         exterior = vertices[polygon['exterior'][:, 0], :]
         interiors = []
         for interior in polygon['interiors']:
@@ -121,7 +121,7 @@ def get_boundary_segments(mesh):
             # Pinched nodes also result in non-simple linestring,
             # but they can be handled gracefully, here we are looking
             # for other issues like folded elements
-            test_polys = [p for p in polygonize(this_segment)]
+            test_polys = list(polygonize(this_segment))
             if not test_polys:
                 raise ValueError(
                     "Mesh boundary crosses itself! Folded element(s)!")
@@ -153,7 +153,7 @@ def get_mesh_polygons(mesh):
         lines = get_boundary_segments(target_mesh)
 
         poly_gen = polygonize(lines)
-        polys = [p for p in poly_gen]
+        polys = list(poly_gen)
         polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
 
@@ -162,28 +162,28 @@ def get_mesh_polygons(mesh):
         if find_pass == 0:
             non_bndry_verts = np.setdiff1d(
                     np.arange(len(coords)), bndry_verts)
-            pts = MultiPoint(coords[non_bndry_verts])
+            pnts = MultiPoint(coords[non_bndry_verts])
         else:
-            pts = MultiPoint(coords[bndry_verts])
+            pnts = MultiPoint(coords[bndry_verts])
 
 
         # NOTE: This logic requires polygons to be sorted by area
         pass_valid_polys = []
-        while len(pts):
+        while len(pnts):
 
 
-            idx = np.random.randint(len(pts))
-            pt = pts[idx]
+            idx = np.random.randint(len(pnts))
+            pnt = pnts[idx]
 
             polys_gdf = gpd.GeoDataFrame(
                 {'geometry': polys, 'list_index': range(len(polys))})
 
 
-            res_gdf = polys_gdf[polys_gdf.intersects(pt)]
+            res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pts = MultiPoint([*pts[:idx], *pts[idx + 1:]])
-                if pts.is_empty:
+                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1:]])
+                if pnts.is_empty:
                     break
 
                 continue
@@ -194,11 +194,11 @@ def get_mesh_polygons(mesh):
 
 
             pass_valid_polys.append(poly)
-            pts = pts.difference(poly)
-            if pts.is_empty:
+            pnts = pnts.difference(poly)
+            if pnts.is_empty:
                 break
-            if isinstance(pts, Point):
-                pts = MultiPoint([pts])
+            if isinstance(pnts, Point):
+                pnts = MultiPoint([pnts])
 
 
         result_polys.extend(pass_valid_polys)
@@ -223,11 +223,11 @@ def needs_sieve(mesh, area=None):
                 remove.append(idx)
     if len(remove) > 0:
         return True
-    
+
     return False
 
 
-def put_IDtags(mesh):
+def put_id_tags(mesh):
     # start enumerating on 1 to avoid issues with indexing on fortran models
     mesh.vert2 = np.array(
         [(coord, id+1) for id, coord in enumerate(mesh.vert2['coord'])],
@@ -334,10 +334,10 @@ def finalize_mesh(mesh, sieve_area=None):
             _sieve_by_mask(mesh, sieve_mask)
 
         if no_op:
-            break;
+            break
 
     cleanup_isolates(mesh)
-    put_IDtags(mesh)
+    put_id_tags(mesh)
 
 
 def remesh_small_elements(opts, geom, mesh, hfun):
@@ -506,38 +506,38 @@ def index_ring_collection(mesh):
         boundary_edges.append(
             (int(tri.triangles[i, j]),
                 int(tri.triangles[i, (j+1) % 3])))
-    index_ring_collection = sort_edges(boundary_edges)
+    idx_ring_coll = sort_edges(boundary_edges)
     # sort index_rings into corresponding "polygons"
     areas = []
     vertices = mesh.vert2['coord']
-    for index_ring in index_ring_collection:
-        e0, e1 = [list(t) for t in zip(*index_ring)]
+    for index_ring in idx_ring_coll:
+        e0, _ = [list(t) for t in zip(*index_ring)]
         areas.append(float(Polygon(vertices[e0, :]).area))
 
     # maximum area must be main mesh
     idx = areas.index(np.max(areas))
-    exterior = index_ring_collection.pop(idx)
+    exterior = idx_ring_coll.pop(idx)
     areas.pop(idx)
     _id = 0
-    _index_ring_collection = dict()
-    _index_ring_collection[_id] = {
+    idx_ring_coll = {}
+    idx_ring_coll[_id] = {
         'exterior': np.asarray(exterior),
         'interiors': []
         }
     e0, e1 = [list(t) for t in zip(*exterior)]
     path = Path(vertices[e0 + [e0[0]], :], closed=True)
-    while len(index_ring_collection) > 0:
+    while len(idx_ring_coll) > 0:
         # find all internal rings
         potential_interiors = []
-        for i, index_ring in enumerate(index_ring_collection):
+        for i, index_ring in enumerate(idx_ring_coll):
             e0, e1 = [list(t) for t in zip(*index_ring)]
             if path.contains_point(vertices[e0[0], :]):
                 potential_interiors.append(i)
         # filter out nested rings
         real_interiors = []
         for i, p_interior in reversed(list(enumerate(potential_interiors))):
-            _p_interior = index_ring_collection[p_interior]
-            check = [index_ring_collection[_]
+            _p_interior = idx_ring_coll[p_interior]
+            check = [idx_ring_coll[_]
                      for j, _ in reversed(list(enumerate(potential_interiors)))
                      if i != j]
             has_parent = False
@@ -551,38 +551,38 @@ def index_ring_collection(mesh):
                 real_interiors.append(p_interior)
         # pop real rings from collection
         for i in reversed(sorted(real_interiors)):
-            _index_ring_collection[_id]['interiors'].append(
-                np.asarray(index_ring_collection.pop(i)))
+            idx_ring_coll[_id]['interiors'].append(
+                np.asarray(idx_ring_coll.pop(i)))
             areas.pop(i)
         # if no internal rings found, initialize next polygon
-        if len(index_ring_collection) > 0:
+        if len(idx_ring_coll) > 0:
             idx = areas.index(np.max(areas))
-            exterior = index_ring_collection.pop(idx)
+            exterior = idx_ring_coll.pop(idx)
             areas.pop(idx)
             _id += 1
-            _index_ring_collection[_id] = {
+            idx_ring_coll[_id] = {
                 'exterior': np.asarray(exterior),
                 'interiors': []
                 }
             e0, e1 = [list(t) for t in zip(*exterior)]
             path = Path(vertices[e0 + [e0[0]], :], closed=True)
-    return _index_ring_collection
+    return idx_ring_coll
 
 
 def outer_ring_collection(mesh):
-    _index_ring_collection = index_ring_collection(mesh)
+    idx_ring_coll = index_ring_collection(mesh)
     exterior_ring_collection = defaultdict()
-    for key, ring in _index_ring_collection.items():
+    for key, ring in idx_ring_coll.items():
         exterior_ring_collection[key] = ring['exterior']
     return exterior_ring_collection
 
 
 def inner_ring_collection(mesh):
-    _index_ring_collection = index_ring_collection(mesh)
-    inner_ring_collection = defaultdict()
-    for key, rings in _index_ring_collection.items():
-        inner_ring_collection[key] = rings['interiors']
-    return inner_ring_collection
+    idx_ring_coll = index_ring_collection(mesh)
+    inner_ring_coll = defaultdict()
+    for key, rings in idx_ring_coll.items():
+        inner_ring_coll[key] = rings['interiors']
+    return inner_ring_coll
 
 
 def signed_polygon_area(vertices):
@@ -601,12 +601,12 @@ def vertices_around_vertex(mesh):
         def append(geom):
             for simplex in geom['index']:
                 for i, j in permutations(simplex, 2):
-                    vertices_around_vertex[i].add(j)
-        vertices_around_vertex = defaultdict(set)
+                    vert_list[i].add(j)
+        vert_list = defaultdict(set)
         append(mesh.tria3)
         append(mesh.quad4)
         append(mesh.hexa8)
-        return vertices_around_vertex
+        return vert_list
 
     msg = f"Not implemented for mshID={mesh.mshID}"
     raise NotImplementedError(msg)
@@ -707,16 +707,15 @@ def get_verts_in_shape(
                              in_box_idx_3, in_box_idx_4))
         return in_box_idx
 
-    else:
 
-        pt_series = gpd.GeoSeries(gpd.points_from_xy(
-            mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
-        shp_series = gpd.GeoSeries(shape)
+    pt_series = gpd.GeoSeries(gpd.points_from_xy(
+        mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
+    shp_series = gpd.GeoSeries(shape)
 
-        in_shp_idx = pt_series.sindex.query_bulk(
-                shp_series, predicate="intersects")
+    in_shp_idx = pt_series.sindex.query_bulk(
+            shp_series, predicate="intersects")
 
-        return in_shp_idx
+    return in_shp_idx
 
 
 @must_be_euclidean_mesh
@@ -731,7 +730,7 @@ def get_cross_edges(
 
     coords = mesh.vert2['coord']
 
-    coord_dict = dict()
+    coord_dict = {}
     for i, coo in enumerate(coords):
         coord_dict[tuple(coo)] = i
 
@@ -752,7 +751,7 @@ def get_cross_edges(
 
 
     cut_coords = [
-        [coo for coo in cooseq]
+        list(cooseq)
         for cooseq in gdf_x.geometry.apply(lambda i: i.coords).values]
 
     cut_edges = np.array([
@@ -1011,10 +1010,13 @@ def calculate_tria_areas(mesh):
     tria_sides = np.sqrt(
             np.sum(np.power(np.abs(tria_side_components), 2),
                    axis=2).squeeze())
-    p = np.sum(tria_sides, axis=1) / 2
-    p = p.reshape(len(p), 1)
-    a, b, c = np.split(tria_sides, 3, axis=1)
-    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c)).squeeze()
+    perimeter = np.sum(tria_sides, axis=1) / 2
+    perimeter = perimeter.reshape(len(perimeter), 1)
+    a_side, b_side, c_side = np.split(tria_sides, 3, axis=1)
+    tria_areas = np.sqrt(
+            perimeter*(perimeter-a_side)
+            * (perimeter-b_side)*(perimeter-c_side)
+            ).squeeze()
     return tria_areas
 
 @must_be_euclidean_mesh
@@ -1044,8 +1046,8 @@ def calculate_edge_lengths(mesh):
                 ,axis=2)).squeeze()
 
     edge_dict = defaultdict(float)
-    for en, edge in enumerate(all_edges):
-        edge_dict[tuple(edge)] = edge_lens[en]
+    for i, edge in enumerate(all_edges):
+        edge_dict[tuple(edge)] = edge_lens[i]
 
     return edge_dict
 
@@ -1058,13 +1060,13 @@ def elements(mesh):
     elements_id.extend(list(mesh.hexa8['IDtag']))
     elements_id = range(1, len(elements_id)+1) \
         if len(set(elements_id)) != len(elements_id) else elements_id
-    elements = []
-    elements.extend(list(mesh.tria3['index']))
-    elements.extend(list(mesh.quad4['index']))
-    elements.extend(list(mesh.hexa8['index']))
-    elements = {
-        elements_id[i]: indexes for i, indexes in enumerate(elements)}
-    return elements
+    elems = []
+    elems.extend(list(mesh.tria3['index']))
+    elems.extend(list(mesh.quad4['index']))
+    elems.extend(list(mesh.hexa8['index']))
+    elems = {
+        elements_id[i]: indexes for i, indexes in enumerate(elems)}
+    return elems
 
 
 @must_be_euclidean_mesh
@@ -1072,14 +1074,14 @@ def faces_around_vertex(mesh):
     _elements = elements(mesh)
     length = max(map(len, _elements.values()))
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
-    faces_around_vertex = defaultdict(set)
+    faces_around_vert = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
         # TODO:
         pass
 #        np.isin(i, axis=0)
-#        faces_around_vertex[i].add()
+#        faces_around_vert[i].add()
 
-    faces_around_vertex = defaultdict(set)
+    faces_around_vert = defaultdict(set)
 
 
 def get_boundary_edges(mesh):
@@ -1130,8 +1132,8 @@ def has_pinched_nodes(mesh):
     u, c = np.unique(all_nodes, return_counts=True)
     if len(u[c > 1]) > 0:
         return True
-    else:
-        return False
+
+    return False
 
 
 def cleanup_pinched_nodes(mesh):

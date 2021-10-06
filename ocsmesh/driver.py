@@ -1,10 +1,10 @@
 import logging
+from typing import Union
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
 import numpy as np
 from pyproj import CRS
-from typing import Union
 
 
 from ocsmesh import utils

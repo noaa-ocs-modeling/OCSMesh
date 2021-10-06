@@ -50,8 +50,8 @@ def buffer_to_dict(buf: TextIO):
     while _bnd_id < NOPE:
         NETA = int(buf.readline().split()[0])
         _cnt = 0
-        boundaries[None][_bnd_id] = dict()
-        boundaries[None][_bnd_id]['indexes'] = list()
+        boundaries[None][_bnd_id] = {}
+        boundaries[None][_bnd_id]['indexes'] = []
         while _cnt < NETA:
             boundaries[None][_bnd_id]['indexes'].append(
                 buf.readline().split()[0].strip())
@@ -67,8 +67,8 @@ def buffer_to_dict(buf: TextIO):
             _bnd_id = 0
         else:
             _bnd_id = len(boundaries[ibtype])
-        boundaries[ibtype][_bnd_id] = dict()
-        boundaries[ibtype][_bnd_id]['indexes'] = list()
+        boundaries[ibtype][_bnd_id] = {}
+        boundaries[ibtype][_bnd_id]['indexes'] = []
         while _pnt_cnt < npts:
             line = buf.readline().split()
             if len(line) == 1:
@@ -103,16 +103,16 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
     NE, NP = len(elements), len(nodes)
     out = [f"{description}", f"{NE} {NP}"]
     # TODO: Probably faster if using np.array2string
-    for id, (coords, values) in nodes.items():
+    for node_id, (coords, values) in nodes.items():
         if isinstance(values, numbers.Number):
             values = [values]
-        line = [f"{id}"]
+        line = [f"{node_id}"]
         line.extend([f"{x:<.16E}" for x in coords])
         line.extend([f"{x:<.16E}" for x in values])
         out.append(" ".join(line))
 
-    for id, element in elements.items():
-        line = [f"{id}"]
+    for elem_id, element in elements.items():
+        line = [f"{elem_id}"]
         line.append(f"{len(element)}")
         line.extend([f"{e}" for e in element])
         out.append(" ".join(line))
@@ -154,11 +154,11 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
     for ibtype, boundaries in boundaries.items():
         if ibtype is None:
             continue
-        for id, boundary in boundaries.items():
+        for bdry_id, boundary in boundaries.items():
             line = [
                 f"{len(boundary['indexes']):d}",
                 f"{ibtype}",
-                f"! boundary {ibtype}:{id}"]
+                f"! boundary {ibtype}:{bdry_id}"]
             out.append(' '.join(line))
             for idx in boundary['indexes']:
                 out.append(f"{idx}")

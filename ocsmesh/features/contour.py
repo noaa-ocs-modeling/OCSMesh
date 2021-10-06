@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class ContourBase(ABC):
 
-    def __init__(self, sources=list(), shapefile=None):
+    def __init__(self, sources=[], shapefile=None):
         if sources and shapefile:
             raise ValueError(
                 "Both sources and shapefile cannot be specified at the same time!")
@@ -13,7 +13,7 @@ class ContourBase(ABC):
             raise NotImplementedError(
                 "Contour based on shapefiles are not supported yet!")
 
-        self._sources = list()
+        self._sources = []
         if not isinstance(sources, (list, tuple)):
             sources = [sources]
         for source in sources:
@@ -64,7 +64,7 @@ class ContourBase(ABC):
 
 class Contour(ContourBase):
 
-    def __init__(self, level=None, sources=list(), shapefile=None):
+    def __init__(self, level=None, sources=[], shapefile=None):
 
         super().__init__(sources, shapefile)
         self._level = level
@@ -92,7 +92,7 @@ class FilledContour(ContourBase):
     def __init__(self,
                  level0=None,
                  level1=None,
-                 sources=list(),
+                 sources=[],
                  max_contour_defn : Contour = None,
                  shapefile=None):
 
@@ -108,10 +108,10 @@ class FilledContour(ContourBase):
             self._level1 = level1
 
     def _get_contour_from_source(self, source):
-        z_info = dict()
-        if self._level0 != None:
+        z_info = {}
+        if self._level0 is not None:
             z_info['zmin'] = self._level0
-        if self._level1 != None:
+        if self._level1 is not None:
             z_info['zmax'] = self._level1
 
         src_class = type(source).__name__

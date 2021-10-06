@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 from pathlib import Path
 from copy import deepcopy
-import logging, sys
+import logging
+import sys
 
 import geopandas as gpd
 import numpy as np
-from shapely.geometry import MultiPolygon, box, Polygon
-from shapely.ops import polygonize, transform
+from shapely.geometry import MultiPolygon, Polygon
+from shapely.ops import transform
 import jigsawpy
 from pyproj import Transformer
 
@@ -47,26 +48,25 @@ class RemeshByShape:
         this_parser.add_argument(
             '--contour',
             action='append', nargs='+', type=float, dest='contours',
-            metavar='CONTOUR_DEFN', default=list(),
+            metavar='CONTOUR_DEFN', default=[],
             help="Each contour's (level, [expansion, target])"
                  " to be applied on all size functions in collector")
         this_parser.add_argument(
             '--patch',
             action='append', nargs=3, type=float, dest='patches',
-            metavar='PATCH_DEFN', default=list(),
-            help="Specify patch mesh size above a given contour level"
+            metavar='PATCH_DEFN', default=[[]            help="Specify patch mesh size above a given contour level"
                  " by passing (lower_bound, expansion, target_size)"
                  " for each patch")
         this_parser.add_argument(
             '--constant',
             action='append', nargs=2, type=float, dest='constants',
-            metavar='CONST_DEFN', default=list(),
+            metavar='CONST_DEFN', default=[],
             help="Specify constant mesh size above a given contour level"
                  " by passing (lower_bound, target_size) for each constant")
         this_parser.add_argument('-s', '--sieve', type=float)
 
         this_parser.add_argument(
-            '--interpolate', nargs='+', type=Path, default=list(),
+            '--interpolate', nargs='+', type=Path, default=[],
             help="To interpolate from depth of DEMs not involved in"
                  " the remeshing process")
 
@@ -101,7 +101,7 @@ class RemeshByShape:
         nprocs = args.nprocs
 
         # Process inputs
-        contour_defns = list()
+        contour_defns = []
         for contour in contours:
             if len(contour) > 3:
                 raise ValueError(
@@ -111,16 +111,16 @@ class RemeshByShape:
                     *contour, *[None]*(3-len(contour))]
             contour_defns.append((level, expansion_rate, target_size))
 
-        patch_defns = list()
+        patch_defns = []
         for lower_bound, target_size in patches:
             patch_defns.append((lower_bound, expansion_rate, target_size))
 
-        constant_defns = list()
+        constant_defns = []
         for lower_bound, target_size in constants:
             constant_defns.append((lower_bound, target_size))
 
 
-        interp_rast_list = list()
+        interp_rast_list = []
         for dem in interp:
             interp_rast_list.append(Raster(dem))
 
@@ -159,7 +159,7 @@ class RemeshByShape:
 
                 gdf_diff = gpd.overlay(
                         gdf_mesh_poly, gdf_shape, how='difference')
-                diff_polys = list()
+                diff_polys = []
                 for geom in gdf_diff.geometry:
                     if isinstance(geom, Polygon):
                         diff_polys.append(geom)
@@ -170,7 +170,7 @@ class RemeshByShape:
                     # TODO: Check for multipolygon and single polygon in multi assumption
                     area_ref = 0.05 * np.sum(
                             [i.area for i in gdf_to_refine.geometry])
-                    upstream_polys = list()
+                    upstream_polys = []
                     for ipoly in diff_polys:
                         if ipoly.area < area_ref:
                             upstream_polys.append(ipoly)
@@ -270,7 +270,7 @@ class RemeshByShape:
         if not (geom_jig.crs == ref_crs
                 and (init_jig and init_jig.crs == ref_crs)):
             raise ValueError(
-                f"CRS for geometry, hfun and init mesh is not the same")
+                "CRS for geometry, hfun and init mesh is not the same")
 
         opts = jigsawpy.jigsaw_jig_t()
         opts.hfun_scal = "absolute"

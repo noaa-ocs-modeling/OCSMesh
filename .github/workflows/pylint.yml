@@ -23,4 +23,4 @@ jobs:
     - name: Analysing the code with pylint
       run: |
         conda install -cconda-forge pylint=2.11.1 # For fail-on option
-        pylint --fail-on E --fail-under 7.40 ocsmesh
+        pylint ocsmesh

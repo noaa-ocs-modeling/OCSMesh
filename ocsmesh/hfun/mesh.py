@@ -1,9 +1,8 @@
 import functools
 import logging
 import operator
-from copy import deepcopy
 from collections import defaultdict
-from typing import Union, List
+from typing import Union
 from multiprocessing import cpu_count, Pool
 from time import time
 
@@ -14,7 +13,7 @@ from pyproj import CRS, Transformer
 import utm
 from shapely import ops
 from shapely.geometry import (
-    LineString, MultiLineString, box, GeometryCollection,
+    LineString, MultiLineString, GeometryCollection,
     Polygon, MultiPolygon)
 
 from ocsmesh.hfun.base import BaseHfun
@@ -58,9 +57,8 @@ class HfunMesh(BaseHfun):
                     )).T
             self.mesh.msh_t.crs = utm_crs
             self._crs = utm_crs
-            return self.mesh.msh_t
-        else:
-            return self.mesh.msh_t
+
+        return self.mesh.msh_t
 
     def size_from_mesh(self):
 
@@ -213,7 +211,7 @@ class HfunMesh(BaseHfun):
             raise ValueError("Argument target_size must be greater than zero.")
 
         # For expansion_rate
-        if expansion_rate != None:
+        if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
@@ -301,7 +299,7 @@ class HfunMesh(BaseHfun):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = [linestring for linestring in feature]
+            feature = list(feature)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -339,7 +337,7 @@ class HfunMesh(BaseHfun):
         feature = functools.reduce(operator.iconcat, res, [])
         _logger.info(f'Repartitioning features took {time()-start}.')
 
-        _logger.info(f'Resampling features on ...')
+        _logger.info('Resampling features on ...')
         start = time()
 
         # We don't want to recreate the same transformation

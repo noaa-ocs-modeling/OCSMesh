@@ -22,5 +22,4 @@ class CmdCli:
             "Scripts CLI is used for experimental new features"
             " and is subject to change.")
 
-        args.scripts_cmd
         self._script_dict[args.scripts_cmd].run(args)

@@ -78,6 +78,8 @@ class HfunRaster(BaseHfun, Raster):
 
     def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
                  verbosity=0):
+
+        self._xy_cache = {}
         self._raster = raster
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
@@ -98,12 +100,12 @@ class HfunRaster(BaseHfun, Raster):
         output_mesh.ndims = +2
         output_mesh.mshID = "euclidean-mesh"
         output_mesh.crs = self.crs
-        for window in iter_windows:
+        for win in iter_windows:
 
             hfun = jigsaw_msh_t()
             hfun.ndims = +2
 
-            x0, y0, x1, y1 = self.get_window_bounds(window)
+            x0, y0, x1, y1 = self.get_window_bounds(win)
 
             if self.crs.is_geographic:
                 hfun.mshID = 'euclidean-mesh'
@@ -124,8 +126,8 @@ class HfunRaster(BaseHfun, Raster):
                         }[self.crs.ellipsoid.name]
                 )
                 # get bbox data
-                xgrid = self.get_x(window=window)
-                ygrid = np.flip(self.get_y(window=window))
+                xgrid = self.get_x(window=win)
+                ygrid = np.flip(self.get_y(window=win))
                 xgrid, ygrid = np.meshgrid(xgrid, ygrid)
                 bottom = xgrid[0, :]
                 top = xgrid[1, :]
@@ -136,8 +138,8 @@ class HfunRaster(BaseHfun, Raster):
 
                 _logger.info('Building hfun.tria3...')
 
-                dim1 = window.width
-                dim2 = window.height
+                dim1 = win.width
+                dim2 = win.height
 
                 tria3 = np.empty(
                     ((dim1 - 1), (dim2  - 1)),
@@ -169,17 +171,17 @@ class HfunRaster(BaseHfun, Raster):
                 # BUILD VERT2_t. this one comes from the memcache array
                 _logger.info('Building hfun.vert2...')
                 hfun.vert2 = np.empty(
-                    window.width*window.height,
+                    win.width*win.height,
                     dtype=jigsaw_msh_t.VERT2_t)
                 hfun.vert2['coord'] = np.array(
-                    self.get_xy_memcache(window, utm_crs))
+                    self.get_xy_memcache(win, utm_crs))
                 _logger.info('Done building hfun.vert2...')
 
                 # Build REALS_t: this one comes from hfun raster
                 _logger.info('Building hfun.value...')
                 hfun.value = np.array(
-                    self.get_values(window=window, band=1).flatten().reshape(
-                        (window.width*window.height, 1)),
+                    self.get_values(window=win, band=1).flatten().reshape(
+                        (win.width*win.height, 1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 _logger.info('Done building hfun.value...')
 
@@ -204,13 +206,13 @@ class HfunRaster(BaseHfun, Raster):
                 start = time()
                 hfun.mshID = 'euclidean-grid'
                 hfun.xgrid = np.array(
-                    np.array(self.get_x(window=window)),
+                    np.array(self.get_x(window=win)),
                     dtype=jigsaw_msh_t.REALS_t)
                 hfun.ygrid = np.array(
-                    np.flip(self.get_y(window=window)),
+                    np.flip(self.get_y(window=win)),
                     dtype=jigsaw_msh_t.REALS_t)
                 hfun.value = np.array(
-                    np.flipud(self.get_values(window=window, band=1)),
+                    np.flipud(self.get_values(window=win, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
                 geom = PolygonGeom(box(x0, y1, x1, y0), self.crs).msh_t()
@@ -265,19 +267,18 @@ class HfunRaster(BaseHfun, Raster):
                 axis=0)
             output_mesh.vert2 = np.append(
                 output_mesh.vert2,
-                np.array([(coo, tag)
-                          for coo, tag in window_mesh.vert2],
+                np.array(list(window_mesh.vert2),
                          dtype=jigsaw_msh_t.VERT2_t),
                 axis=0)
             if output_mesh.value.size:
                 output_mesh.value = np.append(
                     output_mesh.value,
-                    np.array([v for v in window_mesh.value],
+                    np.array(list(window_mesh.value),
                              dtype=jigsaw_msh_t.REALS_t),
                     axis=0)
             else:
                 output_mesh.value = np.array(
-                        [v for v in window_mesh.value],
+                        list(window_mesh.value),
                         dtype=jigsaw_msh_t.REALS_t)
 
         # NOTE: In the end we need to return in a CRS that
@@ -342,7 +343,7 @@ class HfunRaster(BaseHfun, Raster):
             raise ValueError("Argument target_size must be greater than zero.")
 
         # For expansion_rate
-        if expansion_rate != None:
+        if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
@@ -367,7 +368,7 @@ class HfunRaster(BaseHfun, Raster):
                 # as the hfun (we don't calculate distances in this
                 # method)
 
-                _logger.info(f'Creating mask from shape ...')
+                _logger.info('Creating mask from shape ...')
                 start = time()
                 try:
                     mask, _, _ = rasterio.mask.raster_geometry_mask(
@@ -451,7 +452,7 @@ class HfunRaster(BaseHfun, Raster):
         channels = self.raster.get_channels(
                 level=level, width=width, tolerance=tolerance)
 
-        if channels == None:
+        if channels is None:
             return
 
         self.add_patch(
@@ -568,7 +569,7 @@ class HfunRaster(BaseHfun, Raster):
                 win_feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
 
-                _logger.info(f'Resampling features on ...')
+                _logger.info('Resampling features on ...')
                 start = time()
 
                 # We don't want to recreate the same transformation
@@ -641,8 +642,6 @@ class HfunRaster(BaseHfun, Raster):
         self._tmpfile = tmpfile
 
     def get_xy_memcache(self, window, dst_crs):
-        if not hasattr(self, '_xy_cache'):
-            self._xy_cache = {}
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
             _logger.info('Transform points to local CRS...')
@@ -658,10 +657,10 @@ class HfunRaster(BaseHfun, Raster):
             _logger.info('Done!')
             self._xy_cache[f'{window}{dst_crs}'] = tmpfile
             return fp[:]
-        else:
-            _logger.info('Loading values from memcache...')
-            return np.memmap(tmpfile, dtype='float32', mode='r',
-                             shape=((window.width*window.height), 2))[:]
+
+        _logger.info('Loading values from memcache...')
+        return np.memmap(tmpfile, dtype='float32', mode='r',
+                         shape=((window.width*window.height), 2))[:]
 
     def add_subtidal_flow_limiter(
             self,
