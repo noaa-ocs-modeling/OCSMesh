@@ -91,7 +91,7 @@ class _ConfigManager:
                     geom, job_args[i][0].name, job_args[i][2],
                     job_args[i][3], job_args[i][5], hashes[i])
             self._session.commit()
-            del(res)
+            del res
 
         for feature in self._features:
             raise NotImplementedError('features')
@@ -131,6 +131,8 @@ class _ConfigManager:
         return Hfun(mesh, crs=self._crs)
 
     def _certify_config(self):
+        # pylint: disable=W0104
+
         self._config
         self._rasters
         self._features
@@ -139,7 +141,7 @@ class _ConfigManager:
         self._outputs
         self._logger.debug(" done checking configuration file")
 
-    def _get_raster_by_id(self, id):
+    def _get_raster_by_id(self, rast_id):
 
         def check_if_uri_is_tile_index(uri):
             try:
@@ -148,7 +150,7 @@ class _ConfigManager:
             except fiona.errors.DriverError:
                 return False
 
-        raster_opts = self._rasters[id]
+        raster_opts = self._rasters[rast_id]
 
         if 'http' in raster_opts['uri'] or 'ftp' in raster_opts['uri']:
             raise NotImplementedError("URI is internet address")
@@ -162,14 +164,13 @@ class _ConfigManager:
         if check_if_uri_is_tile_index(uri):
             raise NotImplementedError('URI is a tile index')
 
-        else:
-            chunk_size = raster_opts.get("chunk_size")
-            if chunk_size is None:
-                chunk_size = self._config.get("chunk_size")
-            if chunk_size is None:
-                chunk_size = self._args.chunk_size
-            raster_opts.update({"chunk_size": chunk_size})
-            return [(uri, raster_opts)]
+        chunk_size = raster_opts.get("chunk_size")
+        if chunk_size is None:
+            chunk_size = self._config.get("chunk_size")
+        if chunk_size is None:
+            chunk_size = self._args.chunk_size
+        raster_opts.update({"chunk_size": chunk_size})
+        return [(uri, raster_opts)]
 
     def _save_geom_to_db(self, geom, source, zmin, zmax, driver, key):
         self._logger.debug("_save_geom_to_db()")
@@ -306,7 +307,7 @@ class _ConfigManager:
                 config_geom_rasters = [config_geom_rasters]
             for geom_raster in config_geom_rasters:
                 geom_raster_id = geom_raster.pop('id')
-                if geom_raster_id in self._rasters.keys():
+                if geom_raster_id in self._rasters:
                     _geom.update({geom_raster_id: geom_raster})
                 else:
                     raise KeyError(

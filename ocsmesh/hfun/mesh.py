@@ -13,8 +13,7 @@ from pyproj import CRS, Transformer
 import utm
 from shapely import ops
 from shapely.geometry import (
-    LineString, MultiLineString, GeometryCollection,
-    Polygon, MultiPolygon)
+    LineString, MultiLineString, Polygon, MultiPolygon)
 
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor

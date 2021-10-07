@@ -76,11 +76,13 @@ def geom_string(geom_type, sms2dm):
             f'{geom_type}',
             f'{elm_id}',
         ]
-        for j in range(len(geom)):
+        for j, _ in enumerate(geom):
             line.append(f"{geom[j]}")
         f.append(' '.join(line))
     if len(f) > 0:
         return '\n'.join(f)
+
+    return ''
 
 
 def E3T_string(sms2dm):

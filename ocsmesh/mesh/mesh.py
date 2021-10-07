@@ -155,6 +155,7 @@ class Nodes:
     def __init__(self, mesh: "EuclideanMesh"):
         self.mesh = mesh
         self._id_to_index = None
+        self._index_to_id = None
 
     @lru_cache(maxsize=1)
     def __call__(self):
@@ -187,9 +188,8 @@ class Nodes:
 
     @property
     def index_to_id(self):
-        if not hasattr(self, '_index_to_id'):
-            self._index_to_id = {index: node_id for index, node_id
-                                 in enumerate(self().keys())}
+        if self._index_to_id is None:
+            self._index_to_id = dict(enumerate(self().keys()))
         return self._index_to_id
 
     # def get_indexes_around_index(self, index):
@@ -542,7 +542,7 @@ class EuclideanMesh(BaseMesh):
     def write(self,
               path: Union[str, os.PathLike],
               overwrite: bool = False,
-              format='grd',
+              format='grd', # pylint: disable=W0622
               ):
         path = pathlib.Path(path)
         if path.exists() and overwrite is not True:
@@ -635,14 +635,14 @@ class EuclideanMesh2D(EuclideanMesh):
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
-        if output_type == 'polygon':
+        if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
             return Bbox([[xmin, ymin], [xmax, ymax]])
-        else:
-            raise TypeError(
-                'Argument output_type must a string literal \'polygon\' or '
-                '\'bbox\'')
+
+        raise TypeError(
+            'Argument output_type must a string literal \'polygon\' or '
+            '\'bbox\'')
 
     @property
     def boundaries(self):
@@ -738,7 +738,7 @@ class EuclideanMesh2D(EuclideanMesh):
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
         poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
+        polys = list(poly_gen)
         polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
         rings = [p.exterior for p in polys]
@@ -781,13 +781,12 @@ class Mesh(BaseMesh):
         if mesh.mshID == 'euclidean-mesh':
             if mesh.ndims == 2:
                 return EuclideanMesh2D(mesh)
-            else:
-                raise NotImplementedError(
-                    f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
-                    'handled.')
 
-        else:
-            raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
+            raise NotImplementedError(
+                f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
+                'handled.')
+
+        raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
 
     @staticmethod
     def open(path, crs=None):

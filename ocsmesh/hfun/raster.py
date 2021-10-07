@@ -39,6 +39,7 @@ class HfunInputRaster:
             raise TypeError(f'Argument raster must be of type {Raster}, not '
                             f'type {type(raster)}.')
         # init output raster file
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         with rasterio.open(raster.tmpfile) as src:
             if raster.chunk_size is not None:
@@ -355,6 +356,7 @@ class HfunRaster(BaseHfun, Raster):
                 target_size=target_size,
                 nprocs=nprocs)
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
@@ -421,6 +423,8 @@ class HfunRaster(BaseHfun, Raster):
 
         contours = []
         for _level in level:
+            # pylint: disable=R1724
+
             _contours = self.raster.get_contour(_level)
             if isinstance(_contours, GeometryCollection):
                 continue
@@ -526,7 +530,7 @@ class HfunRaster(BaseHfun, Raster):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = [linestring for linestring in feature]
+            feature = list(feature)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -535,6 +539,7 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
@@ -647,6 +652,7 @@ class HfunRaster(BaseHfun, Raster):
             _logger.info('Transform points to local CRS...')
             transformer = Transformer.from_crs(
                 self.src.crs, dst_crs, always_xy=True)
+            # pylint: disable=R1732
             tmpfile = tempfile.NamedTemporaryFile()
             xy = self.get_xy(window)
             fp = np.memmap(tmpfile, dtype='float32', mode='w+', shape=xy.shape)
@@ -673,6 +679,7 @@ class HfunRaster(BaseHfun, Raster):
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
@@ -749,6 +756,7 @@ class HfunRaster(BaseHfun, Raster):
             else float(lower_bound)
         upper_bound = float('inf') if upper_bound is None \
             else float(upper_bound)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
 
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:

@@ -78,12 +78,12 @@ class RasterGeom(BaseGeom):
             if np.all(new_mask == -1):  # or not new_mask.any():
                 continue
 
-            else:
-                fig, ax = plt.subplots()
-                ax.contourf(x, y, new_mask, levels=[0, 1])
-                plt.close(fig)
-                polygon_collection.extend(
-                    [polygon for polygon in get_multipolygon_from_axes(ax)])
+            fig, ax = plt.subplots()
+            ax.contourf(x, y, new_mask, levels=[0, 1])
+            plt.close(fig)
+            polygon_collection.extend(
+                list(get_multipolygon_from_axes(ax)))
+
         union_result = ops.unary_union(polygon_collection)
         if isinstance(union_result, Polygon):
             union_result = MultiPolygon([union_result])
@@ -116,7 +116,7 @@ class RasterGeom(BaseGeom):
 
 def get_multipolygon_from_axes(ax):
     # extract linear_rings from plot
-    linear_ring_collection = list()
+    linear_ring_collection = []
     for path_collection in ax.collections:
         for path in path_collection.get_paths():
             polygons = path.to_polygons(closed_only=True)
@@ -129,11 +129,11 @@ def get_multipolygon_from_axes(ax):
         areas = [Polygon(linear_ring).area
                  for linear_ring in linear_ring_collection]
         idx = np.where(areas == np.max(areas))[0][0]
-        polygon_collection = list()
+        polygon_collection = []
         outer_ring = linear_ring_collection.pop(idx)
         path = Path(np.asarray(outer_ring.coords), closed=True)
         while len(linear_ring_collection) > 0:
-            inner_rings = list()
+            inner_rings = []
             for i, linear_ring in reversed(
                     list(enumerate(linear_ring_collection))):
                 xy = np.asarray(linear_ring.coords)[0, :]

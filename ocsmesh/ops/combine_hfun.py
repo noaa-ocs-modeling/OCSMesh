@@ -1,8 +1,8 @@
 import logging
 import os
 import pathlib
-from multiprocessing import Pool, cpu_count
-from typing import Union, Sequence, Tuple, List
+from multiprocessing import cpu_count
+from typing import Union, Sequence, List
 
 from pyproj import CRS
 from jigsawpy import savemsh, savevtk
@@ -74,7 +74,7 @@ class HfunCombine:
         if mesh_file:
             base_mesh = Mesh.open(mesh_file, crs="EPSG:4326")
 
-        rast_list = list()
+        rast_list = []
         for dem_path in dem_files:
 
             logging.info(f"Loading raster {dem_path}...")

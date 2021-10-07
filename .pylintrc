@@ -1,12 +1,14 @@
 [MASTER]
 fail-on=E
-fail-under=9.50
+fail-under=9.85
 py-version=3.9.7
 
 [MESSAGES CONTROL]
 disable=fixme,
         invalid-name,
         unused-variable,
+        unused-argument,
+        no-self-use,
         too-many-arguments,
         too-many-locals,
         too-many-lines,
@@ -19,7 +21,8 @@ disable=fixme,
         logging-fstring-interpolation,
         missing-module-docstring,
         missing-class-docstring,
-        missing-function-docstring
+        missing-function-docstring,
+        unspecified-encoding
 
 [TYPECHECK]
 ignored-modules=matplotlib, matplotlib.cm

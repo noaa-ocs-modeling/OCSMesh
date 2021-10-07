@@ -1,23 +1,17 @@
 import os
-import gc
 import logging
 import warnings
 import tempfile
-import numpy as np
 from numbers import Number
-from functools import reduce
 from pathlib import Path
-from time import time
-from multiprocessing import Pool, cpu_count
-from copy import copy
-from typing import Union, Sequence, List, Tuple
+from multiprocessing import cpu_count
+from typing import Union, Sequence, Tuple
 
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon
 from shapely import ops
 from shapely.validation import explain_validity
-from jigsawpy import jigsaw_msh_t
 
 from ocsmesh.mesh import Mesh
 from ocsmesh.mesh.base import BaseMesh
@@ -34,7 +28,7 @@ _logger = logging.getLogger(__name__)
 
 class ContourPatchInfoCollector:
     def __init__(self):
-        self._contour_patch_info = list()
+        self._contour_patch_info = []
 
     def add(self, contour_defn, patch_defn):
         self._contour_patch_info.append((contour_defn, patch_defn))
@@ -86,7 +80,7 @@ class GeomCollector(BaseGeom):
         self._nprocs = nprocs
         self._chunk_size = chunk_size
         self._overlap = overlap
-        self._geom_list = list()
+        self._geom_list = []
 
         self._base_shape = base_shape
         self._base_shape_crs = CRS.from_user_input(base_shape_crs)
@@ -187,7 +181,7 @@ class GeomCollector(BaseGeom):
         epsg4326 = CRS.from_user_input("EPSG:4326")
         mp = None
         with tempfile.TemporaryDirectory() as temp_dir:
-            feather_files = list()
+            feather_files = []
 
             temp_path = Path(temp_dir)
 
@@ -251,7 +245,6 @@ class GeomCollector(BaseGeom):
                     " or by only max value ")
 
             contour_defn = FilledContour(level1=level)
-            level0, level1
 
         elif isinstance(contour_defn, Contour):
             contour_defn = FilledContour(max_contour_defn=contour_defn)
@@ -261,7 +254,7 @@ class GeomCollector(BaseGeom):
                 f"Filled contour definition must be of type"
                 f" {FilledContour} not {type(contour_defn)}!")
 
-        elif level != None:
+        elif level is not None:
             msg = "Level is ignored since a contour definition is provided!"
             warnings.warn(msg)
             _logger.info(msg)
@@ -305,7 +298,7 @@ class GeomCollector(BaseGeom):
         return self._get_raster_files_from_source(rasters)
 
     def _get_raster_files_from_source(self, rasters):
-        raster_files = list()
+        raster_files = []
         for r in rasters:
             if isinstance(r, Raster):
                 raster_files.append(r.path)
@@ -364,7 +357,7 @@ class GeomCollector(BaseGeom):
         out_path = Path(out_dir)
 
         non_rasters = self._get_non_raster_sources()
-        feather_files = list()
+        feather_files = []
         for e, geom in enumerate(non_rasters):
 
             geom_path = out_path / f'nonraster_{os.getpid()}_{e}.feather'
@@ -387,7 +380,7 @@ class GeomCollector(BaseGeom):
 
     def _extract_features(self, out_dir, base_multipoly):
 
-        feather_files = list()
+        feather_files = []
         feather_files.extend(self._apply_patch(out_dir, base_multipoly))
 
         return feather_files
@@ -401,7 +394,7 @@ class GeomCollector(BaseGeom):
         zmin = self._elev_info['zmin']
         zmax = self._elev_info['zmax']
 
-        feather_files = list()
+        feather_files = []
         for e, (ctr_defn, ptch_defn) in enumerate(self._contour_patch_info_coll):
 
             patch_zmin, patch_zmax = ctr_defn.level
@@ -426,8 +419,7 @@ class GeomCollector(BaseGeom):
                         {'geometry': patch_mp}, crs=crs)
                 if crs != CRS.from_user_input("EPSG:4326"):
                     gdf_patch = gdf_patch.to_crs("EPSG:4326")
-                combine_poly = MultiPolygon([
-                    geom for geom in gdf_patch.geometry])
+                combine_poly = MultiPolygon(list(gdf_patch.geometry))
             geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
             combine_geometry(
                 patch_raster_files, geom_path, "feather",

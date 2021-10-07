@@ -1,7 +1,6 @@
 #! /usr/bin/env python
 
 import argparse
-import logging
 
 from ocsmesh.ops import combine_geometry, combine_hfun
 from ocsmesh.cli.cli import CmdCli
@@ -20,7 +19,7 @@ class OCSMesh:
             nprocs = self._args.nprocs
             if self._args.geom_nprocs:
                 nprocs = self._args.geom_nprocs
-            nprocs = -1 if nprocs == None else nprocs
+            nprocs = -1 if nprocs is None else nprocs
 
             if self._args.geom_cmd == "build":
                 arg_dict = dict(
@@ -43,7 +42,7 @@ class OCSMesh:
             nprocs = self._args.nprocs
             if self._args.hfun_nprocs:
                 nprocs = self._args.hfun_nprocs
-            nprocs = -1 if nprocs == None else nprocs
+            nprocs = -1 if nprocs is None else nprocs
 
             if self._args.hfun_cmd == "build":
                 arg_dict = dict(
@@ -126,13 +125,13 @@ def create_parser():
     hfun_bld.add_argument(
         '--hmin', type=float, help='Minimum element size')
     hfun_bld.add_argument(
-        '--contour', action='append', nargs='+', type=float, default=list(),
+        '--contour', action='append', nargs='+', type=float, default=[],
         help="Each contour's (level, [expansion, target])"
              " to be applied on all size functions in collector")
     hfun_bld.add_argument(
         '--constant',
         action='append', nargs=2, type=float, dest='constants',
-        metavar='CONST_DEFN', default=list(),
+        metavar='CONST_DEFN', default=[],
         help="Specify constant mesh size above a given contour level"
              " by passing (lower_bound, target_size) for each constant")
     hfun_bld.add_argument(

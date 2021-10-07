@@ -42,7 +42,7 @@ class MeshGeom(BaseGeom):
         """
         self._mesh = mesh
 
-    def get_multipolygon(self):
+    def get_multipolygon(self, **kwargs):
         # TODO: What if there's no tria, e.g. Mesh object is
         # created  from geom.msh_t() return value
         return self.mesh.hull.multipolygon()

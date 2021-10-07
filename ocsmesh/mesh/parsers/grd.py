@@ -151,10 +151,10 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
                 _cnt += np.asarray(bnd['indexes']).size
     out.append(f"{_cnt:d} ! Total number of non-ocean boundary nodes")
     # all additional boundaries
-    for ibtype, boundaries in boundaries.items():
+    for ibtype, bndrys in boundaries.items():
         if ibtype is None:
             continue
-        for bdry_id, boundary in boundaries.items():
+        for bdry_id, boundary in bndrys.items():
             line = [
                 f"{len(boundary['indexes']):d}",
                 f"{ibtype}",
@@ -177,10 +177,10 @@ def read(resource: Union[str, os.PathLike], boundaries: bool = True, crs=True):
     with open(resource, 'r') as stream:
         try:
             grd = buffer_to_dict(stream)
-        except Exception:
-            raise Exception(
-                f'Resource {str(resource)} is not a not a valid grd file or is'
-                ' corrupted.')
+        except Exception as excepting:
+            err_msg = f'Resource {str(resource)} is not a valid grd file'
+            raise Exception(err_msg) from excepting
+
     if boundaries is False:
         grd.pop('boundaries', None)
     if crs is True:

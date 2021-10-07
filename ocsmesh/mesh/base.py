@@ -6,9 +6,9 @@ class BaseMesh:
 
     @property
     def coord(self):
-        if self.msh_t.ndims == 2:
+        if self.msh_t.ndims == 2: # pylint: disable=R1705
             return self.msh_t.vert2['coord']
         elif self.msh_t.ndims == 3:
             return self.msh_t.vert3['coord']
-        else:
-            raise ValueError(f'Unhandled mesh dimensions {self.msh_t.ndims}.')
+
+        raise ValueError(f'Unhandled mesh dimensions {self.msh_t.ndims}.')

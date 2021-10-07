@@ -75,6 +75,7 @@ class Crs:
                 raise TypeError(f'Argument crs must be of type {str} or {CRS},'
                                 f' not type {type(val)}.')
             # create a temporary copy of the original file and update meta.
+            # pylint: disable=R1732
             tmpfile = tempfile.NamedTemporaryFile()
             with rasterio.open(obj.path) as src:
                 if obj.chunk_size is not None:
@@ -260,7 +261,7 @@ class Raster:
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
-        if output_type == 'polygon':
+        if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
             return Bbox([[xmin, ymin], [xmax, ymax]])
@@ -355,6 +356,7 @@ class Raster:
         kwargs = self.src.meta.copy()
         band_id = kwargs["count"]+1
         kwargs.update(count=band_id)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
@@ -369,6 +371,7 @@ class Raster:
         A parallelized version is presented here:
         https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
         """
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **self.src.meta.copy()) as dst:
             for window in self.iter_windows():
@@ -389,6 +392,7 @@ class Raster:
 #        n_bands_new = meta["count"] * 2
         n_bands_new = meta["count"]
         meta.update(count=n_bands_new)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **meta) as dst:
@@ -405,6 +409,7 @@ class Raster:
         _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
         out_images, out_transform = mask(self._src, shapes)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
             if i is None:
@@ -425,8 +430,8 @@ class Raster:
         if i is None:
             return np.dstack(
                 [self.src.read_masks(i) for i in range(1, self.count + 1)])
-        else:
-            return self.src.read_masks(i)
+
+        return self.src.read_masks(i)
 
     def warp(self, dst_crs, nprocs=-1):
         nprocs = -1 if nprocs is None else nprocs
@@ -448,6 +453,7 @@ class Raster:
             'width': width,
             'height': height
         })
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
 
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
@@ -472,6 +478,7 @@ class Raster:
             msg = "resampling_method must be a valid name or None"
             raise ValueError(msg)
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         # resample data to target shape
         width = int(self.src.width * scaling_factor)
@@ -516,6 +523,7 @@ class Raster:
             "width": out_image.shape[2],
             "transform": out_transform}
             )
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, "w", **out_meta) as dest:
             dest.write(out_image)
@@ -626,6 +634,7 @@ class Raster:
                         # LineStrings must have at least 2 coordinate tuples
                         pass
             if len(features) > 0:
+                # pylint: disable=R1732
                 tmpfile = pathlib.Path(tmpdir) / pathlib.Path(
                         tempfile.NamedTemporaryFile(suffix='.feather').name
                         ).name
@@ -641,9 +650,11 @@ class Raster:
         for feather in feathers:
             out = out.append(gpd.read_feather(feather), ignore_index=True)
             feather.unlink()
-            for geometry in out.geometry:
-                if isinstance(geometry, LineString):
-                    geometry = MultiLineString([geometry])
+            geometry = []
+            for geom in out.geometry:
+                if isinstance(geom, LineString):
+                    geometry = MultiLineString([geom])
+                    break
             for linestring in geometry:
                 features.append(linestring)
         _logger.debug('Merging features.')
@@ -871,7 +882,7 @@ def get_multipolygon_from_axes(ax):
 
 
 def redistribute_vertices(geom, distance):
-    if geom.geom_type == 'LineString':
+    if geom.geom_type == 'LineString': # pylint: disable=R1705
         num_vert = int(round(geom.length / distance))
         if num_vert == 0:
             num_vert = 1
@@ -882,5 +893,5 @@ def redistribute_vertices(geom, distance):
         parts = [redistribute_vertices(part, distance)
                  for part in geom]
         return type(geom)([p for p in parts if not p.is_empty])
-    else:
-        raise ValueError(f'unhandled geometry {geom.geom_type}')
+
+    raise ValueError(f'unhandled geometry {geom.geom_type}')

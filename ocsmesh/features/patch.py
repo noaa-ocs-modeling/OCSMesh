@@ -40,7 +40,7 @@ class Patch:
 
     def get_multipolygon(self) -> MultiPolygon:
 
-        if self._shape:
+        if self._shape: # pylint: disable=R1705
             return self._shape, self._shape_crs
 
         elif self._shapefile.is_file():
