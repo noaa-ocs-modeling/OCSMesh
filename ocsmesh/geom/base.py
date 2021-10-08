@@ -6,7 +6,6 @@ import numpy as np
 from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import MultiPolygon
-import utm
 
 from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import utils

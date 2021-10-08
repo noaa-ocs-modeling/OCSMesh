@@ -444,8 +444,8 @@ class Boundaries:
                     land_boundary.append(tuple(ext_ring[i, :]))
                 elif np.any(np.asarray((e0, e1)) == -1):
                     ocean_boundary.append(tuple(ext_ring[i, :]))
-#            ocean_boundaries = edges_to_rings(ocean_boundary)
-#            land_boundaries = edges_to_rings(land_boundary)
+#            ocean_boundaries = utils.sort_edges(ocean_boundary)
+#            land_boundaries = utils.sort_edges(land_boundary)
             ocean_boundaries = []
             if len(ocean_boundary) != 0:
                 #pylint: disable=not-an-iterable
@@ -499,7 +499,7 @@ class Boundaries:
 
                 # TODO: Do we still need these?
                 e0, e1 = [list(t) for t in zip(*int_ring)]
-                if signed_polygon_area(self.mesh.coord[e0, :]) < 0:
+                if utils.signed_polygon_area(self.mesh.coord[e0, :]) < 0:
                     e0 = e0[::-1]
                     e1 = e1[::-1]
                 e0 = [get_id(vert) for vert in e0]
@@ -817,40 +817,6 @@ class Mesh(BaseMesh):
             f'Unable to automatically determine file type for {str(path)}.')
 
 
-def edges_to_rings(edges):
-    if len(edges) == 0:
-        return edges
-    # start ordering the edges into linestrings
-    edge_collection = []
-    ordered_edges = [edges.pop(-1)]
-    e0, e1 = [list(t) for t in zip(*edges)]
-    while len(edges) > 0:
-        if ordered_edges[-1][1] in e0:
-            idx = e0.index(ordered_edges[-1][1])
-            ordered_edges.append(edges.pop(idx))
-        elif ordered_edges[0][0] in e1:
-            idx = e1.index(ordered_edges[0][0])
-            ordered_edges.insert(0, edges.pop(idx))
-        elif ordered_edges[-1][1] in e1:
-            idx = e1.index(ordered_edges[-1][1])
-            ordered_edges.append(
-                list(reversed(edges.pop(idx))))
-        elif ordered_edges[0][0] in e0:
-            idx = e0.index(ordered_edges[0][0])
-            ordered_edges.insert(
-                0, list(reversed(edges.pop(idx))))
-        else:
-            edge_collection.append(tuple(ordered_edges))
-            idx = -1
-            ordered_edges = [edges.pop(idx)]
-        e0.pop(idx)
-        e1.pop(idx)
-    # finalize
-    if len(edge_collection) == 0 and len(edges) == 0:
-        edge_collection.append(tuple(ordered_edges))
-    else:
-        edge_collection.append(tuple(ordered_edges))
-    return edge_collection
 
 
 def sort_rings(index_rings, vertices):
@@ -925,16 +891,6 @@ def sort_rings(index_rings, vertices):
             path = Path(vertices[e0 + [e0[0]], :], closed=True)
     return _index_rings
 
-
-def signed_polygon_area(vertices):
-    # https://code.activestate.com/recipes/578047-area-of-polygon-using-shoelace-formula/
-    n = len(vertices)  # of vertices
-    area = 0.0
-    for i in range(n):
-        j = (i + 1) % n
-        area += vertices[i][0] * vertices[j][1]
-        area -= vertices[j][0] * vertices[i][1]
-        return area / 2.0
 
 
 def _mesh_interpolate_worker(

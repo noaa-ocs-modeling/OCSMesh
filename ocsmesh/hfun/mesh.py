@@ -9,8 +9,7 @@ from time import time
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
 import numpy as np
-from pyproj import CRS, Transformer
-import utm
+from pyproj import Transformer
 from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, Polygon, MultiPolygon)

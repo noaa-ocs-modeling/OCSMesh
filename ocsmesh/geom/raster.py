@@ -1,15 +1,14 @@
 import os
 from typing import Union
 
-from matplotlib.path import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from shapely import ops
-from shapely.geometry import (
-    Polygon, MultiPolygon, LinearRing)
+from shapely.geometry import Polygon, MultiPolygon
 
 from ocsmesh.geom.base import BaseGeom
 from ocsmesh.raster import Raster
+from ocsmesh import utils
 
 
 class SourceRaster:
@@ -82,7 +81,7 @@ class RasterGeom(BaseGeom):
             ax.contourf(x, y, new_mask, levels=[0, 1])
             plt.close(fig)
             polygon_collection.extend(
-                list(get_multipolygon_from_axes(ax)))
+                list(utils.get_multipolygon_from_pathplot(ax)))
 
         union_result = ops.unary_union(polygon_collection)
         if isinstance(union_result, Polygon):
@@ -111,43 +110,3 @@ class RasterGeom(BaseGeom):
             plt.show()
 
         return plt.gca()
-
-
-
-def get_multipolygon_from_axes(ax):
-    # extract linear_rings from plot
-    linear_ring_collection = []
-    for path_collection in ax.collections:
-        for path in path_collection.get_paths():
-            polygons = path.to_polygons(closed_only=True)
-            for linear_ring in polygons:
-                if linear_ring.shape[0] > 3:
-                    linear_ring_collection.append(
-                        LinearRing(linear_ring))
-    if len(linear_ring_collection) > 1:
-        # reorder linear rings from above
-        areas = [Polygon(linear_ring).area
-                 for linear_ring in linear_ring_collection]
-        idx = np.where(areas == np.max(areas))[0][0]
-        polygon_collection = []
-        outer_ring = linear_ring_collection.pop(idx)
-        path = Path(np.asarray(outer_ring.coords), closed=True)
-        while len(linear_ring_collection) > 0:
-            inner_rings = []
-            for i, linear_ring in reversed(
-                    list(enumerate(linear_ring_collection))):
-                xy = np.asarray(linear_ring.coords)[0, :]
-                if path.contains_point(xy):
-                    inner_rings.append(linear_ring_collection.pop(i))
-            polygon_collection.append(Polygon(outer_ring, inner_rings))
-            if len(linear_ring_collection) > 0:
-                areas = [Polygon(linear_ring).area
-                         for linear_ring in linear_ring_collection]
-                idx = np.where(areas == np.max(areas))[0][0]
-                outer_ring = linear_ring_collection.pop(idx)
-                path = Path(np.asarray(outer_ring.coords), closed=True)
-        multipolygon = MultiPolygon(polygon_collection)
-    else:
-        multipolygon = MultiPolygon(
-            [Polygon(linear_ring_collection.pop())])
-    return multipolygon

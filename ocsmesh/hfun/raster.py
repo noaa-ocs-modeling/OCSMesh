@@ -18,7 +18,6 @@ from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, box, GeometryCollection,
     Polygon, MultiPolygon)
-import utm
 
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows

@@ -18,7 +18,6 @@ from jigsawpy import jigsaw_msh_t
 from rasterio.transform import from_origin
 from rasterio.warp import reproject, Resampling
 import rasterio
-import utm
 
 from ocsmesh import utils
 from ocsmesh.hfun.base import BaseHfun
@@ -828,7 +827,7 @@ class HfunCollector(BaseHfun):
 
         utm_crs = utils.estimate_bounds_utm(
                 (x0, y0, x1, y1), "EPSG:4326")
-        assert (utm_crs is not None)
+        assert utm_crs is not None
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
 

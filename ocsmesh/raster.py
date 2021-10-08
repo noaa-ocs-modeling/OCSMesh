@@ -12,13 +12,11 @@ import warnings
 # from matplotlib.colors import LinearSegmentedColormap
 import geopandas as gpd
 from matplotlib.cm import ScalarMappable
-from matplotlib.path import Path
 import matplotlib.pyplot as plt
 from matplotlib.transforms import Bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from pyproj import CRS, Transformer
-import utm
 import rasterio
 from rasterio import warp
 from rasterio.mask import mask
@@ -29,7 +27,7 @@ from rasterio import windows
 from scipy.ndimage import gaussian_filter
 from shapely import ops
 from shapely.geometry import (
-    Polygon, MultiPolygon, LinearRing, LineString, MultiLineString, box)
+    Polygon, MultiPolygon, LineString, MultiLineString, box)
 
 # from ocsmesh.geom import Geom
 # from ocsmesh.hfun import Hfun
@@ -238,7 +236,7 @@ class Raster:
             ax.contourf(
                 x, y, new_mask, levels=[0, 1])
             plt.close(fig)
-            polygon_collection.extend(get_multipolygon_from_axes(ax))
+            polygon_collection.extend(utils.get_multipolygon_from_pathplot(ax))
 
         geom = ops.unary_union(polygon_collection)
         if not isinstance(geom, MultiPolygon):
@@ -825,45 +823,6 @@ def get_iter_windows(
             w = chunk_size + overlap
             w = w - (off_w + w) % width if off_w + w > width else w
             yield windows.Window(off_w, off_h, w, h)
-
-
-def get_multipolygon_from_axes(ax):
-    # extract linear_rings from plot
-    linear_ring_collection = []
-    for path_collection in ax.collections:
-        for path in path_collection.get_paths():
-            polygons = path.to_polygons(closed_only=True)
-            for linear_ring in polygons:
-                if linear_ring.shape[0] > 3:
-                    linear_ring_collection.append(
-                        LinearRing(linear_ring))
-    if len(linear_ring_collection) > 1:
-        # reorder linear rings from above
-        areas = [Polygon(linear_ring).area
-                 for linear_ring in linear_ring_collection]
-        idx = np.where(areas == np.max(areas))[0][0]
-        polygon_collection = []
-        outer_ring = linear_ring_collection.pop(idx)
-        path = Path(np.asarray(outer_ring.coords), closed=True)
-        while len(linear_ring_collection) > 0:
-            inner_rings = []
-            for i, linear_ring in reversed(
-                    list(enumerate(linear_ring_collection))):
-                xy = np.asarray(linear_ring.coords)[0, :]
-                if path.contains_point(xy):
-                    inner_rings.append(linear_ring_collection.pop(i))
-            polygon_collection.append(Polygon(outer_ring, inner_rings))
-            if len(linear_ring_collection) > 0:
-                areas = [Polygon(linear_ring).area
-                         for linear_ring in linear_ring_collection]
-                idx = np.where(areas == np.max(areas))[0][0]
-                outer_ring = linear_ring_collection.pop(idx)
-                path = Path(np.asarray(outer_ring.coords), closed=True)
-        multipolygon = MultiPolygon(polygon_collection)
-    else:
-        multipolygon = MultiPolygon(
-            [Polygon(linear_ring_collection.pop())])
-    return multipolygon
 
 
 def redistribute_vertices(geom, distance):
