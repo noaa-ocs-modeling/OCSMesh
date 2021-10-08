@@ -2,6 +2,7 @@ from collections import defaultdict
 from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple
 from functools import reduce
+from multiprocessing import cpu_count, Pool
 from copy import deepcopy
 
 import jigsawpy
@@ -16,7 +17,8 @@ from scipy.interpolate import (  # type: ignore[import]
 from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
-        box, GeometryCollection, Point, MultiPoint, LinearRing)
+        box, GeometryCollection, Point, MultiPoint,
+        LineString, LinearRing)
 from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
@@ -210,6 +212,40 @@ def get_mesh_polygons(mesh):
 
 
     return MultiPolygon(result_polys)
+
+
+def repartition_features(linestring, max_verts):
+    features = []
+    if len(linestring.coords) > max_verts:
+        new_feat = []
+        for segment in list(map(LineString, zip(
+                linestring.coords[:-1],
+                linestring.coords[1:]))):
+            new_feat.append(segment)
+            if len(new_feat) == max_verts - 1:
+                features.append(linemerge(new_feat))
+                new_feat = []
+        if len(new_feat) != 0:
+            features.append(linemerge(new_feat))
+    else:
+        features.append(linestring)
+    return features
+
+
+def transform_linestring(
+    linestring: LineString,
+    target_size: float,
+):
+    distances = [0.]
+    while distances[-1] + target_size < linestring.length:
+        distances.append(distances[-1] + target_size)
+    distances.append(linestring.length)
+    linestring = LineString([
+        linestring.interpolate(distance)
+        for distance in distances
+        ])
+    return linestring
+
 
 
 def needs_sieve(mesh, area=None):
@@ -1607,3 +1643,23 @@ def merge_msh_t(
     composite_mesh.crs = dst_crs
 
     return composite_mesh
+
+
+def requires_pool(func):
+    def wrapper(*args, nprocs=None, pool=None, **kwargs):
+
+        if pool is not None:
+            rv = func(*args, **kwargs, pool=pool)
+
+        else:
+            # Check nprocs
+            nprocs = -1 if nprocs is None else nprocs
+            nprocs = cpu_count() if nprocs == -1 else nprocs
+
+            with Pool(processes=nprocs) as new_pool:
+                rv = func(*args, **kwargs, pool=new_pool)
+            new_pool.join()
+
+        return rv
+
+    return wrapper

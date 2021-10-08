@@ -2,13 +2,10 @@ import os
 from typing import Union
 
 import matplotlib.pyplot as plt
-import numpy as np
-from shapely import ops
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import MultiPolygon
 
 from ocsmesh.geom.base import BaseGeom
 from ocsmesh.raster import Raster
-from ocsmesh import utils
 
 
 class SourceRaster:
@@ -61,32 +58,7 @@ class RasterGeom(BaseGeom):
         if zmin is None and zmax is None:
             return MultiPolygon([self.raster.get_bbox()])
 
-        polygon_collection = []
-        for window in self.raster.iter_windows():
-            x, y, z = self.raster.get_window_data(window, band=1)
-            new_mask = np.full(z.mask.shape, 0)
-            new_mask[np.where(z.mask)] = -1
-            new_mask[np.where(~z.mask)] = 1
-
-            if zmin is not None:
-                new_mask[np.where(z < zmin)] = -1
-
-            if zmax is not None:
-                new_mask[np.where(z > zmax)] = -1
-
-            if np.all(new_mask == -1):  # or not new_mask.any():
-                continue
-
-            fig, ax = plt.subplots()
-            ax.contourf(x, y, new_mask, levels=[0, 1])
-            plt.close(fig)
-            polygon_collection.extend(
-                list(utils.get_multipolygon_from_pathplot(ax)))
-
-        union_result = ops.unary_union(polygon_collection)
-        if isinstance(union_result, Polygon):
-            union_result = MultiPolygon([union_result])
-        return union_result
+        return self.raster.get_multipolygon(zmin=zmin, zmax=zmax)
 
 
     @property

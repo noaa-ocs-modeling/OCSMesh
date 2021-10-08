@@ -233,15 +233,15 @@ class Raster:
                 continue
 
             fig, ax = plt.subplots()
-            ax.contourf(
-                x, y, new_mask, levels=[0, 1])
+            ax.contourf(x, y, new_mask, levels=[0, 1])
             plt.close(fig)
-            polygon_collection.extend(utils.get_multipolygon_from_pathplot(ax))
+            polygon_collection.extend(
+                    list(utils.get_multipolygon_from_pathplot(ax)))
 
-        geom = ops.unary_union(polygon_collection)
-        if not isinstance(geom, MultiPolygon):
-            geom = MultiPolygon([geom])
-        return geom
+        union_result = ops.unary_union(polygon_collection)
+        if not isinstance(union_result, MultiPolygon):
+            union_result = MultiPolygon([union_result])
+        return union_result
 
     def get_bbox(
             self,

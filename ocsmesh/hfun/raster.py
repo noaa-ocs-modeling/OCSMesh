@@ -293,7 +293,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: float = None,
             target_size: float = None,
             nprocs: int = None
-    ):
+            ):
 
         # TODO: Add pool input support like add_feature for performance
 
@@ -303,8 +303,8 @@ class HfunRaster(BaseHfun, Raster):
                     f"Wrong type \"{type(multipolygon)}\""
                     f" for multipolygon input.")
 
-        if isinstance(multipolygon, Polygon):
-            multipolygon = MultiPolygon([multipolygon])
+            if isinstance(multipolygon, Polygon):
+                multipolygon = MultiPolygon([multipolygon])
 
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
@@ -327,6 +327,7 @@ class HfunRaster(BaseHfun, Raster):
                 inter for ply in multipolygon for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
+            # pylint: disable=E1123
             self.add_feature(
                 feature=features,
                 expansion_rate=expansion_rate,
@@ -440,39 +441,9 @@ class HfunRaster(BaseHfun, Raster):
             channels, expansion_rate, target_size, nprocs)
 
 
+
+    @utils.requires_pool
     def add_feature(
-            self,
-            feature: Union[LineString, MultiLineString],
-            expansion_rate: float,
-            target_size: float = None,
-            nprocs=None,
-            max_verts=200,
-            proc_pool=None
-    ):
-        if proc_pool is not None:
-            self._add_feature_internal(
-                feature=feature,
-                expansion_rate=expansion_rate,
-                target_size=target_size,
-                pool=proc_pool,
-                max_verts=max_verts)
-
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            _logger.debug(f'Using nprocs={nprocs}')
-
-            with Pool(processes=nprocs) as pool:
-                self._add_feature_internal(
-                    feature=feature,
-                    expansion_rate=expansion_rate,
-                    target_size=target_size,
-                    pool=pool,
-                    max_verts=max_verts)
-            pool.join()
-
-    def _add_feature_internal(
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
@@ -531,7 +502,7 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info('Repartitioning features...')
                 start = time()
                 res = pool.starmap(
-                    repartition_features,
+                    utils.repartition_features,
                     [(linestring, max_verts) for linestring in feature]
                     )
                 win_feature = functools.reduce(operator.iconcat, res, [])
@@ -558,7 +529,7 @@ class HfunRaster(BaseHfun, Raster):
                             f"Transform apply took {time() - start2:f}")
 
                 transformed_features = pool.starmap(
-                    transform_linestring,
+                    utils.transform_linestring,
                     [(linestring, target_size) for linestring in win_feature]
                 )
                 _logger.info(f'Resampling features took {time()-start}.')
@@ -762,20 +733,6 @@ def transform_point(x, y, src_crs, utm_crs):
     return transformer.transform(x, y)
 
 
-def transform_linestring(
-    linestring: LineString,
-    target_size: float,
-):
-    distances = [0.]
-    while distances[-1] + target_size < linestring.length:
-        distances.append(distances[-1] + target_size)
-    distances.append(linestring.length)
-    linestring = LineString([
-        linestring.interpolate(distance)
-        for distance in distances
-        ])
-    return linestring
-
 def transform_polygon(
     polygon: Polygon,
     src_crs: CRS = None,
@@ -788,21 +745,3 @@ def transform_polygon(
         polygon = ops.transform(
                 transformer.transform, polygon)
     return polygon
-
-
-def repartition_features(linestring, max_verts):
-    features = []
-    if len(linestring.coords) > max_verts:
-        new_feat = []
-        for segment in list(map(LineString, zip(
-                linestring.coords[:-1],
-                linestring.coords[1:]))):
-            new_feat.append(segment)
-            if len(new_feat) == max_verts - 1:
-                features.append(ops.linemerge(new_feat))
-                new_feat = []
-        if len(new_feat) != 0:
-            features.append(ops.linemerge(new_feat))
-    else:
-        features.append(linestring)
-    return features

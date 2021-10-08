@@ -572,7 +572,7 @@ class HfunCollector(BaseHfun):
                                 'feature': shape,
                                 'expansion_rate': row.expansion_rate,
                                 'target_size': row.target_size,
-                                'proc_pool': p
+                                'pool': p
                             })
             p.join()
             # hfun objects cause issue with pickling
