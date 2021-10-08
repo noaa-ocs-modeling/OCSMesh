@@ -82,7 +82,7 @@ def geom_string(geom_type, sms2dm):
     if len(f) > 0:
         return '\n'.join(f)
 
-    return ''
+    return None
 
 
 def E3T_string(sms2dm):
