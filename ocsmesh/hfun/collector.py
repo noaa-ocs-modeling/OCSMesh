@@ -729,7 +729,7 @@ class HfunCollector(BaseHfun):
                     fit_inside=True,
                     inverse=True)
 
-            if len(hfun_mesh.vert2) != 0:
+            if len(hfun_mesh.vert2) == 0:
                 _logger.debug("Hfun ignored due to overlap")
                 continue
 
@@ -781,10 +781,10 @@ class HfunCollector(BaseHfun):
         composite_hfun.ndims = 2
 
         composite_hfun.vert2 = np.array(
-                [(coord, 0) for coord in np.vstack(coord)],
+                [(coo, 0) for coo in np.vstack(coord)],
                 dtype=jigsaw_msh_t.VERT2_t)
         composite_hfun.tria3 = np.array(
-                [(index, 0) for index in np.vstack(index)],
+                [(idx, 0) for idx in np.vstack(index)],
                 dtype=jigsaw_msh_t.TRIA3_t)
         composite_hfun.value = np.array(
                 np.vstack(value),

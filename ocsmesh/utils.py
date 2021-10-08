@@ -542,17 +542,17 @@ def index_ring_collection(mesh):
         boundary_edges.append(
             (int(tri.triangles[i, j]),
                 int(tri.triangles[i, (j+1) % 3])))
-    idx_ring_coll = sort_edges(boundary_edges)
+    init_idx_ring_coll = sort_edges(boundary_edges)
     # sort index_rings into corresponding "polygons"
     areas = []
     vertices = mesh.vert2['coord']
-    for index_ring in idx_ring_coll:
+    for index_ring in init_idx_ring_coll:
         e0, _ = [list(t) for t in zip(*index_ring)]
         areas.append(float(Polygon(vertices[e0, :]).area))
 
     # maximum area must be main mesh
     idx = areas.index(np.max(areas))
-    exterior = idx_ring_coll.pop(idx)
+    exterior = init_idx_ring_coll.pop(idx)
     areas.pop(idx)
     _id = 0
     idx_ring_coll = {}
@@ -562,18 +562,18 @@ def index_ring_collection(mesh):
         }
     e0, e1 = [list(t) for t in zip(*exterior)]
     path = Path(vertices[e0 + [e0[0]], :], closed=True)
-    while len(idx_ring_coll) > 0:
+    while len(init_idx_ring_coll) > 0:
         # find all internal rings
         potential_interiors = []
-        for i, index_ring in enumerate(idx_ring_coll):
+        for i, index_ring in enumerate(init_idx_ring_coll):
             e0, e1 = [list(t) for t in zip(*index_ring)]
             if path.contains_point(vertices[e0[0], :]):
                 potential_interiors.append(i)
         # filter out nested rings
         real_interiors = []
         for i, p_interior in reversed(list(enumerate(potential_interiors))):
-            _p_interior = idx_ring_coll[p_interior]
-            check = [idx_ring_coll[_]
+            _p_interior = init_idx_ring_coll[p_interior]
+            check = [init_idx_ring_coll[_]
                      for j, _ in reversed(list(enumerate(potential_interiors)))
                      if i != j]
             has_parent = False
@@ -585,15 +585,16 @@ def index_ring_collection(mesh):
                     break
             if not has_parent:
                 real_interiors.append(p_interior)
+        # TODO: CHECK IF CLEANUP IS CORRECT!
         # pop real rings from collection
         for i in reversed(sorted(real_interiors)):
             idx_ring_coll[_id]['interiors'].append(
-                np.asarray(idx_ring_coll.pop(i)))
+                np.asarray(init_idx_ring_coll.pop(i)))
             areas.pop(i)
         # if no internal rings found, initialize next polygon
-        if len(idx_ring_coll) > 0:
+        if len(init_idx_ring_coll) > 0:
             idx = areas.index(np.max(areas))
-            exterior = idx_ring_coll.pop(idx)
+            exterior = init_idx_ring_coll.pop(idx)
             areas.pop(idx)
             _id += 1
             idx_ring_coll[_id] = {

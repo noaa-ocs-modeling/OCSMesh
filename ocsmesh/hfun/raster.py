@@ -40,6 +40,7 @@ class HfunInputRaster:
         # init output raster file
         # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
+        # TODO: Use contextlib.ExitStack
         with rasterio.open(raster.tmpfile) as src:
             if raster.chunk_size is not None:
                 windows = get_iter_windows(
