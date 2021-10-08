@@ -9,6 +9,7 @@ from shapely.geometry import MultiPolygon
 import utm
 
 from ocsmesh.crs import CRS as CRSDescriptor
+from ocsmesh import utils
 
 
 class BaseGeom(ABC):
@@ -63,21 +64,9 @@ def multipolygon_to_jigsaw_msh_t(
         crs: CRS
 ) -> jigsaw_msh_t:
     '''Casts shapely.geometry.MultiPolygon to jigsawpy.jigsaw_msh_t'''
-    utm_crs = None
-    if crs.is_geographic:
-        x0, y0, x1, y1 = multipolygon.bounds
-        _, _, number, letter = utm.from_latlon(
-            (y0 + y1)/2, (x0 + x1)/2)
-        # PyProj 3.2.1 throws error if letter is provided
-        utm_crs = CRS(
-            proj='utm',
-            zone=f'{number}',
-            south=(y0 + y1)/2 < 0,
-            ellps={
-                'GRS 1980': 'GRS80',
-                'WGS 84': 'WGS84'
-                }[crs.ellipsoid.name]
-        )
+    utm_crs = utils.estimate_bounds_utm(
+            multipolygon.bounds, crs)
+    if utm_crs is not None:
         transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
         multipolygon = ops.transform(transformer.transform, multipolygon)
 

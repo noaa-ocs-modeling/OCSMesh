@@ -826,12 +826,9 @@ class HfunCollector(BaseHfun):
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
         x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
 
-        _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-        # PyProj 3.2.1 throws error if letter is provided
-        utm_crs = CRS(
-            proj='utm', zone=f'{number}',
-            south=(y0 + y1)/2 < 0, ellps='WGS84')
+        utm_crs = utils.estimate_bounds_utm(
+                (x0, y0, x1, y1), "EPSG:4326")
+        assert (utm_crs is not None)
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
 

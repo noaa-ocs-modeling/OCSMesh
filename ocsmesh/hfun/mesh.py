@@ -31,20 +31,9 @@ class HfunMesh(BaseHfun):
         self._crs = mesh.crs
 
     def msh_t(self) -> jigsaw_msh_t:
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
+
+        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
             # TODO: This modifies the underlying mesh, is this
@@ -73,103 +62,31 @@ class HfunMesh(BaseHfun):
         hfun_msh = self.mesh.msh_t
         coord = hfun_msh.vert2['coord']
 
-        if self.crs.is_geographic:
-
+        transformer = None
+        utm_crs = utils.estimate_mesh_utm(hfun_msh)
+        if utm_crs is not None:
             _logger.info('Projecting to utm...')
 
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            # Note self.mesh.msh_t is NOT overwritten as coord is
-            # being reassigned, not modified
-            coord = np.vstack(
-                transformer.transform(coord[:, 0], coord[:, 1])).T
-
-        # NOTE: For msh_t type vertex id and index are the same
-        trias = hfun_msh.tria3['index']
-        quads = hfun_msh.quad4['index']
-        hexas = hfun_msh.hexa8['index']
-
-        _logger.info('Getting edges...')
-        # Get unique set of edges by rolling connectivity
-        # and joining connectivities in 3rd dimension, then sorting
-        # to get all edges with lower index first
-        all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-        if trias.shape[0]:
-            _logger.info('Getting tria edges...')
-            edges = np.sort(
-                    np.stack(
-                        (trias, np.roll(trias, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-        if quads.shape[0]:
-            _logger.info('Getting quad edges...')
-            edges = np.sort(
-                    np.stack(
-                        (quads, np.roll(quads, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-        if hexas.shape[0]:
-            _logger.info('Getting quad edges...')
-            edges = np.sort(
-                    np.stack(
-                        (hexas, np.roll(hexas, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-
-        all_edges = np.unique(all_edges, axis=0)
-
-        # ONLY TESTED FOR TRIA FOR NOW
-
-        # This part of the function is generic for tria and quad
-
-        # Get coordinates for all edge vertices
-        _logger.info('Getting coordinate of edges...')
-        edge_coords = coord[all_edges, :]
 
         # Calculate length of all edges based on acquired coords
         _logger.info('Getting length of edges...')
-        edge_lens = np.sqrt(
-                np.sum(
-                    np.power(
-                        np.abs(np.diff(edge_coords, axis=1)), 2)
-                    ,axis=2)).squeeze()
+        len_dict = utils.calculate_edge_lengths(hfun_msh, transformer)
 
         # Calculate the mesh size by getting average of lengths
         # associated with each vertex (note there's not id vs index
         # distinction here). This is the most time consuming section
         # as of 04/21
-        _logger.info('Creating vertex to edge map...')
-        vert_to_edge = defaultdict(list)
-        for e, i in enumerate(all_edges.ravel()):
-            vert_to_edge[i].append(e // 2)
+        vert_to_lens = defaultdict(list)
+        for verts_idx, edge_len in len_dict.items():
+            for vidx in verts_idx:
+                vert_to_lens[vidx].append(edge_len)
 
         _logger.info('Creating size value array for vertices...')
         vert_value = np.array(
-                [np.average(edge_lens[vert_to_edge[i]])
-                    if i in vert_to_edge else 0
-                        for i in range(coord.shape[0])])
+            [np.average(vert_to_lens[i]) if i in vert_to_lens else 0
+             for i in range(coord.shape[0])])
 
         # NOTE: Modifying values of underlying mesh
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
@@ -308,24 +225,7 @@ class HfunMesh(BaseHfun):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
-        utm_crs: Union[CRS, None] = None
-
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}',
-                south=(y0 + y1)/2 < 0,
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[self.crs.ellipsoid.name]
-            )
-        else:
-            utm_crs = None
+        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
 
         _logger.info('Repartitioning features...')
         start = time()

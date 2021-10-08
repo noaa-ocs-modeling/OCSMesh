@@ -554,25 +554,10 @@ class Raster:
 
         multipoly = self.get_multipolygon(zmax=level)
 
-        utm_crs = None
-        if self.crs.is_geographic:
-            # Input sizes are in meters, so crs should NOT
-            # be geographic
-            x0, y0, x1, y1 = self.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}',
-                south=(y0 + y1)/2 < 0,
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[self.crs.ellipsoid.name]
-            )
+        utm_crs = utils.estimate_bounds_utm(
+            self.get_bbox().bounds, self.crs)
 
-        if utm_crs:
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.src.crs, utm_crs, always_xy=True)
             multipoly = ops.transform(transformer.transform, multipoly)
@@ -581,7 +566,7 @@ class Raster:
         if channels is None:
             return None
 
-        if utm_crs:
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 utm_crs, self.src.crs, always_xy=True)
             channels = ops.transform(transformer.transform, channels)

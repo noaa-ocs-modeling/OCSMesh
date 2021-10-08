@@ -965,30 +965,15 @@ def get_mesh_edges(mesh: jigsaw_msh_t, unique=True):
     # and joining connectivities in 3rd dimension, then sorting
     # to get all edges with lower index first
     all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-    if trias.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (trias, np.roll(trias, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if quads.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (quads, np.roll(quads, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if hexas.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (hexas, np.roll(hexas, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
+    for elm_type in [trias, quads, hexas]:
+        if elm_type.shape[0]:
+            edges = np.sort(
+                    np.stack(
+                        (elm_type, np.roll(elm_type, shift=1, axis=1)),
+                        axis=2),
+                    axis=2)
+            edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+            all_edges = np.vstack((all_edges, edges))
 
     if unique:
         all_edges = np.unique(all_edges, axis=0)
@@ -1020,11 +1005,14 @@ def calculate_tria_areas(mesh):
     return tria_areas
 
 @must_be_euclidean_mesh
-def calculate_edge_lengths(mesh):
+def calculate_edge_lengths(mesh, transformer=None):
 
     # Taken from size_from_mesh method of hfun-mesh
 
     coord = mesh.vert2['coord']
+    if transformer is not None:
+        coord = np.vstack(
+            transformer.transform(coord[:, 0], coord[:, 1])).T
 
     # Get unique set of edges by rolling connectivity
     # and joining connectivities in 3rd dimension, then sorting
@@ -1422,11 +1410,26 @@ def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
 
 @must_be_euclidean_mesh
 def msh_t_to_utm(msh):
-    if hasattr(msh, 'crs') and msh.crs.is_geographic:
-        coords = msh.vert2['coord']
-        x0, y0, x1, y1 = (
-            np.min(coords[:, 0]), np.min(coords[:, 1]),
-            np.max(coords[:, 0]), np.max(coords[:, 1]))
+    utm_crs = estimate_mesh_utm(msh)
+    if utm_crs is None:
+        return
+
+    transformer = Transformer.from_crs(
+        msh.crs, utm_crs, always_xy=True)
+
+    coords = msh.vert2['coord']
+
+    # pylint: disable=E0633
+    coords[:, 0], coords[:, 1] = transformer.transform(
+            coords[:, 0], coords[:, 1])
+    msh.vert2['coord'][:] = coords
+    msh.crs = utm_crs
+
+
+def estimate_bounds_utm(bounds, crs="EPSG:4326"):
+    in_crs = CRS.from_user_input(crs)
+    if in_crs.is_geographic:
+        x0, y0, x1, y1 = bounds
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
         # PyProj 3.2.1 throws error if letter is provided
@@ -1437,16 +1440,23 @@ def msh_t_to_utm(msh):
                 ellps={
                     'GRS 1980': 'GRS80',
                     'WGS 84': 'WGS84'
-                    }[msh.crs.ellipsoid.name]
+                    }[in_crs.ellipsoid.name]
             )
-        transformer = Transformer.from_crs(
-            msh.crs, utm_crs, always_xy=True)
+        return utm_crs
 
-        # pylint: disable=E0633
-        coords[:, 0], coords[:, 1] = transformer.transform(
-                coords[:, 0], coords[:, 1])
-        msh.vert2['coord'][:] = coords
-        msh.crs = utm_crs
+    return None
+
+@must_be_euclidean_mesh
+def estimate_mesh_utm(msh):
+    if hasattr(msh, 'crs'):
+        coords = msh.vert2['coord']
+        x0, y0, x1, y1 = (
+            np.min(coords[:, 0]), np.min(coords[:, 1]),
+            np.max(coords[:, 0]), np.max(coords[:, 1]))
+        utm_crs = estimate_bounds_utm((x0, y0, x1, y1), msh.crs)
+        return utm_crs
+
+    return None
 
 def get_polygon_channels(polygon, width, simplify=None, join_style=3):
 

@@ -95,7 +95,6 @@ class HfunRaster(BaseHfun, Raster):
         else:
             iter_windows = [window]
 
-        utm_crs = None
 
         output_mesh = jigsaw_msh_t()
         output_mesh.ndims = +2
@@ -108,24 +107,15 @@ class HfunRaster(BaseHfun, Raster):
 
             x0, y0, x1, y1 = self.get_window_bounds(win)
 
-            if self.crs.is_geographic:
+            utm_crs = utils.estimate_bounds_utm(
+                    (x0, y0, x1, y1), self.crs)
+
+            if utm_crs is not None:
                 hfun.mshID = 'euclidean-mesh'
                 # If these 3 objects (vert2, tria3, value) don't fit into
                 # memroy, then the raster needs to be chunked. We need to
                 # implement auto-chunking.
                 start = time()
-                _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-                # PyProj 3.2.1 throws error if letter is provided
-                utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
                 # get bbox data
                 xgrid = self.get_x(window=win)
                 ygrid = np.flip(self.get_y(window=win))
@@ -252,8 +242,7 @@ class HfunRaster(BaseHfun, Raster):
             hfun.crs = utm_crs
             utils.interpolate(hfun, window_mesh, **kwargs)
 
-            # reproject and combine with other windows
-            # output_mesh is always in self.crs
+            # reproject to combine with other windows
             if utm_crs is not None:
                 window_mesh.crs = utm_crs
                 utils.reproject(window_mesh, self.crs)
@@ -285,20 +274,9 @@ class HfunRaster(BaseHfun, Raster):
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
+        utm_crs = utils.estimate_bounds_utm(
+                self.get_bbox().bounds, self.crs)
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
             output_mesh.vert2['coord'] = np.vstack(
@@ -543,28 +521,14 @@ class HfunRaster(BaseHfun, Raster):
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
-        utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile, 'w', **meta,) as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                if self.crs.is_geographic:
-                    x0, y0, x1, y1 = self.get_window_bounds(window)
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    # PyProj 3.2.1 throws error if letter is provided
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}',
-                        south=(y0 + y1)/2 < 0,
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
-                else:
-                    utm_crs = None
+                utm_crs = utils.estimate_bounds_utm(
+                        self.get_window_bounds(window), self.crs)
+
                 _logger.info('Repartitioning features...')
                 start = time()
                 res = pool.starmap(
@@ -681,7 +645,6 @@ class HfunRaster(BaseHfun, Raster):
 
         # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
-        utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
 
             iter_windows = list(self.iter_windows())
@@ -690,21 +653,11 @@ class HfunRaster(BaseHfun, Raster):
             for i, window in enumerate(iter_windows):
 
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                x0, y0, x1, y1 = self.get_window_bounds(window)
 
-                if self.crs.is_geographic:
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    # PyProj 3.2.1 throws error if letter is provided
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}',
-                        south=(y0 + y1)/2 < 0,
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
+                x0, y0, x1, y1 = self.get_window_bounds(window)
+                utm_crs = utils.estimate_bounds_utm(
+                        (x0, y0, x1, y1), self.crs)
+                if utm_crs is not None:
                     transformer = Transformer.from_crs(
                             self.crs, utm_crs, always_xy=True)
                     (x0, x1), (y0, y1) = transformer.transform(
