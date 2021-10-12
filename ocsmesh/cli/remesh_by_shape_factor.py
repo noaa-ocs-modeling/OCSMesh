@@ -244,7 +244,8 @@ class RemeshByShape:
             refine_ctr = transform(transformer.transform, refine_ctr)
 
             hfun_refine.add_feature(
-                    refine_ctr, expansion_rate, target_size, nprocs)
+                    refine_ctr, expansion_rate, target_size,
+                    nprocs=nprocs)
 
         for lower_bound, expansion_rate, target_size in patch_defns:
             refine_mp = mesh.get_multipolygon(zmin=lower_bound)

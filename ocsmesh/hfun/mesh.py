@@ -132,7 +132,7 @@ class HfunMesh(BaseHfun):
                 inter for ply in multipolygon for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
-            # pylint: disable=E1123
+            # pylint: disable=E1123, E1125
             self.add_feature(
                 feature=features,
                 expansion_rate=expansion_rate,
@@ -162,14 +162,15 @@ class HfunMesh(BaseHfun):
 
         self.mesh.msh_t.value = values
 
-    @utils.requires_pool
+    @utils.add_pool_args
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
             target_size: float = None,
-            pool: Pool = None,
-            max_verts=200
+            max_verts=200,
+            *, # kwarg-only comes after this
+            pool: Pool
     ):
         # TODO: Partition features if they are too "long" which results in an
         # improvement for parallel pool. E.g. if a feature is too long, 1

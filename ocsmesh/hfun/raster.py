@@ -328,7 +328,7 @@ class HfunRaster(BaseHfun, Raster):
                 inter for ply in multipolygon for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
-            # pylint: disable=E1123
+            # pylint: disable=E1123, E1125
             self.add_feature(
                 feature=features,
                 expansion_rate=expansion_rate,
@@ -420,7 +420,10 @@ class HfunRaster(BaseHfun, Raster):
         contours = MultiLineString(contours)
 
         _logger.info('Adding contours as features...')
-        self.add_feature(contours, expansion_rate, target_size, nprocs)
+        # pylint: disable=E1123, E1125
+        self.add_feature(
+                contours, expansion_rate, target_size,
+                nprocs=nprocs)
 
     def add_channel(
             self,
@@ -443,14 +446,15 @@ class HfunRaster(BaseHfun, Raster):
 
 
 
-    @utils.requires_pool
+    @utils.add_pool_args
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
             target_size: float = None,
-            pool: Pool = None,
-            max_verts=200
+            max_verts=200,
+            *, # kwarg-only comes after this
+            pool: Pool,
     ):
         '''Adds a linear distance size function constraint to the mesh.
 

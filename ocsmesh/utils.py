@@ -1645,7 +1645,7 @@ def merge_msh_t(
     return composite_mesh
 
 
-def requires_pool(func):
+def add_pool_args(func):
     def wrapper(*args, nprocs=None, pool=None, **kwargs):
 
         if pool is not None:
