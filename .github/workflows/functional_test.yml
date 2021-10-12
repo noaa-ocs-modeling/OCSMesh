@@ -67,3 +67,7 @@ jobs:
         name: remesh-bydem-results
         path: remeshed.2dm
         retention-days: 7
+
+    - name: Run mesh size calc test
+      shell: bash -l {0}
+      run: python tests/api/size_from_mesh.py

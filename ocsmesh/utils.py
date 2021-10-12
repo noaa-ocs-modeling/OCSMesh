@@ -1082,8 +1082,6 @@ def calculate_tria_areas(mesh):
 @must_be_euclidean_mesh
 def calculate_edge_lengths(mesh, transformer=None):
 
-    # Taken from size_from_mesh method of hfun-mesh
-
     coord = mesh.vert2['coord']
     if transformer is not None:
         coord = np.vstack(
