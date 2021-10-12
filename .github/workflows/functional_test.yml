@@ -18,7 +18,6 @@ jobs:
     - name: Install dependencies
       shell: bash -l {0}
       run: |
-        conda env list
         python ./setup.py install_jigsaw
         pip install .
     - name: Download example DEM
