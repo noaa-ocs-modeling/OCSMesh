@@ -2,21 +2,22 @@
 """
 CLI interface for interpolating rasters into a mesh.
 """
+import sys
 import argparse
 import pathlib
-from tqdm import tqdm
-import sys
-from functools import lru_cache
-import numpy as np
-from matplotlib.path import Path  # type: ignore[import]
-import fiona
-from multiprocessing import Pool
-import requests
-import tempfile
 import shutil
+import tempfile
+from functools import lru_cache
+from multiprocessing import Pool
+
+import numpy as np
+import fiona
+import requests
+from tqdm import tqdm
+from matplotlib.path import Path  # type: ignore[import]
 from scipy.interpolate import RectBivariateSpline  # , griddata
-from shapely.geometry import box
 from geoalchemy2.shape import from_shape
+from shapely.geometry import box
 from shapely.ops import transform
 from pyproj import CRS, Transformer
 from ocsmesh import Mesh, Raster, db
@@ -338,6 +339,7 @@ def validate_tile_index(path):
 
 def request_raster_from_url(url, verbose=False):
     """ returns :class:`tempfile.NamedTemporaryFile` object """
+    # pylint: disable=R1732
     tmpfile = tempfile.NamedTemporaryFile()
     with open(tmpfile.name, 'wb') as f:
         response = requests.get(url, stream=True)

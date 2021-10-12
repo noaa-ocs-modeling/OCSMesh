@@ -4,7 +4,7 @@ from pyproj import CRS
 
 
 def read(path, crs=None):
-    sms2dm = dict()
+    sms2dm = {}
     with open(pathlib.Path(path), 'r') as f:
         lines = list(map(str.split, f.readlines()))
         ind = 1
@@ -54,12 +54,12 @@ def to_string(sms2dm):
 
 
 def ND_string(sms2dm):
-    assert all(int(id) > 0 for id in sms2dm['ND'])
+    assert all(int(nd_id) > 0 for nd_id in sms2dm['ND'])
     lines = []
-    for id, (coords, value) in sms2dm['ND'].items():
+    for nd_id, (coords, value) in sms2dm['ND'].items():
         lines.append(' '.join([
             'ND',
-            f'{int(id):d}',
+            f'{int(nd_id):d}',
             f"{coords[0]:<.16E}",
             f"{coords[1]:<.16E}",
             f"{value:<.16E}"
@@ -69,18 +69,20 @@ def ND_string(sms2dm):
 
 def geom_string(geom_type, sms2dm):
     assert geom_type in ['E3T', 'E4Q', 'E6T', 'E8Q', 'E9Q']
-    assert all(int(id) > 0 for id in sms2dm[geom_type])
+    assert all(int(elm_id) > 0 for elm_id in sms2dm[geom_type])
     f = []
-    for id, geom in sms2dm[geom_type].items():
+    for elm_id, geom in sms2dm[geom_type].items():
         line = [
             f'{geom_type}',
-            f'{id}',
+            f'{elm_id}',
         ]
-        for j in range(len(geom)):
+        for j, _ in enumerate(geom):
             line.append(f"{geom[j]}")
         f.append(' '.join(line))
     if len(f) > 0:
         return '\n'.join(f)
+
+    return None
 
 
 def E3T_string(sms2dm):

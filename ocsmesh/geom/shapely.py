@@ -1,6 +1,7 @@
+from typing import Union
+
 from pyproj import CRS
 from shapely.geometry import Polygon, MultiPolygon
-from typing import Union
 
 from ocsmesh.geom.base import BaseGeom
 
@@ -16,7 +17,7 @@ class PolygonGeom(ShapelyGeom):
         self._polygon = polygon
         super().__init__(crs)
 
-    def get_multipolygon(self):
+    def get_multipolygon(self, **kwargs):
         return MultiPolygon([self._polygon])
 
     @property
@@ -35,7 +36,7 @@ class MultiPolygonGeom(ShapelyGeom):
         self._multipolygon = multipolygon
         super().__init__(crs)
 
-    def get_multipolygon(self):
+    def get_multipolygon(self, **kwargs):
         return self._multipolygon
 
     @property

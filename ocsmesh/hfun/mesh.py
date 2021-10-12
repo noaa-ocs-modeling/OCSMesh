@@ -1,21 +1,18 @@
 import functools
 import logging
 import operator
-from copy import deepcopy
 from collections import defaultdict
-from typing import Union, List
+from typing import Union
 from multiprocessing import cpu_count, Pool
 from time import time
 
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
 import numpy as np
-from pyproj import CRS, Transformer
-import utm
+from pyproj import Transformer
 from shapely import ops
 from shapely.geometry import (
-    LineString, MultiLineString, box, GeometryCollection,
-    Polygon, MultiPolygon)
+    LineString, MultiLineString, Polygon, MultiPolygon)
 
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor
@@ -33,20 +30,9 @@ class HfunMesh(BaseHfun):
         self._crs = mesh.crs
 
     def msh_t(self) -> jigsaw_msh_t:
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
+
+        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
             # TODO: This modifies the underlying mesh, is this
@@ -58,13 +44,12 @@ class HfunMesh(BaseHfun):
                     )).T
             self.mesh.msh_t.crs = utm_crs
             self._crs = utm_crs
-            return self.mesh.msh_t
-        else:
-            return self.mesh.msh_t
+
+        return self.mesh.msh_t
 
     def size_from_mesh(self):
 
-        ''' 
+        '''
         Get size function values based on the mesh underlying
         this size function. This method overwrites the values
         in underlying msh_t.
@@ -76,103 +61,31 @@ class HfunMesh(BaseHfun):
         hfun_msh = self.mesh.msh_t
         coord = hfun_msh.vert2['coord']
 
-        if self.crs.is_geographic:
-
+        transformer = None
+        utm_crs = utils.estimate_mesh_utm(hfun_msh)
+        if utm_crs is not None:
             _logger.info('Projecting to utm...')
 
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            # Note self.mesh.msh_t is NOT overwritten as coord is 
-            # being reassigned, not modified
-            coord = np.vstack(
-                transformer.transform(coord[:, 0], coord[:, 1])).T
-
-        # NOTE: For msh_t type vertex id and index are the same
-        trias = hfun_msh.tria3['index']
-        quads = hfun_msh.quad4['index']
-        hexas = hfun_msh.hexa8['index']
-
-        _logger.info('Getting edges...')
-        # Get unique set of edges by rolling connectivity
-        # and joining connectivities in 3rd dimension, then sorting
-        # to get all edges with lower index first
-        all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-        if trias.shape[0]:
-            _logger.info('Getting tria edges...')
-            edges = np.sort(
-                    np.stack(
-                        (trias, np.roll(trias, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-        if quads.shape[0]:
-            _logger.info('Getting quad edges...')
-            edges = np.sort(
-                    np.stack(
-                        (quads, np.roll(quads, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-        if hexas.shape[0]:
-            _logger.info('Getting quad edges...')
-            edges = np.sort(
-                    np.stack(
-                        (hexas, np.roll(hexas, shift=1, axis=1)),
-                        axis=2),
-                    axis=2)
-            edges = np.unique(
-                    edges.reshape(np.product(edges.shape[0:2]), 2), axis=0)
-            all_edges = np.vstack((all_edges, edges))
-
-        all_edges = np.unique(all_edges, axis=0)
-
-        # ONLY TESTED FOR TRIA FOR NOW
-
-        # This part of the function is generic for tria and quad
-        
-        # Get coordinates for all edge vertices
-        _logger.info('Getting coordinate of edges...')
-        edge_coords = coord[all_edges, :]
 
         # Calculate length of all edges based on acquired coords
         _logger.info('Getting length of edges...')
-        edge_lens = np.sqrt(
-                np.sum(
-                    np.power(
-                        np.abs(np.diff(edge_coords, axis=1)), 2)
-                    ,axis=2)).squeeze()
+        len_dict = utils.calculate_edge_lengths(hfun_msh, transformer)
 
         # Calculate the mesh size by getting average of lengths
         # associated with each vertex (note there's not id vs index
         # distinction here). This is the most time consuming section
         # as of 04/21
-        _logger.info('Creating vertex to edge map...')
-        vert_to_edge = defaultdict(list)
-        for e, i in enumerate(all_edges.ravel()):
-            vert_to_edge[i].append(e // 2)
+        vert_to_lens = defaultdict(list)
+        for verts_idx, edge_len in len_dict.items():
+            for vidx in verts_idx:
+                vert_to_lens[vidx].append(edge_len)
 
         _logger.info('Creating size value array for vertices...')
         vert_value = np.array(
-                [np.average(edge_lens[vert_to_edge[i]])
-                    if i in vert_to_edge else 0
-                        for i in range(coord.shape[0])])
+            [np.average(vert_to_lens[i]) if i in vert_to_lens else 0
+             for i in range(coord.shape[0])])
 
         # NOTE: Modifying values of underlying mesh
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
@@ -213,12 +126,13 @@ class HfunMesh(BaseHfun):
             raise ValueError("Argument target_size must be greater than zero.")
 
         # For expansion_rate
-        if expansion_rate != None:
+        if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
-            
+
             features = MultiLineString([*exteriors, *interiors])
+            # pylint: disable=E1123, E1125
             self.add_feature(
                 feature=features,
                 expansion_rate=expansion_rate,
@@ -245,48 +159,18 @@ class HfunMesh(BaseHfun):
             values[np.where(values > self.hmax)] = self.hmax
         values = np.minimum(self.mesh.msh_t.value, values)
         values = values.reshape(self.mesh.msh_t.value.shape)
-        
+
         self.mesh.msh_t.value = values
 
+    @utils.add_pool_args
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
             target_size: float = None,
-            nprocs=None,
             max_verts=200,
-            proc_pool=None
-    ):
-        if proc_pool is not None:
-            self._add_feature_internal(
-                feature=feature,
-                expansion_rate=expansion_rate,
-                target_size=target_size,
-                pool=proc_pool,
-                max_verts=max_verts)
-
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            _logger.debug(f'Using nprocs={nprocs}')
-
-            with Pool(processes=nprocs) as pool:
-                self._add_feature_internal(
-                    feature=feature,
-                    expansion_rate=expansion_rate,
-                    target_size=target_size,
-                    pool=pool,
-                    max_verts=max_verts)
-            pool.join()
-
-    def _add_feature_internal(
-            self,
-            feature: Union[LineString, MultiLineString],
-            expansion_rate: float,
-            target_size: float = None,
-            pool: Pool = None,
-            max_verts=200
+            *, # kwarg-only comes after this
+            pool: Pool
     ):
         # TODO: Partition features if they are too "long" which results in an
         # improvement for parallel pool. E.g. if a feature is too long, 1
@@ -301,7 +185,7 @@ class HfunMesh(BaseHfun):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = [linestring for linestring in feature]
+            feature = list(feature)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -311,35 +195,18 @@ class HfunMesh(BaseHfun):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
-        utm_crs: Union[CRS, None] = None
-        
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.mesh.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}',
-                south=(y0 + y1)/2 < 0,
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[self.crs.ellipsoid.name]
-            )
-        else:
-            utm_crs = None
+        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
 
         _logger.info('Repartitioning features...')
         start = time()
         res = pool.starmap(
-            repartition_features,
+            utils.repartition_features,
             [(linestring, max_verts) for linestring in feature]
             )
         feature = functools.reduce(operator.iconcat, res, [])
         _logger.info(f'Repartitioning features took {time()-start}.')
 
-        _logger.info(f'Resampling features on ...')
+        _logger.info('Resampling features on ...')
         start = time()
 
         # We don't want to recreate the same transformation
@@ -360,7 +227,7 @@ class HfunMesh(BaseHfun):
                     f"Transform apply took {time() - start2:f}")
 
         transformed_features = pool.starmap(
-            transform_linestring,
+            utils.transform_linestring,
             [(linestring, target_size) for linestring in feature]
         )
         _logger.info(f'Resampling features took {time()-start}.')
@@ -380,7 +247,7 @@ class HfunMesh(BaseHfun):
         tree = cKDTree(np.array(points))
         _logger.info(f'Generating KDTree took {time()-start}.')
 
-        # We call msh_t() so that it also takes care of utm 
+        # We call msh_t() so that it also takes care of utm
         # transformation
         xy = self.msh_t().vert2['coord']
 
@@ -428,36 +295,3 @@ class HfunMesh(BaseHfun):
 
     def get_bbox(self, **kwargs):
         return self.mesh.get_bbox(**kwargs)
-
-
-def transform_linestring(
-    linestring: LineString,
-    target_size: float,
-):
-    distances = [0.]
-    while distances[-1] + target_size < linestring.length:
-        distances.append(distances[-1] + target_size)
-    distances.append(linestring.length)
-    linestring = LineString([
-        linestring.interpolate(distance)
-        for distance in distances
-        ])
-    return linestring
-
-
-def repartition_features(linestring, max_verts):
-    features = []
-    if len(linestring.coords) > max_verts:
-        new_feat = []
-        for segment in list(map(LineString, zip(
-                linestring.coords[:-1],
-                linestring.coords[1:]))):
-            new_feat.append(segment)
-            if len(new_feat) == max_verts - 1:
-                features.append(ops.linemerge(new_feat))
-                new_feat = []
-        if len(new_feat) != 0:
-            features.append(ops.linemerge(new_feat))
-    else:
-        features.append(linestring)
-    return features

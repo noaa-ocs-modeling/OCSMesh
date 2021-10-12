@@ -17,7 +17,7 @@ class Hfun:
         hfun: Object used to define and compute mesh size function.
         """
 
-        if isinstance(hfun, Raster):
+        if isinstance(hfun, Raster): # pylint: disable=R1705
             return HfunRaster(hfun, **kwargs)
 
         elif isinstance(hfun, EuclideanMesh2D):

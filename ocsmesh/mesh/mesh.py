@@ -4,10 +4,8 @@ from multiprocessing import Pool, cpu_count
 import os
 import pathlib
 from typing import Union, List
-from collections import defaultdict, namedtuple
-from copy import deepcopy
+from collections import defaultdict
 import warnings
-from time import time
 
 import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
@@ -20,9 +18,8 @@ from pyproj import CRS, Transformer
 from scipy.interpolate import (
         RectBivariateSpline, RegularGridInterpolator)
 from shapely.geometry import (
-        LineString, LinearRing, MultiLineString,
-        box, Polygon, MultiPolygon)
-from shapely.ops import polygonize, linemerge, unary_union
+        LineString, box, Polygon, MultiPolygon)
+from shapely.ops import polygonize, linemerge
 
 
 from ocsmesh import utils
@@ -157,6 +154,8 @@ class Nodes:
 
     def __init__(self, mesh: "EuclideanMesh"):
         self.mesh = mesh
+        self._id_to_index = None
+        self._index_to_id = None
 
     @lru_cache(maxsize=1)
     def __call__(self):
@@ -174,24 +173,23 @@ class Nodes:
     def values(self):
         return self.mesh.values
 
-    def get_index_by_id(self, id):
-        return self.id_to_index[id]
+    def get_index_by_id(self, node_id):
+        return self.id_to_index[node_id]
 
     def get_id_by_index(self, index: int):
         return self.index_to_id[index]
 
     @property
     def id_to_index(self):
-        if not hasattr(self, '_id_to_index'):
+        if self._id_to_index is None:
             self._id_to_index = {node_id: index for index, node_id
                                  in enumerate(self().keys())}
         return self._id_to_index
 
     @property
     def index_to_id(self):
-        if not hasattr(self, '_index_to_id'):
-            self._index_to_id = {index: node_id for index, node_id
-                                 in enumerate(self().keys())}
+        if self._index_to_id is None:
+            self._index_to_id = dict(enumerate(self().keys()))
         return self._index_to_id
 
     # def get_indexes_around_index(self, index):
@@ -264,12 +262,12 @@ class Elements:
 
     def geodataframe(self):
         data = []
-        for id, element in self().items():
+        for elem_id, element in self().items():
             data.append({
                 'geometry': Polygon(
                     self.mesh.coord[list(
                         map(self.mesh.nodes.get_index_by_id, element))]),
-                'id': id})
+                'id': elem_id})
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
 
@@ -278,6 +276,9 @@ class Boundaries:
     def __init__(self, mesh: "Mesh"):
         # TODO: Add a way to manually initialize
         self.mesh = mesh
+        self._ocean = gpd.GeoDataFrame()
+        self._land = gpd.GeoDataFrame()
+        self._interior = gpd.GeoDataFrame()
         self._data = defaultdict(defaultdict)
 
     @lru_cache(maxsize=1)
@@ -289,29 +290,29 @@ class Boundaries:
         if boundaries is not None:
             for ibtype, bnds in boundaries.items():
                 if ibtype is None:
-                    for id, data in bnds.items():
+                    for bnd_id, data in bnds.items():
                         indexes = list(map(self.mesh.nodes.get_index_by_id,
                                        data['indexes']))
                         ocean_boundaries.append({
-                            'id': id,
+                            'id': bnd_id,
                             "index_id": data['indexes'],
                             "indexes": indexes,
                             'geometry': LineString(self.mesh.coord[indexes])
                             })
 
                 elif str(ibtype).endswith('1'):
-                    for id, data in bnds.items():
+                    for bnd_id, data in bnds.items():
                         indexes = list(map(self.mesh.nodes.get_index_by_id,
                                        data['indexes']))
                         interior_boundaries.append({
-                            'id': id,
+                            'id': bnd_id,
                             'ibtype': ibtype,
                             "index_id": data['indexes'],
                             "indexes": indexes,
                             'geometry': LineString(self.mesh.coord[indexes])
                             })
                 else:
-                    for id, data in bnds.items():
+                    for bnd_id, data in bnds.items():
                         _indexes = np.array(data['indexes'])
                         if _indexes.ndim > 1:
                             # ndim > 1 implies we're dealing with an ADCIRC
@@ -329,7 +330,7 @@ class Boundaries:
                                        _indexes))
 
                         land_boundaries.append({
-                            'id': id,
+                            'id': bnd_id,
                             'ibtype': ibtype,
                             "index_id": data['indexes'],
                             "indexes": indexes,
@@ -436,17 +437,17 @@ class Boundaries:
             edge_tag[
                 np.where(values[ext_ring[:, 1]] >= threshold)[0], 1] = 1
             # sort boundary edges
-            ocean_boundary = list()
-            land_boundary = list()
+            ocean_boundary = []
+            land_boundary = []
             for i, (e0, e1) in enumerate(edge_tag):
                 if np.any(np.asarray((e0, e1)) == 1):
                     land_boundary.append(tuple(ext_ring[i, :]))
                 elif np.any(np.asarray((e0, e1)) == -1):
                     ocean_boundary.append(tuple(ext_ring[i, :]))
-#            ocean_boundaries = edges_to_rings(ocean_boundary)
-#            land_boundaries = edges_to_rings(land_boundary)
-            ocean_boundaries = list()
-            if len(ocean_boundary):
+#            ocean_boundaries = utils.sort_edges(ocean_boundary)
+#            land_boundaries = utils.sort_edges(land_boundary)
+            ocean_boundaries = []
+            if len(ocean_boundary) != 0:
                 #pylint: disable=not-an-iterable
                 ocean_segs = linemerge(coords[np.array(ocean_boundary)])
                 ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
@@ -454,8 +455,8 @@ class Boundaries:
                         [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
                          for e, coo in enumerate(seg.coords[:-1])]
                         for seg in ocean_segs]
-            land_boundaries = list()
-            if len(land_boundary):
+            land_boundaries = []
+            if len(land_boundary) != 0:
                 #pylint: disable=not-an-iterable
                 land_segs = linemerge(coords[np.array(land_boundary)])
                 land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
@@ -498,7 +499,7 @@ class Boundaries:
 
                 # TODO: Do we still need these?
                 e0, e1 = [list(t) for t in zip(*int_ring)]
-                if signed_polygon_area(self.mesh.coord[e0, :]) < 0:
+                if utils.signed_polygon_area(self.mesh.coord[e0, :]) < 0:
                     e0 = e0[::-1]
                     e1 = e1[::-1]
                 e0 = [get_id(vert) for vert in e0]
@@ -533,12 +534,15 @@ class EuclideanMesh(BaseMesh):
                 raise ValueError(f'crs property must be of type {CRS}, not '
                                  f'type {type(mesh.crs)}.')
 
+        self._hull = None
+        self._nodes = None
+        self._elements = None
         self._msh_t = mesh
 
     def write(self,
               path: Union[str, os.PathLike],
               overwrite: bool = False,
-              format='grd',
+              format='grd', # pylint: disable=W0622
               ):
         path = pathlib.Path(path)
         if path.exists() and overwrite is not True:
@@ -546,7 +550,7 @@ class EuclideanMesh(BaseMesh):
                 f'File {str(path)} exists and overwrite is not True.')
         if format == 'grd':
             grd_dict = utils.msh_t_to_grd(self.msh_t)
-            if hasattr(self, '_boundaries') and self._boundaries.data:
+            if self._boundaries and self._boundaries.data:
                 grd_dict.update(boundaries=self._boundaries.data)
             grd.write(grd_dict, path, overwrite)
 
@@ -584,19 +588,19 @@ class EuclideanMesh(BaseMesh):
 
     @property
     def hull(self):
-        if not hasattr(self, '_hull'):
+        if self._hull is None:
             self._hull = Hull(self)
         return self._hull
 
     @property
     def nodes(self):
-        if not hasattr(self, '_nodes'):
+        if self._nodes is None:
             self._nodes = Nodes(self)
         return self._nodes
 
     @property
     def elements(self):
-        if not hasattr(self, '_elements'):
+        if self._elements is None:
             self._elements = Elements(self)
         return self._elements
 
@@ -605,6 +609,8 @@ class EuclideanMesh2D(EuclideanMesh):
 
     def __init__(self, mesh: jigsaw_msh_t):
         super().__init__(mesh)
+        self._boundaries = None
+
         if mesh.ndims != +2:
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
                              "but expected ndims=2.")
@@ -629,18 +635,18 @@ class EuclideanMesh2D(EuclideanMesh):
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
-        if output_type == 'polygon':
+        if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
             return Bbox([[xmin, ymin], [xmax, ymax]])
-        else:
-            raise TypeError(
-                'Argument output_type must a string literal \'polygon\' or '
-                '\'bbox\'')
+
+        raise TypeError(
+            'Argument output_type must a string literal \'polygon\' or '
+            '\'bbox\'')
 
     @property
     def boundaries(self):
-        if not hasattr(self, '_boundaries'):
+        if self._boundaries is None:
             self._boundaries = Boundaries(self)
         return self._boundaries
 
@@ -671,7 +677,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
-        
+
 
     def get_contour(self, level: float):
 
@@ -710,7 +716,7 @@ class EuclideanMesh2D(EuclideanMesh):
 
 
     def get_multipolygon(self, zmin=None, zmax=None):
-        
+
         values = self.msh_t.value
         mask = np.ones(values.shape)
         if zmin is not None:
@@ -732,7 +738,7 @@ class EuclideanMesh2D(EuclideanMesh):
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
         poly_gen = polygonize(coords[boundary_edges])
-        polys = [p for p in poly_gen]
+        polys = list(poly_gen)
         polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
         rings = [p.exterior for p in polys]
@@ -746,8 +752,8 @@ class EuclideanMesh2D(EuclideanMesh):
                 (e+1, 0), 'constant', constant_values=0)
 
         # Get actual polygons based on logic described above
-        polys = [p for e, p in enumerate(polys) if not (n_parents[e] % 2)]
-    
+        polys = [p for e, p in enumerate(polys) if not n_parents[e] % 2]
+
         return MultiPolygon(polys)
 
     @property
@@ -766,7 +772,7 @@ class EuclideanMesh2D(EuclideanMesh):
 class Mesh(BaseMesh):
     """Mesh factory"""
 
-    def __new__(self, mesh: jigsaw_msh_t):
+    def __new__(cls, mesh: jigsaw_msh_t):
 
         if not isinstance(mesh, jigsaw_msh_t):
             raise TypeError(f'Argument mesh must be of type {jigsaw_msh_t}, '
@@ -775,13 +781,12 @@ class Mesh(BaseMesh):
         if mesh.mshID == 'euclidean-mesh':
             if mesh.ndims == 2:
                 return EuclideanMesh2D(mesh)
-            else:
-                raise NotImplementedError(
-                    f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
-                    'handled.')
 
-        else:
-            raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
+            raise NotImplementedError(
+                f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
+                'handled.')
+
+        raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
 
     @staticmethod
     def open(path, crs=None):
@@ -812,40 +817,6 @@ class Mesh(BaseMesh):
             f'Unable to automatically determine file type for {str(path)}.')
 
 
-def edges_to_rings(edges):
-    if len(edges) == 0:
-        return edges
-    # start ordering the edges into linestrings
-    edge_collection = list()
-    ordered_edges = [edges.pop(-1)]
-    e0, e1 = [list(t) for t in zip(*edges)]
-    while len(edges) > 0:
-        if ordered_edges[-1][1] in e0:
-            idx = e0.index(ordered_edges[-1][1])
-            ordered_edges.append(edges.pop(idx))
-        elif ordered_edges[0][0] in e1:
-            idx = e1.index(ordered_edges[0][0])
-            ordered_edges.insert(0, edges.pop(idx))
-        elif ordered_edges[-1][1] in e1:
-            idx = e1.index(ordered_edges[-1][1])
-            ordered_edges.append(
-                list(reversed(edges.pop(idx))))
-        elif ordered_edges[0][0] in e0:
-            idx = e0.index(ordered_edges[0][0])
-            ordered_edges.insert(
-                0, list(reversed(edges.pop(idx))))
-        else:
-            edge_collection.append(tuple(ordered_edges))
-            idx = -1
-            ordered_edges = [edges.pop(idx)]
-        e0.pop(idx)
-        e1.pop(idx)
-    # finalize
-    if len(edge_collection) == 0 and len(edges) == 0:
-        edge_collection.append(tuple(ordered_edges))
-    else:
-        edge_collection.append(tuple(ordered_edges))
-    return edge_collection
 
 
 def sort_rings(index_rings, vertices):
@@ -860,7 +831,7 @@ def sort_rings(index_rings, vertices):
     """
 
     # sort index_rings into corresponding "polygons"
-    areas = list()
+    areas = []
     for index_ring in index_rings:
         e0, e1 = [list(t) for t in zip(*index_ring)]
         areas.append(float(Polygon(vertices[e0, :]).area))
@@ -870,7 +841,7 @@ def sort_rings(index_rings, vertices):
     exterior = index_rings.pop(idx)
     areas.pop(idx)
     _id = 0
-    _index_rings = dict()
+    _index_rings = {}
     _index_rings[_id] = {
         'exterior': np.asarray(exterior),
         'interiors': []
@@ -879,13 +850,13 @@ def sort_rings(index_rings, vertices):
     path = Path(vertices[e0 + [e0[0]], :], closed=True)
     while len(index_rings) > 0:
         # find all internal rings
-        potential_interiors = list()
+        potential_interiors = []
         for i, index_ring in enumerate(index_rings):
             e0, e1 = [list(t) for t in zip(*index_ring)]
             if path.contains_point(vertices[e0[0], :]):
                 potential_interiors.append(i)
         # filter out nested rings
-        real_interiors = list()
+        real_interiors = []
         for i, p_interior in reversed(
                 list(enumerate(potential_interiors))):
             _p_interior = index_rings[p_interior]
@@ -920,16 +891,6 @@ def sort_rings(index_rings, vertices):
             path = Path(vertices[e0 + [e0[0]], :], closed=True)
     return _index_rings
 
-
-def signed_polygon_area(vertices):
-    # https://code.activestate.com/recipes/578047-area-of-polygon-using-shoelace-formula/
-    n = len(vertices)  # of vertices
-    area = 0.0
-    for i in range(n):
-        j = (i + 1) % n
-        area += vertices[i][0] * vertices[j][1]
-        area -= vertices[j][0] * vertices[i][1]
-        return area / 2.0
 
 
 def _mesh_interpolate_worker(
@@ -1003,7 +964,7 @@ def _mesh_interpolate_worker(
             helper[interp_mask] = False
             # _idxs is inverse mask
             _idxs[_idxs] = helper
-            _values = _values[~interp_mask] 
+            _values = _values[~interp_mask]
         idxs.append(_idxs)
         values.append(_values)
 

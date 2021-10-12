@@ -1,3 +1,29 @@
+[MASTER]
+fail-on=E
+fail-under=9.85
+py-version=3.9.7
+
+[MESSAGES CONTROL]
+disable=fixme,
+        invalid-name,
+        unused-variable,
+        unused-argument,
+        no-self-use,
+        too-many-arguments,
+        too-many-locals,
+        too-many-lines,
+        too-many-nested-blocks,
+        too-many-branches,
+        too-many-statements,
+        too-many-public-methods,
+        too-many-instance-attributes,
+        too-few-public-methods,
+        logging-fstring-interpolation,
+        missing-module-docstring,
+        missing-class-docstring,
+        missing-function-docstring,
+        unspecified-encoding
+
 [TYPECHECK]
 ignored-modules=matplotlib, matplotlib.cm
 generated-members=ocsmesh.driver.JigsawDriver.hfun

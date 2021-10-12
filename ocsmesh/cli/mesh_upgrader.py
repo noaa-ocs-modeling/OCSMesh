@@ -1,23 +1,17 @@
 #!/bin/env python3
 import gc
-import os
 import sys
 import pathlib
 import logging
-import argparse
 
 import geopandas as gpd
-import matplotlib.pyplot as plt
-from shapely import ops
-from shapely.geometry import mapping, box, MultiPolygon, Polygon
+from shapely.geometry import MultiPolygon
 
-import jigsawpy
 from ocsmesh import Raster, Geom, Hfun, JigsawDriver
 from ocsmesh.mesh.mesh import Mesh
 from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.features.contour import Contour
-from ocsmesh.features.patch import Patch
 from ocsmesh.mesh.parsers import sms2dm
 from ocsmesh.utils import msh_t_to_2dm
 
@@ -38,7 +32,7 @@ class MeshUpgrader:
         return 'mesh_upgrader'
 
     def __init__(self, sub_parser):
-        # e.g 
+        # e.g
         # ./multi_dem_mesh_2.py \
         #       --basemesh data/prusvi/mesh/PRUSVI_COMT.14 \
         #       --demlo gebco_2020_n90.0_s0.0_w-90.0_e0.0.tif \
@@ -66,11 +60,11 @@ class MeshUpgrader:
         base_mesh_4_hfun = Mesh.open(base_path, crs="EPSG:4326")
         base_mesh_4_geom = Mesh.open(base_path, crs="EPSG:4326")
 
-        geom_rast_list = list()
-        hfun_rast_list = list()
-        hfun_hirast_list = list()
-        hfun_lorast_list = list()
-        interp_rast_list = list()
+        geom_rast_list = []
+        hfun_rast_list = []
+        hfun_hirast_list = []
+        hfun_lorast_list = []
+        interp_rast_list = []
         for dem_path in demlo_paths:
             hfun_lorast_list.append(Raster(dem_path))
             interp_rast_list.append(Raster(dem_path))
@@ -124,7 +118,7 @@ class MeshUpgrader:
         # Read back stored values to pass to mesh driver
         read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
         geom_from_disk = MultiPolygonGeom(
-            MultiPolygon([geom for geom in read_gdf.geometry]),
+            MultiPolygon(list(read_gdf.geometry)),
             crs=read_gdf.crs)
 
         read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")

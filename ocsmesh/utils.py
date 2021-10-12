@@ -1,8 +1,8 @@
 from collections import defaultdict
-from enum import Enum
 from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple
 from functools import reduce
+from multiprocessing import cpu_count, Pool
 from copy import deepcopy
 
 import jigsawpy
@@ -16,21 +16,22 @@ from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
-        Polygon, MultiPolygon, MultiLineString,
-        box, GeometryCollection, Point, MultiPoint)
-from shapely.ops import polygonize, linemerge, unary_union
+        Polygon, MultiPolygon,
+        box, GeometryCollection, Point, MultiPoint,
+        LineString, LinearRing)
+from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
 
 
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
 
-def must_be_euclidean_mesh(f):
+def must_be_euclidean_mesh(func):
     def decorator(mesh, *args, **kwargs):
         if mesh.mshID.lower() != 'euclidean-mesh':
             msg = f"Not implemented for mshID={mesh.mshID}"
             raise NotImplementedError(msg)
-        return f(mesh, *args, **kwargs)
+        return func(mesh, *args, **kwargs)
     return decorator
 
 
@@ -45,7 +46,7 @@ def mesh_to_tri(mesh):
 
 
 def cleanup_isolates(mesh):
-    
+
     # For triangle only (TODO: add support for other types)
     node_indexes = np.arange(mesh.vert2['coord'].shape[0])
     used_indexes = np.unique(mesh.tria3['index'])
@@ -79,11 +80,11 @@ def put_edge2(mesh):
 
 def geom_to_multipolygon(mesh):
     vertices = mesh.vert2['coord']
-    _index_ring_collection = index_ring_collection(mesh)
-    polygon_collection = list()
-    for polygon in _index_ring_collection.values():
+    idx_ring_coll = index_ring_collection(mesh)
+    polygon_collection = []
+    for polygon in idx_ring_coll.values():
         exterior = vertices[polygon['exterior'][:, 0], :]
-        interiors = list()
+        interiors = []
         for interior in polygon['interiors']:
             interiors.append(vertices[interior[:, 0], :])
         polygon_collection.append(Polygon(exterior, interiors))
@@ -105,13 +106,13 @@ def get_boundary_segments(mesh):
 
     graph = sparse.lil_matrix(
             (len(boundary_verts), len(boundary_verts)))
-    for v1, v2 in new_boundary_edges:
-        graph[v1, v2] = 1
+    for vert1, vert2 in new_boundary_edges:
+        graph[vert1, vert2] = 1
 
     n_components, labels = sparse.csgraph.connected_components(
             graph, directed=False)
 
-    segments = list()
+    segments = []
     for i in range(n_components):
         conn_mask = np.any(np.isin(
                 new_boundary_edges, np.nonzero(labels == i)),
@@ -122,8 +123,8 @@ def get_boundary_segments(mesh):
             # Pinched nodes also result in non-simple linestring,
             # but they can be handled gracefully, here we are looking
             # for other issues like folded elements
-            test_polys = [p for p in polygonize(this_segment)]
-            if not len(test_polys):
+            test_polys = list(polygonize(this_segment))
+            if not test_polys:
                 raise ValueError(
                     "Mesh boundary crosses itself! Folded element(s)!")
         segments.append(this_segment)
@@ -136,7 +137,7 @@ def get_mesh_polygons(mesh):
 
     # TODO: Copy mesh?
     target_mesh = mesh
-    result_polys = list()
+    result_polys = []
 
     # 2-pass find, first find using polygons that intersect non-boundary
     # vertices, then from the rest of the mesh find polygons that
@@ -146,7 +147,7 @@ def get_mesh_polygons(mesh):
 
         coords = target_mesh.vert2['coord']
 
-        if not len(coords): 
+        if len(coords) == 0:
             continue
 
         boundary_edges = get_boundary_edges(target_mesh)
@@ -154,7 +155,7 @@ def get_mesh_polygons(mesh):
         lines = get_boundary_segments(target_mesh)
 
         poly_gen = polygonize(lines)
-        polys = [p for p in poly_gen]
+        polys = list(poly_gen)
         polys = sorted(polys, key=lambda p: p.area, reverse=True)
 
 
@@ -163,28 +164,28 @@ def get_mesh_polygons(mesh):
         if find_pass == 0:
             non_bndry_verts = np.setdiff1d(
                     np.arange(len(coords)), bndry_verts)
-            pts = MultiPoint(coords[non_bndry_verts])
+            pnts = MultiPoint(coords[non_bndry_verts])
         else:
-            pts = MultiPoint(coords[bndry_verts])
+            pnts = MultiPoint(coords[bndry_verts])
 
 
         # NOTE: This logic requires polygons to be sorted by area
-        pass_valid_polys = list()
-        while len(pts):
+        pass_valid_polys = []
+        while len(pnts):
 
 
-            idx = np.random.randint(len(pts))
-            pt = pts[idx]
+            idx = np.random.randint(len(pnts))
+            pnt = pnts[idx]
 
             polys_gdf = gpd.GeoDataFrame(
                 {'geometry': polys, 'list_index': range(len(polys))})
 
 
-            res_gdf = polys_gdf[polys_gdf.intersects(pt)]
-            if not len(res_gdf):
+            res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
+            if len(res_gdf) == 0:
                 # How is this possible?!
-                pts = MultiPoint([*pts[:idx], *pts[idx + 1:]])
-                if pts.is_empty:
+                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1:]])
+                if pnts.is_empty:
                     break
 
                 continue
@@ -195,11 +196,11 @@ def get_mesh_polygons(mesh):
 
 
             pass_valid_polys.append(poly)
-            pts = pts.difference(poly)
-            if pts.is_empty:
+            pnts = pnts.difference(poly)
+            if pnts.is_empty:
                 break
-            if isinstance(pts, Point):
-                pts = MultiPoint([pts])
+            if isinstance(pnts, Point):
+                pnts = MultiPoint([pnts])
 
 
         result_polys.extend(pass_valid_polys)
@@ -213,22 +214,56 @@ def get_mesh_polygons(mesh):
     return MultiPolygon(result_polys)
 
 
+def repartition_features(linestring, max_verts):
+    features = []
+    if len(linestring.coords) > max_verts:
+        new_feat = []
+        for segment in list(map(LineString, zip(
+                linestring.coords[:-1],
+                linestring.coords[1:]))):
+            new_feat.append(segment)
+            if len(new_feat) == max_verts - 1:
+                features.append(linemerge(new_feat))
+                new_feat = []
+        if len(new_feat) != 0:
+            features.append(linemerge(new_feat))
+    else:
+        features.append(linestring)
+    return features
+
+
+def transform_linestring(
+    linestring: LineString,
+    target_size: float,
+):
+    distances = [0.]
+    while distances[-1] + target_size < linestring.length:
+        distances.append(distances[-1] + target_size)
+    distances.append(linestring.length)
+    linestring = LineString([
+        linestring.interpolate(distance)
+        for distance in distances
+        ])
+    return linestring
+
+
+
 def needs_sieve(mesh, area=None):
     areas = [polygon.area for polygon in geom_to_multipolygon(mesh)]
     if area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
-        remove = list()
+        remove = []
         for idx, patch_area in enumerate(areas):
             if patch_area <= area:
                 remove.append(idx)
     if len(remove) > 0:
         return True
-    else:
-        return False
+
+    return False
 
 
-def put_IDtags(mesh):
+def put_id_tags(mesh):
     # start enumerating on 1 to avoid issues with indexing on fortran models
     mesh.vert2 = np.array(
         [(coord, id+1) for id, coord in enumerate(mesh.vert2['coord'])],
@@ -255,7 +290,7 @@ def _get_sieve_mask(mesh, polygons, sieve_area):
     if sieve_area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
-        remove = list()
+        remove = []
         for idx, patch_area in enumerate(areas):
             if patch_area <= sieve_area:
                 remove.append(idx)
@@ -289,13 +324,13 @@ def _sieve_by_mask(mesh, sieve_mask):
     tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
 
     # Tria and node removal and renumbering indexes ...
-    tria3_IDtag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
+    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
     tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
     used_indexes = np.unique(tria3_index)
     node_indexes = np.arange(mesh.vert2['coord'].shape[0])
     renum = {old: new for new, old in enumerate(np.unique(tria3_index))}
     tria3_index = np.array([renum[i] for i in tria3_index])
-    tria3_index = tria3_index.reshape((tria3_IDtag.shape[0], 3))
+    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
     vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
 
     # update vert2
@@ -307,7 +342,7 @@ def _sieve_by_mask(mesh, sieve_mask):
 
     # update tria3
     mesh.tria3 = np.array(
-        [(tuple(indices), tria3_IDtag[i])
+        [(tuple(indices), tria3_id_tag[i])
          for i, indices in enumerate(tria3_index)],
         dtype=jigsaw_msh_t.TRIA3_t)
 
@@ -335,10 +370,10 @@ def finalize_mesh(mesh, sieve_area=None):
             _sieve_by_mask(mesh, sieve_mask)
 
         if no_op:
-            break;
+            break
 
     cleanup_isolates(mesh)
-    put_IDtags(mesh)
+    put_id_tags(mesh)
 
 
 def remesh_small_elements(opts, geom, mesh, hfun):
@@ -363,7 +398,7 @@ def remesh_small_elements(opts, geom, mesh, hfun):
         tria_areas = calculate_tria_areas(fixed_mesh)
         tiny_sz = coef * equilat_area
         tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas < tiny_sz, :].ravel())
-        if not len(tiny_verts):
+        if len(tiny_verts) == 0:
             break
         mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
 
@@ -393,7 +428,7 @@ def sieve(mesh, area=None):
     if area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
-        remove = list()
+        remove = []
         for idx, patch_area in enumerate(areas):
             if patch_area <= area:
                 remove.append(idx)
@@ -428,11 +463,11 @@ def sieve(mesh, area=None):
     used_indexes = np.unique(mesh.tria3['index'])
     node_indexes = np.arange(mesh.vert2['coord'].shape[0])
     tria3_idxs = np.where(~np.isin(node_indexes, used_indexes))[0]
-    tria3_IDtag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
+    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
     tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
     for idx in reversed(tria3_idxs):
         tria3_index[np.where(tria3_index >= idx)] -= 1
-    tria3_index = tria3_index.reshape((tria3_IDtag.shape[0], 3))
+    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
     vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
 
     # update vert2
@@ -444,7 +479,7 @@ def sieve(mesh, area=None):
 
     # update tria3
     mesh.tria3 = np.array(
-        [(tuple(indices), tria3_IDtag[i])
+        [(tuple(indices), tria3_id_tag[i])
          for i, indices in enumerate(tria3_index)],
         dtype=jigsaw_msh_t.TRIA3_t)
 
@@ -455,7 +490,7 @@ def sort_edges(edges):
         return edges
 
     # start ordering the edges into linestrings
-    edge_collection = list()
+    edge_collection = []
     ordered_edges = [edges.pop(-1)]
     e0, e1 = [list(t) for t in zip(*edges)]
     while len(edges) > 0:
@@ -499,7 +534,7 @@ def index_ring_collection(mesh):
 
     # find boundary edges using triangulation neighbors table,
     # see: https://stackoverflow.com/a/23073229/7432462
-    boundary_edges = list()
+    boundary_edges = []
     tri = mesh_to_tri(mesh)
     idxs = np.vstack(
         list(np.where(tri.neighbors == -1))).T
@@ -507,38 +542,38 @@ def index_ring_collection(mesh):
         boundary_edges.append(
             (int(tri.triangles[i, j]),
                 int(tri.triangles[i, (j+1) % 3])))
-    index_ring_collection = sort_edges(boundary_edges)
+    init_idx_ring_coll = sort_edges(boundary_edges)
     # sort index_rings into corresponding "polygons"
-    areas = list()
+    areas = []
     vertices = mesh.vert2['coord']
-    for index_ring in index_ring_collection:
-        e0, e1 = [list(t) for t in zip(*index_ring)]
+    for index_ring in init_idx_ring_coll:
+        e0, _ = [list(t) for t in zip(*index_ring)]
         areas.append(float(Polygon(vertices[e0, :]).area))
 
     # maximum area must be main mesh
     idx = areas.index(np.max(areas))
-    exterior = index_ring_collection.pop(idx)
+    exterior = init_idx_ring_coll.pop(idx)
     areas.pop(idx)
     _id = 0
-    _index_ring_collection = dict()
-    _index_ring_collection[_id] = {
+    idx_ring_coll = {}
+    idx_ring_coll[_id] = {
         'exterior': np.asarray(exterior),
         'interiors': []
         }
     e0, e1 = [list(t) for t in zip(*exterior)]
     path = Path(vertices[e0 + [e0[0]], :], closed=True)
-    while len(index_ring_collection) > 0:
+    while len(init_idx_ring_coll) > 0:
         # find all internal rings
-        potential_interiors = list()
-        for i, index_ring in enumerate(index_ring_collection):
+        potential_interiors = []
+        for i, index_ring in enumerate(init_idx_ring_coll):
             e0, e1 = [list(t) for t in zip(*index_ring)]
             if path.contains_point(vertices[e0[0], :]):
                 potential_interiors.append(i)
         # filter out nested rings
-        real_interiors = list()
+        real_interiors = []
         for i, p_interior in reversed(list(enumerate(potential_interiors))):
-            _p_interior = index_ring_collection[p_interior]
-            check = [index_ring_collection[_]
+            _p_interior = init_idx_ring_coll[p_interior]
+            check = [init_idx_ring_coll[_]
                      for j, _ in reversed(list(enumerate(potential_interiors)))
                      if i != j]
             has_parent = False
@@ -552,38 +587,77 @@ def index_ring_collection(mesh):
                 real_interiors.append(p_interior)
         # pop real rings from collection
         for i in reversed(sorted(real_interiors)):
-            _index_ring_collection[_id]['interiors'].append(
-                np.asarray(index_ring_collection.pop(i)))
+            idx_ring_coll[_id]['interiors'].append(
+                np.asarray(init_idx_ring_coll.pop(i)))
             areas.pop(i)
         # if no internal rings found, initialize next polygon
-        if len(index_ring_collection) > 0:
+        if len(init_idx_ring_coll) > 0:
             idx = areas.index(np.max(areas))
-            exterior = index_ring_collection.pop(idx)
+            exterior = init_idx_ring_coll.pop(idx)
             areas.pop(idx)
             _id += 1
-            _index_ring_collection[_id] = {
+            idx_ring_coll[_id] = {
                 'exterior': np.asarray(exterior),
                 'interiors': []
                 }
             e0, e1 = [list(t) for t in zip(*exterior)]
             path = Path(vertices[e0 + [e0[0]], :], closed=True)
-    return _index_ring_collection
+    return idx_ring_coll
 
 
 def outer_ring_collection(mesh):
-    _index_ring_collection = index_ring_collection(mesh)
-    outer_ring_collection = defaultdict()
-    for key, ring in _index_ring_collection.items():
-        outer_ring_collection[key] = ring['exterior']
-    return outer_ring_collection
+    idx_ring_coll = index_ring_collection(mesh)
+    exterior_ring_collection = defaultdict()
+    for key, ring in idx_ring_coll.items():
+        exterior_ring_collection[key] = ring['exterior']
+    return exterior_ring_collection
 
 
 def inner_ring_collection(mesh):
-    _index_ring_collection = index_ring_collection(mesh)
-    inner_ring_collection = defaultdict()
-    for key, rings in _index_ring_collection.items():
-        inner_ring_collection[key] = rings['interiors']
-    return inner_ring_collection
+    idx_ring_coll = index_ring_collection(mesh)
+    inner_ring_coll = defaultdict()
+    for key, rings in idx_ring_coll.items():
+        inner_ring_coll[key] = rings['interiors']
+    return inner_ring_coll
+
+
+def get_multipolygon_from_pathplot(ax):
+    # extract linear_rings from plot
+    linear_ring_collection = []
+    for path_collection in ax.collections:
+        for path in path_collection.get_paths():
+            polygons = path.to_polygons(closed_only=True)
+            for linear_ring in polygons:
+                if linear_ring.shape[0] > 3:
+                    linear_ring_collection.append(
+                        LinearRing(linear_ring))
+    if len(linear_ring_collection) > 1:
+        # reorder linear rings from above
+        areas = [Polygon(linear_ring).area
+                 for linear_ring in linear_ring_collection]
+        idx = np.where(areas == np.max(areas))[0][0]
+        polygon_collection = []
+        outer_ring = linear_ring_collection.pop(idx)
+        path = Path(np.asarray(outer_ring.coords), closed=True)
+        while len(linear_ring_collection) > 0:
+            inner_rings = []
+            for i, linear_ring in reversed(
+                    list(enumerate(linear_ring_collection))):
+                xy = np.asarray(linear_ring.coords)[0, :]
+                if path.contains_point(xy):
+                    inner_rings.append(linear_ring_collection.pop(i))
+            polygon_collection.append(Polygon(outer_ring, inner_rings))
+            if len(linear_ring_collection) > 0:
+                areas = [Polygon(linear_ring).area
+                         for linear_ring in linear_ring_collection]
+                idx = np.where(areas == np.max(areas))[0][0]
+                outer_ring = linear_ring_collection.pop(idx)
+                path = Path(np.asarray(outer_ring.coords), closed=True)
+        multipolygon = MultiPolygon(polygon_collection)
+    else:
+        multipolygon = MultiPolygon(
+            [Polygon(linear_ring_collection.pop())])
+    return multipolygon
 
 
 def signed_polygon_area(vertices):
@@ -602,15 +676,15 @@ def vertices_around_vertex(mesh):
         def append(geom):
             for simplex in geom['index']:
                 for i, j in permutations(simplex, 2):
-                    vertices_around_vertex[i].add(j)
-        vertices_around_vertex = defaultdict(set)
+                    vert_list[i].add(j)
+        vert_list = defaultdict(set)
         append(mesh.tria3)
         append(mesh.quad4)
         append(mesh.hexa8)
-        return vertices_around_vertex
-    else:
-        msg = f"Not implemented for mshID={mesh.mshID}"
-        raise NotImplementedError(msg)
+        return vert_list
+
+    msg = f"Not implemented for mshID={mesh.mshID}"
+    raise NotImplementedError(msg)
 
 def get_surrounding_elem_verts(mesh, in_vert):
 
@@ -708,16 +782,15 @@ def get_verts_in_shape(
                              in_box_idx_3, in_box_idx_4))
         return in_box_idx
 
-    else:
 
-        pt_series = gpd.GeoSeries(gpd.points_from_xy(
-            mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
-        shp_series = gpd.GeoSeries(shape)
+    pt_series = gpd.GeoSeries(gpd.points_from_xy(
+        mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
+    shp_series = gpd.GeoSeries(shape)
 
-        in_shp_idx = pt_series.sindex.query_bulk(
-                shp_series, predicate="intersects")
+    in_shp_idx = pt_series.sindex.query_bulk(
+            shp_series, predicate="intersects")
 
-        return in_shp_idx
+    return in_shp_idx
 
 
 @must_be_euclidean_mesh
@@ -732,7 +805,7 @@ def get_cross_edges(
 
     coords = mesh.vert2['coord']
 
-    coord_dict = dict()
+    coord_dict = {}
     for i, coo in enumerate(coords):
         coord_dict[tuple(coo)] = i
 
@@ -753,7 +826,7 @@ def get_cross_edges(
 
 
     cut_coords = [
-        [coo for coo in cooseq]
+        list(cooseq)
         for cooseq in gdf_x.geometry.apply(lambda i: i.coords).values]
 
     cut_edges = np.array([
@@ -835,7 +908,7 @@ def remove_mesh_by_edge(
     if not in_place:
         mesh_out = deepcopy(mesh)
 
-    # NOTE: This method selects more elements than needed as it 
+    # NOTE: This method selects more elements than needed as it
     # uses only existance of more than two of the vertices attached
     # to the input edges in the element as criteria.
     edge_verts = np.unique(edges)
@@ -939,7 +1012,7 @@ def clip_mesh_by_vertex(
         for key, elem_type in mesh_types.items():
             setattr(
                 mesh_out,
-                key, 
+                key,
                 np.array(
                     [(con, 0) for con in elem_final_dict[key]],
                     dtype=getattr(jigsaw_msh_t, elem_type)))
@@ -967,30 +1040,15 @@ def get_mesh_edges(mesh: jigsaw_msh_t, unique=True):
     # and joining connectivities in 3rd dimension, then sorting
     # to get all edges with lower index first
     all_edges = np.empty(shape=(0, 2), dtype=trias.dtype)
-    if trias.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (trias, np.roll(trias, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if quads.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (quads, np.roll(quads, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
-    if hexas.shape[0]:
-        edges = np.sort(
-                np.stack(
-                    (hexas, np.roll(hexas, shift=1, axis=1)),
-                    axis=2),
-                axis=2)
-        edges = edges.reshape(np.product(edges.shape[0:2]), 2)
-        all_edges = np.vstack((all_edges, edges))
+    for elm_type in [trias, quads, hexas]:
+        if elm_type.shape[0]:
+            edges = np.sort(
+                    np.stack(
+                        (elm_type, np.roll(elm_type, shift=1, axis=1)),
+                        axis=2),
+                    axis=2)
+            edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+            all_edges = np.vstack((all_edges, edges))
 
     if unique:
         all_edges = np.unique(all_edges, axis=0)
@@ -1012,18 +1070,22 @@ def calculate_tria_areas(mesh):
     tria_sides = np.sqrt(
             np.sum(np.power(np.abs(tria_side_components), 2),
                    axis=2).squeeze())
-    p = np.sum(tria_sides, axis=1) / 2
-    p = p.reshape(len(p), 1)
-    a, b, c = np.split(tria_sides, 3, axis=1)
-    tria_areas = np.sqrt(p*(p-a)*(p-b)*(p-c)).squeeze()
+    perimeter = np.sum(tria_sides, axis=1) / 2
+    perimeter = perimeter.reshape(len(perimeter), 1)
+    a_side, b_side, c_side = np.split(tria_sides, 3, axis=1)
+    tria_areas = np.sqrt(
+            perimeter*(perimeter-a_side)
+            * (perimeter-b_side)*(perimeter-c_side)
+            ).squeeze()
     return tria_areas
 
 @must_be_euclidean_mesh
-def calculate_edge_lengths(mesh):
-
-    # Taken from size_from_mesh method of hfun-mesh
+def calculate_edge_lengths(mesh, transformer=None):
 
     coord = mesh.vert2['coord']
+    if transformer is not None:
+        coord = np.vstack(
+            transformer.transform(coord[:, 0], coord[:, 1])).T
 
     # Get unique set of edges by rolling connectivity
     # and joining connectivities in 3rd dimension, then sorting
@@ -1033,7 +1095,7 @@ def calculate_edge_lengths(mesh):
     # ONLY TESTED FOR TRIA AS OF NOW
 
     # This part of the function is generic for tria and quad
-    
+
     # Get coordinates for all edge vertices
     edge_coords = coord[all_edges, :]
 
@@ -1045,27 +1107,27 @@ def calculate_edge_lengths(mesh):
                 ,axis=2)).squeeze()
 
     edge_dict = defaultdict(float)
-    for en, edge in enumerate(all_edges):
-        edge_dict[tuple(edge)] = edge_lens[en]
+    for i, edge in enumerate(all_edges):
+        edge_dict[tuple(edge)] = edge_lens[i]
 
     return edge_dict
 
 
 @must_be_euclidean_mesh
 def elements(mesh):
-    elements_id = list()
+    elements_id = []
     elements_id.extend(list(mesh.tria3['IDtag']))
     elements_id.extend(list(mesh.quad4['IDtag']))
     elements_id.extend(list(mesh.hexa8['IDtag']))
     elements_id = range(1, len(elements_id)+1) \
         if len(set(elements_id)) != len(elements_id) else elements_id
-    elements = list()
-    elements.extend(list(mesh.tria3['index']))
-    elements.extend(list(mesh.quad4['index']))
-    elements.extend(list(mesh.hexa8['index']))
-    elements = {
-        elements_id[i]: indexes for i, indexes in enumerate(elements)}
-    return elements
+    elems = []
+    elems.extend(list(mesh.tria3['index']))
+    elems.extend(list(mesh.quad4['index']))
+    elems.extend(list(mesh.hexa8['index']))
+    elems = {
+        elements_id[i]: indexes for i, indexes in enumerate(elems)}
+    return elems
 
 
 @must_be_euclidean_mesh
@@ -1073,14 +1135,14 @@ def faces_around_vertex(mesh):
     _elements = elements(mesh)
     length = max(map(len, _elements.values()))
     y = np.array([xi+[-99999]*(length-len(xi)) for xi in _elements.values()])
-    faces_around_vertex = defaultdict(set)
+    faces_around_vert = defaultdict(set)
     for i, coord in enumerate(mesh.vert2['index']):
         # TODO:
         pass
 #        np.isin(i, axis=0)
-#        faces_around_vertex[i].add()
+#        faces_around_vert[i].add()
 
-    faces_around_vertex = defaultdict(set)
+    faces_around_vert = defaultdict(set)
 
 
 def get_boundary_edges(mesh):
@@ -1124,15 +1186,15 @@ def has_pinched_nodes(mesh):
     # nodes
 
     _inner_ring_collection = inner_ring_collection(mesh)
-    all_nodes = list()
+    all_nodes = []
     for inner_rings in _inner_ring_collection.values():
         for ring in inner_rings:
             all_nodes.extend(np.asarray(ring)[:, 0].tolist())
     u, c = np.unique(all_nodes, return_counts=True)
     if len(u[c > 1]) > 0:
         return True
-    else:
-        return False
+
+    return False
 
 
 def cleanup_pinched_nodes(mesh):
@@ -1141,7 +1203,7 @@ def cleanup_pinched_nodes(mesh):
     # nodes
 
     _inner_ring_collection = inner_ring_collection(mesh)
-    all_nodes = list()
+    all_nodes = []
     for inner_rings in _inner_ring_collection.values():
         for ring in inner_rings:
             all_nodes.extend(np.asarray(ring)[:, 0].tolist())
@@ -1183,7 +1245,7 @@ def interpolate_euclidean_mesh_to_euclidean_mesh(
 def interpolate_euclidean_grid_to_euclidean_mesh(
         src: jigsaw_msh_t,
         dst: jigsaw_msh_t,
-        bbox=[None, None, None, None],
+        bbox=None,
         kx=3,
         ky=3,
         s=0
@@ -1192,7 +1254,7 @@ def interpolate_euclidean_grid_to_euclidean_mesh(
         src.xgrid,
         src.ygrid,
         src.value.T,
-        bbox=bbox,
+        bbox=bbox or [None, None, None, None],
         kx=kx,
         ky=ky,
         s=s
@@ -1324,10 +1386,10 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     if src_crs is not None:
         # TODO: Support non EPSG:4326 CRS
 #        desc = src_crs.to_string()
-        EPSG_4326 = CRS.from_epsg(4326)
-        if not src_crs.equals(EPSG_4326):
+        epsg_4326 = CRS.from_epsg(4326)
+        if not src_crs.equals(epsg_4326):
             transformer = Transformer.from_crs(
-                src_crs, EPSG_4326, always_xy=True)
+                src_crs, epsg_4326, always_xy=True)
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
 
@@ -1335,15 +1397,15 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
             enumerate(zip(coords, -msh.value))}
     # NOTE: Node IDs are node index + 1
-    elements = {
+    elems = {
         i + 1: v + 1 for i, v in enumerate(msh.tria3['index'])}
-    offset = len(elements)
-    elements.update({
+    offset = len(elems)
+    elems.update({
         offset + i + 1: v + 1 for i, v in enumerate(msh.quad4['index'])})
 
     return {'description': desc,
             'nodes': nodes,
-            'elements': elements}
+            'elements': elems}
 
 
 def grd_to_msh_t(_grd: Dict) -> jigsaw_msh_t:
@@ -1376,10 +1438,10 @@ def msh_t_to_2dm(msh: jigsaw_msh_t):
     coords = msh.vert2['coord']
     src_crs = msh.crs if hasattr(msh, 'crs') else None
     if src_crs is not None:
-        EPSG_4326 = CRS.from_epsg(4326)
-        if not src_crs.equals(EPSG_4326):
+        epsg_4326 = CRS.from_epsg(4326)
+        if not src_crs.equals(epsg_4326):
             transformer = Transformer.from_crs(
-                src_crs, EPSG_4326, always_xy=True)
+                src_crs, epsg_4326, always_xy=True)
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
     return {
@@ -1421,11 +1483,26 @@ def sms2dm_to_msh_t(_sms2dm: Dict) -> jigsaw_msh_t:
 
 @must_be_euclidean_mesh
 def msh_t_to_utm(msh):
-    if hasattr(msh, 'crs') and msh.crs.is_geographic:
-        coords = msh.vert2['coord']
-        x0, y0, x1, y1 = (
-            np.min(coords[:, 0]), np.min(coords[:, 1]),
-            np.max(coords[:, 0]), np.max(coords[:, 1]))
+    utm_crs = estimate_mesh_utm(msh)
+    if utm_crs is None:
+        return
+
+    transformer = Transformer.from_crs(
+        msh.crs, utm_crs, always_xy=True)
+
+    coords = msh.vert2['coord']
+
+    # pylint: disable=E0633
+    coords[:, 0], coords[:, 1] = transformer.transform(
+            coords[:, 0], coords[:, 1])
+    msh.vert2['coord'][:] = coords
+    msh.crs = utm_crs
+
+
+def estimate_bounds_utm(bounds, crs="EPSG:4326"):
+    in_crs = CRS.from_user_input(crs)
+    if in_crs.is_geographic:
+        x0, y0, x1, y1 = bounds
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
         # PyProj 3.2.1 throws error if letter is provided
@@ -1436,16 +1513,23 @@ def msh_t_to_utm(msh):
                 ellps={
                     'GRS 1980': 'GRS80',
                     'WGS 84': 'WGS84'
-                    }[msh.crs.ellipsoid.name]
+                    }[in_crs.ellipsoid.name]
             )
-        transformer = Transformer.from_crs(
-            msh.crs, utm_crs, always_xy=True)
+        return utm_crs
 
-        # pylint: disable=E0633
-        coords[:, 0], coords[:, 1] = transformer.transform(
-                coords[:, 0], coords[:, 1])
-        msh.vert2['coord'][:] = coords
-        msh.crs = utm_crs
+    return None
+
+@must_be_euclidean_mesh
+def estimate_mesh_utm(msh):
+    if hasattr(msh, 'crs'):
+        coords = msh.vert2['coord']
+        x0, y0, x1, y1 = (
+            np.min(coords[:, 0]), np.min(coords[:, 1]),
+            np.max(coords[:, 0]), np.max(coords[:, 1]))
+        utm_crs = estimate_bounds_utm((x0, y0, x1, y1), msh.crs)
+        return utm_crs
+
+    return None
 
 def get_polygon_channels(polygon, width, simplify=None, join_style=3):
 
@@ -1467,7 +1551,7 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
                     join_style=join_style))
 
     buffered_gdf = buffered_gdf[~buffered_gdf.is_empty]
-    if not len(buffered_gdf):
+    if len(buffered_gdf) == 0:
         # All is channel!
         return polygon
     channels_gdf = gpd.overlay(
@@ -1501,13 +1585,13 @@ def merge_msh_t(
     # TODO: Add support for quad4 and hexa8
 
     dst_crs = CRS.from_user_input(out_crs)
-    
-    coord = list()
-    index = list()
-    value = list()
+
+    coord = []
+    index = []
+    value = []
     offset = 0
 
-    mesh_shape_list = list()
+    mesh_shape_list = []
     # Last has the highest priority
     for mesh in mesh_list[::-1]:
         if not dst_crs.equals(mesh.crs):
@@ -1557,3 +1641,23 @@ def merge_msh_t(
     composite_mesh.crs = dst_crs
 
     return composite_mesh
+
+
+def add_pool_args(func):
+    def wrapper(*args, nprocs=None, pool=None, **kwargs):
+
+        if pool is not None:
+            rv = func(*args, **kwargs, pool=pool)
+
+        else:
+            # Check nprocs
+            nprocs = -1 if nprocs is None else nprocs
+            nprocs = cpu_count() if nprocs == -1 else nprocs
+
+            with Pool(processes=nprocs) as new_pool:
+                rv = func(*args, **kwargs, pool=new_pool)
+            new_pool.join()
+
+        return rv
+
+    return wrapper

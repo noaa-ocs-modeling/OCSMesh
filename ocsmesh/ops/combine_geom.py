@@ -7,7 +7,6 @@ import tempfile
 import warnings
 from typing import Union, Sequence, Tuple, List
 
-import pandas as pd
 import geopandas as gpd
 import numpy as np
 from pyproj import CRS, Transformer
@@ -96,13 +95,13 @@ class GeomCombine:
             _logger.info(
                 f"All DEMs have the same CRS:"
                 f" {self._calc_crs.to_string()}")
-            
+
         base_mult_poly = None
         if mesh_mp_in:
-            # Assumption: If base_mult_poly is provided, it's in 
+            # Assumption: If base_mult_poly is provided, it's in
             # base_crs if not None, else in out_crs
             base_mult_poly = self._get_valid_multipolygon(mesh_mp_in)
-            if base_crs == None:
+            if base_crs is None:
                 base_crs = out_crs
             if not base_crs.equals(self._calc_crs):
                 _logger.info("Reprojecting base polygon...")
@@ -117,7 +116,7 @@ class GeomCombine:
             mesh_crs = base_mesh.crs
             # Assumption: If mesh_crs is not defined, mesh is in
             # base_crs if not None, else inout_crs
-            if base_crs == None:
+            if base_crs is None:
                 if mesh_crs:
                     base_crs = mesh_crs
                 else:
@@ -150,17 +149,17 @@ class GeomCombine:
             # was erosion and we want to make sure new DEMs futher
             # inland are considered (?)
             self._base_exterior = MultiPolygon(
-                    [i for i in ops.polygonize(
-                        [poly.exterior for poly in base_mult_poly])])
+                    list(ops.polygonize(
+                        [poly.exterior for poly in base_mult_poly])))
 
 
-        z_info = dict()
+        z_info = {}
         if zmin is not None:
             z_info['zmin'] = zmin
         if zmax is not None:
             z_info['zmax'] = zmax
 
-        poly_files_coll = list()
+        poly_files_coll = []
         _logger.info(f"Number of processes: {nprocs}")
         with tempfile.TemporaryDirectory(dir=out_dir) as temp_dir, \
                 tempfile.NamedTemporaryFile() as base_file:
@@ -180,7 +179,7 @@ class GeomCombine:
             # (i.e. lowest priority number)
             priorities = list((range(len(dem_files))))[::-1]
             # TODO: Needs some code refinement for bbox issue
-#            priority_args = list()
+#            priority_args = []
 #            for priority, dem_file in zip(priorities, dem_files):
 #                priority_args.append(
 #                    (priority, temp_dir, dem_file, chunk_size, overlap))
@@ -192,7 +191,7 @@ class GeomCombine:
             _logger.info("Processing DEM contours ...")
             # Process contours
             if nprocs > 1:
-                parallel_args = list()
+                parallel_args = []
                 for priority, dem_file in zip(priorities, dem_files):
                     parallel_args.append(
                         (base_mesh_path, temp_dir,
@@ -272,7 +271,7 @@ class GeomCombine:
 
 
     def _multipolygon_to_disk(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             multipolygon: MultiPolygon,
             fix: bool = True):
@@ -290,13 +289,13 @@ class GeomCombine:
 
 
     def _read_multipolygon(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             fix: bool = True
             ) -> MultiPolygon:
 
         multipolygon = MultiPolygon(
-                [i for i in gpd.read_feather(path).geometry])
+                list(gpd.read_feather(path).geometry))
 
         if fix:
             multipolygon = self._get_valid_multipolygon(
@@ -305,7 +304,7 @@ class GeomCombine:
         return multipolygon
 
     def _read_to_geodf(
-            self, 
+            self,
             path: Union[str, os.PathLike],
             ) -> gpd.GeoDataFrame:
 
@@ -332,7 +331,7 @@ class GeomCombine:
 
         pri_dt_path = (
             pathlib.Path(temp_dir) / f'dem_priority_{priority}.feather')
-        
+
         pri_mult_poly = MultiPolygon([box(*rast.src.bounds)])
 
         self._multipolygon_to_disk(
@@ -345,13 +344,13 @@ class GeomCombine:
             temp_dir: Union[str, os.PathLike],
             priorities: Sequence[int],
             dem_files: Sequence[Union[str, os.PathLike]],
-            z_info: dict = dict(),
+            z_info: dict = {},
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
 
         _logger.info("Getting DEM info")
-        poly_coll = list()
+        poly_coll = []
         for priority, dem_path in zip(priorities, dem_files):
             _logger.info(f"Processing {dem_path} ...")
             if not pathlib.Path(dem_path).is_file():
@@ -417,7 +416,7 @@ class GeomCombine:
 #            for p in range(priority):
 #                higher_pri_path = (
 #                    pathlib.Path(temp_dir) / f'dem_priority_{p}.feather')
-#            
+#
 #                if higher_pri_path.is_file():
 #                    priority_geodf = priority_geodf.append(
 #                             self._read_to_geodf(higher_pri_path))
@@ -429,8 +428,8 @@ class GeomCombine:
 #                    pri_mult_poly = op_res
 #                else:
 #                    pri_mult_poly = MultiPolygon([op_res])
-#                    
-#                 
+#
+#
 #                if rast_box.within(pri_mult_poly):
 #                    _logger.info(
 #                        f"{dem_path} is ignored due to priority...")
@@ -472,7 +471,7 @@ class GeomCombine:
             temp_dir: Union[str, os.PathLike],
             priority: int,
             dem_file: Union[str, os.PathLike],
-            z_info: dict = dict(),
+            z_info: dict = {},
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
@@ -552,8 +551,8 @@ class GeomCombine:
             msh.ndims = +2
             msh.mshID = 'euclidean-mesh'
 
-            coords = list()
-            edges = list()
+            coords = []
+            edges = []
             for polygon in multi_polygon:
                 self._linearring_to_vert_edge(
                         coords, edges, polygon.exterior)

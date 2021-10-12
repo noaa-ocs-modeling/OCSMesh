@@ -12,13 +12,11 @@ import warnings
 # from matplotlib.colors import LinearSegmentedColormap
 import geopandas as gpd
 from matplotlib.cm import ScalarMappable
-from matplotlib.path import Path
 import matplotlib.pyplot as plt
 from matplotlib.transforms import Bbox
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from pyproj import CRS, Transformer
-import utm
 import rasterio
 from rasterio import warp
 from rasterio.mask import mask
@@ -29,7 +27,7 @@ from rasterio import windows
 from scipy.ndimage import gaussian_filter
 from shapely import ops
 from shapely.geometry import (
-    Polygon, MultiPolygon, LinearRing, LineString, MultiLineString, box)
+    Polygon, MultiPolygon, LineString, MultiLineString, box)
 
 # from ocsmesh.geom import Geom
 # from ocsmesh.hfun import Hfun
@@ -75,18 +73,19 @@ class Crs:
                 raise TypeError(f'Argument crs must be of type {str} or {CRS},'
                                 f' not type {type(val)}.')
             # create a temporary copy of the original file and update meta.
+            # pylint: disable=R1732
             tmpfile = tempfile.NamedTemporaryFile()
             with rasterio.open(obj.path) as src:
                 if obj.chunk_size is not None:
-                    windows = get_iter_windows(
+                    wins = get_iter_windows(
                         src.width, src.height, chunk_size=obj.chunk_size)
                 else:
-                    windows = [rasterio.windows.Window(
+                    wins = [windows.Window(
                         0, 0, src.width, src.height)]
                 meta = src.meta.copy()
                 meta.update({'crs': val, 'driver': 'GTiff'})
                 with rasterio.open(tmpfile, 'w', **meta,) as dst:
-                    for window in windows:
+                    for window in wins:
                         dst.write(src.read(window=window), window=window)
             obj._tmpfile = tmpfile
 
@@ -218,8 +217,8 @@ class Raster:
         else:
             iter_windows = [window]
 
-        for window in iter_windows:
-            x, y, z = self.get_window_data(window, band=band)
+        for win in iter_windows:
+            x, y, z = self.get_window_data(win, band=band)
             new_mask = np.full(z.mask.shape, 0)
             new_mask[np.where(z.mask)] = -1
             new_mask[np.where(~z.mask)] = 1
@@ -233,17 +232,16 @@ class Raster:
             if np.all(new_mask == -1):  # or not new_mask.any():
                 continue
 
-            else:
-                fig, ax = plt.subplots()
-                ax.contourf(
-                    x, y, new_mask, levels=[0, 1])
-                plt.close(fig)
-                polygon_collection.extend(get_multipolygon_from_axes(ax))
+            fig, ax = plt.subplots()
+            ax.contourf(x, y, new_mask, levels=[0, 1])
+            plt.close(fig)
+            polygon_collection.extend(
+                    list(utils.get_multipolygon_from_pathplot(ax)))
 
-        geom = ops.unary_union(polygon_collection)
-        if not isinstance(geom, MultiPolygon):
-            geom = MultiPolygon([geom])
-        return geom
+        union_result = ops.unary_union(polygon_collection)
+        if not isinstance(union_result, MultiPolygon):
+            union_result = MultiPolygon([union_result])
+        return union_result
 
     def get_bbox(
             self,
@@ -261,14 +259,14 @@ class Raster:
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
-        if output_type == 'polygon':
+        if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
             return Bbox([[xmin, ymin], [xmax, ymax]])
-        else:
-            raise TypeError(
-                'Argument output_type must a string literal \'polygon\' or '
-                '\'bbox\'')
+
+        raise TypeError(
+            'Argument output_type must a string literal \'polygon\' or '
+            '\'bbox\'')
 
     def contourf(
             self,
@@ -335,8 +333,7 @@ class Raster:
     def tags(self, i=None):
         if i is None:
             return self.src.tags()
-        else:
-            return self.src.tags(i)
+        return self.src.tags(i)
 
     def read(self, i, masked=True, **kwargs):
         return self.src.read(i, masked=masked, **kwargs)
@@ -351,12 +348,13 @@ class Raster:
         return self.src.sample(xy, i)
 
     def close(self):
-        del(self._src)
+        del self._src
 
     def add_band(self, values,  **tags):
         kwargs = self.src.meta.copy()
         band_id = kwargs["count"]+1
         kwargs.update(count=band_id)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
@@ -371,6 +369,7 @@ class Raster:
         A parallelized version is presented here:
         https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
         """
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **self.src.meta.copy()) as dst:
             for window in self.iter_windows():
@@ -391,6 +390,7 @@ class Raster:
 #        n_bands_new = meta["count"] * 2
         n_bands_new = meta["count"]
         meta.update(count=n_bands_new)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(
             prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **meta) as dst:
@@ -407,6 +407,7 @@ class Raster:
         _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
         out_images, out_transform = mask(self._src, shapes)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
             if i is None:
@@ -427,8 +428,8 @@ class Raster:
         if i is None:
             return np.dstack(
                 [self.src.read_masks(i) for i in range(1, self.count + 1)])
-        else:
-            return self.src.read_masks(i)
+
+        return self.src.read_masks(i)
 
     def warp(self, dst_crs, nprocs=-1):
         nprocs = -1 if nprocs is None else nprocs
@@ -450,6 +451,7 @@ class Raster:
             'width': width,
             'height': height
         })
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
 
         with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
@@ -474,6 +476,7 @@ class Raster:
             msg = "resampling_method must be a valid name or None"
             raise ValueError(msg)
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         # resample data to target shape
         width = int(self.src.width * scaling_factor)
@@ -518,6 +521,7 @@ class Raster:
             "width": out_image.shape[2],
             "transform": out_transform}
             )
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, "w", **out_meta) as dest:
             dest.write(out_image)
@@ -536,8 +540,8 @@ class Raster:
             iter_windows = [window]
         if len(iter_windows) > 1:
             return self._get_raster_contour_feathered(level, iter_windows)
-        else:
-            return self._get_raster_contour_windowed(level, window)
+
+        return self._get_raster_contour_windowed(level, window)
 
     def get_channels(
             self,
@@ -548,25 +552,10 @@ class Raster:
 
         multipoly = self.get_multipolygon(zmax=level)
 
-        utm_crs = None
-        if self.crs.is_geographic:
-            # Input sizes are in meters, so crs should NOT
-            # be geographic
-            x0, y0, x1, y1 = self.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}',
-                south=(y0 + y1)/2 < 0,
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[self.crs.ellipsoid.name]
-            )
+        utm_crs = utils.estimate_bounds_utm(
+            self.get_bbox().bounds, self.crs)
 
-        if utm_crs:
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.src.crs, utm_crs, always_xy=True)
             multipoly = ops.transform(transformer.transform, multipoly)
@@ -575,7 +564,7 @@ class Raster:
         if channels is None:
             return None
 
-        if utm_crs:
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 utm_crs, self.src.crs, always_xy=True)
             channels = ops.transform(transformer.transform, channels)
@@ -628,6 +617,7 @@ class Raster:
                         # LineStrings must have at least 2 coordinate tuples
                         pass
             if len(features) > 0:
+                # pylint: disable=R1732
                 tmpfile = pathlib.Path(tmpdir) / pathlib.Path(
                         tempfile.NamedTemporaryFile(suffix='.feather').name
                         ).name
@@ -643,9 +633,11 @@ class Raster:
         for feather in feathers:
             out = out.append(gpd.read_feather(feather), ignore_index=True)
             feather.unlink()
-            for geometry in out.geometry:
-                if isinstance(geometry, LineString):
-                    geometry = MultiLineString([geometry])
+            geometry = []
+            for geom in out.geometry:
+                if isinstance(geom, LineString):
+                    geometry = MultiLineString([geom])
+                    break
             for linestring in geometry:
                 features.append(linestring)
         _logger.debug('Merging features.')
@@ -680,7 +672,7 @@ class Raster:
 
     def get_window_transform(self, window):
         if window is None:
-            return
+            return None
         return windows.transform(window, self.transform)
 
     @property
@@ -833,47 +825,8 @@ def get_iter_windows(
             yield windows.Window(off_w, off_h, w, h)
 
 
-def get_multipolygon_from_axes(ax):
-    # extract linear_rings from plot
-    linear_ring_collection = list()
-    for path_collection in ax.collections:
-        for path in path_collection.get_paths():
-            polygons = path.to_polygons(closed_only=True)
-            for linear_ring in polygons:
-                if linear_ring.shape[0] > 3:
-                    linear_ring_collection.append(
-                        LinearRing(linear_ring))
-    if len(linear_ring_collection) > 1:
-        # reorder linear rings from above
-        areas = [Polygon(linear_ring).area
-                 for linear_ring in linear_ring_collection]
-        idx = np.where(areas == np.max(areas))[0][0]
-        polygon_collection = list()
-        outer_ring = linear_ring_collection.pop(idx)
-        path = Path(np.asarray(outer_ring.coords), closed=True)
-        while len(linear_ring_collection) > 0:
-            inner_rings = list()
-            for i, linear_ring in reversed(
-                    list(enumerate(linear_ring_collection))):
-                xy = np.asarray(linear_ring.coords)[0, :]
-                if path.contains_point(xy):
-                    inner_rings.append(linear_ring_collection.pop(i))
-            polygon_collection.append(Polygon(outer_ring, inner_rings))
-            if len(linear_ring_collection) > 0:
-                areas = [Polygon(linear_ring).area
-                         for linear_ring in linear_ring_collection]
-                idx = np.where(areas == np.max(areas))[0][0]
-                outer_ring = linear_ring_collection.pop(idx)
-                path = Path(np.asarray(outer_ring.coords), closed=True)
-        multipolygon = MultiPolygon(polygon_collection)
-    else:
-        multipolygon = MultiPolygon(
-            [Polygon(linear_ring_collection.pop())])
-    return multipolygon
-
-
 def redistribute_vertices(geom, distance):
-    if geom.geom_type == 'LineString':
+    if geom.geom_type == 'LineString': # pylint: disable=R1705
         num_vert = int(round(geom.length / distance))
         if num_vert == 0:
             num_vert = 1
@@ -884,5 +837,5 @@ def redistribute_vertices(geom, distance):
         parts = [redistribute_vertices(part, distance)
                  for part in geom]
         return type(geom)([p for p in parts if not p.is_empty])
-    else:
-        raise ValueError('unhandled geometry %s', (geom.geom_type,))
+
+    raise ValueError(f'unhandled geometry {geom.geom_type}')

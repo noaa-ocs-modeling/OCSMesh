@@ -18,7 +18,6 @@ from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, box, GeometryCollection,
     Polygon, MultiPolygon)
-import utm
 
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
@@ -39,7 +38,9 @@ class HfunInputRaster:
             raise TypeError(f'Argument raster must be of type {Raster}, not '
                             f'type {type(raster)}.')
         # init output raster file
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
+        # TODO: Use contextlib.ExitStack
         with rasterio.open(raster.tmpfile) as src:
             if raster.chunk_size is not None:
                 windows = get_iter_windows(
@@ -78,6 +79,8 @@ class HfunRaster(BaseHfun, Raster):
 
     def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
                  verbosity=0):
+
+        self._xy_cache = {}
         self._raster = raster
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
@@ -92,40 +95,30 @@ class HfunRaster(BaseHfun, Raster):
         else:
             iter_windows = [window]
 
-        utm_crs = None
 
         output_mesh = jigsaw_msh_t()
         output_mesh.ndims = +2
         output_mesh.mshID = "euclidean-mesh"
         output_mesh.crs = self.crs
-        for window in iter_windows:
+        for win in iter_windows:
 
             hfun = jigsaw_msh_t()
             hfun.ndims = +2
 
-            x0, y0, x1, y1 = self.get_window_bounds(window)
+            x0, y0, x1, y1 = self.get_window_bounds(win)
 
-            if self.crs.is_geographic:
+            utm_crs = utils.estimate_bounds_utm(
+                    (x0, y0, x1, y1), self.crs)
+
+            if utm_crs is not None:
                 hfun.mshID = 'euclidean-mesh'
                 # If these 3 objects (vert2, tria3, value) don't fit into
                 # memroy, then the raster needs to be chunked. We need to
                 # implement auto-chunking.
                 start = time()
-                _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-                # PyProj 3.2.1 throws error if letter is provided
-                utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
                 # get bbox data
-                xgrid = self.get_x(window=window)
-                ygrid = np.flip(self.get_y(window=window))
+                xgrid = self.get_x(window=win)
+                ygrid = np.flip(self.get_y(window=win))
                 xgrid, ygrid = np.meshgrid(xgrid, ygrid)
                 bottom = xgrid[0, :]
                 top = xgrid[1, :]
@@ -136,8 +129,8 @@ class HfunRaster(BaseHfun, Raster):
 
                 _logger.info('Building hfun.tria3...')
 
-                dim1 = window.width
-                dim2 = window.height
+                dim1 = win.width
+                dim2 = win.height
 
                 tria3 = np.empty(
                     ((dim1 - 1), (dim2  - 1)),
@@ -169,17 +162,17 @@ class HfunRaster(BaseHfun, Raster):
                 # BUILD VERT2_t. this one comes from the memcache array
                 _logger.info('Building hfun.vert2...')
                 hfun.vert2 = np.empty(
-                    window.width*window.height,
+                    win.width*win.height,
                     dtype=jigsaw_msh_t.VERT2_t)
                 hfun.vert2['coord'] = np.array(
-                    self.get_xy_memcache(window, utm_crs))
+                    self.get_xy_memcache(win, utm_crs))
                 _logger.info('Done building hfun.vert2...')
 
                 # Build REALS_t: this one comes from hfun raster
                 _logger.info('Building hfun.value...')
                 hfun.value = np.array(
-                    self.get_values(window=window, band=1).flatten().reshape(
-                        (window.width*window.height, 1)),
+                    self.get_values(window=win, band=1).flatten().reshape(
+                        (win.width*win.height, 1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 _logger.info('Done building hfun.value...')
 
@@ -204,13 +197,13 @@ class HfunRaster(BaseHfun, Raster):
                 start = time()
                 hfun.mshID = 'euclidean-grid'
                 hfun.xgrid = np.array(
-                    np.array(self.get_x(window=window)),
+                    np.array(self.get_x(window=win)),
                     dtype=jigsaw_msh_t.REALS_t)
                 hfun.ygrid = np.array(
-                    np.flip(self.get_y(window=window)),
+                    np.flip(self.get_y(window=win)),
                     dtype=jigsaw_msh_t.REALS_t)
                 hfun.value = np.array(
-                    np.flipud(self.get_values(window=window, band=1)),
+                    np.flipud(self.get_values(window=win, band=1)),
                     dtype=jigsaw_msh_t.REALS_t)
                 kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
                 geom = PolygonGeom(box(x0, y1, x1, y0), self.crs).msh_t()
@@ -249,8 +242,7 @@ class HfunRaster(BaseHfun, Raster):
             hfun.crs = utm_crs
             utils.interpolate(hfun, window_mesh, **kwargs)
 
-            # reproject and combine with other windows
-            # output_mesh is always in self.crs
+            # reproject to combine with other windows
             if utm_crs is not None:
                 window_mesh.crs = utm_crs
                 utils.reproject(window_mesh, self.crs)
@@ -265,38 +257,26 @@ class HfunRaster(BaseHfun, Raster):
                 axis=0)
             output_mesh.vert2 = np.append(
                 output_mesh.vert2,
-                np.array([(coo, tag)
-                          for coo, tag in window_mesh.vert2],
+                np.array(list(window_mesh.vert2),
                          dtype=jigsaw_msh_t.VERT2_t),
                 axis=0)
             if output_mesh.value.size:
                 output_mesh.value = np.append(
                     output_mesh.value,
-                    np.array([v for v in window_mesh.value],
+                    np.array(list(window_mesh.value),
                              dtype=jigsaw_msh_t.REALS_t),
                     axis=0)
             else:
                 output_mesh.value = np.array(
-                        [v for v in window_mesh.value],
+                        list(window_mesh.value),
                         dtype=jigsaw_msh_t.REALS_t)
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
-        if self.crs.is_geographic:
-            x0, y0, x1, y1 = self.get_bbox().bounds
-            _, _, number, letter = utm.from_latlon(
-                    (y0 + y1)/2, (x0 + x1)/2)
-            # PyProj 3.2.1 throws error if letter is provided
-            utm_crs = CRS(
-                    proj='utm',
-                    zone=f'{number}',
-                    south=(y0 + y1)/2 < 0,
-                    ellps={
-                        'GRS 1980': 'GRS80',
-                        'WGS 84': 'WGS84'
-                        }[self.crs.ellipsoid.name]
-                )
+        utm_crs = utils.estimate_bounds_utm(
+                self.get_bbox().bounds, self.crs)
+        if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
             output_mesh.vert2['coord'] = np.vstack(
@@ -314,7 +294,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: float = None,
             target_size: float = None,
             nprocs: int = None
-    ):
+            ):
 
         # TODO: Add pool input support like add_feature for performance
 
@@ -324,8 +304,8 @@ class HfunRaster(BaseHfun, Raster):
                     f"Wrong type \"{type(multipolygon)}\""
                     f" for multipolygon input.")
 
-        if isinstance(multipolygon, Polygon):
-            multipolygon = MultiPolygon([multipolygon])
+            if isinstance(multipolygon, Polygon):
+                multipolygon = MultiPolygon([multipolygon])
 
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
@@ -342,18 +322,20 @@ class HfunRaster(BaseHfun, Raster):
             raise ValueError("Argument target_size must be greater than zero.")
 
         # For expansion_rate
-        if expansion_rate != None:
+        if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon]
             interiors = [
                 inter for ply in multipolygon for inter in ply.interiors]
-            
+
             features = MultiLineString([*exteriors, *interiors])
+            # pylint: disable=E1123, E1125
             self.add_feature(
                 feature=features,
                 expansion_rate=expansion_rate,
                 target_size=target_size,
                 nprocs=nprocs)
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
@@ -367,7 +349,7 @@ class HfunRaster(BaseHfun, Raster):
                 # as the hfun (we don't calculate distances in this
                 # method)
 
-                _logger.info(f'Creating mask from shape ...')
+                _logger.info('Creating mask from shape ...')
                 start = time()
                 try:
                     mask, _, _ = rasterio.mask.raster_geometry_mask(
@@ -378,7 +360,7 @@ class HfunRaster(BaseHfun, Raster):
                 except ValueError:
                     # If there's no overlap between the raster and
                     # shapes then it throws ValueError, instead of
-                    # checking for intersection, if there's a value 
+                    # checking for intersection, if there's a value
                     # error we assume there's no overlap
                     _logger.debug(
                         'Polygons don\'t intersect with the raster')
@@ -396,7 +378,7 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                
+
                 _logger.info(f'Write array to file {tmpfile.name}...')
                 start = time()
                 dst.write_band(1, values, window=window)
@@ -420,6 +402,8 @@ class HfunRaster(BaseHfun, Raster):
 
         contours = []
         for _level in level:
+            # pylint: disable=R1724
+
             _contours = self.raster.get_contour(_level)
             if isinstance(_contours, GeometryCollection):
                 continue
@@ -436,7 +420,10 @@ class HfunRaster(BaseHfun, Raster):
         contours = MultiLineString(contours)
 
         _logger.info('Adding contours as features...')
-        self.add_feature(contours, expansion_rate, target_size, nprocs)
+        # pylint: disable=E1123, E1125
+        self.add_feature(
+                contours, expansion_rate, target_size,
+                nprocs=nprocs)
 
     def add_channel(
             self,
@@ -451,52 +438,23 @@ class HfunRaster(BaseHfun, Raster):
         channels = self.raster.get_channels(
                 level=level, width=width, tolerance=tolerance)
 
-        if channels == None:
+        if channels is None:
             return
 
         self.add_patch(
             channels, expansion_rate, target_size, nprocs)
 
 
+
+    @utils.add_pool_args
     def add_feature(
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
             target_size: float = None,
-            nprocs=None,
             max_verts=200,
-            proc_pool=None
-    ):
-        if proc_pool is not None:
-            self._add_feature_internal(
-                feature=feature,
-                expansion_rate=expansion_rate,
-                target_size=target_size,
-                pool=proc_pool,
-                max_verts=max_verts)
-
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            _logger.debug(f'Using nprocs={nprocs}')
-
-            with Pool(processes=nprocs) as pool:
-                self._add_feature_internal(
-                    feature=feature,
-                    expansion_rate=expansion_rate,
-                    target_size=target_size,
-                    pool=pool,
-                    max_verts=max_verts)
-            pool.join()
-
-    def _add_feature_internal(
-            self,
-            feature: Union[LineString, MultiLineString],
-            expansion_rate: float,
-            target_size: float = None,
-            pool: Pool = None,
-            max_verts=200
+            *, # kwarg-only comes after this
+            pool: Pool,
     ):
         '''Adds a linear distance size function constraint to the mesh.
 
@@ -525,7 +483,7 @@ class HfunRaster(BaseHfun, Raster):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = [linestring for linestring in feature]
+            feature = list(feature)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
@@ -534,41 +492,28 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
-        utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile, 'w', **meta,) as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                if self.crs.is_geographic:
-                    x0, y0, x1, y1 = self.get_window_bounds(window)
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    # PyProj 3.2.1 throws error if letter is provided
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}',
-                        south=(y0 + y1)/2 < 0,
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
-                else:
-                    utm_crs = None
+                utm_crs = utils.estimate_bounds_utm(
+                        self.get_window_bounds(window), self.crs)
+
                 _logger.info('Repartitioning features...')
                 start = time()
                 res = pool.starmap(
-                    repartition_features,
+                    utils.repartition_features,
                     [(linestring, max_verts) for linestring in feature]
                     )
                 win_feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
 
-                _logger.info(f'Resampling features on ...')
+                _logger.info('Resampling features on ...')
                 start = time()
 
                 # We don't want to recreate the same transformation
@@ -589,7 +534,7 @@ class HfunRaster(BaseHfun, Raster):
                             f"Transform apply took {time() - start2:f}")
 
                 transformed_features = pool.starmap(
-                    transform_linestring,
+                    utils.transform_linestring,
                     [(linestring, target_size) for linestring in win_feature]
                 )
                 _logger.info(f'Resampling features took {time()-start}.')
@@ -641,13 +586,12 @@ class HfunRaster(BaseHfun, Raster):
         self._tmpfile = tmpfile
 
     def get_xy_memcache(self, window, dst_crs):
-        if not hasattr(self, '_xy_cache'):
-            self._xy_cache = {}
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
             _logger.info('Transform points to local CRS...')
             transformer = Transformer.from_crs(
                 self.src.crs, dst_crs, always_xy=True)
+            # pylint: disable=R1732
             tmpfile = tempfile.NamedTemporaryFile()
             xy = self.get_xy(window)
             fp = np.memmap(tmpfile, dtype='float32', mode='w+', shape=xy.shape)
@@ -658,10 +602,10 @@ class HfunRaster(BaseHfun, Raster):
             _logger.info('Done!')
             self._xy_cache[f'{window}{dst_crs}'] = tmpfile
             return fp[:]
-        else:
-            _logger.info('Loading values from memcache...')
-            return np.memmap(tmpfile, dtype='float32', mode='r',
-                             shape=((window.width*window.height), 2))[:]
+
+        _logger.info('Loading values from memcache...')
+        return np.memmap(tmpfile, dtype='float32', mode='r',
+                         shape=((window.width*window.height), 2))[:]
 
     def add_subtidal_flow_limiter(
             self,
@@ -674,8 +618,8 @@ class HfunRaster(BaseHfun, Raster):
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
-        utm_crs: Union[CRS, None] = None
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
 
             iter_windows = list(self.iter_windows())
@@ -684,21 +628,11 @@ class HfunRaster(BaseHfun, Raster):
             for i, window in enumerate(iter_windows):
 
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                x0, y0, x1, y1 = self.get_window_bounds(window)
 
-                if self.crs.is_geographic:
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    # PyProj 3.2.1 throws error if letter is provided
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}',
-                        south=(y0 + y1)/2 < 0,
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
+                x0, y0, x1, y1 = self.get_window_bounds(window)
+                utm_crs = utils.estimate_bounds_utm(
+                        (x0, y0, x1, y1), self.crs)
+                if utm_crs is not None:
                     transformer = Transformer.from_crs(
                             self.crs, utm_crs, always_xy=True)
                     (x0, x1), (y0, y1) = transformer.transform(
@@ -750,6 +684,7 @@ class HfunRaster(BaseHfun, Raster):
             else float(lower_bound)
         upper_bound = float('inf') if upper_bound is None \
             else float(upper_bound)
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
 
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
@@ -803,20 +738,6 @@ def transform_point(x, y, src_crs, utm_crs):
     return transformer.transform(x, y)
 
 
-def transform_linestring(
-    linestring: LineString,
-    target_size: float,
-):
-    distances = [0.]
-    while distances[-1] + target_size < linestring.length:
-        distances.append(distances[-1] + target_size)
-    distances.append(linestring.length)
-    linestring = LineString([
-        linestring.interpolate(distance)
-        for distance in distances
-        ])
-    return linestring
-
 def transform_polygon(
     polygon: Polygon,
     src_crs: CRS = None,
@@ -829,21 +750,3 @@ def transform_polygon(
         polygon = ops.transform(
                 transformer.transform, polygon)
     return polygon
-
-
-def repartition_features(linestring, max_verts):
-    features = []
-    if len(linestring.coords) > max_verts:
-        new_feat = []
-        for segment in list(map(LineString, zip(
-                linestring.coords[:-1],
-                linestring.coords[1:]))):
-            new_feat.append(segment)
-            if len(new_feat) == max_verts - 1:
-                features.append(ops.linemerge(new_feat))
-                new_feat = []
-        if len(new_feat) != 0:
-            features.append(ops.linemerge(new_feat))
-    else:
-        features.append(linestring)
-    return features

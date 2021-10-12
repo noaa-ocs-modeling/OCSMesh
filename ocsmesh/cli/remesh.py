@@ -1,18 +1,14 @@
 #!/usr/bin/env python
 import sys
-import os
 import gc
 import logging
-import argparse
 from pathlib import Path
 from copy import deepcopy
 
 import jigsawpy
-import utm
 import numpy as np
 import geopandas as gpd
-from shapely.geometry import Polygon, MultiPolygon, box
-from pyproj import CRS, Transformer
+from shapely.geometry import Polygon, MultiPolygon
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
@@ -36,7 +32,7 @@ class RemeshByDEM:
 
     def __init__(self, sub_parser):
 
-        # e.g 
+        # e.g
         # ./remesh \
         #   --mesh <MESH_ADD> \
         #   --output <OUT_FILE_ADDR> \
@@ -58,13 +54,13 @@ class RemeshByDEM:
         this_parser.add_argument(
             '--contour',
             action='append', nargs='+', type=float, dest='contours',
-            metavar='CONTOUR_DEFN', default=list(),
+            metavar='CONTOUR_DEFN', default=[],
             help="Each contour's (level, [expansion, target])"
                  " to be applied on all size functions in collector")
         this_parser.add_argument(
             '--constant',
             action='append', nargs=2, type=float, dest='constants',
-            metavar='CONST_DEFN', default=list(),
+            metavar='CONST_DEFN', default=[],
             help="Specify constant mesh size above a given contour level"
                  " by passing (lower_bound, target_size) for each constant")
         this_parser.add_argument('--hmin', type=float, default=250)
@@ -79,7 +75,7 @@ class RemeshByDEM:
 
         this_parser.add_argument('-s', '--sieve', type=float)
         this_parser.add_argument(
-            '--interpolate', nargs='+', type=Path, default=list(),
+            '--interpolate', nargs='+', type=Path, default=[],
             help="To interpolate from depth of DEMs not involved in"
                  " the remeshing process")
 
@@ -91,11 +87,12 @@ class RemeshByDEM:
         this_parser.add_argument('dem', nargs='+', type=Path)
 
 
-    def _read_geom_hfun(self, geom_file, hfun_file, hfun_crs):
+    @staticmethod
+    def _read_geom_hfun(geom_file, hfun_file, hfun_crs):
         _logger.info("Read geom and hfun from disk")
         _logger.info("Readng geometry...")
         gdf_geom = gpd.read_file(geom_file)
-        poly_list = list()
+        poly_list = []
         for i in gdf_geom.geometry:
             if isinstance(i, MultiPolygon):
                 poly_list.extend(i)
@@ -139,7 +136,7 @@ class RemeshByDEM:
         nprocs = args.nprocs
 
         # Process inputs
-        contour_defns = list()
+        contour_defns = []
         for contour in contours:
             if len(contour) > 3:
                 raise ValueError(
@@ -148,21 +145,21 @@ class RemeshByDEM:
             level, expansion_rate, target_size = [
                     *contour, *[None]*(3-len(contour))]
             contour_defns.append((level, expansion_rate, target_size))
-        
-        constant_defns = list()
+
+        constant_defns = []
         for lower_bound, target_size in constants:
             constant_defns.append((lower_bound, target_size))
-       
+
 
         if out_path is None:
             out_path = base_path.parent / ('remeshed.' + out_format)
         out_path.parent.mkdir(exist_ok=True, parents=True)
 
-        nprocs = -1 if nprocs == None else nprocs
+        nprocs = -1 if nprocs is None else nprocs
 
-        geom_rast_list = list()
-        hfun_rast_list = list()
-        interp_rast_list = list()
+        geom_rast_list = []
+        hfun_rast_list = []
+        interp_rast_list = []
 
         # Low priority interpolation. e.g. user remeshes based on NCEI
         # but still wants to interpolate GEBCO on mesh
@@ -176,13 +173,13 @@ class RemeshByDEM:
             geom_rast_list.append(Raster(dem_path))
             hfun_rast_list.append(Raster(dem_path))
             interp_rast_list.append(Raster(dem_path))
-            
+
         _logger.info("Read base mesh")
         if mesh_crs is None:
             mesh_crs = "EPSG:4326"
         init_mesh = Mesh.open(str(base_path), crs=mesh_crs)
         # TODO: Cleanup isolates?
-        
+
         log_calculation = True
         # Read geometry and hfun from files if provided
         if (geom_file and hfun_file
@@ -269,7 +266,7 @@ class RemeshByDEM:
                 log_calculation = False
         else:
             raise ValueError(
-                f"Input not valid to initialize geom and hfun")
+                "Input not valid to initialize geom and hfun")
 
 
         if log_calculation:
@@ -293,10 +290,11 @@ class RemeshByDEM:
         utils.msh_t_to_utm(jig_init)
 
 
+        # pylint: disable=C0325
         if not (jig_geom.crs == jig_hfun.crs == jig_init.crs):
             raise ValueError(
-                f"Converted UTM CRS for geometry, hfun and init mesh"
-                f"is not equivalent")
+                "Converted UTM CRS for geometry, hfun and init mesh"
+                "is not equivalent")
 
 
         _logger.info("Calculate remeshing region of interest")

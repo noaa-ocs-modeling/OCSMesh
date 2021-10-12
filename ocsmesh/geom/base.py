@@ -6,9 +6,9 @@ import numpy as np
 from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import MultiPolygon
-import utm
 
 from ocsmesh.crs import CRS as CRSDescriptor
+from ocsmesh import utils
 
 
 class BaseGeom(ABC):
@@ -63,25 +63,13 @@ def multipolygon_to_jigsaw_msh_t(
         crs: CRS
 ) -> jigsaw_msh_t:
     '''Casts shapely.geometry.MultiPolygon to jigsawpy.jigsaw_msh_t'''
-    utm_crs = None
-    if crs.is_geographic:
-        x0, y0, x1, y1 = multipolygon.bounds
-        _, _, number, letter = utm.from_latlon(
-            (y0 + y1)/2, (x0 + x1)/2)
-        # PyProj 3.2.1 throws error if letter is provided
-        utm_crs = CRS(
-            proj='utm',
-            zone=f'{number}',
-            south=(y0 + y1)/2 < 0,
-            ellps={
-                'GRS 1980': 'GRS80',
-                'WGS 84': 'WGS84'
-                }[crs.ellipsoid.name]
-        )
+    utm_crs = utils.estimate_bounds_utm(
+            multipolygon.bounds, crs)
+    if utm_crs is not None:
         transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
         multipolygon = ops.transform(transformer.transform, multipolygon)
 
-    vert2: List[Tuple[Tuple[float, float], int]] = list()
+    vert2: List[Tuple[Tuple[float, float], int]] = []
     for polygon in multipolygon:
         if np.all(
                 np.asarray(
@@ -94,11 +82,11 @@ def multipolygon_to_jigsaw_msh_t(
                 vert2.append(((x, y), 0))
 
     # edge2
-    edge2: List[Tuple[int, int]] = list()
+    edge2: List[Tuple[int, int]] = []
     for polygon in multipolygon:
         polygon = [polygon.exterior, *polygon.interiors]
         for linear_ring in polygon:
-            _edge2 = list()
+            _edge2 = []
             for i in range(len(linear_ring.coords)-2):
                 _edge2.append((i, i+1))
             _edge2.append((_edge2[-1][1], _edge2[0][0]))

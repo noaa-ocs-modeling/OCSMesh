@@ -23,7 +23,7 @@ class Geom(BaseGeom):
             Object to use as input to compute the output mesh hull.
         """
 
-        if isinstance(geom, Raster):
+        if isinstance(geom, Raster): # pylint: disable=R1705
             return RasterGeom(geom, **kwargs)
 
         elif isinstance(geom, BaseMesh):
@@ -38,10 +38,9 @@ class Geom(BaseGeom):
         elif isinstance(geom, (list, tuple)):
             return GeomCollector(geom, **kwargs)
 
-        else:
-            raise TypeError(
-                f'Argument geom must be of type {BaseGeom} or a derived type, '
-                f'not type {type(geom)}.')
+        raise TypeError(
+            f'Argument geom must be of type {BaseGeom} or a derived type, '
+            f'not type {type(geom)}.')
 
     @staticmethod
     def is_valid_type(geom):

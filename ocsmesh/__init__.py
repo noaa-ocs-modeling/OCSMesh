@@ -20,8 +20,8 @@ except OSError as e:
     src_libpath = pyenv / 'lib' / libjigsaw
     if not src_libpath.is_file():
         raise e
-    else:
-        os.symlink(src_libpath, tgt_libpath)
+
+    os.symlink(src_libpath, tgt_libpath)
 
 
 from .geom import Geom

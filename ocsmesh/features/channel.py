@@ -1,11 +1,9 @@
-from pathlib import Path
-
 class Channel:
 
-    def __init__(self, level=0, width=1000, tolerance=50, sources=list()):
+    def __init__(self, level=0, width=1000, tolerance=50, sources=[]):
 
-        # Even a tolerance of 1 for simplifying polygon for channel 
-        # calculations is much faster than no simplification. 50 
+        # Even a tolerance of 1 for simplifying polygon for channel
+        # calculations is much faster than no simplification. 50
         # is much faster than 1. The reason is in simplify we don't
         # preserve topology
 
@@ -13,7 +11,7 @@ class Channel:
         self._width = width # and less
         self._tolerance = tolerance # to simplify
 
-        self._sources = list()
+        self._sources = []
         if not isinstance(sources, (list, tuple)):
             sources = [sources]
         for source in sources:
@@ -38,7 +36,7 @@ class Channel:
     def iter_channels(self):
         for source in self._sources:
             ch, crs = self._get_contour_from_source(source)
-            if ch == None:
+            if ch is None:
                 continue
             yield ch, crs
 
