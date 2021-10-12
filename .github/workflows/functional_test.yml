@@ -68,6 +68,6 @@ jobs:
         path: remeshed.2dm
         retention-days: 7
 
-    - name: Run mesh size calc test
+    - name: Run Python API tests
       shell: bash -l {0}
-      run: python tests/api/size_from_mesh.py
+      run: python -m unittest discover tests/api -p "*.py"
