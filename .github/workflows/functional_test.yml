@@ -1,0 +1,69 @@
+name: Functional
+
+on: [push]
+
+jobs:
+  basic-functional-tests:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Conda environment for Python
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.9 # TODO: For testing use matrix of env
+        environment-file: ./environment.yml
+        activate-environment: ocsmesh-env
+
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        python ./setup.py install_jigsaw
+        pip install .
+
+    - name: Prepare example DEM
+      shell: bash -l {0}
+      run: |
+        wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O fullsize_dem.tif
+        gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
+
+    - name: 'Upload test dem'
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-dem
+        path: test_dem.tif
+        retention-days: 7
+
+    - name: Run geom build test
+      shell: bash -l {0}
+      run: source tests/cli/build_geom.sh
+
+    - name: 'Upload Geom build results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: geom-build-results
+        path: test_shape
+        retention-days: 7
+
+    - name: Run hfun build test
+      shell: bash -l {0}
+      run: source tests/cli/build_hfun.sh
+
+    - name: 'Upload Hfun build results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: hfun-build-results
+        path: test.2dm
+        retention-days: 7
+
+    - name: Run remesh test
+      shell: bash -l {0}
+      run: source tests/cli/remesh_by_dem.sh
+
+    - name: 'Upload remesh results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: remesh-bydem-results
+        path: remeshed.2dm
+        retention-days: 7

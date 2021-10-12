@@ -9,18 +9,19 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v2
+    - name: Set up Conda environment for Python
+      uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: 3.9
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
+        python-version: 3.9 # TODO: For testing use matrix of env
+        environment-file: ./environment.yml
+        activate-environment: ocsmesh-env
     - name: Install dependencies
+      shell: bash -l {0}
       run: |
-        conda env update --file environment.yml --name base
+        python ./setup.py install_jigsaw
+        pip install .
     - name: Analysing the code with pylint
+      shell: bash -l {0}
       run: |
         conda install -cconda-forge pylint=2.11.1 # For fail-on option
         pylint ocsmesh

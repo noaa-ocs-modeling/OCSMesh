@@ -585,7 +585,6 @@ def index_ring_collection(mesh):
                     break
             if not has_parent:
                 real_interiors.append(p_interior)
-        # TODO: CHECK IF CLEANUP IS CORRECT!
         # pop real rings from collection
         for i in reversed(sorted(real_interiors)):
             idx_ring_coll[_id]['interiors'].append(
