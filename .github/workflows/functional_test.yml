@@ -20,9 +20,11 @@ jobs:
       run: |
         python ./setup.py install_jigsaw
         pip install .
-    - name: Download example DEM
+    - name: Prepare example DEM
+      shell: bash -l {0}
       run: |
-        wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O test_dem.tif
+        wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O fullsize_dem.tif
+        gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
     - name: Run geom build test
       shell: bash -l {0}
       run: source tests/cli/build_geom.sh
