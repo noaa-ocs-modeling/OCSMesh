@@ -392,7 +392,7 @@ class HfunCollector(BaseHfun):
         constraint_defn = TopoConstConstraint(
             value, upper_bound, lower_bound, value_type, rate)
 
-        if source_index != None and not isinstance(source_index, (tuple, list)):
+        if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._constraint_info_coll.add(source_index, constraint_defn)
 
@@ -403,7 +403,6 @@ class HfunCollector(BaseHfun):
             upper_bound=np.inf,
             lower_bound=-np.inf,
             value_type: str = 'min',
-            rate=0.01,
             source_index: Union[List[int], int, None] = None):
 
         self._applied = False
@@ -411,7 +410,7 @@ class HfunCollector(BaseHfun):
         constraint_defn = TopoFuncConstraint(
             func, upper_bound, lower_bound, value_type, rate)
 
-        if source_index != None and not isinstance(source_index, (tuple, list)):
+        if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._constraint_info_coll.add(source_index, constraint_defn)
 
@@ -602,7 +601,7 @@ class HfunCollector(BaseHfun):
         for in_idx, hfun in enumerate(raster_hfun_list):
             constraint_list = list()
             for src_idx, constraint_defn in self._constraint_info_coll:
-                if src_idx != None and in_idx not in src_idx:
+                if src_idx is not None and in_idx not in src_idx:
                     continue
 
                 constraint_list.append(constraint_defn)

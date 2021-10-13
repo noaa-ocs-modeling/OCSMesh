@@ -36,15 +36,16 @@ class Constraint(ABC):
         '''
         The function to compare a value with the constraint value
         and evaluate wether it satisfies the constraint
-        function's needs to receive values to check as first argument 
+        function's needs to receive values to check as first argument
         '''
 
+        # pylint: disable=R1705
         if self.value_type == ConstraintValueType.MIN:
             return np.greater
         elif self.value_type == ConstraintValueType.MAX:
             return np.less
-        else:
-            raise ValueError("Invalid value type for constraint!")
+
+        raise ValueError("Invalid value type for constraint!")
 
     @property
     def rate_sign(self):
@@ -56,12 +57,13 @@ class Constraint(ABC):
         size outside calculated zone
         '''
 
+        # pylint: disable=R1705
         if self.value_type == ConstraintValueType.MIN:
             return -1
         elif self.value_type == ConstraintValueType.MAX:
             return +1
-        else:
-            raise ValueError("Invalid value type for constraint!")
+
+        raise ValueError("Invalid value type for constraint!")
 
 
     @abstractmethod

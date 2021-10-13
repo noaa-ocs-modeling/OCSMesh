@@ -306,8 +306,9 @@ class HfunRaster(BaseHfun, Raster):
     def apply_constraints(self, constraint_list):
 
         # TODO: Validate conflicting constraints
-        
+
         # Apply constraints
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
             iter_windows = list(self.iter_windows())
@@ -319,20 +320,8 @@ class HfunRaster(BaseHfun, Raster):
 
 
                 # Get locations
-                if self.crs.is_geographic:
-                    x0, y0, x1, y1 = self.get_window_bounds(window)
-                    _, _, number, letter = utm.from_latlon(
-                        (y0 + y1)/2, (x0 + x1)/2)
-                    utm_crs = CRS(
-                        proj='utm',
-                        zone=f'{number}{letter}',
-                        ellps={
-                            'GRS 1980': 'GRS80',
-                            'WGS 84': 'WGS84'
-                            }[self.crs.ellipsoid.name]
-                    )
-                else:
-                    utm_crs = None
+                utm_crs = utils.estimate_bounds_utm(
+                        self.get_window_bounds(window), self.crs)
 
                 if utm_crs is not None:
                     xy = self.get_xy_memcache(window, utm_crs)
@@ -418,6 +407,7 @@ class HfunRaster(BaseHfun, Raster):
         # check target size
         target_size = self.hmin if target_size is None else target_size
         if target_size is None:
+            # pylint: disable=W0101
             raise ValueError('Argument target_size must be specified if no '
                              'global hmin has been set.')
         if target_size <= 0:
