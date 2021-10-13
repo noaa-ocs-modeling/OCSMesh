@@ -33,6 +33,14 @@ warnings.filterwarnings(
 _logger = logging.getLogger(__name__)
 
 
+def _apply_constraints(method):
+    def wrapped(obj, *args, **kwargs):
+        rv = method(obj, *args, **kwargs)
+        obj.apply_added_constraints()
+        return rv
+    return wrapped
+
+
 class HfunInputRaster:
 
     def __set__(self, obj, raster: Raster):
@@ -293,14 +301,9 @@ class HfunRaster(BaseHfun, Raster):
         return output_mesh
 
 
-    def _apply_constraints(method):
+    def apply_added_constraints(self):
 
-        def wrapper(self, *args, **kwargs):
-            rv = method(self, *args, **kwargs)
-            self.apply_constraints(self._constraints)
-            return rv
-
-        return wrapper
+        self.apply_constraints(self._constraints)
 
 
     def apply_constraints(self, constraint_list):

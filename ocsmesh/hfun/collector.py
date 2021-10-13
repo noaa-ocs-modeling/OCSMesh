@@ -403,6 +403,7 @@ class HfunCollector(BaseHfun):
             upper_bound=np.inf,
             lower_bound=-np.inf,
             value_type: str = 'min',
+            rate=0.01,
             source_index: Union[List[int], int, None] = None):
 
         self._applied = False
