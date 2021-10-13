@@ -13,6 +13,7 @@ class Constraint(ABC):
         # TODO: Put rate in a mixin ?
         self._rate = rate
 
+        # pylint: disable=W1116
         if isinstance(value_type, ConstraintValueType):
             self._val_type = value_type
         elif isinstance(value_type, str):
@@ -80,7 +81,7 @@ class Constraint(ABC):
         bound_values = ref_values.copy().ravel()
         coords = locations.reshape(-1, 2)
 
-        if self._rate == None:
+        if self._rate is None:
             return values # TODO: COPY?
 
         if len(coords) != len(new_values):

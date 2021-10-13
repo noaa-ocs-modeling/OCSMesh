@@ -95,7 +95,7 @@ class HfunRaster(BaseHfun, Raster):
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
-        self._constraints = list()
+        self._constraints = []
 
 
     def msh_t(self, window: rasterio.windows.Window = None,
@@ -398,8 +398,8 @@ class HfunRaster(BaseHfun, Raster):
                     f"Wrong type \"{type(multipolygon)}\""
                     f" for multipolygon input.")
 
-            if isinstance(multipolygon, Polygon):
-                multipolygon = MultiPolygon([multipolygon])
+        if isinstance(multipolygon, Polygon):
+            multipolygon = MultiPolygon([multipolygon])
 
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs

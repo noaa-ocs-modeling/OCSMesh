@@ -1072,6 +1072,7 @@ def calculate_tria_areas(mesh):
                    axis=2).squeeze())
     perimeter = np.sum(tria_sides, axis=1) / 2
     perimeter = perimeter.reshape(len(perimeter), 1)
+    # pylint: disable=W0632
     a_side, b_side, c_side = np.split(tria_sides, 3, axis=1)
     tria_areas = np.sqrt(
             perimeter*(perimeter-a_side)

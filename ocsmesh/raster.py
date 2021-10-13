@@ -18,8 +18,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from pyproj import CRS, Transformer
 import rasterio
+import rasterio.mask
 from rasterio import warp
-from rasterio.mask import mask
 from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 from rasterio.transform import array_bounds
@@ -406,7 +406,7 @@ class Raster:
     def mask(self, shapes, i=None, **kwargs):
         _kwargs = self.src.meta.copy()
         _kwargs.update(kwargs)
-        out_images, out_transform = mask(self._src, shapes)
+        out_images, out_transform = rasterio.mask.mask(self._src, shapes)
         # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
@@ -537,6 +537,7 @@ class Raster:
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
 
+        # pylint: disable=R1732
         tmpfile = tempfile.NamedTemporaryFile()
         meta = self.src.meta.copy()
         meta.update({'driver': 'GTiff'})
@@ -551,7 +552,7 @@ class Raster:
                 # as the hfun (we don't calculate distances in this
                 # method)
 
-                _logger.info(f'Creating mask from shape ...')
+                _logger.info('Creating mask from shape ...')
                 start = time()
                 values = self.get_values(window=window).copy()
                 mask = np.zeros_like(values)

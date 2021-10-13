@@ -206,7 +206,7 @@ class ChannelRefineCollector:
 class ConstraintInfoCollector:
 
     def __init__(self):
-        self._constraints_info = list()
+        self._constraints_info = []
 
     def add(self, src_idx, constraint):
         srcs = tuple(src_idx) if src_idx is not None else None
@@ -600,7 +600,7 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
-            constraint_list = list()
+            constraint_list = []
             for src_idx, constraint_defn in self._constraint_info_coll:
                 if src_idx is not None and in_idx not in src_idx:
                     continue
@@ -1062,7 +1062,7 @@ class HfunCollector(BaseHfun):
 
     def _apply_constraints_fast(self, big_hfun):
 
-        constraint_list = list()
+        constraint_list = []
         for src_idx, constraint_defn in self._constraint_info_coll:
             # TODO: Account for source index
             constraint_list.append(constraint_defn)
