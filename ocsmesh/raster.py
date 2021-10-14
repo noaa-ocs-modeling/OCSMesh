@@ -532,11 +532,7 @@ class Raster:
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
 
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        meta = self.src.meta.copy()
-        meta.update({'driver': 'GTiff'})
-        with rasterio.open(tmpfile, 'w', **meta,) as dst:
+        with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
@@ -583,8 +579,6 @@ class Raster:
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
-
-        self._tmpfile = tmpfile
 
 
     def get_contour(

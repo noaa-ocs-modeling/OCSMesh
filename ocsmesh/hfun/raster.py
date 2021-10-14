@@ -314,9 +314,7 @@ class HfunRaster(BaseHfun, Raster):
         # TODO: Validate conflicting constraints
 
         # Apply constraints
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+        with self.modifying_raster() as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
 
@@ -350,8 +348,6 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, hfun_values, window=window)
                 del rast_values
                 gc.collect()
-
-        self._tmpfile = tmpfile
 
 
     @_apply_constraints
