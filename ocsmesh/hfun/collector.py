@@ -890,6 +890,8 @@ class HfunCollector(BaseHfun):
 
         rast_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if len(rast_hfun_list) == 0:
+            return None
 
         all_bounds = []
         n_cell_lim = 0
@@ -1013,22 +1015,34 @@ class HfunCollector(BaseHfun):
 
         # NOTE: Caching applied doesn't work here since we apply
         # everything on a temporary big raster
-        hfun = HfunRaster(big_raster, **self._size_info)
+        rast_hfun_list = []
+        hfun_rast = None
+        if big_raster:
+            hfun_rast = HfunRaster(big_raster, **self._size_info)
+            rast_hfun_list.append(hfun_rast)
+
+
 
         mesh_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunMesh)]
         if self._base_mesh and self._base_as_hfun:
             mesh_hfun_list.insert(0, self._base_mesh)
 
-        self._apply_contours([*mesh_hfun_list, hfun])
-        self._apply_flow_limiters_fast(hfun)
-        self._apply_const_val_fast(hfun)
-        self._apply_patch([*mesh_hfun_list, hfun])
-        self._apply_channels([*mesh_hfun_list, hfun])
+        # Mesh hfun parts are still stateful
+        self._apply_contours([*mesh_hfun_list, *rast_hfun_list])
+        if hfun_rast:
+            # In fast method we only have big raster if any
+            self._apply_flow_limiters_fast(hfun_rast)
+            self._apply_const_val_fast(hfun_rast)
+        # Mesh hfun parts are still stateful
+        self._apply_patch([*mesh_hfun_list, *rast_hfun_list])
+        self._apply_channels([*mesh_hfun_list, *rast_hfun_list])
 
-        self._apply_constraints_fast(hfun)
+        if hfun_rast:
+            self._apply_constraints_fast(hfun_rast)
 
-        return hfun
+
+        return hfun_rast
 
     def _apply_flow_limiters_fast(self, big_hfun):
 
@@ -1086,30 +1100,38 @@ class HfunCollector(BaseHfun):
         for hfun in dem_hfun_list:
             dem_box_list.append(hfun.get_bbox(crs=epsg4326))
 
+        index = []
+        coord = []
+        value = []
+        offset = 0
 
         # Calculate multipoly and clip big hfun
-        dem_gdf = gpd.GeoDataFrame(
-                geometry=dem_box_list, crs=epsg4326)
-        big_cut_shape = dem_gdf.unary_union
-        big_msh_t = big_hfun.msh_t()
-        if hasattr(big_msh_t, "crs"):
-            if not epsg4326.equals(big_msh_t.crs):
-                utils.reproject(big_msh_t, epsg4326)
-        big_msh_t = utils.clip_mesh_by_shape(
-            big_msh_t,
-            big_cut_shape,
-            use_box_only=False,
-            fit_inside=False)
+        big_cut_shape = None
+        if big_hfun:
+            dem_gdf = gpd.GeoDataFrame(
+                    geometry=dem_box_list, crs=epsg4326)
+            big_cut_shape = dem_gdf.unary_union
+            big_msh_t = big_hfun.msh_t()
+            if hasattr(big_msh_t, "crs"):
+                if not epsg4326.equals(big_msh_t.crs):
+                    utils.reproject(big_msh_t, epsg4326)
 
+            big_msh_t = utils.clip_mesh_by_shape(
+                big_msh_t,
+                big_cut_shape,
+                use_box_only=False,
+                fit_inside=False)
+
+
+            index.append(big_msh_t.tria3['index'] + offset)
+            coord.append(big_msh_t.vert2['coord'])
+            value.append(big_msh_t.value)
+            offset = offset + coord[-1].shape[0]
 
         hfun_list = nondem_hfun_list[::-1]
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
 
-        index = [big_msh_t.tria3['index']]
-        coord = [big_msh_t.vert2['coord']]
-        value = [big_msh_t.value]
-        offset = coord[-1].shape[0]
         nondem_box_list = []
         for hfun in hfun_list:
             nondem_msh_t = deepcopy(hfun.msh_t())
@@ -1119,12 +1141,13 @@ class HfunCollector(BaseHfun):
             nondem_bbox = hfun.get_bbox(crs=epsg4326)
             # In fast method all DEM hfuns have more priority than all
             # other inputs
-            nondem_msh_t = utils.clip_mesh_by_shape(
-                nondem_msh_t,
-                big_cut_shape,
-                use_box_only=False,
-                fit_inside=True,
-                inverse=True)
+            if big_cut_shape:
+                nondem_msh_t = utils.clip_mesh_by_shape(
+                    nondem_msh_t,
+                    big_cut_shape,
+                    use_box_only=False,
+                    fit_inside=True,
+                    inverse=True)
             for ibox in nondem_box_list:
                 nondem_msh_t = utils.clip_mesh_by_shape(
                     nondem_msh_t,
