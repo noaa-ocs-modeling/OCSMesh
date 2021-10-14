@@ -2,6 +2,7 @@ import os
 import logging
 import warnings
 import tempfile
+from time import time
 from numbers import Number
 from pathlib import Path
 from multiprocessing import cpu_count
@@ -92,10 +93,8 @@ class GeomCollector(BaseGeom):
 
         self._type_chk(in_list)
 
-        # TODO: CRS considerations -- geom combine doesn't necessarily
-        # return EPSG:4326 (unlike hfun collector msh_t)
-        self._crs = 'EPSG:4326'
-
+        _logger.info("Processing geometry collector inputs")
+        input_crs_list = []
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -164,7 +163,14 @@ class GeomCollector(BaseGeom):
                 else:
                     raise TypeError("Input file extension not supported!")
 
+            input_crs_list.append(geom.crs)
             self._geom_list.append(geom)
+
+        self._crs = CRS.from_user_input("EPSG:4326")
+        if len(set(input_crs_list)) == 1:
+            self._crs = CRS.from_user_input(input_crs_list[0])
+            _logger.info(f"All CRS the same {self._crs.to_string()}")
+
 
 
     def get_multipolygon(self, **kwargs) -> MultiPolygon:
@@ -178,7 +184,6 @@ class GeomCollector(BaseGeom):
         # Since raster geoms are stateless, the polygons should be
         # calculated everytime
 
-        epsg4326 = CRS.from_user_input("EPSG:4326")
         mp = None
         with tempfile.TemporaryDirectory() as temp_dir:
             feather_files = []
@@ -188,14 +193,15 @@ class GeomCollector(BaseGeom):
             base_multipoly = None
             if self._base_shape:
                 base_multipoly = self._base_shape
-                if not self._base_shape_crs.equals(epsg4326):
+                if not self._base_shape_crs.equals(self._crs):
                     transformer = Transformer.from_crs(
-                        self._base_shape_crs, epsg4326, always_xy=True)
+                        self._base_shape_crs, self._crs, always_xy=True)
                     base_multipoly = ops.transform(
                             transformer.transform, base_multipoly)
 
             elif self._base_mesh:
-                # TODO: Make sure all calcs are in EPSG:4326
+                # TODO: Make sure all calcs are in correct CRS
+                _logger.info("Extracting base mesh polygon")
                 base_multipoly = self._base_mesh.hull.multipolygon()
 
             feather_files.append(self._extract_global_boundary(
@@ -205,10 +211,11 @@ class GeomCollector(BaseGeom):
             feather_files.extend(self._extract_features(
                 temp_path, base_multipoly))
 
-            gdf = gpd.GeoDataFrame(columns=['geometry'], crs=epsg4326)
+            gdf = gpd.GeoDataFrame(columns=['geometry'], crs=self._crs)
             for f in feather_files:
                 gdf = gdf.append(gpd.read_feather(f))
-
+            _logger.info("Combining all results...")
+            start = time()
             mp = gdf.unary_union
             if isinstance(mp, Polygon):
                 mp = MultiPolygon([mp])
@@ -217,6 +224,7 @@ class GeomCollector(BaseGeom):
                 raise ValueError(
                     "Union of all shapes resulted in invalid geometry"
                     + " type")
+            _logger.info(f"Combining all results took {time()-start}...")
 
         return mp
 
@@ -300,6 +308,7 @@ class GeomCollector(BaseGeom):
     def _get_raster_files_from_source(self, rasters):
         raster_files = []
         for r in rasters:
+            rast_obj = None
             if isinstance(r, Raster):
                 raster_files.append(r.tmpfile)
             elif isinstance(r, RasterGeom):
@@ -348,7 +357,8 @@ class GeomCollector(BaseGeom):
             None, base_multipoly, False,
             zmin, zmax,
             self._chunk_size, self._overlap,
-            self._nprocs)
+            self._nprocs,
+            out_crs=self._crs)
 
         return geom_path
 
@@ -367,8 +377,8 @@ class GeomCollector(BaseGeom):
                     geom.get_multipolygon())
             gdf_non_raster = gpd.GeoDataFrame(
                     {'geometry': multipoly}, crs=crs)
-            if crs != CRS.from_user_input("EPSG:4326"):
-                gdf_non_raster = gdf_non_raster.to_crs("EPSG:4326")
+            if crs != self._crs:
+                gdf_non_raster = gdf_non_raster.to_crs(self._crs)
 
             # TODO: Clip using base_multipoly?
 
@@ -417,8 +427,8 @@ class GeomCollector(BaseGeom):
                 patch_mp, crs = ptch_defn.get_multipolygon()
                 gdf_patch = gpd.GeoDataFrame(
                         {'geometry': patch_mp}, crs=crs)
-                if crs != CRS.from_user_input("EPSG:4326"):
-                    gdf_patch = gdf_patch.to_crs("EPSG:4326")
+                if crs != self._crs:
+                    gdf_patch = gdf_patch.to_crs(self._crs)
                 combine_poly = MultiPolygon(list(gdf_patch.geometry))
             geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
             combine_geometry(
@@ -426,7 +436,8 @@ class GeomCollector(BaseGeom):
                 None, combine_poly, True,
                 patch_zmin, patch_zmax,
                 self._chunk_size, self._overlap,
-                self._nprocs)
+                self._nprocs,
+                out_crs=self._crs)
 
             if geom_path.is_file():
                 feather_files.append(geom_path)
