@@ -33,7 +33,7 @@ class Patch:
                 f"Type of shape input must be either {MultiPolygon}"
                 f" or {Polygon}")
 
-        elif not self._shapefile.is_file():
+        elif not self._shapefile.exists():
             raise ValueError(
                 "Not shape input for patch definition")
 
@@ -43,7 +43,7 @@ class Patch:
         if self._shape: # pylint: disable=R1705
             return self._shape, self._shape_crs
 
-        elif self._shapefile.is_file():
+        elif self._shapefile.exists():
             gdf = gpd.read_file(self._shapefile)
             poly_list = []
             for shp in gdf.geometry:
