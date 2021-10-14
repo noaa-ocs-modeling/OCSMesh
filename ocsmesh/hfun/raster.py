@@ -6,6 +6,7 @@ import operator
 import tempfile
 from time import time
 from typing import Union, List
+from contextlib import ExitStack
 import warnings
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
@@ -48,25 +49,26 @@ class HfunInputRaster:
             raise TypeError(f'Argument raster must be of type {Raster}, not '
                             f'type {type(raster)}.')
         # init output raster file
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        # TODO: Use contextlib.ExitStack
-        with rasterio.open(raster.tmpfile) as src:
+        with ExitStack() as stack:
+
+            src = stack.enter_context(rasterio.open(raster.tmpfile))
             if raster.chunk_size is not None:
                 windows = get_iter_windows(
                     src.width, src.height, chunk_size=raster.chunk_size)
             else:
                 windows = [rasterio.windows.Window(
                     0, 0, src.width, src.height)]
+
             meta = src.meta.copy()
             meta.update({'driver': 'GTiff', 'dtype': np.float32})
-            with rasterio.open(tmpfile, 'w', **meta,) as dst:
-                for window in windows:
-                    values = src.read(window=window).astype(np.float32)
-                    values[:] = np.finfo(np.float32).max
-                    dst.write(values, window=window)
+            dst = stack.enter_context(
+                    obj.modifying_raster(use_src_meta=False, **meta))
+            for window in windows:
+                values = src.read(window=window).astype(np.float32)
+                values[:] = np.finfo(np.float32).max
+                dst.write(values, window=window)
+
         obj.__dict__['raster'] = raster
-        obj._tmpfile = tmpfile
         obj._chunk_size = raster.chunk_size
         obj._overlap = raster.overlap
 
@@ -91,6 +93,7 @@ class HfunRaster(BaseHfun, Raster):
                  verbosity=0):
 
         self._xy_cache = {}
+        # NOTE: unlike Raster, HfunRaster has no "path" set
         self._raster = raster
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
@@ -430,11 +433,7 @@ class HfunRaster(BaseHfun, Raster):
                 target_size=target_size,
                 nprocs=nprocs)
 
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        meta = self.src.meta.copy()
-        meta.update({'driver': 'GTiff'})
-        with rasterio.open(tmpfile, 'w', **meta,) as dst:
+        with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
@@ -474,12 +473,10 @@ class HfunRaster(BaseHfun, Raster):
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
 
-                _logger.info(f'Write array to file {tmpfile.name}...')
+                _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
-
-        self._tmpfile = tmpfile
 
 
     @_apply_constraints
@@ -590,11 +587,7 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        meta = self.src.meta.copy()
-        meta.update({'driver': 'GTiff'})
-        with rasterio.open(tmpfile, 'w', **meta,) as dst:
+        with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
@@ -677,11 +670,10 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                _logger.info(f'Write array to file {tmpfile.name}...')
+                _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
-        self._tmpfile = tmpfile
 
     def get_xy_memcache(self, window, dst_crs):
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
@@ -717,9 +709,7 @@ class HfunRaster(BaseHfun, Raster):
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
 
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
-        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+        with self.modifying_raster() as dst:
 
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
@@ -776,7 +766,6 @@ class HfunRaster(BaseHfun, Raster):
                     hfun_values).astype(
                     self.dtype(1))
                 dst.write_band(1, hfun_values, window=window)
-        self._tmpfile = tmpfile
 
     @_apply_constraints
     def add_constant_value(self, value, lower_bound=None, upper_bound=None):
@@ -784,10 +773,8 @@ class HfunRaster(BaseHfun, Raster):
             else float(lower_bound)
         upper_bound = float('inf') if upper_bound is None \
             else float(upper_bound)
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile()
 
-        with rasterio.open(tmpfile.name, 'w', **self.src.meta) as dst:
+        with self.modifying_raster() as dst:
 
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
@@ -806,7 +793,6 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, hfun_values, window=window)
                 del rast_values
                 gc.collect()
-        self._tmpfile = tmpfile
 
     @property
     def raster(self):

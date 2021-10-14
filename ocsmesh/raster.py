@@ -7,6 +7,7 @@ import pathlib
 import tempfile
 from time import time
 from typing import Union
+from contextlib import contextmanager, ExitStack
 import warnings
 
 # from matplotlib.colors import LinearSegmentedColormap
@@ -72,22 +73,22 @@ class Crs:
             if not isinstance(val, CRS):
                 raise TypeError(f'Argument crs must be of type {str} or {CRS},'
                                 f' not type {type(val)}.')
+
             # create a temporary copy of the original file and update meta.
-            # pylint: disable=R1732
-            tmpfile = tempfile.NamedTemporaryFile()
-            with rasterio.open(obj.path) as src:
+            with ExitStack() as stack:
+
+                src = stack.enter_context(rasterio.open(obj.path))
                 if obj.chunk_size is not None:
                     wins = get_iter_windows(
                         src.width, src.height, chunk_size=obj.chunk_size)
                 else:
                     wins = [windows.Window(
                         0, 0, src.width, src.height)]
-                meta = src.meta.copy()
-                meta.update({'crs': val, 'driver': 'GTiff'})
-                with rasterio.open(tmpfile, 'w', **meta,) as dst:
-                    for window in wins:
-                        dst.write(src.read(window=window), window=window)
-            obj._tmpfile = tmpfile
+
+                dst = stack.enter_context(
+                        obj.modifying_raster(crs=val, driver='GTiff'))
+                for window in wins:
+                    dst.write(src.read(window=window), window=window)
 
 
 class TemporaryFile:
@@ -161,6 +162,31 @@ class Raster:
     def __iter__(self, chunk_size=None, overlap=None):
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
+
+    @contextmanager
+    def modifying_raster(self, use_src_meta=True, **kwargs):
+        no_except = False
+        try:
+            # pylint: disable=R1732
+            tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
+
+            new_meta = kwargs
+            # Flag to workaround cases where "src" is NOT set yet
+            if use_src_meta:
+                new_meta = self.src.meta.copy()
+                new_meta.update(**kwargs)
+            with rasterio.open(tmpfile.name, 'w', **new_meta) as dst:
+                yield dst
+
+            no_except = True
+
+        finally:
+            if no_except:
+                # So that tmpfile is NOT destroyed when it locally
+                # goes out of scope
+                self._tmpfile = tmpfile
+
+
 
     def get_x(self, window=None):
         window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
@@ -352,16 +378,11 @@ class Raster:
 
     def add_band(self, values,  **tags):
         kwargs = self.src.meta.copy()
-        band_id = kwargs["count"]+1
-        kwargs.update(count=band_id)
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(
-            prefix=tmpdir)
-        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+        band_id = kwargs["count"] + 1
+        with self.modifying_raster(count=band_id) as dst:
             for i in range(1, self.src.count + 1):
                 dst.write_band(i, self.src.read(i))
             dst.write_band(band_id, values.astype(self.src.dtypes[i-1]))
-        self._tmpfile = tmpfile
         return band_id
 
     def fill_nodata(self):
@@ -369,15 +390,13 @@ class Raster:
         A parallelized version is presented here:
         https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
         """
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-        with rasterio.open(tmpfile.name, 'w', **self.src.meta.copy()) as dst:
+
+        with self.modifying_raster() as dst:
             for window in self.iter_windows():
                 dst.write(
                     fillnodata(self.src.read(window=window, masked=True)),
                     window=window
                     )
-        self._tmpfile = tmpfile
 
     def gaussian_filter(self, **kwargs):
 
@@ -386,14 +405,7 @@ class Raster:
         # NOTE: Adding new bands in this function can result in issues
         # in other parts of the code. Thorough testing is needed for
         # modifying the raster (e.g. hfun add_contour is affected)
-        meta = self.src.meta.copy()
-#        n_bands_new = meta["count"] * 2
-        n_bands_new = meta["count"]
-        meta.update(count=n_bands_new)
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(
-            prefix=tmpdir)
-        with rasterio.open(tmpfile.name, 'w', **meta) as dst:
+        with self.modifying_raster() as dst:
             for i in range(1, self.src.count + 1):
                 outband = self.src.read(i)
 #                # Write orignal band
@@ -401,15 +413,10 @@ class Raster:
                 # Write filtered band
                 outband = gaussian_filter(outband, **kwargs)
                 dst.write_band(i, outband)
-        self._tmpfile = tmpfile
 
     def mask(self, shapes, i=None, **kwargs):
-        _kwargs = self.src.meta.copy()
-        _kwargs.update(kwargs)
         out_images, out_transform = rasterio.mask.mask(self._src, shapes)
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-        with rasterio.open(tmpfile.name, 'w', **_kwargs) as dst:
+        with self.modifying_raster(**kwargs) as dst:
             if i is None:
                 for j in range(1, self.src.count + 1):
                     dst.write_band(j, out_images[j-1])
@@ -422,7 +429,6 @@ class Raster:
                     else:
                         dst.write_band(j, self.src.read(j))
                         dst.update_tags(j, **self.src.tags(j))
-        self._tmpfile = tmpfile
 
     def read_masks(self, i=None):
         if i is None:
@@ -444,17 +450,14 @@ class Raster:
             dst_width=self.src.width,
             dst_height=self.src.height
             )
-        kwargs = self.src.meta.copy()
-        kwargs.update({
+
+        meta_update = {
             'crs': dst_crs.srs,
             'transform': transform,
             'width': width,
             'height': height
-        })
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-
-        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+        }
+        with self.modifying_raster(**meta_update) as dst:
             for i in range(1, self.src.count + 1):
                 rasterio.warp.reproject(
                     source=rasterio.band(self._src, i),
@@ -467,7 +470,6 @@ class Raster:
                     num_threads=nprocs,
                     )
 
-        self._tmpfile = tmpfile
 
     def resample(self, scaling_factor, resampling_method=None):
         if resampling_method is None:
@@ -476,8 +478,6 @@ class Raster:
             msg = "resampling_method must be a valid name or None"
             raise ValueError(msg)
 
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
         # resample data to target shape
         width = int(self.src.width * scaling_factor)
         height = int(self.src.height * scaling_factor)
@@ -489,19 +489,17 @@ class Raster:
             ),
             resampling=resampling_method
         )
-        kwargs = self.src.meta.copy()
         transform = self.src.transform * self.src.transform.scale(
             (self.src.width / data.shape[-1]),
             (self.src.height / data.shape[-2])
         )
-        kwargs.update({
+        meta_update = {
             'transform': transform,
             'width': width,
             'height': height
-            })
-        with rasterio.open(tmpfile.name, 'w', **kwargs) as dst:
+            }
+        with self.modifying_raster(**meta_update) as dst:
             dst.write(data)
-        self._tmpfile = tmpfile
 
     def save(self, path):
         with rasterio.open(pathlib.Path(path), 'w', **self.src.meta) as dst:
@@ -514,18 +512,15 @@ class Raster:
             geom = MultiPolygon([geom])
         out_image, out_transform = rasterio.mask.mask(
             self.src, geom, crop=True)
-        out_meta = self.src.meta.copy()
-        out_meta.update({
+        meta_update = {
             "driver": "GTiff",
             "height": out_image.shape[1],
             "width": out_image.shape[2],
-            "transform": out_transform}
-            )
-        # pylint: disable=R1732
-        tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
-        with rasterio.open(tmpfile.name, "w", **out_meta) as dest:
+            "transform": out_transform
+            }
+
+        with self.modifying_raster(**meta_update) as dest:
             dest.write(out_image)
-        self._tmpfile = tmpfile
 
 
     def adjust(
@@ -658,6 +653,13 @@ class Raster:
         return ops.linemerge(features)
 
     def _get_raster_contour_feathered(self, level, iter_windows):
+
+        with tempfile.TemporaryDirectory(dir=tmpdir) as feather_dir:
+            results = self._get_raster_contour_feathered_internal(
+                    level, iter_windows, feather_dir)
+        return results
+
+    def _get_raster_contour_feathered_internal(self, level, iter_windows, temp_dir):
         feathers = []
         total_windows = len(iter_windows)
         _logger.debug(f'Total windows to process: {total_windows}.')
@@ -682,10 +684,7 @@ class Raster:
                         # LineStrings must have at least 2 coordinate tuples
                         pass
             if len(features) > 0:
-                # pylint: disable=R1732
-                tmpfile = pathlib.Path(tmpdir) / pathlib.Path(
-                        tempfile.NamedTemporaryFile(suffix='.feather').name
-                        ).name
+                tmpfile = os.path.join(temp_dir, f'file_{i}.feather')
                 _logger.debug('Saving feather.')
                 features = ops.linemerge(features)
                 gpd.GeoDataFrame(

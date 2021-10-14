@@ -301,9 +301,9 @@ class GeomCollector(BaseGeom):
         raster_files = []
         for r in rasters:
             if isinstance(r, Raster):
-                raster_files.append(r.path)
+                raster_files.append(r.tmpfile)
             elif isinstance(r, RasterGeom):
-                raster_files.append(r.raster.path)
+                raster_files.append(r.raster.tmpfile)
 
         return raster_files
 
