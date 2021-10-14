@@ -164,14 +164,17 @@ class Raster:
             yield window, self.get_window_bounds(window)
 
     @contextmanager
-    def modifying_raster(self, **kwargs):
+    def modifying_raster(self, use_src_meta=True, **kwargs):
         no_except = False
         try:
             # pylint: disable=R1732
             tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
 
-            new_meta = self.src.meta.copy()
-            new_meta.update(**kwargs)
+            new_meta = kwargs
+            # Flag to workaround cases where "src" is NOT set yet
+            if use_src_meta:
+                new_meta = self.src.meta.copy()
+                new_meta.update(**kwargs)
             with rasterio.open(tmpfile.name, 'w', **new_meta) as dst:
                 yield dst
 

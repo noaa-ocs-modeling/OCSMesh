@@ -6,7 +6,7 @@ import operator
 import tempfile
 from time import time
 from typing import Union, List
-from contextlib import contextmanager, ExitStack
+from contextlib import ExitStack
 import warnings
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
@@ -59,8 +59,10 @@ class HfunInputRaster:
                 windows = [rasterio.windows.Window(
                     0, 0, src.width, src.height)]
 
+            meta = src.meta.copy()
+            meta.update({'driver': 'GTiff', 'dtype': np.float32})
             dst = stack.enter_context(
-                obj.modifying_raster(driver='GTiff', dtype=np.float32))
+                    obj.modifying_raster(use_src_meta=False, **meta))
             for window in windows:
                 values = src.read(window=window).astype(np.float32)
                 values[:] = np.finfo(np.float32).max
@@ -91,6 +93,7 @@ class HfunRaster(BaseHfun, Raster):
                  verbosity=0):
 
         self._xy_cache = {}
+        # NOTE: unlike Raster, HfunRaster has no "path" set
         self._raster = raster
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
@@ -470,7 +473,7 @@ class HfunRaster(BaseHfun, Raster):
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
 
-                _logger.info(f'Write array to file...')
+                _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
@@ -667,7 +670,7 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax is not None:
                     values[np.where(values > self.hmax)] = self.hmax
                 values = np.minimum(self.get_values(window=window), values)
-                _logger.info(f'Write array to file...')
+                _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
