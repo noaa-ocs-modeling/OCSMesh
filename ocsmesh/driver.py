@@ -77,7 +77,7 @@ class JigsawDriver:
         self._crs = CRS.from_user_input(crs) if crs is not None else crs
         self._opts.verbosity = verbosity
 
-    def run(self, sieve=None):
+    def run(self, sieve=None, quality_metric=1.05):
 
         hfun_msh_t = self.hfun.msh_t()
 
@@ -87,6 +87,7 @@ class JigsawDriver:
 
         self.opts.hfun_hmin = np.min(hfun_msh_t.value)
         self.opts.hfun_hmax = np.max(hfun_msh_t.value)
+        self.opts.mesh_rad2 = float(quality_metric)
 
         geom_msh_t = self.geom.msh_t()
 

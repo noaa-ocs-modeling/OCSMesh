@@ -662,13 +662,23 @@ class EuclideanMesh2D(EuclideanMesh):
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
-        with Pool(processes=nprocs) as pool:
-            res = pool.starmap(
-                _mesh_interpolate_worker,
-                [(self.vert2['coord'], self.crs,
-                    _raster.tmpfile, _raster.chunk_size, method)
-                 for _raster in raster]
-                )
+        # Fix an issue on Jupyter notebook where having pool execute
+        # interpolation even in case of nprocs == 1 would results in
+        # application getting stuck
+        if nprocs > 1:
+            with Pool(processes=nprocs) as pool:
+                res = pool.starmap(
+                    _mesh_interpolate_worker,
+                    [(self.vert2['coord'], self.crs,
+                        _raster.tmpfile, _raster.chunk_size, method)
+                     for _raster in raster]
+                    )
+            pool.join()
+        else:
+            res = [_mesh_interpolate_worker(
+                        self.vert2['coord'], self.crs,
+                        _raster.tmpfile, _raster.chunk_size, method)
+                   for _raster in raster]
 
         values = self.msh_t.value.flatten()
 

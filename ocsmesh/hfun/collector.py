@@ -28,6 +28,8 @@ from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
 from ocsmesh.features.channel import Channel
+from ocsmesh.features.constraint import (
+    TopoConstConstraint, TopoFuncConstraint)
 
 _logger = logging.getLogger(__name__)
 
@@ -201,6 +203,21 @@ class ChannelRefineCollector:
             yield gdf
 
 
+class ConstraintInfoCollector:
+
+    def __init__(self):
+        self._constraints_info = []
+
+    def add(self, src_idx, constraint):
+        srcs = tuple(src_idx) if src_idx is not None else None
+        self._constraints_info.append((srcs, constraint))
+
+    def __iter__(self):
+        for defn in self._constraints_info:
+            yield defn
+
+
+
 class HfunCollector(BaseHfun):
 
     def __init__(
@@ -255,6 +272,8 @@ class HfunCollector(BaseHfun):
         self._ch_info_coll = ChannelRefineInfoCollector()
         self._channels_coll = ChannelRefineCollector(
                 self._ch_info_coll)
+
+        self._constraint_info_coll = ConstraintInfoCollector()
 
         self._type_chk(in_list)
 
@@ -357,6 +376,44 @@ class HfunCollector(BaseHfun):
             raise ValueError(f"Invalid method specified: {self._method}")
 
         return composite_hfun
+
+
+    def add_topo_bound_constraint(
+            self,
+            value,
+            upper_bound=np.inf,
+            lower_bound=-np.inf,
+            value_type: str = 'min',
+            rate=0.01,
+            source_index: Union[List[int], int, None] = None):
+
+        self._applied = False
+
+        constraint_defn = TopoConstConstraint(
+            value, upper_bound, lower_bound, value_type, rate)
+
+        if source_index is not None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+        self._constraint_info_coll.add(source_index, constraint_defn)
+
+
+    def add_topo_func_constraint(
+            self,
+            func=lambda i: i / 2.0,
+            upper_bound=np.inf,
+            lower_bound=-np.inf,
+            value_type: str = 'min',
+            rate=0.01,
+            source_index: Union[List[int], int, None] = None):
+
+        self._applied = False
+
+        constraint_defn = TopoFuncConstraint(
+            func, upper_bound, lower_bound, value_type, rate)
+
+        if source_index is not None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+        self._constraint_info_coll.add(source_index, constraint_defn)
 
 
     def add_contour(
@@ -493,6 +550,9 @@ class HfunCollector(BaseHfun):
             target_size: float = None,
     ):
 
+        # "shape" should be in 4326 CRS. For shapefile or patch_defn
+        # CRS info is included
+
         self._applied = False
 
         if not patch_defn:
@@ -526,8 +586,30 @@ class HfunCollector(BaseHfun):
             self._apply_const_val()
             self._apply_patch()
             self._apply_channels()
+            self._apply_constraints()
 
         self._applied = True
+
+
+    def _apply_constraints(self):
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
+            constraint_list = []
+            for src_idx, constraint_defn in self._constraint_info_coll:
+                if src_idx is not None and in_idx not in src_idx:
+                    continue
+
+                constraint_list.append(constraint_defn)
+
+            if constraint_list:
+                hfun.apply_constraints(constraint_list)
+
 
     def _apply_contours(self, apply_to=None):
 
@@ -808,6 +890,8 @@ class HfunCollector(BaseHfun):
 
         rast_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if len(rast_hfun_list) == 0:
+            return None
 
         all_bounds = []
         n_cell_lim = 0
@@ -906,6 +990,10 @@ class HfunCollector(BaseHfun):
                     if src_idx is None or in_idx in src_idx:
                         ignore = False
                         break
+                for src_idx, _ in self._constraint_info_coll:
+                    if src_idx is None or in_idx in src_idx:
+                        ignore = False
+                        break
                 if ignore:
                     continue
 
@@ -927,19 +1015,34 @@ class HfunCollector(BaseHfun):
 
         # NOTE: Caching applied doesn't work here since we apply
         # everything on a temporary big raster
-        hfun = HfunRaster(big_raster, **self._size_info)
+        rast_hfun_list = []
+        hfun_rast = None
+        if big_raster:
+            hfun_rast = HfunRaster(big_raster, **self._size_info)
+            rast_hfun_list.append(hfun_rast)
+
+
 
         mesh_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunMesh)]
         if self._base_mesh and self._base_as_hfun:
             mesh_hfun_list.insert(0, self._base_mesh)
-        self._apply_contours([*mesh_hfun_list, hfun])
-        self._apply_flow_limiters_fast(hfun)
-        self._apply_const_val_fast(hfun)
-        self._apply_patch([*mesh_hfun_list, hfun])
-        self._apply_channels([*mesh_hfun_list, hfun])
 
-        return hfun
+        # Mesh hfun parts are still stateful
+        self._apply_contours([*mesh_hfun_list, *rast_hfun_list])
+        if hfun_rast:
+            # In fast method we only have big raster if any
+            self._apply_flow_limiters_fast(hfun_rast)
+            self._apply_const_val_fast(hfun_rast)
+        # Mesh hfun parts are still stateful
+        self._apply_patch([*mesh_hfun_list, *rast_hfun_list])
+        self._apply_channels([*mesh_hfun_list, *rast_hfun_list])
+
+        if hfun_rast:
+            self._apply_constraints_fast(hfun_rast)
+
+
+        return hfun_rast
 
     def _apply_flow_limiters_fast(self, big_hfun):
 
@@ -971,6 +1074,17 @@ class HfunCollector(BaseHfun):
             big_hfun.add_constant_value(const_val, level0, level1)
 
 
+    def _apply_constraints_fast(self, big_hfun):
+
+        constraint_list = []
+        for src_idx, constraint_defn in self._constraint_info_coll:
+            # TODO: Account for source index
+            constraint_list.append(constraint_defn)
+
+        if constraint_list:
+            big_hfun.apply_constraints(constraint_list)
+
+
     def _get_hfun_composite_fast(self, big_hfun):
 
         # In fast method all DEM hfuns have more priority than all
@@ -986,54 +1100,71 @@ class HfunCollector(BaseHfun):
         for hfun in dem_hfun_list:
             dem_box_list.append(hfun.get_bbox(crs=epsg4326))
 
+        index = []
+        coord = []
+        value = []
+        offset = 0
 
         # Calculate multipoly and clip big hfun
-        dem_gdf = gpd.GeoDataFrame(
-                geometry=dem_box_list, crs=epsg4326)
-        big_cut_shape = dem_gdf.unary_union
-        big_msh_t = big_hfun.msh_t()
-        if hasattr(big_msh_t, "crs"):
-            if not epsg4326.equals(big_msh_t.crs):
-                utils.reproject(big_msh_t, epsg4326)
-        big_msh_t = utils.clip_mesh_by_shape(
-            big_msh_t,
-            big_cut_shape,
-            use_box_only=False,
-            fit_inside=False)
+        big_cut_shape = None
+        if big_hfun:
+            dem_gdf = gpd.GeoDataFrame(
+                    geometry=dem_box_list, crs=epsg4326)
+            big_cut_shape = dem_gdf.unary_union
+            big_msh_t = big_hfun.msh_t()
+            if hasattr(big_msh_t, "crs"):
+                if not epsg4326.equals(big_msh_t.crs):
+                    utils.reproject(big_msh_t, epsg4326)
 
+            big_msh_t = utils.clip_mesh_by_shape(
+                big_msh_t,
+                big_cut_shape,
+                use_box_only=False,
+                fit_inside=False)
+
+
+            index.append(big_msh_t.tria3['index'] + offset)
+            coord.append(big_msh_t.vert2['coord'])
+            value.append(big_msh_t.value)
+            offset = offset + coord[-1].shape[0]
 
         hfun_list = nondem_hfun_list[::-1]
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
 
-        index = [big_msh_t.tria3['index']]
-        coord = [big_msh_t.vert2['coord']]
-        value = [big_msh_t.value]
-        offset = coord[-1].shape[0]
-        nondem_box_list = []
+        nondem_shape_list = []
         for hfun in hfun_list:
             nondem_msh_t = deepcopy(hfun.msh_t())
             if hasattr(nondem_msh_t, "crs"):
                 if not epsg4326.equals(nondem_msh_t.crs):
                     utils.reproject(nondem_msh_t, epsg4326)
-            nondem_bbox = hfun.get_bbox(crs=epsg4326)
+
+            nondem_shape = utils.get_mesh_polygons(hfun.mesh.msh_t)
+            if not epsg4326.equals(hfun.crs):
+                transformer = Transformer.from_crs(
+                    hfun.crs, epsg4326, always_xy=True)
+                nondem_shape = ops.transform(
+                        transformer.transform, nondem_shape)
+
             # In fast method all DEM hfuns have more priority than all
             # other inputs
-            nondem_msh_t = utils.clip_mesh_by_shape(
-                nondem_msh_t,
-                big_cut_shape,
-                use_box_only=False,
-                fit_inside=True,
-                inverse=True)
-            for ibox in nondem_box_list:
+            if big_cut_shape:
                 nondem_msh_t = utils.clip_mesh_by_shape(
                     nondem_msh_t,
-                    ibox,
-                    use_box_only=True,
+                    big_cut_shape,
+                    use_box_only=False,
                     fit_inside=True,
                     inverse=True)
 
-            nondem_box_list.append(nondem_bbox)
+            for ishp in nondem_shape_list:
+                nondem_msh_t = utils.clip_mesh_by_shape(
+                    nondem_msh_t,
+                    ishp,
+                    use_box_only=False,
+                    fit_inside=True,
+                    inverse=True)
+
+            nondem_shape_list.append(nondem_shape)
 
             index.append(nondem_msh_t.tria3['index'] + offset)
             coord.append(nondem_msh_t.vert2['coord'])
