@@ -281,6 +281,7 @@ class HfunCollector(BaseHfun):
         #
         # TODO: CRS considerations
 
+        input_crs_list = []
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -350,8 +351,13 @@ class HfunCollector(BaseHfun):
                 else:
                     raise TypeError("Input file extension not supported!")
 
+            input_crs_list.append(hfun.crs)
             self._hfun_list.append(hfun)
 
+        self._crs = CRS.from_user_input("EPSG:4326")
+        if len(set(input_crs_list)) == 1:
+            self._crs = CRS.from_user_input(input_crs_list[0])
+            _logger.info(f"All CRS the same {self._crs.to_string()}")
 
     def msh_t(self) -> jigsaw_msh_t:
 
@@ -793,11 +799,11 @@ class HfunCollector(BaseHfun):
 
             # To avoid removing verts and trias from mesh hfuns
             hfun_mesh = deepcopy(hfun.msh_t())
-            # If no CRS info, we assume EPSG:4326
+            # If no CRS info, we assume EPSG:4326 or input CRS
+            # if all equal
             if hasattr(hfun_mesh, "crs"):
-                dst_crs = CRS.from_user_input("EPSG:4326")
-                if hfun_mesh.crs != dst_crs:
-                    utils.reproject(hfun_mesh, dst_crs)
+                if hfun_mesh.crs != self._crs:
+                    utils.reproject(hfun_mesh, self._crs)
 
             # Get all previous bbox and clip to resolve overlaps
             # removing all tria that have NODE in bbox because it's
@@ -824,10 +830,11 @@ class HfunCollector(BaseHfun):
                 hfun_mesh.value[hfun_mesh.value > hmax] = hmax
 
             mesh = Mesh(hfun_mesh)
-            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
+            bbox_list.append(mesh.get_bbox(crs=self._crs))
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
+            # Geomesh only writes EPSG:4326 mesh
             mesh.write(file_path, format='2dm')
             path_list.append(file_path)
             _logger.info('Done writing 2dm file.')
@@ -843,6 +850,7 @@ class HfunCollector(BaseHfun):
         _logger.info('Reading 2dm hfun files...')
         start = time()
         for path in hfun_path_list:
+            # Geomesh only writes EPSG:4326 mesh
             collection.append(Mesh.open(path, crs='EPSG:4326'))
         _logger.info(f'Reading 2dm hfun files took {time()-start}.')
 
@@ -853,6 +861,7 @@ class HfunCollector(BaseHfun):
         value = []
         offset = 0
         for hfun in collection:
+            utils.reproject(hfun.msh_t, self._crs)
             index.append(hfun.tria3['index'] + offset)
             coord.append(hfun.coord)
             value.append(hfun.value)
@@ -872,12 +881,12 @@ class HfunCollector(BaseHfun):
                 np.vstack(value),
                 dtype=jigsaw_msh_t.REALS_t)
 
-        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
+        composite_hfun.crs = self._crs
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
-        # Up until now all calculation was in EPSG:4326
+        # Up until now all calculation was in self._crs
         utils.msh_t_to_utm(composite_hfun)
 
         return composite_hfun
@@ -901,7 +910,7 @@ class HfunCollector(BaseHfun):
                     * hfun_in.raster.src.shape[1],
                 n_cell_lim)
             all_bounds.append(
-                    hfun_in.get_bbox(crs='EPSG:4326').bounds)
+                    hfun_in.get_bbox(crs=self._crs).bounds)
         # 3 is just a arbitray tolerance for memory limit calculations
         n_cell_lim = n_cell_lim * self._nprocs / 3
         all_bounds = np.array(all_bounds)
@@ -909,21 +918,25 @@ class HfunCollector(BaseHfun):
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
         x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
 
-        utm_crs = utils.estimate_bounds_utm(
-                (x0, y0, x1, y1), "EPSG:4326")
-        assert utm_crs is not None
-        transformer = Transformer.from_crs(
-                'EPSG:4326', utm_crs, always_xy=True)
+        raster_crs = self._crs
+        if self._crs.is_geographic:
+            utm_crs = utils.estimate_bounds_utm(
+                    (x0, y0, x1, y1), self._crs)
+            assert utm_crs is not None
+            transformer = Transformer.from_crs(
+                    self._crs, utm_crs, always_xy=True)
 
-        box_epsg4326 = box(x0, y0, x1, y1)
-        poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
-        x0, y0, x1, y1 = poly_utm.bounds
+            box_oldcrs = box(x0, y0, x1, y1)
+            # Use polygon of box to get the correct bounds
+            poly_utm = ops.transform(transformer.transform, Polygon(box_oldcrs))
+            x0, y0, x1, y1 = poly_utm.bounds
+            raster_crs = utm_crs
 
         worst_res = 0
         for hfun_in in rast_hfun_list:
-            bnd1 = hfun_in.get_bbox(crs=utm_crs).bounds
+            bnd1 = hfun_in.get_bbox(crs=raster_crs).bounds
             dim1 = np.max([bnd1[2] - bnd1[0], bnd1[3] - bnd1[1]])
-            bnd2 = hfun_in.get_bbox(crs='EPSG:4326').bounds
+            bnd2 = hfun_in.get_bbox(crs=raster_crs).bounds
             dim2 = np.max([bnd2[2] - bnd2[0], bnd2[3] - bnd2[1]])
             ratio = dim1 / dim2
             pixel_size_x = hfun_in.raster.src.transform[0] * ratio
@@ -958,7 +971,7 @@ class HfunCollector(BaseHfun):
                 'dtype': np.float32,
                 'width': shape0,
                 'height': shape1,
-                'crs': utm_crs,
+                'crs': raster_crs,
                 'transform': transform,
                 'count': 1,
         }
@@ -1021,8 +1034,6 @@ class HfunCollector(BaseHfun):
             hfun_rast = HfunRaster(big_raster, **self._size_info)
             rast_hfun_list.append(hfun_rast)
 
-
-
         mesh_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunMesh)]
         if self._base_mesh and self._base_as_hfun:
@@ -1040,7 +1051,6 @@ class HfunCollector(BaseHfun):
 
         if hfun_rast:
             self._apply_constraints_fast(hfun_rast)
-
 
         return hfun_rast
 
@@ -1094,11 +1104,12 @@ class HfunCollector(BaseHfun):
         nondem_hfun_list = [
             i for i in self._hfun_list if not isinstance(i, HfunRaster)]
 
-        epsg4326 = CRS.from_user_input("EPSG:4326")
-
         dem_box_list = []
         for hfun in dem_hfun_list:
-            dem_box_list.append(hfun.get_bbox(crs=epsg4326))
+            # TODO: If there's mask use shape
+            # Calling raster get multipoly will result in polygon
+            # only where data exists
+            dem_box_list.append(hfun.get_bbox(crs=self._crs))
 
         index = []
         coord = []
@@ -1109,19 +1120,18 @@ class HfunCollector(BaseHfun):
         big_cut_shape = None
         if big_hfun:
             dem_gdf = gpd.GeoDataFrame(
-                    geometry=dem_box_list, crs=epsg4326)
+                    geometry=dem_box_list, crs=self._crs)
             big_cut_shape = dem_gdf.unary_union
             big_msh_t = big_hfun.msh_t()
             if hasattr(big_msh_t, "crs"):
-                if not epsg4326.equals(big_msh_t.crs):
-                    utils.reproject(big_msh_t, epsg4326)
+                if not self._crs.equals(big_msh_t.crs):
+                    utils.reproject(big_msh_t, self._crs)
 
             big_msh_t = utils.clip_mesh_by_shape(
                 big_msh_t,
                 big_cut_shape,
                 use_box_only=False,
                 fit_inside=False)
-
 
             index.append(big_msh_t.tria3['index'] + offset)
             coord.append(big_msh_t.vert2['coord'])
@@ -1136,13 +1146,13 @@ class HfunCollector(BaseHfun):
         for hfun in hfun_list:
             nondem_msh_t = deepcopy(hfun.msh_t())
             if hasattr(nondem_msh_t, "crs"):
-                if not epsg4326.equals(nondem_msh_t.crs):
-                    utils.reproject(nondem_msh_t, epsg4326)
+                if not self._crs.equals(nondem_msh_t.crs):
+                    utils.reproject(nondem_msh_t, self._crs)
 
             nondem_shape = utils.get_mesh_polygons(hfun.mesh.msh_t)
-            if not epsg4326.equals(hfun.crs):
+            if not self._crs.equals(hfun.crs):
                 transformer = Transformer.from_crs(
-                    hfun.crs, epsg4326, always_xy=True)
+                    hfun.crs, self._crs, always_xy=True)
                 nondem_shape = ops.transform(
                         transformer.transform, nondem_shape)
 
@@ -1194,12 +1204,12 @@ class HfunCollector(BaseHfun):
         if hmax:
             composite_hfun.value[composite_hfun.value > hmax] = hmax
 
-        composite_hfun.crs = epsg4326
+        composite_hfun.crs = self._crs
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
-        # Up until now all calculation was in EPSG:4326
+        # Up until now all calculation was in self._crs
         utils.msh_t_to_utm(composite_hfun)
 
         return composite_hfun
