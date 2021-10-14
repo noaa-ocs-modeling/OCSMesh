@@ -575,7 +575,7 @@ class Raster:
                 else:
                     values[values > outside_max] = outside_max
 
-                _logger.info(f'Write array to file {tmpfile.name}...')
+                _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
