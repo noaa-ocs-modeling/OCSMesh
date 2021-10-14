@@ -1132,13 +1132,20 @@ class HfunCollector(BaseHfun):
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
 
-        nondem_box_list = []
+        nondem_shape_list = []
         for hfun in hfun_list:
             nondem_msh_t = deepcopy(hfun.msh_t())
             if hasattr(nondem_msh_t, "crs"):
                 if not epsg4326.equals(nondem_msh_t.crs):
                     utils.reproject(nondem_msh_t, epsg4326)
-            nondem_bbox = hfun.get_bbox(crs=epsg4326)
+
+            nondem_shape = utils.get_mesh_polygons(hfun.mesh.msh_t)
+            if not epsg4326.equals(hfun.crs):
+                transformer = Transformer.from_crs(
+                    hfun.crs, epsg4326, always_xy=True)
+                nondem_shape = ops.transform(
+                        transformer.transform, nondem_shape)
+
             # In fast method all DEM hfuns have more priority than all
             # other inputs
             if big_cut_shape:
@@ -1148,15 +1155,16 @@ class HfunCollector(BaseHfun):
                     use_box_only=False,
                     fit_inside=True,
                     inverse=True)
-            for ibox in nondem_box_list:
+
+            for ishp in nondem_shape_list:
                 nondem_msh_t = utils.clip_mesh_by_shape(
                     nondem_msh_t,
-                    ibox,
-                    use_box_only=True,
+                    ishp,
+                    use_box_only=False,
                     fit_inside=True,
                     inverse=True)
 
-            nondem_box_list.append(nondem_bbox)
+            nondem_shape_list.append(nondem_shape)
 
             index.append(nondem_msh_t.tria3['index'] + offset)
             coord.append(nondem_msh_t.vert2['coord'])
