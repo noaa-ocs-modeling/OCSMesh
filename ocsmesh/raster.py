@@ -1,3 +1,10 @@
+"""Wrapper for raster image functionalities commonly used for meshing
+
+This module implements wrapper for basic functionalities of handling
+raster files such as CRS transformations, resampling, clipping, 
+extracting & overriding data, plotting, etc.
+"""
+
 import math
 import hashlib
 import logging
@@ -43,6 +50,8 @@ os.makedirs(tmpdir, exist_ok=True)
 
 
 class RasterPath:
+    """Descriptor class for storing the path of original input raster
+    """
 
     def __set__(self, obj, val: Union[str, os.PathLike]):
         obj.__dict__['path'] = pathlib.Path(val)
@@ -52,6 +61,12 @@ class RasterPath:
 
 
 class Crs:
+    """Descriptor class for CRS of the input raster.
+
+    If user specifies this value, the existing CRS of the input raster
+    is ignored (if any). If the user doesn't provide this value and
+    the raster itself doesn't have any CRS either it's an error.
+    """
 
     def __set__(self, obj, val: Union[str, CRS, None]):
 
@@ -92,6 +107,14 @@ class Crs:
 
 
 class TemporaryFile:
+    """Descriptor class for storing tempfile object of working raster
+
+    All the raster operations done using `Raster` object is written
+    to disk. In order to avoid modifying the original input raster
+    a the input data is first writton to a temporary file. This 
+    temporary file is created using `TemporaryFile` to have auto
+    cleanup capabities on object destruction.
+    """
 
     def __set__(self, obj, val):
         obj.__dict__['tmpfile'] = val
@@ -105,6 +128,14 @@ class TemporaryFile:
 
 
 class SourceRaster:
+    """Descriptor class for storing the raster dataset handler.
+
+    `Raster` objects are manipulated using `rasterio` package. All
+    the access to the raster data using this package happens through
+    `rasterio.DatasetReader`. This descriptor holds onto the opened
+    dataset to use as a shorthand of checking file existance and
+    opening it everytime need arises.
+    """
 
     def __get__(self, obj, val) -> rasterio.DatasetReader:
         source = obj.__dict__.get('source')
@@ -118,6 +149,8 @@ class SourceRaster:
 
 
 class ChunkSize:
+    """Descriptor class for storing the size for windowed operations
+    """
 
     def __set__(self, obj, val):
         chunk_size = 0 if val is None else int(val)
@@ -130,6 +163,8 @@ class ChunkSize:
 
 
 class Overlap:
+    """Descriptor class for storing the overlap for windowed operations
+    """
 
     def __set__(self, obj, val):
         obj.__dict__['overlap'] = 0 if val is None else val
@@ -139,6 +174,116 @@ class Overlap:
 
 
 class Raster:
+    """Wrapper class for basic raster handling
+
+    This 
+
+    Attributes
+    ----------
+    x
+    y
+    values
+    path
+    tmpfile
+    md5
+    count
+    is_masked
+    shape
+    height
+    bbox
+    src
+    width
+    dx
+    dy
+    crs
+    nodatavals
+    transform
+    dtypes
+    nodata
+    xres
+    yres
+    resampling_method
+    chunk_size
+    overlap
+    
+    Methods
+    -------
+    modifying_raster(use_src_meta=True, **kwargs)
+        Context for modifying raster and saving to disk after.
+    get_x(window=None)
+        Get X values from the raster.
+    get_y(window=None)
+        Get Y values from the raster.
+    get_xy(window=None)
+        Get raster position tuples.
+    get_values(window=None, band=None, **kwargs)
+        Get values at all the points in the raster.
+    get_xyz(window=None, band=None)
+        Get raster position tuples and values horizontally stacked.
+    get_multipolygon(zmin=None, zmax=None, window=None,
+                     overlap=None, band=1)
+        Extract multipolygon from raster data.
+    get_bbox(crs=None, output_type=None)
+        Get the raster bounding box.
+    contourf(band=1, window=None, axes=None, vmin=None, vmax=None,
+             cmap='topobathy', levels=None, show=False, title=None,
+             figsize=None, colors=256, cbar_label=None, norm=None,
+             **kwargs)
+        Plot a filled contour from the raster data.
+    tags(i=None)
+        Get tags set on raster dataset.
+    read(i, masked=True, **kwargs)
+        Call underlying dataset `read` method.
+    dtype(i)
+        Return data type from the source raster.
+    nodataval(i)
+        Return the no-data value of the source raster.
+    sample(xy, i)
+        Call underlying dataset `sample` method.
+    close()
+        Release source raster object.
+    add_band(values,  **tags)
+        Add a new band of data with specified tags to the raster.
+    fill_nodata()
+        Fill no-data points in the raster dataset.
+    gaussian_filter(**kwargs)
+        Apply Gaussian filter on the raster data.
+    mask(shapes, i=None, **kwargs)
+        Mask raster data by shape.
+    read_masks(i=None)
+        Read source raster masks.
+    warp(dst_crs, nprocs=-1)
+        Reproject raster data.
+    resample(scaling_factor, resampling_method=None)
+        Resample raster data.
+    save(path)
+        Save as raster data to the provided path.
+    clip(geom)
+        Clip raster data by provided shape.
+    adjust(geom, inside_min=0.5, outside_max=-0.5)
+        Modify raster values based on constraints and shape.
+    get_contour(level, window)
+        Calculate contour of specified level on raster data.
+    get_channels(level=0, width=1000, tolerance=None)
+        Calculate narrow areas based on input level and width.
+    iter_windows(chunk_size=None, overlap=None)
+        Return raster view windows based on chunk size and overlap.
+    get_window_data(window, masked=True, band=None)
+        Return raster values based for the input window.
+    get_window_bounds(window)
+        Return window bounds.
+    get_window_transform(window)
+        Return window transform for the input raster
+
+    Notes
+    -----
+    This class makes use of property and descriptor type attributes.
+    Some of the properties even point to the value set by the 
+    descriptors. It's important to not that the properties are
+    set lazily. It's also noteworthy to mention that this class is
+    currently **not** picklable due temporary file and file-like
+    object attributes.
+    """
 
     _path = RasterPath()
     _crs = Crs()
@@ -154,6 +299,21 @@ class Raster:
             chunk_size=None,
             overlap=None
     ):
+        """Raster data manipulator.
+
+        Parameters
+        ----------
+        path : str or os.PathLike
+            Path to a raster image to work on (.tiff or .nc).
+        crs : str or CRS, default=None
+            CRS to use and override input raster data with.
+            Note that no transformation takes place.
+        chunk_size : int , default=None
+            Square window size to be used for data chunking
+        overlap : int , default=None
+            Overlap size for calculating chunking windows on the raster
+        """
+
         self._chunk_size = chunk_size
         self._overlap = overlap
         self._path = path
@@ -165,6 +325,30 @@ class Raster:
 
     @contextmanager
     def modifying_raster(self, use_src_meta=True, **kwargs):
+        r"""Context manager for modifying and storing raster data
+
+        This is a helper context manager method that handles creating
+        new temporary file and replacing the old one with it when
+        raster data is successfully modified.
+
+        Parameters
+        ----------
+        use_src_meta : bool, default=True
+            Whether or not to copy the metadata of the source raster 
+            when creating the new empty raster file
+        **kwargs : dict
+            Options to be passed as metadata to raster database. These
+            options override values taken from source raster in case
+            `use_src_meta` is `True`
+
+        Yields
+        ------
+        rasterio.DatasetReader
+            Handle to the opened dataset on temporary file which
+            will override the old values if no exception occurs
+            during the context
+        """
+
         no_except = False
         try:
             # pylint: disable=R1732
@@ -189,6 +373,19 @@ class Raster:
 
 
     def get_x(self, window=None):
+        """Get X positions of the raster grid.
+
+        Parameters
+        ----------
+        window : windows.Window, default=None
+            The window over which X positions are to be returned
+
+        Returns
+        -------
+        np.ndarray
+            A vector X positions from minimum to the maximum
+        """
+
         window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
         if window is not None:
@@ -200,6 +397,19 @@ class Raster:
         return np.linspace(x0, x1, width)
 
     def get_y(self, window=None):
+        """Get Y positions of the raster grid.
+
+        Parameters
+        ----------
+        window : windows.Window, default=None
+            The window over which Y positions are to be returned
+
+        Returns
+        -------
+        np.ndarray
+            A vector Y positions from minimum to the maximum
+        """
+
         window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
         if window is not None:
@@ -211,10 +421,41 @@ class Raster:
         return np.linspace(y1, y0, height)
 
     def get_xy(self, window=None):
+        """Get raster positions tuple array
+
+        Parameters
+        ----------
+        window : windows.Window, default=None
+            The window over which positions are to be returned
+
+        Returns
+        -------
+        np.ndarray
+            A `n` :math:`\times 2` matrix of positions
+        """
+
         x, y = np.meshgrid(self.get_x(window), self.get_y(window))
         return np.vstack([x.flatten(), y.flatten()]).T
 
     def get_values(self, window=None, band=None, **kwargs):
+        r"""Return the data stored at each point in the raster grid
+
+        Parameters
+        ----------
+        window : windows.Window, default=None
+            The window over which values are to be returned.
+        band : int, default=None
+            The band from which the values should be read. If `None`
+            return data from band `1`.
+        **kwargs : dict
+            Additional arguments to pass to `rasterio.DatasetReader.read`.
+
+        Returns
+        -------
+        np.ndarray
+            A 2D matrix of values on the raster grid.
+        """
+
         i = 1 if band is None else band
         window = windows.Window(0, 0, self.src.shape[1], self.src.shape[0]) \
             if window is None else window
@@ -223,6 +464,23 @@ class Raster:
         return self.src.read(i, window=window, **kwargs)
 
     def get_xyz(self, window=None, band=None):
+        """Return the data stored at each point in the raster grid
+
+        Parameters
+        ----------
+        window : windows.Window, default=None
+            The window over which positions and values are to be
+            returned.
+        band : int, default=None
+            The band from which the values should be read. If `None`
+            return data from band `1`.
+
+        Returns
+        -------
+        np.ndarray
+            A `n` :math:`\times 3` matrix of x, y and values
+        """
+
         xy = self.get_xy(window)
         values = self.get_values(window=window, band=band).reshape(
             (xy.shape[0], 1))
@@ -230,13 +488,37 @@ class Raster:
 
     def get_multipolygon(
             self,
-            hmin=None,
             zmin=None,
             zmax=None,
             window=None,
             overlap=None,
             band=1,
     ):
+        """Calculate and return a multipolygon based on the raster data
+
+        Calculates filled contour from raster data between specified
+        limits on the specified band and creates a multipolygon from
+        the filled contour to return.
+
+        Parameters
+        ----------
+        zmin : float or None, default=None
+            Lower bound of raster data for filled contour calculation
+        zmax : float or None, default=None
+            Upper bound of raster data for filled contour calculation
+        window : windows.Window or None, default=None
+            Window over whose data the multipolygon is calculated
+        overlap : int or None, default=None
+            Overlap used for generating windows if `window` is not provided
+        band : int or None, default=1
+            Raster band over whose data multipolygon is calculated
+
+        Returns
+        -------
+        MultiPolygon
+            The calculated multipolygon from raster data
+        """
+
         polygon_collection = []
         if window is None:
             iter_windows = self.iter_windows(overlap=overlap)

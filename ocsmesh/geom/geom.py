@@ -1,3 +1,11 @@
+"""This module defines geometry factory class
+
+Instead of importing specific geometry types, users can import
+factory `Geom` object from this module which creates the correct
+geometry type based on the input arguments passed to it
+
+"""
+
 from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
 
 from ocsmesh.raster import Raster
@@ -10,17 +18,33 @@ from ocsmesh.geom.collector import GeomCollector
 
 
 class Geom(BaseGeom):
-    """
-    Factory class that creates and returns correct object type
-    based on the input type
+    """ Geometry object factory
+
+    Factory class that creates and returns correct geometry object
+    based on the input types.
+
+    Methods
+    -------
+    is_valid_type(geom)
+        Static method to check if an object is a valid geometry type
+
+    Notes
+    -----
+    The object created when using this class is not an instance of
+    this class or a subclass of it. It is a subclass of BaseGeom
+    instead.
     """
 
     def __new__(cls, geom, **kwargs):
-        """
-        Input parameters
-        ----------------
-        geom:
-            Object to use as input to compute the output mesh hull.
+        r"""
+        Parameters
+        ----------
+        geom
+            Object to create the domain geometry from. The type of
+            this object determines the created geometry object type
+        **kwargs : dict
+            Keyword arguments passed to the constructor of the
+            correct geometry type
         """
 
         if isinstance(geom, Raster): # pylint: disable=R1705
@@ -45,6 +69,3 @@ class Geom(BaseGeom):
     @staticmethod
     def is_valid_type(geom):
         return isinstance(geom, BaseGeom)
-
-    def get_multipolygon(self, **kwargs) -> MultiPolygon:
-        raise NotImplementedError

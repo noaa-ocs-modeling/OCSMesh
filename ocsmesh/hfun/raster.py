@@ -76,18 +76,9 @@ class HfunInputRaster:
         return obj.__dict__['raster']
 
 
-class FeatureCache:
-
-    def __get__(self, obj, val):
-        features = obj.__dict__.get('features')
-        if features is None:
-            features = {}
-
-
 class HfunRaster(BaseHfun, Raster):
 
     _raster = HfunInputRaster()
-    _feature_cache = FeatureCache()
 
     def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
                  verbosity=0):
