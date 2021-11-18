@@ -69,3 +69,9 @@ class Geom(BaseGeom):
     @staticmethod
     def is_valid_type(geom):
         return isinstance(geom, BaseGeom)
+
+    def get_multipolygon(self, **kwargs) -> MultiPolygon:
+
+        # FIXME: Need to override the superclass method here to avoid
+        # instantiation of abstract class error 
+        raise NotImplementedError

@@ -1,7 +1,7 @@
 """Wrapper for raster image functionalities commonly used for meshing
 
 This module implements wrapper for basic functionalities of handling
-raster files such as CRS transformations, resampling, clipping, 
+raster files such as CRS transformations, resampling, clipping,
 extracting & overriding data, plotting, etc.
 """
 
@@ -16,7 +16,7 @@ import warnings
 from time import time
 from contextlib import contextmanager, ExitStack
 from typing import (
-        Union, Generator, Any, Optional, List, Tuple, Iterable)
+        Union, Generator, Any, Optional, Dict, List, Tuple, Iterable)
 try:
     from typing import Literal
 except ImportError:
@@ -115,7 +115,7 @@ class TemporaryFile:
 
     All the raster operations done using `Raster` object is written
     to disk. In order to avoid modifying the original input raster
-    a the input data is first writton to a temporary file. This 
+    a the input data is first writton to a temporary file. This
     temporary file is created using `TemporaryFile` to have auto
     cleanup capabities on object destruction.
     """
@@ -180,7 +180,7 @@ class Overlap:
 class Raster:
     """Wrapper class for basic raster handling
 
-    This 
+    This
 
     Attributes
     ----------
@@ -209,7 +209,7 @@ class Raster:
     resampling_method
     chunk_size
     overlap
-    
+
     Methods
     -------
     modifying_raster(use_src_meta=True, **kwargs)
@@ -282,7 +282,7 @@ class Raster:
     Notes
     -----
     This class makes use of property and descriptor type attributes.
-    Some of the properties even point to the value set by the 
+    Some of the properties even point to the value set by the
     descriptors. It's important to not that the properties are
     set lazily. It's also noteworthy to mention that this class is
     currently **not** picklable due temporary file and file-like
@@ -342,7 +342,7 @@ class Raster:
         Parameters
         ----------
         use_src_meta : bool, default=True
-            Whether or not to copy the metadata of the source raster 
+            Whether or not to copy the metadata of the source raster
             when creating the new empty raster file
         **kwargs : dict, optional
             Options to be passed as metadata to raster database. These
@@ -441,7 +441,7 @@ class Raster:
     def get_xy(
             self,
             window: Optional[windows.Window] = None
-            ) -> np.ndarray[(float, 2)]:
+            ) -> np.ndarray:
         """Get raster positions tuple array
 
         Parameters
@@ -493,7 +493,7 @@ class Raster:
             self,
             window: Optional[windows.Window] = None,
             band: Optional[int] = None
-            ) -> np.ndarray[(float, 3)]:
+            ) -> np.ndarray:
         """Return the data stored at each point in the raster grid
 
         Parameters
@@ -833,7 +833,7 @@ class Raster:
                 correct shape as the raster.
             **tags : dict, optional
                 The tags to be added for the new band of data.
-        
+
         Returns
         -------
         int
@@ -997,7 +997,7 @@ class Raster:
 
     def resample(self,
                  scaling_factor: float,
-                 resampling_method Optional[str] = None
+                 resampling_method: Optional[str] = None
                  ) -> None:
         """Resample raster data in-place based on a scaling factor
 
@@ -1066,7 +1066,7 @@ class Raster:
 
         Parameters
         ----------
-        geom : Polygon or MultiPolygon 
+        geom : Polygon or MultiPolygon
             Shape used to clip the raster data
 
         Returns
@@ -1217,7 +1217,7 @@ class Raster:
         describes the narrow region cut-off. `tolerance` is used
         for simplifying the polygon before buffering it to reduce
         computational cost.
-        
+
         Parameters
         ----------
         level : float, default=0
@@ -1261,7 +1261,7 @@ class Raster:
             window: windows.Window
             ) -> Union[LineString, MultiLineString]:
         """Calculate contour on raster data for a single window
-        
+
         Parameters
         ----------
         level : float
@@ -1301,7 +1301,7 @@ class Raster:
             iter_windows : Iterable[windows.Window]
             ) -> Union[LineString, MultiLineString]:
         """Wrapper to calculate contour on raster data for a list of windows.
-        
+
         Parameters
         ----------
         level : float
@@ -1318,7 +1318,7 @@ class Raster:
         Notes
         -----
         This method calculates contour for each window and then merges
-        the results. This private method is a wrapper to the 
+        the results. This private method is a wrapper to the
         method that actually computes the contours.
         """
 
@@ -1354,7 +1354,7 @@ class Raster:
         Notes
         -----
         This method calculates contour for each window and offloads it
-        to disk to conserve memory. When all windows are processed, 
+        to disk to conserve memory. When all windows are processed,
         `geopandas` out of core method is used to merge the results
         into a `LineString` or `MultiLineString` on the memory
         """
@@ -1415,7 +1415,7 @@ class Raster:
 
         This method calculates the sequence of square windows for
         the raster based on the provided `chunk_size` and `overlap`.
-        
+
         Parameters
         ----------
         chunk_size : int or None , default=None
@@ -1475,7 +1475,7 @@ class Raster:
     def get_window_bounds(
             self,
             window : windows.Window
-            ) -> :
+            ) -> Tuple[int, int, int, int]:
         """Returns west, south, east, north bounds of the window
 
         Paramaters
@@ -1526,7 +1526,7 @@ class Raster:
         return self.get_x()
 
     @property
-    def y(self): -> npt.NDArray[float]:
+    def y(self) -> npt.NDArray[float]:
         """Read-only attribute for the y-ticks of raster grid
 
         This is a read-only property that returns the same results as
@@ -1581,11 +1581,11 @@ class Raster:
     def is_masked(self) -> bool:
         """Read-only attribute indicating whether raster has missing data.
 
-        This is a read-only property that indicates whether or not 
+        This is a read-only property that indicates whether or not
         the raster has missing data points. The value of this
         property is recalculated every time the property is retrieved.
         """
-        
+
         for window in self.iter_windows(self.chunk_size):
             if self.src.nodata in self.src.read(window=window):
                 return True
@@ -1731,10 +1731,10 @@ def get_iter_windows(
         ) -> Generator[windows.Window, None, None]:
     """Calculates sequence of raster windows based on basic inputs
 
-    This stand-alone function calculates the sequence of square windows 
+    This stand-alone function calculates the sequence of square windows
     based on inputs that are not necessarily tied to a specific raster
     dataset.
-    
+
     Parameters
     ----------
     width : int
@@ -1753,7 +1753,7 @@ def get_iter_windows(
     Yields
     ------
     windows.Window
-        Calculated square window based on the total size as well as 
+        Calculated square window based on the total size as well as
         chunk size and windows overlap values.
     """
 
@@ -1777,7 +1777,7 @@ def redistribute_vertices(
         distance: float
         ) -> Union[LineString, MultiLineString]:
     """Redistribute the vertices of input line strings
-    
+
     Parameters
     ----------
     geom : LineString or MultiLineString
