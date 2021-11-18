@@ -102,6 +102,7 @@ setuptools.setup(
     python_requires='>=3.7, <3.10',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
+                      "typing_extensions",
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",

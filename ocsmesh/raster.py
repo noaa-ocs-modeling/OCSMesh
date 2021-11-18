@@ -12,22 +12,28 @@ import multiprocessing
 import os
 import pathlib
 import tempfile
-from time import time
-from typing import Union
-from contextlib import contextmanager, ExitStack
 import warnings
+from time import time
+from contextlib import contextmanager, ExitStack
+from typing import (
+        Union, Generator, Any, Optional, List, Tuple, Iterable)
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
-# from matplotlib.colors import LinearSegmentedColormap
 import geopandas as gpd
-from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
+from matplotlib.cm import ScalarMappable
 from matplotlib.transforms import Bbox
+from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
+import numpy.typing as npt
 from pyproj import CRS, Transformer
 import rasterio
 import rasterio.mask
-from rasterio import warp
+from rasterio import warp, Affine
 from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 from rasterio.transform import array_bounds
@@ -37,8 +43,6 @@ from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LineString, MultiLineString, box)
 
-# from ocsmesh.geom import Geom
-# from ocsmesh.hfun import Hfun
 from ocsmesh import figures
 from ocsmesh import utils
 
@@ -56,7 +60,7 @@ class RasterPath:
     def __set__(self, obj, val: Union[str, os.PathLike]):
         obj.__dict__['path'] = pathlib.Path(val)
 
-    def __get__(self, obj, val):
+    def __get__(self, obj, objtype=None):
         return obj.__dict__['path']
 
 
@@ -116,11 +120,11 @@ class TemporaryFile:
     cleanup capabities on object destruction.
     """
 
-    def __set__(self, obj, val):
+    def __set__(self, obj, val: tempfile.NamedTemporaryFile):
         obj.__dict__['tmpfile'] = val
         obj._src = rasterio.open(val.name)
 
-    def __get__(self, obj, val) -> pathlib.Path:
+    def __get__(self, obj, objtype=None) -> pathlib.Path:
         tmpfile = obj.__dict__.get('tmpfile')
         if tmpfile is None:
             return obj.path
@@ -137,28 +141,28 @@ class SourceRaster:
     opening it everytime need arises.
     """
 
-    def __get__(self, obj, val) -> rasterio.DatasetReader:
+    def __set__(self, obj, val: rasterio.DatasetReader):
+        obj.__dict__['source'] = val
+
+    def __get__(self, obj, objtype=None) -> rasterio.DatasetReader:
         source = obj.__dict__.get('source')
         if source is None:
             source = rasterio.open(obj.path)
             obj.__dict__['source'] = source
         return source
 
-    def __set__(self, obj, val: rasterio.DatasetReader):
-        obj.__dict__['source'] = val
-
 
 class ChunkSize:
     """Descriptor class for storing the size for windowed operations
     """
 
-    def __set__(self, obj, val):
+    def __set__(self, obj, val: int):
         chunk_size = 0 if val is None else int(val)
         if not chunk_size >= 0:
             raise ValueError("Argument chunk_size must be >= 0.")
         obj.__dict__['chunk_size'] = val
 
-    def __get__(self, obj, val):
+    def __get__(self, obj, objtype=None) -> int:
         return obj.__dict__['chunk_size']
 
 
@@ -166,10 +170,10 @@ class Overlap:
     """Descriptor class for storing the overlap for windowed operations
     """
 
-    def __set__(self, obj, val):
+    def __set__(self, obj, val: int):
         obj.__dict__['overlap'] = 0 if val is None else val
 
-    def __get__(self, obj, val):
+    def __get__(self, obj, objtype=None) -> int:
         return obj.__dict__['overlap']
 
 
@@ -223,7 +227,7 @@ class Raster:
     get_multipolygon(zmin=None, zmax=None, window=None,
                      overlap=None, band=1)
         Extract multipolygon from raster data.
-    get_bbox(crs=None, output_type=None)
+    get_bbox(crs=None, output_type='polygon')
         Get the raster bounding box.
     contourf(band=1, window=None, axes=None, vmin=None, vmax=None,
              cmap='topobathy', levels=None, show=False, title=None,
@@ -257,7 +261,7 @@ class Raster:
     resample(scaling_factor, resampling_method=None)
         Resample raster data.
     save(path)
-        Save as raster data to the provided path.
+        Save-as raster data to the provided path.
     clip(geom)
         Clip raster data by provided shape.
     adjust(geom, inside_min=0.5, outside_max=-0.5)
@@ -295,9 +299,9 @@ class Raster:
     def __init__(
             self,
             path: Union[str, os.PathLike],
-            crs: Union[str, CRS] = None,
-            chunk_size=None,
-            overlap=None
+            crs: Union[str, CRS, None] = None,
+            chunk_size: Optional[int] = None,
+            overlap: Optional[int] = None
     ):
         """Raster data manipulator.
 
@@ -308,9 +312,9 @@ class Raster:
         crs : str or CRS, default=None
             CRS to use and override input raster data with.
             Note that no transformation takes place.
-        chunk_size : int , default=None
+        chunk_size : int or None, default=None
             Square window size to be used for data chunking
-        overlap : int , default=None
+        overlap : int or None , default=None
             Overlap size for calculating chunking windows on the raster
         """
 
@@ -319,12 +323,16 @@ class Raster:
         self._path = path
         self._crs = crs
 
-    def __iter__(self, chunk_size=None, overlap=None):
+    def __iter__(self, chunk_size: int = None, overlap: int = None):
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
 
     @contextmanager
-    def modifying_raster(self, use_src_meta=True, **kwargs):
+    def modifying_raster(
+            self,
+            use_src_meta: bool = True,
+            **kwargs: Any
+            ) -> Generator[rasterio.DatasetReader, None, None]:
         r"""Context manager for modifying and storing raster data
 
         This is a helper context manager method that handles creating
@@ -336,10 +344,14 @@ class Raster:
         use_src_meta : bool, default=True
             Whether or not to copy the metadata of the source raster 
             when creating the new empty raster file
-        **kwargs : dict
+        **kwargs : dict, optional
             Options to be passed as metadata to raster database. These
             options override values taken from source raster in case
             `use_src_meta` is `True`
+
+        Returns
+        -------
+        None
 
         Yields
         ------
@@ -372,7 +384,10 @@ class Raster:
 
 
 
-    def get_x(self, window=None):
+    def get_x(
+            self,
+            window: Optional[windows.Window] = None
+            ) -> npt.NDArray[float]:
         """Get X positions of the raster grid.
 
         Parameters
@@ -396,7 +411,10 @@ class Raster:
         x0, y0, x1, y1 = self.get_window_bounds(window)
         return np.linspace(x0, x1, width)
 
-    def get_y(self, window=None):
+    def get_y(
+            self,
+            window: Optional[windows.Window] = None
+            ) -> npt.NDArray[float]:
         """Get Y positions of the raster grid.
 
         Parameters
@@ -420,7 +438,10 @@ class Raster:
         x0, y0, x1, y1 = self.get_window_bounds(window)
         return np.linspace(y1, y0, height)
 
-    def get_xy(self, window=None):
+    def get_xy(
+            self,
+            window: Optional[windows.Window] = None
+            ) -> np.ndarray[(float, 2)]:
         """Get raster positions tuple array
 
         Parameters
@@ -437,7 +458,12 @@ class Raster:
         x, y = np.meshgrid(self.get_x(window), self.get_y(window))
         return np.vstack([x.flatten(), y.flatten()]).T
 
-    def get_values(self, window=None, band=None, **kwargs):
+    def get_values(
+            self,
+            window: Optional[windows.Window] = None,
+            band: Optional[int] = None,
+            **kwargs: Any
+            ) -> npt.NDArray[float]:
         r"""Return the data stored at each point in the raster grid
 
         Parameters
@@ -447,7 +473,7 @@ class Raster:
         band : int, default=None
             The band from which the values should be read. If `None`
             return data from band `1`.
-        **kwargs : dict
+        **kwargs : dict, optional
             Additional arguments to pass to `rasterio.DatasetReader.read`.
 
         Returns
@@ -463,7 +489,11 @@ class Raster:
             assert isinstance(window, windows.Window)
         return self.src.read(i, window=window, **kwargs)
 
-    def get_xyz(self, window=None, band=None):
+    def get_xyz(
+            self,
+            window: Optional[windows.Window] = None,
+            band: Optional[int] = None
+            ) -> np.ndarray[(float, 3)]:
         """Return the data stored at each point in the raster grid
 
         Parameters
@@ -488,12 +518,12 @@ class Raster:
 
     def get_multipolygon(
             self,
-            zmin=None,
-            zmax=None,
-            window=None,
-            overlap=None,
-            band=1,
-    ):
+            zmin: Optional[float] = None,
+            zmax: Optional[float] = None,
+            window: Optional[windows.Window] = None,
+            overlap: Optional[int] = None,
+            band: int = 1,
+    ) -> MultiPolygon:
         """Calculate and return a multipolygon based on the raster data
 
         Calculates filled contour from raster data between specified
@@ -510,7 +540,7 @@ class Raster:
             Window over whose data the multipolygon is calculated
         overlap : int or None, default=None
             Overlap used for generating windows if `window` is not provided
-        band : int or None, default=1
+        band : int, default=1
             Raster band over whose data multipolygon is calculated
 
         Returns
@@ -553,9 +583,30 @@ class Raster:
 
     def get_bbox(
             self,
-            crs: Union[str, CRS] = None,
-            output_type: str = None
-    ) -> Union[Polygon, Bbox]:
+            crs: Union[str, CRS, None] = None,
+            output_type: Literal['polygon', 'bbox'] = 'polygon'
+        ) -> Union[Polygon, Bbox]:
+        """Calculate the bounding box of the raster.
+
+        Parameters
+        ----------
+        crs : str or CRS or None, default=None
+            The CRS in which the bounding box is requested.
+        output_type : {'polygon', 'bbox'}
+            The label of the return type for bounding box, either a
+            `shapely` 'polygon' or `matplotlib` 'bbox'.
+
+        Returns
+        -------
+        box or Bbox
+            The bounding box of the raster.
+
+        Raises
+        ------
+        TypeError
+            If the label of return type is not valid.
+        """
+
         output_type = 'polygon' if output_type is None else output_type
         xmin, xmax = np.min(self.x), np.max(self.x)
         ymin, ymax = np.min(self.y), np.max(self.y)
@@ -578,21 +629,62 @@ class Raster:
 
     def contourf(
             self,
-            band=1,
-            window=None,
-            axes=None,
-            vmin=None,
-            vmax=None,
-            cmap='topobathy',
-            levels=None,
-            show=False,
-            title=None,
-            figsize=None,
-            colors=256,
-            cbar_label=None,
+            band: int = 1,
+            window: Optional[windows.Window] = None,
+            axes: Optional[Axes] = None,
+            vmin: Optional[float] = None,
+            vmax: Optional[float] = None,
+            cmap: str = 'topobathy',
+            levels: Optional[List[float]] = None,
+            show: bool = False,
+            title: Optional[str] = None,
+            figsize: Optional[Tuple[float, float]] = None,
+            colors: int = 256,
+            cbar_label: Optional[str] = None,
             norm=None,
-            **kwargs
-    ):
+            **kwargs : Any
+            ) -> Axes:
+        """Plot filled contour for raster data.
+
+        Parameters
+        ----------
+            band : int, default=1
+                Raster band from which data is used.
+            window : windows.Window or None, default=None
+                Raster window from which data is used.
+            axes : Axes or None, default=None
+                Matplotlib axes to draw contour on>
+            vmin : float or None, default=None
+                Minimum value of the filled contour.
+            vmax : float or None, default=None
+                Maximum value of the filled contour.
+            cmap : str, default='topobathy'
+                Colormap to use for filled contour.
+            levels : list of float or None, default=None
+                Prespecified list of contour levels.
+            show : bool, default=False
+                Whether to show the contour on creation or not.
+            title : str or None, default=None
+                Title used on the axes of the contour
+            figsize : tuple of float or None, default=None
+                Figure size used for the contour figure
+            colors : int, default=256
+                Contour colors associated with levels
+            cbar_label : str or None, default=None
+                Label of the colorbar
+            norm : Normalize or None, default=None
+                Normalizer object
+            **kwargs : dict, optional
+                Keyword arguments passed to the matplotlib contourf()
+                function
+
+        Returns
+        -------
+        Axes
+            Axes object from matplotlib library that holds onto the
+            contour plot object
+        """
+
         if axes is None:
             fig = plt.figure(figsize=figsize)
             axes = fig.add_subplot(111)
@@ -638,27 +730,116 @@ class Raster:
             plt.show()
         return axes
 
-    def tags(self, i=None):
+    def tags(self, i: Optional[int] = None) -> Dict[str, str]:
+        """Return a dictionary of dataset or band's tags
+
+        Parameters
+        ----------
+        i : int or None, default=None
+            The band from which the tags are read.
+
+        Returns
+        -------
+        dict
+            Dictionary of tags
+        """
+
         if i is None:
             return self.src.tags()
         return self.src.tags(i)
 
-    def read(self, i, masked=True, **kwargs):
+    def read(self, i: int, masked: bool = True, **kwargs: Any) -> npt.NDArray[float]:
+        """Read the data from raster opened file
+
+        Parameters
+        ----------
+        i : int
+            The index of the band to read the data from
+        masked : bool, default=True
+            Whether or not to return a masked array
+        **kwargs : dict, optional
+            Additional keyword arguments passed to rasterio read()
+
+        Returns
+        -------
+        ndarray
+            Array of raster data
+        """
+
         return self.src.read(i, masked=masked, **kwargs)
 
-    def dtype(self, i):
+    def dtype(self, i: int) -> npt.NDArray[float]:
+        """Raster data type
+
+        Parameters
+        ----------
+        i : int
+            The index of the band to read the data from
+
+        Returns
+        -------
+        Any
+            Data type of raster values
+        """
+
         return self.src.dtypes[i-1]
 
-    def nodataval(self, i):
+    def nodataval(self, i: int) -> float:
+        """Value used for filling no-data points
+
+        Parameters
+        ----------
+        i : int
+            The index of the band to read the data from
+
+        Returns
+        -------
+        float
+            The value to be used for points that have missing data
+        """
+
         return self.src.nodatavals[i-1]
 
-    def sample(self, xy, i):
+    def sample(self, xy: Iterable, i: int) -> npt.NDArray[float]:
+        """Get value of the data in specified positions
+
+        Parameters
+        ----------
+        xy : iterable
+            Pairs of xy coordinates for which data is retrieved
+        i : int
+            The index of the band to read the data from
+
+        Returns
+        -------
+        ndarray
+            Array of values for specified input positions
+        """
+
         return self.src.sample(xy, i)
 
-    def close(self):
+    def close(self) -> None:
+        """Delete source object"""
+
         del self._src
 
-    def add_band(self, values,  **tags):
+    def add_band(self, values: npt.NDArray[float], **tags: Any) -> int:
+        """Add a new band for `values` with tags `tags` to the raster
+
+        Parameters
+        ----------
+            values : array-like
+                The values to be added to the raster, it must have the
+                correct shape as the raster.
+            **tags : dict, optional
+                The tags to be added for the new band of data.
+        
+        Returns
+        -------
+        int
+            ID of the new band added to the raster.
+        """
+
         kwargs = self.src.meta.copy()
         band_id = kwargs["count"] + 1
         with self.modifying_raster(count=band_id) as dst:
@@ -667,11 +848,11 @@ class Raster:
             dst.write_band(band_id, values.astype(self.src.dtypes[i-1]))
         return band_id
 
-    def fill_nodata(self):
-        """
-        A parallelized version is presented here:
-        https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
-        """
+    def fill_nodata(self) -> None:
+        """Fill missing values in the raster in-place"""
+
+        # A parallelized version is presented here:
+        # https://github.com/basaks/rasterio/blob/master/examples/fill_large_raster.py
 
         with self.modifying_raster() as dst:
             for window in self.iter_windows():
@@ -680,7 +861,18 @@ class Raster:
                     window=window
                     )
 
-    def gaussian_filter(self, **kwargs):
+    def gaussian_filter(self, **kwargs: Any) -> None:
+        """Apply Gaussian filter to the raster data in-place
+
+        Parameters
+        ----------
+        **kwargs : dict, optional
+            Keyword arguments passed to SciPy `gaussian_filter` function
+
+        Returns
+        -------
+        None
+        """
 
         # TODO: Don't overwrite; add additoinal bands for filtered values
 
@@ -696,7 +888,28 @@ class Raster:
                 outband = gaussian_filter(outband, **kwargs)
                 dst.write_band(i, outband)
 
-    def mask(self, shapes, i=None, **kwargs):
+    def mask(self,
+             shapes: Iterable,
+             i: Optional[int] = None,
+             **kwargs: Any
+             ) -> None:
+        """Mask data based on input shapes in-place
+
+        Parameters
+        ----------
+        shapes : iterable
+            List of GeoJSON like dict or objects that implement Python
+            geo interface protocol (passed to `rasterio.mask.mask`).
+        i : int or None, default=None
+            The index of the band to read the data from.
+        **kwargs : dict, optional
+            Keyword arguments used to create new raster Dataset.
+
+        Returns
+        -------
+        None
+        """
+
         out_images, out_transform = rasterio.mask.mask(self._src, shapes)
         with self.modifying_raster(**kwargs) as dst:
             if i is None:
@@ -712,14 +925,43 @@ class Raster:
                         dst.write_band(j, self.src.read(j))
                         dst.update_tags(j, **self.src.tags(j))
 
-    def read_masks(self, i=None):
+    def read_masks(self, i: Optional[int] = None) -> npt.NDArray[bool]:
+        """Read existing masks on the raster data
+
+        Parameters
+        ----------
+        i : int or None, default=None
+
+        Returns
+        -------
+        np.ndarray or view
+            Raster band mask from the dataset
+        """
+
         if i is None:
             return np.dstack(
                 [self.src.read_masks(i) for i in range(1, self.count + 1)])
 
         return self.src.read_masks(i)
 
-    def warp(self, dst_crs, nprocs=-1):
+    def warp(self,
+             dst_crs: Union[CRS, str],
+             nprocs: int = -1
+             ) -> None:
+        """Reproject the raster data to specified `dst_crs` in-place
+
+        Parameters
+        ----------
+        dst_crs : CRS or str
+            Destination CRS to which raster must be transformed
+        nprocs : int, default=-1
+            Number of processors to use for the operation
+
+        Returns
+        -------
+        None
+        """
+
         nprocs = -1 if nprocs is None else nprocs
         nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
         dst_crs = CRS.from_user_input(dst_crs)
@@ -753,7 +995,25 @@ class Raster:
                     )
 
 
-    def resample(self, scaling_factor, resampling_method=None):
+    def resample(self,
+                 scaling_factor: float,
+                 resampling_method Optional[str] = None
+                 ) -> None:
+        """Resample raster data in-place based on a scaling factor
+
+        Parameters
+        ----------
+        scaling_factor : float
+            The scaling factor to use for resampling data
+        resampling_method : str or None, default=None
+            Name of the resampling method passed to
+            `rasterio.DatasetReader.read`
+
+        Returns
+        -------
+        None
+        """
+
         if resampling_method is None:
             resampling_method = self.resampling_method
         else:
@@ -783,13 +1043,37 @@ class Raster:
         with self.modifying_raster(**meta_update) as dst:
             dst.write(data)
 
-    def save(self, path):
+    def save(self, path: Union[str, os.PathLike]) -> None:
+        """Save-as raster dataset to a new location
+
+        Parameters
+        ----------
+        path : str or path-like
+            The path to which raster must be saved.
+
+        Returns
+        -------
+        None
+        """
+
         with rasterio.open(pathlib.Path(path), 'w', **self.src.meta) as dst:
             for i in range(1, self.src.count + 1):
                 dst.write_band(i, self.src.read(i))
                 dst.update_tags(i, **self.src.tags(i))
 
-    def clip(self, geom: Union[Polygon, MultiPolygon]):
+    def clip(self, geom: Union[Polygon, MultiPolygon]) -> None:
+        """Clip raster data in-place, outside the specified shape.
+
+        Parameters
+        ----------
+        geom : Polygon or MultiPolygon 
+            Shape used to clip the raster data
+
+        Returns
+        -------
+        None
+        """
+
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
         out_image, out_transform = rasterio.mask.mask(
@@ -808,8 +1092,30 @@ class Raster:
     def adjust(
             self,
             geom: Union[Polygon, MultiPolygon],
-            inside_min=0.5,
-            outside_max=-0.5):
+            inside_min: float = 0.5,
+            outside_max: float = -0.5
+            ) -> None:
+        """Adjust raster data in-place based on specified shape.
+
+        This method can be used to adjust e.g. raster elevation values
+        based on a more accurate land-mass polygon.
+
+        Parameters
+        ----------
+        geom : Polygon or MultiPolygon
+            Filled shape to determine which points are considered
+            inside or outside (usually land-mass polygon)
+        inside_min : float
+            The minimum value to truncate raster data that falls
+            inside the specified `geom` shape
+        outside_max : float
+            The maximum value to truncate raster data that falls
+            outside the specified `geom` shape
+
+        Returns
+        -------
+        None
+        """
 
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
@@ -866,8 +1172,26 @@ class Raster:
     def get_contour(
             self,
             level: float,
-            window: rasterio.windows.Window = None
-    ):
+            window: Optional[windows.Window] = None
+            ) -> Union[LineString, MultiLineString]:
+        """Calculate contour lines for specified data level.
+
+        This method can be used e.g. to calculated coastline based on
+        raster data.
+
+        Parameters
+        ----------
+        level : float
+            The level for which contour lines must be calculated
+        window : windows.Window or None
+            The raster window for which contour lines must be calculated
+
+        Returns
+        -------
+        LineString or MultiLineString
+            The contour lines calculated for the specified level
+        """
+
         _logger.debug(
             f'RasterHfun.get_raster_contours(level={level}, window={window})')
         if window is None:
@@ -877,14 +1201,38 @@ class Raster:
         if len(iter_windows) > 1:
             return self._get_raster_contour_feathered(level, iter_windows)
 
-        return self._get_raster_contour_windowed(level, window)
+        return self._get_raster_contour_single_window(level, window)
 
     def get_channels(
             self,
             level: float = 0,
             width: float = 1000, # in meters
-            tolerance: Union[None, float] = None
-    ):
+            tolerance: Optional[float] = None
+            ) -> Union[Polygon, MultiPolygon]:
+        """Calculate narrow width polygons based on specified input
+
+        By using `buffer` functionality this method finds narrow
+        regions of the domain. The `level` specifies at which data
+        level domain polygon should be calculated and `width`
+        describes the narrow region cut-off. `tolerance` is used
+        for simplifying the polygon before buffering it to reduce
+        computational cost.
+        
+        Parameters
+        ----------
+        level : float, default=0
+            Reference level to calculate domain polygon for narrow
+            region calculation.
+        width : float, default=1000
+            Cut-off used for designating narrow regions.
+        tolerance : float or None, default=None
+            Tolerance used for simplifying domain polygon.
+
+        Returns
+        -------
+        Polygon or MultiPolygon
+            The calculated narrow regions based on raster data
+        """
 
         multipoly = self.get_multipolygon(zmax=level)
 
@@ -907,7 +1255,26 @@ class Raster:
 
         return channels
 
-    def _get_raster_contour_windowed(self, level, window):
+    def _get_raster_contour_single_window(
+            self,
+            level: float,
+            window: windows.Window
+            ) -> Union[LineString, MultiLineString]:
+        """Calculate contour on raster data for a single window
+        
+        Parameters
+        ----------
+        level : float
+            The level for which contour lines must be calculated
+        window : windows.Window or None
+            The raster window for which contour lines must be calculated
+
+        Returns
+        -------
+        LineString or MultiLineString
+            The contour lines calculated for the specified level
+        """
+
         x, y = self.get_x(), self.get_y()
         features = []
         values = self.get_values(band=1, window=window)
@@ -928,14 +1295,70 @@ class Raster:
                     pass
         return ops.linemerge(features)
 
-    def _get_raster_contour_feathered(self, level, iter_windows):
+    def _get_raster_contour_feathered(
+            self,
+            level : float,
+            iter_windows : Iterable[windows.Window]
+            ) -> Union[LineString, MultiLineString]:
+        """Wrapper to calculate contour on raster data for a list of windows.
+        
+        Parameters
+        ----------
+        level : float
+            The level for which contour lines must be calculated
+        iter_windows : iterable
+            Sequence of raster windows to calculated the contour lines
+            on
+
+        Returns
+        -------
+        LineString or MultiLineString
+            The contour lines calculated for the specified level
+
+        Notes
+        -----
+        This method calculates contour for each window and then merges
+        the results. This private method is a wrapper to the 
+        method that actually computes the contours.
+        """
 
         with tempfile.TemporaryDirectory(dir=tmpdir) as feather_dir:
             results = self._get_raster_contour_feathered_internal(
                     level, iter_windows, feather_dir)
         return results
 
-    def _get_raster_contour_feathered_internal(self, level, iter_windows, temp_dir):
+    def _get_raster_contour_feathered_internal(
+            self,
+            level : float,
+            iter_windows : Iterable[windows.Window],
+            temp_dir : str
+            ) -> Union[LineString, MultiLineString]:
+        """Calculate contour on raster data for a list of windows.
+
+        Parameters
+        ----------
+        level : float
+            The level for which contour lines must be calculated
+        iter_windows : iterable
+            Sequence of raster windows to calculated the contour lines
+            on
+        temp_dir : str
+            Path to the temporary directory used for storing feather
+            files for each raster window before combining the results
+
+        Returns
+        -------
+        LineString or MultiLineString
+            The contour lines calculated for the specified level
+
+        Notes
+        -----
+        This method calculates contour for each window and offloads it
+        to disk to conserve memory. When all windows are processed, 
+        `geopandas` out of core method is used to merge the results
+        into a `LineString` or `MultiLineString` on the memory
+        """
+
         feathers = []
         total_windows = len(iter_windows)
         _logger.debug(f'Total windows to process: {total_windows}.')
@@ -983,7 +1406,30 @@ class Raster:
         _logger.debug('Merging features.')
         return ops.linemerge(features)
 
-    def iter_windows(self, chunk_size=None, overlap=None):
+    def iter_windows(
+            self,
+            chunk_size: Optional[int] = None,
+            overlap: Optional[int] = None
+            ) -> Generator[windows.Window, None, None]:
+        """Calculates sequence of windows for the raster
+
+        This method calculates the sequence of square windows for
+        the raster based on the provided `chunk_size` and `overlap`.
+        
+        Parameters
+        ----------
+        chunk_size : int or None , default=None
+            Square window size to be used for data chunking
+        overlap : int or None , default=None
+            Overlap size for calculating chunking windows on the raster
+
+        Yields
+        ------
+        windows.Window
+            Calculated square window on raster based on the window
+            size and windows overlap values.
+        """
+
         chunk_size = self.chunk_size if chunk_size is None else chunk_size
         overlap = self.overlap if overlap is None else overlap
         if chunk_size in [0, None, False]:
@@ -994,7 +1440,29 @@ class Raster:
                 self.width, self.height, chunk_size, overlap):
             yield window
 
-    def get_window_data(self, window, masked=True, band=None):
+    def get_window_data(
+            self,
+            window : windows.Window,
+            masked : bool = True,
+            band : Optional[int] = None
+            ) -> Tuple[npt.NDArray[float], npt.NDArray[float], npt.NDArray[float]]:
+        """Return the positions and values of raster data for the window
+
+        Paramaters
+        ----------
+        window : windows.Window
+            The window for which data is to be returned.
+        masked : bool, default=True
+            Whether to return a masked array in case of missing data.
+        band : int or None, default=None
+            The ID of the band to read the data from.
+
+        Returns
+        -------
+        tuple of np.ndarray
+            The triple of x-ticks, y-ticks and data on the raster grid
+        """
+
         x0, y0, x1, y1 = self.get_window_bounds(window)
         x = np.linspace(x0, x1, window.width)
         y = np.linspace(y1, y0, window.height)
@@ -1004,39 +1472,99 @@ class Raster:
             data = self.src.read(masked=masked, window=window)
         return x, y, data
 
-    def get_window_bounds(self, window):
+    def get_window_bounds(
+            self,
+            window : windows.Window
+            ) -> :
+        """Returns west, south, east, north bounds of the window
+
+        Paramaters
+        ----------
+        window : windows.Window
+            The window for which bounds are calculated
+
+        Returns
+        -------
+        tuple of int
+            West, south, east, north bounds of the window
+        """
+
         return array_bounds(
             window.height,
             window.width,
             self.get_window_transform(window))
 
-    def get_window_transform(self, window):
+    def get_window_transform(
+            self,
+            window : windows.Window
+            ) -> Union[None, Affine]:
+        """Returns raster's affine transform calculated for the window
+
+        Paramaters
+        ----------
+        window : windows.Window
+            The window for which the affine transform is calculated
+
+        Returns
+        -------
+        Affine
+            Affine transform matrix for specified window
+        """
+
         if window is None:
             return None
         return windows.transform(window, self.transform)
 
     @property
-    def x(self):
+    def x(self) -> npt.NDArray[float]:
+        """Read-only attribute for the x-ticks of raster grid
+
+        This is a read-only property that returns the same results as
+        `get_x` method
+        """
+
         return self.get_x()
 
     @property
-    def y(self):
+    def y(self): -> npt.NDArray[float]:
+        """Read-only attribute for the y-ticks of raster grid
+
+        This is a read-only property that returns the same results as
+        `get_y` method
+        """
+
         return self.get_y()
 
     @property
-    def values(self):
+    def values(self) -> npt.NDArray[float]:
+        """Read-only attribute for the raster grid data
+
+        This is a read-only property that returns the same results as
+        `get_values` method
+        """
+
         return self.get_values()
 
     @property
-    def path(self):
+    def path(self) -> pathlib.Path:
+        """Read-only attribute for the path to original raster file"""
+
         return self._path
 
     @property
-    def tmpfile(self):
+    def tmpfile(self) -> pathlib.Path:
+        """Read-only attribute for the path to working raster file"""
+
         return self._tmpfile
 
     @property
-    def md5(self):
+    def md5(self) -> str:
+        """Read-only attribute for the hash of working raster file content
+
+        This is a read-only property that is recalculated every time
+        from the content of the temporary working raster file.
+        """
+
         hash_md5 = hashlib.md5()
         with open(self._tmpfile.resolve(), "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
@@ -1044,59 +1572,92 @@ class Raster:
         return hash_md5.hexdigest()
 
     @property
-    def count(self):
+    def count(self) -> int:
+        """Read-only attribute for the number of bands of raster dataset"""
+
         return self.src.count
 
     @property
-    def is_masked(self):
+    def is_masked(self) -> bool:
+        """Read-only attribute indicating whether raster has missing data.
+
+        This is a read-only property that indicates whether or not 
+        the raster has missing data points. The value of this
+        property is recalculated every time the property is retrieved.
+        """
+        
         for window in self.iter_windows(self.chunk_size):
             if self.src.nodata in self.src.read(window=window):
                 return True
         return False
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, int]:
+        """Read-only attribute indicating the shape of raster grid"""
+
         return self.src.shape
 
     @property
-    def height(self):
+    def height(self) -> int:
+        """Read-only attribute for the number of rows of raster grid"""
+
         return self.src.height
 
     @property
-    def bbox(self):
+    def bbox(self) -> Union[Polygon, Bbox]:
+        """Read-only attribute for the bounding box of the raster grid
+
+        This is a read-only property that returns the same results as
+        `get_bbox` method
+        """
+
         return self.get_bbox()
 
     @property
-    def src(self):
+    def src(self) -> rasterio.DatasetReader:
+        """Read-only attribute for access to opened dataset handle"""
+
         return self._src
 
     @property
-    def width(self):
+    def width(self) -> int:
+        """Read-only attribute for the number of columns of raster grid"""
+
         return self.src.width
 
     @property
-    def dx(self):
+    def dx(self) -> float:
+        """Read-only attribute for grid distance in x direction"""
         return self.src.transform[0]
 
     @property
-    def dy(self):
+    def dy(self) -> float:
+        """Read-only attribute for grid distance in y direction"""
         return -self.src.transform[4]
 
     @property
     def crs(self) -> CRS:
+        """Read-only attribute for raster CRS
+
+        This read-only property returns CRS as a pyproj.CRS type
+        **not** rasterio.CRS.
+        """
+
         # cast rasterio.CRS to pyproj.CRS for API consistency
         return CRS.from_user_input(self.src.crs)
 
     @property
-    def nodatavals(self):
+    def nodatavals(self) -> float:
         return self.src.nodatavals
 
     @property
-    def transform(self):
+    def transform(self) -> Affine:
+        """Read-only attribute for raster's transform"""
         return self.src.transform
 
     @property
-    def dtypes(self):
+    def dtypes(self) -> Any:
+        """Read-only attribute for raster's data type"""
         return self.src.dtypes
 
     @property
@@ -1104,21 +1665,33 @@ class Raster:
         return self.src.nodata
 
     @property
-    def xres(self):
+    def xres(self) -> float:
+        """Read-only attribute for grid resolution in x direction
+
+        This read-only property returns the same value as `dx`
+        """
         return self.transform[0]
 
     @property
-    def yres(self):
+    def yres(self) -> float:
+        """Read-only attribute for grid resolution in y direction
+
+        This read-only property returns the same value as `-dy`
+        """
         return self.transform[4]
 
     @property
-    def resampling_method(self):
+    def resampling_method(self) -> Resampling:
+        """Modifiable attribute for stored raster resampling method"""
+
         if not hasattr(self, '_resampling_method'):
             self._resampling_method = Resampling.nearest
         return self._resampling_method
 
     @resampling_method.setter
-    def resampling_method(self, resampling_method):
+    def resampling_method(self, resampling_method: Resampling) -> None:
+        """Set `resampling_method`"""
+
         if not isinstance(resampling_method, Resampling):
             TypeError(
                 f'Argument resampling_method must be of type  {Resampling}, '
@@ -1126,30 +1699,64 @@ class Raster:
         self._resampling_method = resampling_method
 
     @property
-    def chunk_size(self):
+    def chunk_size(self) -> int:
+        """Modfiable attribute for stored square raster window size"""
         return self._chunk_size
 
     @chunk_size.setter
-    def chunk_size(self, chunk_size):
+    def chunk_size(self, chunk_size: int) -> None:
+        """Set `chunk_size`"""
+
         self._chunk_size = chunk_size
 
     @property
-    def overlap(self):
+    def overlap(self) -> int:
+        """Modfiable attribute for stored raster windows overlap amount"""
         return self._overlap
 
     @overlap.setter
-    def overlap(self, overlap):
+    def overlap(self, overlap: int) -> None:
+        """Set `overlap`"""
+
         self._overlap = overlap
 
 
 def get_iter_windows(
-        width,
-        height,
-        chunk_size=0,
-        overlap=0,
-        row_off=0,
-        col_off=0
-):
+        width: int,
+        height: int,
+        chunk_size: int = 0,
+        overlap: int = 0,
+        row_off: int = 0,
+        col_off: int = 0
+        ) -> Generator[windows.Window, None, None]:
+    """Calculates sequence of raster windows based on basic inputs
+
+    This stand-alone function calculates the sequence of square windows 
+    based on inputs that are not necessarily tied to a specific raster
+    dataset.
+    
+    Parameters
+    ----------
+    width : int
+        The total width of the all unioned windows combined
+    height : int
+        The total height of the all unioned windows combined
+    chunk_size : int, default=0
+        Square window size to be used for data chunking
+    overlap: int, default=0
+        Overlap size for calculating chunking windows on the raster
+    row_off: int, default=0
+        Unused!
+    col_off: int, default=0
+        Unused!
+
+    Yields
+    ------
+    windows.Window
+        Calculated square window based on the total size as well as 
+        chunk size and windows overlap values.
+    """
+
     win_h = chunk_size + overlap
     win_w = chunk_size + overlap
     n_win_h = math.ceil(height / chunk_size)
@@ -1165,7 +1772,30 @@ def get_iter_windows(
             yield windows.Window(off_w, off_h, w, h)
 
 
-def redistribute_vertices(geom, distance):
+def redistribute_vertices(
+        geom: Union[LineString, MultiLineString],
+        distance: float
+        ) -> Union[LineString, MultiLineString]:
+    """Redistribute the vertices of input line strings
+    
+    Parameters
+    ----------
+    geom : LineString or MultiLineString
+        Input line strings whose vertices is to be redistributed.
+    distance : float
+        The distance to be used for redistribution.
+
+    Returns
+    -------
+    LineString or MultiLineString
+        The resulting line strings with redistributed vertices.
+
+    Raises
+    ------
+    ValueError
+        If input geometry is not LineString or MultiLineString.
+    """
+
     if geom.geom_type == 'LineString': # pylint: disable=R1705
         num_vert = int(round(geom.length / distance))
         if num_vert == 0:
