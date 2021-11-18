@@ -1,28 +1,26 @@
 from collections import defaultdict
-from itertools import permutations
-from typing import Union, Dict, Sequence, Tuple
-from functools import reduce
-from multiprocessing import cpu_count, Pool
 from copy import deepcopy
+from functools import reduce
+from itertools import permutations
+from multiprocessing import Pool, cpu_count
+from typing import Dict, Sequence, Tuple, Union
 
+import geopandas as gpd
 import jigsawpy
+import matplotlib.pyplot as plt  # type: ignore[import]
+import numpy as np  # type: ignore[import]
+import utm
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 from matplotlib.path import Path  # type: ignore[import]
-import matplotlib.pyplot as plt  # type: ignore[import]
 from matplotlib.tri import Triangulation  # type: ignore[import]
-import numpy as np  # type: ignore[import]
 from pyproj import CRS, Transformer  # type: ignore[import]
-from scipy.interpolate import (  # type: ignore[import]
-    RectBivariateSpline, griddata)
 from scipy import sparse
-from shapely.geometry import ( # type: ignore[import]
-        Polygon, MultiPolygon,
-        box, GeometryCollection, Point, MultiPoint,
-        LineString, LinearRing)
-from shapely.ops import polygonize, linemerge
-import geopandas as gpd
-import utm
-
+from scipy.interpolate import RectBivariateSpline  # type: ignore[import]
+from scipy.interpolate import griddata
+from shapely.geometry import GeometryCollection  # type: ignore[import]
+from shapely.geometry import (LinearRing, LineString, MultiPoint, MultiPolygon,
+                              Point, Polygon, box)
+from shapely.ops import linemerge, polygonize
 
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
 

@@ -2,22 +2,20 @@ import functools
 import logging
 import operator
 from collections import defaultdict
-from typing import Union
-from multiprocessing import cpu_count, Pool
+from multiprocessing import Pool, cpu_count
 from time import time
+from typing import Union
 
-from scipy.spatial import cKDTree
-from jigsawpy import jigsaw_msh_t
 import numpy as np
+from jigsawpy import jigsaw_msh_t
 from pyproj import Transformer
+from scipy.spatial import cKDTree
 from shapely import ops
-from shapely.geometry import (
-    LineString, MultiLineString, Polygon, MultiPolygon)
+from shapely.geometry import LineString, MultiLineString, MultiPolygon, Polygon
 
-from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import utils
-
+from ocsmesh.crs import CRS as CRSDescriptor
+from ocsmesh.hfun.base import BaseHfun
 
 _logger = logging.getLogger(__name__)
 

@@ -1,39 +1,37 @@
-import math
 import hashlib
 import logging
+import math
 import multiprocessing
 import os
 import pathlib
 import tempfile
+import warnings
+from contextlib import ExitStack, contextmanager
 from time import time
 from typing import Union
-from contextlib import contextmanager, ExitStack
-import warnings
 
 # from matplotlib.colors import LinearSegmentedColormap
 import geopandas as gpd
-from matplotlib.cm import ScalarMappable
 import matplotlib.pyplot as plt
-from matplotlib.transforms import Bbox
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
-from pyproj import CRS, Transformer
 import rasterio
 import rasterio.mask
-from rasterio import warp
+from matplotlib.cm import ScalarMappable
+from matplotlib.transforms import Bbox
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from pyproj import CRS, Transformer
+from rasterio import warp, windows
 from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 from rasterio.transform import array_bounds
-from rasterio import windows
 from scipy.ndimage import gaussian_filter
 from shapely import ops
-from shapely.geometry import (
-    Polygon, MultiPolygon, LineString, MultiLineString, box)
+from shapely.geometry import (LineString, MultiLineString, MultiPolygon,
+                              Polygon, box)
 
 # from ocsmesh.geom import Geom
 # from ocsmesh.hfun import Hfun
-from ocsmesh import figures
-from ocsmesh import utils
+from ocsmesh import figures, utils
 
 _logger = logging.getLogger(__name__)
 

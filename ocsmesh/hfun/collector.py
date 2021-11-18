@@ -1,35 +1,34 @@
-import os
 import gc
 import logging
-import warnings
+import os
 import tempfile
+import warnings
+from copy import copy, deepcopy
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from time import time
-from multiprocessing import Pool, cpu_count
-from copy import copy, deepcopy
-from typing import Union, Sequence, List, Tuple
+from typing import List, Sequence, Tuple, Union
 
-import numpy as np
 import geopandas as gpd
-from pyproj import CRS, Transformer
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, box
-from shapely import ops
-from jigsawpy import jigsaw_msh_t
-from rasterio.transform import from_origin
-from rasterio.warp import reproject, Resampling
+import numpy as np
 import rasterio
+from jigsawpy import jigsaw_msh_t
+from pyproj import CRS, Transformer
+from rasterio.transform import from_origin
+from rasterio.warp import Resampling, reproject
+from shapely import ops
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, box
 
 from ocsmesh import utils
-from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.hfun.raster import HfunRaster
-from ocsmesh.hfun.mesh import HfunMesh
-from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
-from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.features.channel import Channel
+from ocsmesh.features.constraint import TopoConstConstraint, TopoFuncConstraint
 from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
-from ocsmesh.features.channel import Channel
-from ocsmesh.features.constraint import (
-    TopoConstConstraint, TopoFuncConstraint)
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.hfun.raster import HfunRaster
+from ocsmesh.mesh.mesh import EuclideanMesh2D, Mesh
+from ocsmesh.raster import Raster, get_iter_windows
 
 _logger = logging.getLogger(__name__)
 

@@ -1,13 +1,12 @@
 import pathlib
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.event import listen
-from sqlalchemy.sql import select, func
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from sqlalchemy import Column, Float, String
+
 from geoalchemy2 import Geometry
 from geoalchemy2 import Raster as _Raster
-
+from sqlalchemy import Column, Float, String, create_engine
+from sqlalchemy.event import listen
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func, select
 
 Base = declarative_base()
 

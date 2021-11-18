@@ -1,5 +1,6 @@
-from pathlib import Path
 from abc import ABC, abstractmethod
+from pathlib import Path
+
 
 class ContourBase(ABC):
 

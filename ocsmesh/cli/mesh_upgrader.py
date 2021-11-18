@@ -1,20 +1,19 @@
 #!/bin/env python3
 import gc
-import sys
-import pathlib
 import logging
+import pathlib
+import sys
 
 import geopandas as gpd
 from shapely.geometry import MultiPolygon
 
-from ocsmesh import Raster, Geom, Hfun, JigsawDriver
-from ocsmesh.mesh.mesh import Mesh
+from ocsmesh import Geom, Hfun, JigsawDriver, Raster
+from ocsmesh.features.contour import Contour
 from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
-from ocsmesh.features.contour import Contour
+from ocsmesh.mesh.mesh import Mesh
 from ocsmesh.mesh.parsers import sms2dm
 from ocsmesh.utils import msh_t_to_2dm
-
 
 logging.basicConfig(
     stream=sys.stdout,

@@ -1,15 +1,16 @@
 import os
 from typing import Union
 
+from ocsmesh.geom.base import BaseGeom
+from ocsmesh.mesh.base import BaseMesh
+from ocsmesh.mesh.mesh import Mesh
+
 # from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 # import matplotlib.pyplot as plt  # type: ignore[import]
 # import mpl_toolkits.mplot3d as m3d  # type: ignore[import]
 # import numpy as np  # type: ignore[import]
 # from shapely import ops  # type: ignore[import]
 
-from ocsmesh.geom.base import BaseGeom
-from ocsmesh.mesh.mesh import Mesh
-from ocsmesh.mesh.base import BaseMesh
 
 
 class MeshDescriptor:

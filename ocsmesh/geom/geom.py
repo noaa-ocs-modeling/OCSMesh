@@ -1,12 +1,12 @@
-from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
+from shapely.geometry import MultiPolygon, Polygon  # type: ignore[import]
 
-from ocsmesh.raster import Raster
-from ocsmesh.mesh.base import BaseMesh
 from ocsmesh.geom.base import BaseGeom
-from ocsmesh.geom.raster import RasterGeom
-from ocsmesh.geom.mesh import MeshGeom
-from ocsmesh.geom.shapely import PolygonGeom, MultiPolygonGeom
 from ocsmesh.geom.collector import GeomCollector
+from ocsmesh.geom.mesh import MeshGeom
+from ocsmesh.geom.raster import RasterGeom
+from ocsmesh.geom.shapely import MultiPolygonGeom, PolygonGeom
+from ocsmesh.mesh.base import BaseMesh
+from ocsmesh.raster import Raster
 
 
 class Geom(BaseGeom):

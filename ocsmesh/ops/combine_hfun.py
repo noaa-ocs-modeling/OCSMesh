@@ -2,15 +2,15 @@ import logging
 import os
 import pathlib
 from multiprocessing import cpu_count
-from typing import Union, Sequence, List
+from typing import List, Sequence, Union
 
-from pyproj import CRS
 from jigsawpy import savemsh, savevtk
+from pyproj import CRS
 
-from ocsmesh.raster import Raster
+from ocsmesh import utils
 from ocsmesh.hfun.hfun import Hfun
 from ocsmesh.mesh.mesh import Mesh
-from ocsmesh import utils
+from ocsmesh.raster import Raster
 
 _logger = logging.getLogger(__name__)
 

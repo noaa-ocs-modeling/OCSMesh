@@ -1,15 +1,16 @@
 #! /usr/bin/env python
-import setuptools
-import subprocess
-import setuptools.command.build_py
 import distutils.cmd
 import distutils.util
-import shutil
+import os
 import platform
+import shutil
+import subprocess
+import sys
 from multiprocessing import cpu_count
 from pathlib import Path
-import sys
-import os
+
+import setuptools
+import setuptools.command.build_py
 
 PARENT = Path(__file__).parent.absolute()
 PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))

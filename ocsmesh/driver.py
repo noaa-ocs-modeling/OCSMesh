@@ -1,18 +1,16 @@
 import logging
 from typing import Union
 
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
-from jigsawpy import libsaw
 import numpy as np
+from jigsawpy import jigsaw_jig_t, jigsaw_msh_t, libsaw
 from pyproj import CRS
 
-
 from ocsmesh import utils
-from ocsmesh.mesh import Mesh
-from ocsmesh.hfun import Hfun
-from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.geom import Geom
 from ocsmesh.geom.base import BaseGeom
+from ocsmesh.hfun import Hfun
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.mesh import Mesh
 
 _logger = logging.getLogger(__name__)
 

@@ -1,18 +1,16 @@
 #!/usr/bin/env python
-import sys
 import gc
 import logging
-from pathlib import Path
+import sys
 from copy import deepcopy
+from pathlib import Path
 
+import geopandas as gpd
 import jigsawpy
 import numpy as np
-import geopandas as gpd
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import MultiPolygon, Polygon
 
-from ocsmesh import Raster, Geom, Hfun, Mesh
-from ocsmesh import utils
-
+from ocsmesh import Geom, Hfun, Mesh, Raster, utils
 
 logging.basicConfig(
     stream=sys.stdout,

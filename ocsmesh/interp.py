@@ -2,24 +2,25 @@
 """
 CLI interface for interpolating rasters into a mesh.
 """
-import sys
 import argparse
 import pathlib
 import shutil
+import sys
 import tempfile
 from functools import lru_cache
 from multiprocessing import Pool
 
-import numpy as np
 import fiona
+import numpy as np
 import requests
-from tqdm import tqdm
-from matplotlib.path import Path  # type: ignore[import]
-from scipy.interpolate import RectBivariateSpline  # , griddata
 from geoalchemy2.shape import from_shape
+from matplotlib.path import Path  # type: ignore[import]
+from pyproj import CRS, Transformer
+from scipy.interpolate import RectBivariateSpline  # , griddata
 from shapely.geometry import box
 from shapely.ops import transform
-from pyproj import CRS, Transformer
+from tqdm import tqdm
+
 from ocsmesh import Mesh, Raster, db
 
 

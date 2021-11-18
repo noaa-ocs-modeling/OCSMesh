@@ -1,31 +1,28 @@
 import functools
 import gc
 import logging
-from multiprocessing import cpu_count, Pool
 import operator
 import tempfile
-from time import time
-from typing import Union, List
-from contextlib import ExitStack
 import warnings
+from contextlib import ExitStack
+from multiprocessing import Pool, cpu_count
+from time import time
+from typing import List, Union
 
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
-from jigsawpy import libsaw
 import numpy as np
-from pyproj import CRS, Transformer
 import rasterio
+from jigsawpy import jigsaw_jig_t, jigsaw_msh_t, libsaw
+from pyproj import CRS, Transformer
 from scipy.spatial import cKDTree
 from shapely import ops
-from shapely.geometry import (
-    LineString, MultiLineString, box, GeometryCollection,
-    Polygon, MultiPolygon)
+from shapely.geometry import (GeometryCollection, LineString, MultiLineString,
+                              MultiPolygon, Polygon, box)
 
+from ocsmesh import utils
+from ocsmesh.features.constraint import TopoConstConstraint, TopoFuncConstraint
+from ocsmesh.geom.shapely import PolygonGeom
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
-from ocsmesh.geom.shapely import PolygonGeom
-from ocsmesh.features.constraint import (
-        TopoConstConstraint, TopoFuncConstraint)
-from ocsmesh import utils
 
 # supress feather warning
 warnings.filterwarnings(

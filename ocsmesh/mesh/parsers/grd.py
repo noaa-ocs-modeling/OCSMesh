@@ -1,9 +1,9 @@
-from collections import defaultdict
-import os
 import numbers
+import os
 import pathlib
-from typing import Union, Dict, TextIO
 import warnings
+from collections import defaultdict
+from typing import Dict, TextIO, Union
 
 import numpy as np  # type: ignore[import]
 from pyproj import CRS  # type: ignore[import]

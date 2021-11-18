@@ -1,7 +1,7 @@
 from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.hfun.raster import HfunRaster
-from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.hfun.collector import HfunCollector
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.mesh.mesh import EuclideanMesh2D
 from ocsmesh.raster import Raster
 

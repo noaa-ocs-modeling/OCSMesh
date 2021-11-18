@@ -2,8 +2,8 @@
 
 import argparse
 
-from ocsmesh.ops import combine_geometry, combine_hfun
 from ocsmesh.cli.cli import CmdCli
+from ocsmesh.ops import combine_geometry, combine_hfun
 
 
 class OCSMesh:

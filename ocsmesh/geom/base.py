@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
-from jigsawpy import jigsaw_msh_t
 import numpy as np
+from jigsawpy import jigsaw_msh_t
 from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import MultiPolygon
 
-from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import utils
+from ocsmesh.crs import CRS as CRSDescriptor
 
 
 class BaseGeom(ABC):

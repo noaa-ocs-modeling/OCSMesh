@@ -1,7 +1,7 @@
 from typing import Union
 
 from pyproj import CRS
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import MultiPolygon, Polygon
 
 from ocsmesh.geom.base import BaseGeom
 

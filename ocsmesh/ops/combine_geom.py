@@ -1,24 +1,22 @@
 import gc
 import logging
-from multiprocessing import Pool, Lock, cpu_count
 import os
 import pathlib
 import tempfile
 import warnings
-from typing import Union, Sequence, Tuple, List
+from multiprocessing import Lock, Pool, cpu_count
+from typing import List, Sequence, Tuple, Union
 
 import geopandas as gpd
 import numpy as np
+from jigsawpy import jigsaw_msh_t, savemsh, savevtk
 from pyproj import CRS, Transformer
 from shapely import ops
-from shapely.geometry import box, Polygon, MultiPolygon, LinearRing
+from shapely.geometry import LinearRing, MultiPolygon, Polygon, box
 from shapely.validation import explain_validity
 
-from jigsawpy import jigsaw_msh_t, savemsh, savevtk
-
-from ocsmesh.raster import Raster
 from ocsmesh.mesh.mesh import Mesh
-
+from ocsmesh.raster import Raster
 
 _logger = logging.getLogger(__name__)
 

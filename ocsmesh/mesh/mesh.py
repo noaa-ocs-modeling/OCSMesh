@@ -1,31 +1,28 @@
-from functools import lru_cache
 import logging
-from multiprocessing import Pool, cpu_count
 import os
 import pathlib
-from typing import Union, List
-from collections import defaultdict
 import warnings
+from collections import defaultdict
+from functools import lru_cache
+from multiprocessing import Pool, cpu_count
+from typing import List, Union
 
 import geopandas as gpd
-from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
+import matplotlib.pyplot as plt
+import numpy as np
+from jigsawpy import jigsaw_msh_t, loadmsh, savemsh, savevtk
 from matplotlib.path import Path
 from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
-import matplotlib.pyplot as plt
-import numpy as np
 from pyproj import CRS, Transformer
-from scipy.interpolate import (
-        RectBivariateSpline, RegularGridInterpolator)
-from shapely.geometry import (
-        LineString, box, Polygon, MultiPolygon)
-from shapely.ops import polygonize, linemerge
-
+from scipy.interpolate import RectBivariateSpline, RegularGridInterpolator
+from shapely.geometry import LineString, MultiPolygon, Polygon, box
+from shapely.ops import linemerge, polygonize
 
 from ocsmesh import utils
-from ocsmesh.raster import Raster
 from ocsmesh.mesh.base import BaseMesh
 from ocsmesh.mesh.parsers import grd, sms2dm
+from ocsmesh.raster import Raster
 
 _logger = logging.getLogger(__name__)
 

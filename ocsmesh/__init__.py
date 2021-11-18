@@ -1,10 +1,9 @@
-import pathlib
-from importlib import util
-import tempfile
 import os
-import sys
+import pathlib
 import platform
-
+import sys
+import tempfile
+from importlib import util
 
 try:
     import jigsawpy  # noqa: F401
@@ -24,11 +23,11 @@ except OSError as e:
     os.symlink(src_libpath, tgt_libpath)
 
 
+from .driver import JigsawDriver
 from .geom import Geom
 from .hfun import Hfun
-from .raster import Raster
-from .driver import JigsawDriver
 from .mesh import Mesh
+from .raster import Raster
 
 if util.find_spec("colored_traceback") is not None:
     import colored_traceback
