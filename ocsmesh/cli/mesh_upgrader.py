@@ -5,8 +5,6 @@ import pathlib
 import sys
 
 import geopandas as gpd
-from shapely.geometry import MultiPolygon
-
 from ocsmesh import Geom, Hfun, JigsawDriver, Raster
 from ocsmesh.features.contour import Contour
 from ocsmesh.geom.shapely import MultiPolygonGeom
@@ -14,6 +12,7 @@ from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.mesh.mesh import Mesh
 from ocsmesh.mesh.parsers import sms2dm
 from ocsmesh.utils import msh_t_to_2dm
+from shapely.geometry import MultiPolygon
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -116,10 +115,10 @@ class MeshUpgrader:
         jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
         jigsaw.verbosity = 1
 
-        ## Execute mesher (processing of geom and hfun happens here)
+        # Execute mesher (processing of geom and hfun happens here)
         mesh = jigsaw.run()
 
-        ## Free-up memory
+        # Free-up memory
         del read_gdf
         del geom_from_disk
         del read_hfun
@@ -128,8 +127,8 @@ class MeshUpgrader:
 
         mesh.write(str(out_path) + ".raw.2dm", format="2dm", overwrite=True)
 
-        ## Interpolate DEMs on the mesh
+        # Interpolate DEMs on the mesh
         mesh.interpolate(interp_rast_list, nprocs=4)
 
-        ## Output
+        # Output
         mesh.write(out_path, format="2dm", overwrite=True)

@@ -18,15 +18,8 @@ from scipy import sparse
 from scipy.interpolate import RectBivariateSpline  # type: ignore[import]
 from scipy.interpolate import griddata
 from shapely.geometry import GeometryCollection  # type: ignore[import]
-from shapely.geometry import (
-    LinearRing,
-    LineString,
-    MultiPoint,
-    MultiPolygon,
-    Point,
-    Polygon,
-    box,
-)
+from shapely.geometry import (LinearRing, LineString, MultiPoint, MultiPolygon,
+                              Point, Polygon, box)
 from shapely.ops import linemerge, polygonize
 
 ELEM_2D_TYPES = ["tria3", "quad4", "hexa8"]
@@ -175,7 +168,7 @@ def get_mesh_polygons(mesh):
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1 :]])
+                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1:]])
                 if pnts.is_empty:
                     break
 

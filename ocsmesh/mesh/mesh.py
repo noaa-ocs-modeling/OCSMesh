@@ -14,15 +14,14 @@ from jigsawpy import jigsaw_msh_t, loadmsh, savemsh, savevtk
 from matplotlib.path import Path
 from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
-from pyproj import CRS, Transformer
-from scipy.interpolate import RectBivariateSpline, RegularGridInterpolator
-from shapely.geometry import LineString, MultiPolygon, Polygon, box
-from shapely.ops import linemerge, polygonize
-
 from ocsmesh import utils
 from ocsmesh.mesh.base import BaseMesh
 from ocsmesh.mesh.parsers import grd, sms2dm
 from ocsmesh.raster import Raster
+from pyproj import CRS, Transformer
+from scipy.interpolate import RectBivariateSpline, RegularGridInterpolator
+from shapely.geometry import LineString, MultiPolygon, Polygon, box
+from shapely.ops import linemerge, polygonize
 
 _logger = logging.getLogger(__name__)
 
@@ -804,7 +803,7 @@ class EuclideanMesh2D(EuclideanMesh):
         for e, ring in enumerate(rings[:-1]):
             path = Path(ring, closed=True)
             n_parents = n_parents + np.pad(
-                np.array([path.contains_point(pt) for pt in represent[e + 1 :]]),
+                np.array([path.contains_point(pt) for pt in represent[e + 1:]]),
                 (e + 1, 0),
                 "constant",
                 constant_values=0,
