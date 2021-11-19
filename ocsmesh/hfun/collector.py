@@ -1,40 +1,39 @@
-import os
 import gc
 import logging
-import warnings
+import os
 import tempfile
+import warnings
+from copy import copy, deepcopy
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 from time import time
-from multiprocessing import Pool, cpu_count
-from copy import copy, deepcopy
-from typing import Union, Sequence, List, Tuple
+from typing import List, Sequence, Tuple, Union
 
-import numpy as np
 import geopandas as gpd
-from pyproj import CRS, Transformer
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, box
-from shapely import ops
-from jigsawpy import jigsaw_msh_t
-from rasterio.transform import from_origin
-from rasterio.warp import reproject, Resampling
+import numpy as np
 import rasterio
+from jigsawpy import jigsaw_msh_t
+from pyproj import CRS, Transformer
+from rasterio.transform import from_origin
+from rasterio.warp import Resampling, reproject
+from shapely import ops
+from shapely.geometry import GeometryCollection, MultiPolygon, Polygon, box
 
 from ocsmesh import utils
-from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.hfun.raster import HfunRaster
-from ocsmesh.hfun.mesh import HfunMesh
-from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
-from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.features.channel import Channel
+from ocsmesh.features.constraint import TopoConstConstraint, TopoFuncConstraint
 from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
-from ocsmesh.features.channel import Channel
-from ocsmesh.features.constraint import (
-    TopoConstConstraint, TopoFuncConstraint)
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.hfun.raster import HfunRaster
+from ocsmesh.mesh.mesh import EuclideanMesh2D, Mesh
+from ocsmesh.raster import Raster, get_iter_windows
 
 _logger = logging.getLogger(__name__)
 
-class RefinementContourInfoCollector:
 
+class RefinementContourInfoCollector:
     def __init__(self):
         self._contours_info = {}
 
@@ -46,10 +45,7 @@ class RefinementContourInfoCollector:
             yield defn, info
 
 
-
-
 class RefinementContourCollector:
-
     def __init__(self, contours_info):
         self._contours_info = contours_info
         self._container: List[Union[Tuple, None]] = []
@@ -74,16 +70,17 @@ class RefinementContourCollector:
                 feather_path = out_dir / f"contour_{pid}_{file_counter}.feather"
                 crs_path = out_dir / f"crs_{pid}_{file_counter}.json"
                 gpd.GeoDataFrame(
-                    { 'geometry': [contour],
-                      'expansion_rate': size_info['expansion_rate'],
-                      'target_size': size_info['target_size'],
+                    {
+                        "geometry": [contour],
+                        "expansion_rate": size_info["expansion_rate"],
+                        "target_size": size_info["target_size"],
                     },
-                    crs=crs).to_feather(feather_path)
+                    crs=crs,
+                ).to_feather(feather_path)
                 gc.collect()
-                with open(crs_path, 'w') as fp:
+                with open(crs_path, "w") as fp:
                     fp.write(crs.to_json())
                 self._container.append((feather_path, crs_path))
-
 
     def __iter__(self):
         for raster_data in self._container:
@@ -94,26 +91,20 @@ class RefinementContourCollector:
             yield gdf
 
 
-
-
 class ConstantValueContourInfoCollector:
-
     def __init__(self):
         self._contours_info = {}
 
     def add(self, src_idx, contour_defn0, contour_defn1, value):
         srcs = tuple(src_idx) if src_idx is not None else None
-        self._contours_info[
-                (srcs, contour_defn0, contour_defn1)] = value
+        self._contours_info[(srcs, contour_defn0, contour_defn1)] = value
 
     def __iter__(self):
         for defn, info in self._contours_info.items():
             yield defn, info
 
 
-
 class RefinementPatchInfoCollector:
-
     def __init__(self):
         self._patch_info = {}
 
@@ -125,17 +116,14 @@ class RefinementPatchInfoCollector:
             yield defn, info
 
 
-
 class FlowLimiterInfoCollector:
-
     def __init__(self):
         self._flow_lim_info = []
 
     def add(self, src_idx, hmin, hmax, upper_bound, lower_bound):
 
         srcs = tuple(src_idx) if src_idx is not None else None
-        self._flow_lim_info.append(
-                (src_idx, hmin, hmax, upper_bound, lower_bound))
+        self._flow_lim_info.append((src_idx, hmin, hmax, upper_bound, lower_bound))
 
     def __iter__(self):
 
@@ -143,9 +131,7 @@ class FlowLimiterInfoCollector:
             yield src_idx, hmin, hmax, ub, lb
 
 
-
 class ChannelRefineInfoCollector:
-
     def __init__(self):
         self._ch_info_dict = {}
 
@@ -159,7 +145,6 @@ class ChannelRefineInfoCollector:
 
 
 class ChannelRefineCollector:
-
     def __init__(self, channels_info):
         self._channels_info = channels_info
         self._container: List[Union[Tuple, None]] = []
@@ -184,13 +169,15 @@ class ChannelRefineCollector:
                 feather_path = out_dir / f"channels_{pid}_{file_counter}.feather"
                 crs_path = out_dir / f"crs_{pid}_{file_counter}.json"
                 gpd.GeoDataFrame(
-                    { 'geometry': [channels],
-                      'expansion_rate': size_info['expansion_rate'],
-                      'target_size': size_info['target_size'],
+                    {
+                        "geometry": [channels],
+                        "expansion_rate": size_info["expansion_rate"],
+                        "target_size": size_info["target_size"],
                     },
-                    crs=crs).to_feather(feather_path)
+                    crs=crs,
+                ).to_feather(feather_path)
                 gc.collect()
-                with open(crs_path, 'w') as fp:
+                with open(crs_path, "w") as fp:
                     fp.write(crs.to_json())
                 self._container.append((feather_path, crs_path))
 
@@ -204,7 +191,6 @@ class ChannelRefineCollector:
 
 
 class ConstraintInfoCollector:
-
     def __init__(self):
         self._constraints_info = []
 
@@ -217,23 +203,20 @@ class ConstraintInfoCollector:
             yield defn
 
 
-
 class HfunCollector(BaseHfun):
-
     def __init__(
-            self,
-            in_list: Sequence[
-                Union[str, Raster, Mesh, HfunRaster, HfunMesh]],
-            base_mesh: Mesh = None,
-            hmin: float = None,
-            hmax: float = None,
-            nprocs: int = None,
-            verbosity: int = 0,
-            method: str = 'exact',
-            base_as_hfun: bool = True,
-            base_shape: Union[Polygon, MultiPolygon] = None,
-            base_shape_crs: Union[str, CRS] = 'EPSG:4326'
-            ):
+        self,
+        in_list: Sequence[Union[str, Raster, Mesh, HfunRaster, HfunMesh]],
+        base_mesh: Mesh = None,
+        hmin: float = None,
+        hmax: float = None,
+        nprocs: int = None,
+        verbosity: int = 0,
+        method: str = "exact",
+        base_as_hfun: bool = True,
+        base_shape: Union[Polygon, MultiPolygon] = None,
+        base_shape_crs: Union[str, CRS] = "EPSG:4326",
+    ):
 
         # NOTE: Input Hfuns and their Rasters can get modified
 
@@ -260,8 +243,7 @@ class HfunCollector(BaseHfun):
                 self._base_mesh.size_from_mesh()
 
         self._contour_info_coll = RefinementContourInfoCollector()
-        self._contour_coll = RefinementContourCollector(
-                self._contour_info_coll)
+        self._contour_coll = RefinementContourCollector(self._contour_info_coll)
 
         self._const_val_contour_coll = ConstantValueContourInfoCollector()
 
@@ -270,8 +252,7 @@ class HfunCollector(BaseHfun):
         self._flow_lim_coll = FlowLimiterInfoCollector()
 
         self._ch_info_coll = ChannelRefineInfoCollector()
-        self._channels_coll = ChannelRefineCollector(
-                self._ch_info_coll)
+        self._channels_coll = ChannelRefineCollector(self._ch_info_coll)
 
         self._constraint_info_coll = ConstraintInfoCollector()
 
@@ -292,9 +273,9 @@ class HfunCollector(BaseHfun):
                     clip_shape = self._base_shape
                     if not self._base_shape_crs.equals(in_item.crs):
                         transformer = Transformer.from_crs(
-                            self._base_shape_crs, in_item.crs, always_xy=True)
-                        clip_shape = ops.transform(
-                                transformer.transform, clip_shape)
+                            self._base_shape_crs, in_item.crs, always_xy=True
+                        )
+                        clip_shape = ops.transform(transformer.transform, clip_shape)
                     try:
                         in_item.clip(clip_shape)
                     except ValueError as err:
@@ -316,15 +297,17 @@ class HfunCollector(BaseHfun):
                 hfun = HfunMesh(in_item)
 
             elif isinstance(in_item, str):
-                if in_item.endswith('.tif'):
+                if in_item.endswith(".tif"):
                     raster = Raster(in_item)
                     if self._base_shape:
                         clip_shape = self._base_shape
                         if not self._base_shape_crs.equals(raster.crs):
                             transformer = Transformer.from_crs(
-                                self._base_shape_crs, raster.crs, always_xy=True)
+                                self._base_shape_crs, raster.crs, always_xy=True
+                            )
                             clip_shape = ops.transform(
-                                    transformer.transform, clip_shape)
+                                transformer.transform, clip_shape
+                            )
                         try:
                             in_item.clip(clip_shape)
                         except ValueError as err:
@@ -342,8 +325,7 @@ class HfunCollector(BaseHfun):
 
                     hfun = HfunRaster(raster, **self._size_info)
 
-                elif in_item.endswith(
-                        ('.14', '.grd', '.gr3', '.msh', '.2dm')):
+                elif in_item.endswith((".14", ".grd", ".gr3", ".msh", ".2dm")):
                     mesh = Mesh.open(in_item)
                     hfun = HfunMesh(mesh)
 
@@ -352,20 +334,18 @@ class HfunCollector(BaseHfun):
 
             self._hfun_list.append(hfun)
 
-
     def msh_t(self) -> jigsaw_msh_t:
 
         composite_hfun = jigsaw_msh_t()
 
-        if self._method == 'exact':
+        if self._method == "exact":
             self._apply_features()
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 hfun_path_list = self._write_hfun_to_disk(temp_dir)
                 composite_hfun = self._get_hfun_composite(hfun_path_list)
 
-
-        elif self._method == 'fast':
+        elif self._method == "fast":
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 rast = self._create_big_raster(temp_dir)
@@ -377,57 +357,58 @@ class HfunCollector(BaseHfun):
 
         return composite_hfun
 
-
     def add_topo_bound_constraint(
-            self,
-            value,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01,
-            source_index: Union[List[int], int, None] = None):
+        self,
+        value,
+        upper_bound=np.inf,
+        lower_bound=-np.inf,
+        value_type: str = "min",
+        rate=0.01,
+        source_index: Union[List[int], int, None] = None,
+    ):
 
         self._applied = False
 
         constraint_defn = TopoConstConstraint(
-            value, upper_bound, lower_bound, value_type, rate)
+            value, upper_bound, lower_bound, value_type, rate
+        )
 
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._constraint_info_coll.add(source_index, constraint_defn)
 
-
     def add_topo_func_constraint(
-            self,
-            func=lambda i: i / 2.0,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01,
-            source_index: Union[List[int], int, None] = None):
+        self,
+        func=lambda i: i / 2.0,
+        upper_bound=np.inf,
+        lower_bound=-np.inf,
+        value_type: str = "min",
+        rate=0.01,
+        source_index: Union[List[int], int, None] = None,
+    ):
 
         self._applied = False
 
         constraint_defn = TopoFuncConstraint(
-            func, upper_bound, lower_bound, value_type, rate)
+            func, upper_bound, lower_bound, value_type, rate
+        )
 
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._constraint_info_coll.add(source_index, constraint_defn)
 
-
     def add_contour(
-            self,
-            level: Union[List[float], float] = None,
-            expansion_rate: float = 0.01,
-            target_size: float = None,
-            contour_defn: Contour = None,
+        self,
+        level: Union[List[float], float] = None,
+        expansion_rate: float = 0.01,
+        target_size: float = None,
+        contour_defn: Contour = None,
     ):
 
-        '''
+        """
         Contours are defined by contour defn or by raster sources only,
         but are applied on both raster and mesh hfun
-        '''
+        """
 
         # Always lazy
         self._applied = False
@@ -438,7 +419,6 @@ class HfunCollector(BaseHfun):
         else:
             levels.append(level)
 
-
         contour_defns = []
         if contour_defn is None:
             for lvl in levels:
@@ -447,7 +427,8 @@ class HfunCollector(BaseHfun):
         elif not isinstance(contour_defn, Contour):
             raise TypeError(
                 f"Contour definition must be of type {Contour} not"
-                f" {type(contour_defn)}!")
+                f" {type(contour_defn)}!"
+            )
 
         elif level is not None:
             msg = "Level is ignored since a contour definition is provided!"
@@ -459,18 +440,18 @@ class HfunCollector(BaseHfun):
 
         for ctr_dfn in contour_defns:
             self._contour_info_coll.add(
-                ctr_dfn,
-                expansion_rate=expansion_rate,
-                target_size=target_size)
+                ctr_dfn, expansion_rate=expansion_rate, target_size=target_size
+            )
 
     def add_channel(
-            self,
-            level: float = 0,
-            width: float = 1000, # in meters
-            target_size: float = 200,
-            expansion_rate: float = None,
-            tolerance: Union[None, float] = 50,
-            channel_defn = None):
+        self,
+        level: float = 0,
+        width: float = 1000,  # in meters
+        target_size: float = 200,
+        expansion_rate: float = None,
+        tolerance: Union[None, float] = 50,
+        channel_defn=None,
+    ):
 
         self._applied = False
 
@@ -482,27 +463,26 @@ class HfunCollector(BaseHfun):
         # is much faster than 1. The reason is in simplify we don't
         # preserve topology
         if channel_defn is None:
-            channel_defn = Channel(
-                level=level, width=width, tolerance=tolerance)
+            channel_defn = Channel(level=level, width=width, tolerance=tolerance)
 
         elif not isinstance(channel_defn, Channel):
             raise TypeError(
                 f"Channel definition must be of type {Channel} not"
-                f" {type(channel_defn)}!")
+                f" {type(channel_defn)}!"
+            )
 
         self._ch_info_coll.add(
-            channel_defn,
-            expansion_rate=expansion_rate,
-            target_size=target_size)
-
+            channel_defn, expansion_rate=expansion_rate, target_size=target_size
+        )
 
     def add_subtidal_flow_limiter(
-            self,
-            hmin=None,
-            hmax=None,
-            upper_bound=None,
-            lower_bound=None,
-            source_index: Union[List[int], int, None] = None):
+        self,
+        hmin=None,
+        hmax=None,
+        upper_bound=None,
+        lower_bound=None,
+        source_index: Union[List[int], int, None] = None,
+    ):
 
         self._applied = False
 
@@ -516,15 +496,16 @@ class HfunCollector(BaseHfun):
             hmin=hmin,
             hmax=hmax,
             upper_bound=upper_bound,
-            lower_bound=lower_bound)
-
+            lower_bound=lower_bound,
+        )
 
     def add_constant_value(
-            self, value,
-            lower_bound=None,
-            upper_bound=None,
-            source_index: Union[List[int], int, None] =None):
-
+        self,
+        value,
+        lower_bound=None,
+        upper_bound=None,
+        source_index: Union[List[int], int, None] = None,
+    ):
 
         self._applied = False
 
@@ -538,16 +519,16 @@ class HfunCollector(BaseHfun):
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._const_val_contour_coll.add(
-            source_index, contour_defn0, contour_defn1, value)
-
+            source_index, contour_defn0, contour_defn1, value
+        )
 
     def add_patch(
-            self,
-            shape: Union[MultiPolygon, Polygon] = None,
-            patch_defn: Patch = None,
-            shapefile: Union[None, str, Path] = None,
-            expansion_rate: float = None,
-            target_size: float = None,
+        self,
+        shape: Union[MultiPolygon, Polygon] = None,
+        patch_defn: Patch = None,
+        shapefile: Union[None, str, Path] = None,
+        expansion_rate: float = None,
+        target_size: float = None,
     ):
 
         # "shape" should be in 4326 CRS. For shapefile or patch_defn
@@ -563,20 +544,19 @@ class HfunCollector(BaseHfun):
                 patch_defn = Patch(shapefile=shapefile)
 
         self._refine_patch_info_coll.add(
-            patch_defn,
-            expansion_rate=expansion_rate,
-            target_size=target_size)
-
+            patch_defn, expansion_rate=expansion_rate, target_size=target_size
+        )
 
     @staticmethod
     def _type_chk(input_list):
-        ''' Check the input type for constructor '''
+        """Check the input type for constructor"""
         valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
-                f'Input list items must be of type'
+                f"Input list items must be of type"
                 f' {", ".join(str(i) for i in valid_types)},'
-                f' or a derived type.')
+                f" or a derived type."
+            )
 
     def _apply_features(self):
 
@@ -590,14 +570,11 @@ class HfunCollector(BaseHfun):
 
         self._applied = True
 
-
     def _apply_constraints(self):
-        if self._method == 'fast':
-            raise NotImplementedError(
-                "This function does not suuport fast hfun method")
+        if self._method == "fast":
+            raise NotImplementedError("This function does not suuport fast hfun method")
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
             constraint_list = []
@@ -610,7 +587,6 @@ class HfunCollector(BaseHfun):
             if constraint_list:
                 hfun.apply_constraints(constraint_list)
 
-
     def _apply_contours(self, apply_to=None):
 
         # TODO: Consider CRS before applying to different hfuns
@@ -618,11 +594,9 @@ class HfunCollector(BaseHfun):
         # NOTE: for parallelization make sure a single hfun is NOT
         # passed to multiple processes
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
-            mesh_hfun_list = [
-                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            mesh_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunMesh)]
             if self._base_mesh and self._base_as_hfun:
                 mesh_hfun_list.insert(0, self._base_mesh)
             apply_to = [*mesh_hfun_list, *raster_hfun_list]
@@ -646,32 +620,33 @@ class HfunCollector(BaseHfun):
                             if not gdf.crs.equals(hfun.crs):
                                 _logger.info("Reprojecting feature...")
                                 transformer = Transformer.from_crs(
-                                    gdf.crs, hfun.crs, always_xy=True)
-                                shape = ops.transform(
-                                        transformer.transform, shape)
+                                    gdf.crs, hfun.crs, always_xy=True
+                                )
+                                shape = ops.transform(transformer.transform, shape)
                             counter = counter + 1
-                            hfun.add_feature(**{
-                                'feature': shape,
-                                'expansion_rate': row.expansion_rate,
-                                'target_size': row.target_size,
-                                'pool': p
-                            })
+                            hfun.add_feature(
+                                **{
+                                    "feature": shape,
+                                    "expansion_rate": row.expansion_rate,
+                                    "target_size": row.target_size,
+                                    "pool": p,
+                                }
+                            )
             p.join()
             # hfun objects cause issue with pickling
             # -> cannot be passed to pool
-#            with Pool(processes=self._nprocs) as p:
-#                p.starmap(
-#                    _apply_contours_worker,
-#                    [(hfun, self._contour_coll, self._nprocs)
-#                     for hfun in apply_to])
+
+    #            with Pool(processes=self._nprocs) as p:
+    #                p.starmap(
+    #                    _apply_contours_worker,
+    #                    [(hfun, self._contour_coll, self._nprocs)
+    #                     for hfun in apply_to])
 
     def _apply_channels(self, apply_to=None):
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
-            mesh_hfun_list = [
-                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            mesh_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunMesh)]
             if self._base_mesh and self._base_as_hfun:
                 mesh_hfun_list.insert(0, self._base_mesh)
             apply_to = [*mesh_hfun_list, *raster_hfun_list]
@@ -694,67 +669,60 @@ class HfunCollector(BaseHfun):
                         if not gdf.crs.equals(hfun.crs):
                             _logger.info("Reprojecting feature...")
                             transformer = Transformer.from_crs(
-                                gdf.crs, hfun.crs, always_xy=True)
-                            shape = ops.transform(
-                                    transformer.transform, shape)
+                                gdf.crs, hfun.crs, always_xy=True
+                            )
+                            shape = ops.transform(transformer.transform, shape)
                         counter = counter + 1
-                        hfun.add_patch(**{
-                            'multipolygon': shape,
-                            'expansion_rate': row.expansion_rate,
-                            'target_size': row.target_size,
-                            'nprocs': self._nprocs
-                        })
-
+                        hfun.add_patch(
+                            **{
+                                "multipolygon": shape,
+                                "expansion_rate": row.expansion_rate,
+                                "target_size": row.target_size,
+                                "nprocs": self._nprocs,
+                            }
+                        )
 
     def _apply_flow_limiters(self):
 
-        if self._method == 'fast':
-            raise NotImplementedError(
-                "This function does not suuport fast hfun method")
+        if self._method == "fast":
+            raise NotImplementedError("This function does not suuport fast hfun method")
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
             for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
                 if src_idx is not None and in_idx not in src_idx:
                     continue
                 if hmin is None:
-                    hmin = self._size_info['hmin']
+                    hmin = self._size_info["hmin"]
                 if hmax is None:
-                    hmax = self._size_info['hmax']
+                    hmax = self._size_info["hmax"]
                 hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
-
 
     def _apply_const_val(self):
 
-        if self._method == 'fast':
-            raise NotImplementedError(
-                "This function does not suuport fast hfun method")
+        if self._method == "fast":
+            raise NotImplementedError("This function does not suuport fast hfun method")
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
             for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
                 if src_idx is not None and in_idx not in src_idx:
                     continue
                 level0 = None
-                level1 =  None
+                level1 = None
                 if ctr0 is not None:
                     level0 = ctr0.level
                 if ctr1 is not None:
                     level1 = ctr1.level
                 hfun.add_constant_value(const_val, level0, level1)
 
-
     def _apply_patch(self, apply_to=None):
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        raster_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if apply_to is None:
-            mesh_hfun_list = [
-                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            mesh_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunMesh)]
             if self._base_mesh and self._base_as_hfun:
                 mesh_hfun_list.insert(0, self._base_mesh)
             apply_to = [*mesh_hfun_list, *raster_hfun_list]
@@ -764,14 +732,10 @@ class HfunCollector(BaseHfun):
             for patch_defn, size_info in self._refine_patch_info_coll:
                 shape, crs = patch_defn.get_multipolygon()
                 if hfun.crs != crs:
-                    transformer = Transformer.from_crs(
-                        crs, hfun.crs, always_xy=True)
-                    shape = ops.transform(
-                            transformer.transform, shape)
+                    transformer = Transformer.from_crs(crs, hfun.crs, always_xy=True)
+                    shape = ops.transform(transformer.transform, shape)
 
-                hfun.add_patch(
-                        shape, nprocs=self._nprocs, **size_info)
-
+                hfun.add_patch(shape, nprocs=self._nprocs, **size_info)
 
     def _write_hfun_to_disk(self, out_path):
 
@@ -805,19 +769,16 @@ class HfunCollector(BaseHfun):
             _logger.info("Removing bounds from hfun mesh...")
             for ibox in bbox_list:
                 hfun_mesh = utils.clip_mesh_by_shape(
-                    hfun_mesh,
-                    ibox,
-                    use_box_only=True,
-                    fit_inside=True,
-                    inverse=True)
+                    hfun_mesh, ibox, use_box_only=True, fit_inside=True, inverse=True
+                )
 
             if len(hfun_mesh.vert2) == 0:
                 _logger.debug("Hfun ignored due to overlap")
                 continue
 
             # Check hfun_mesh.value against hmin & hmax
-            hmin = self._size_info['hmin']
-            hmax = self._size_info['hmax']
+            hmin = self._size_info["hmin"]
+            hmax = self._size_info["hmax"]
             if hmin:
                 hfun_mesh.value[hfun_mesh.value < hmin] = hmin
             if hmax:
@@ -826,25 +787,23 @@ class HfunCollector(BaseHfun):
             mesh = Mesh(hfun_mesh)
             bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
             file_counter = file_counter + 1
-            _logger.info(f'write mesh {file_counter} to file...')
-            file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
-            mesh.write(file_path, format='2dm')
+            _logger.info(f"write mesh {file_counter} to file...")
+            file_path = out_dir / f"hfun_{pid}_{file_counter}.2dm"
+            mesh.write(file_path, format="2dm")
             path_list.append(file_path)
-            _logger.info('Done writing 2dm file.')
+            _logger.info("Done writing 2dm file.")
             del mesh
             gc.collect()
         return path_list
 
-
-
     def _get_hfun_composite(self, hfun_path_list):
 
         collection = []
-        _logger.info('Reading 2dm hfun files...')
+        _logger.info("Reading 2dm hfun files...")
         start = time()
         for path in hfun_path_list:
-            collection.append(Mesh.open(path, crs='EPSG:4326'))
-        _logger.info(f'Reading 2dm hfun files took {time()-start}.')
+            collection.append(Mesh.open(path, crs="EPSG:4326"))
+        _logger.info(f"Reading 2dm hfun files took {time()-start}.")
 
         # NOTE: Overlaps are taken care of in the write stage
 
@@ -853,24 +812,22 @@ class HfunCollector(BaseHfun):
         value = []
         offset = 0
         for hfun in collection:
-            index.append(hfun.tria3['index'] + offset)
+            index.append(hfun.tria3["index"] + offset)
             coord.append(hfun.coord)
             value.append(hfun.value)
             offset += hfun.coord.shape[0]
 
         composite_hfun = jigsaw_msh_t()
-        composite_hfun.mshID = 'euclidean-mesh'
+        composite_hfun.mshID = "euclidean-mesh"
         composite_hfun.ndims = 2
 
         composite_hfun.vert2 = np.array(
-                [(coo, 0) for coo in np.vstack(coord)],
-                dtype=jigsaw_msh_t.VERT2_t)
+            [(coo, 0) for coo in np.vstack(coord)], dtype=jigsaw_msh_t.VERT2_t
+        )
         composite_hfun.tria3 = np.array(
-                [(idx, 0) for idx in np.vstack(index)],
-                dtype=jigsaw_msh_t.TRIA3_t)
-        composite_hfun.value = np.array(
-                np.vstack(value),
-                dtype=jigsaw_msh_t.REALS_t)
+            [(idx, 0) for idx in np.vstack(index)], dtype=jigsaw_msh_t.TRIA3_t
+        )
+        composite_hfun.value = np.array(np.vstack(value), dtype=jigsaw_msh_t.REALS_t)
 
         composite_hfun.crs = CRS.from_user_input("EPSG:4326")
 
@@ -882,14 +839,12 @@ class HfunCollector(BaseHfun):
 
         return composite_hfun
 
-
     def _create_big_raster(self, out_path):
 
         out_dir = Path(out_path)
-        out_rast = out_dir / 'big_raster.tif'
+        out_rast = out_dir / "big_raster.tif"
 
-        rast_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        rast_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
         if len(rast_hfun_list) == 0:
             return None
 
@@ -897,11 +852,9 @@ class HfunCollector(BaseHfun):
         n_cell_lim = 0
         for hfun_in in rast_hfun_list:
             n_cell_lim = max(
-                hfun_in.raster.src.shape[0]
-                    * hfun_in.raster.src.shape[1],
-                n_cell_lim)
-            all_bounds.append(
-                    hfun_in.get_bbox(crs='EPSG:4326').bounds)
+                hfun_in.raster.src.shape[0] * hfun_in.raster.src.shape[1], n_cell_lim
+            )
+            all_bounds.append(hfun_in.get_bbox(crs="EPSG:4326").bounds)
         # 3 is just a arbitray tolerance for memory limit calculations
         n_cell_lim = n_cell_lim * self._nprocs / 3
         all_bounds = np.array(all_bounds)
@@ -909,11 +862,9 @@ class HfunCollector(BaseHfun):
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
         x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
 
-        utm_crs = utils.estimate_bounds_utm(
-                (x0, y0, x1, y1), "EPSG:4326")
+        utm_crs = utils.estimate_bounds_utm((x0, y0, x1, y1), "EPSG:4326")
         assert utm_crs is not None
-        transformer = Transformer.from_crs(
-                'EPSG:4326', utm_crs, always_xy=True)
+        transformer = Transformer.from_crs("EPSG:4326", utm_crs, always_xy=True)
 
         box_epsg4326 = box(x0, y0, x1, y1)
         poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
@@ -923,7 +874,7 @@ class HfunCollector(BaseHfun):
         for hfun_in in rast_hfun_list:
             bnd1 = hfun_in.get_bbox(crs=utm_crs).bounds
             dim1 = np.max([bnd1[2] - bnd1[0], bnd1[3] - bnd1[1]])
-            bnd2 = hfun_in.get_bbox(crs='EPSG:4326').bounds
+            bnd2 = hfun_in.get_bbox(crs="EPSG:4326").bounds
             dim2 = np.max([bnd2[2] - bnd2[0], bnd2[3] - bnd2[1]])
             ratio = dim1 / dim2
             pixel_size_x = hfun_in.raster.src.transform[0] * ratio
@@ -932,42 +883,38 @@ class HfunCollector(BaseHfun):
             worst_res = np.max([worst_res, pixel_size_x, pixel_size_y])
 
         # TODO: What if no hmin? -> use smallest raster res!
-        g_hmin = self._size_info['hmin']
+        g_hmin = self._size_info["hmin"]
         res = np.max([g_hmin / 2, worst_res])
-        _logger.info(
-                f"Spatial resolution"
-                f" chosen: {res}, worst: {worst_res}")
+        _logger.info(f"Spatial resolution" f" chosen: {res}, worst: {worst_res}")
         shape0 = int(np.ceil(abs(x1 - x0) / res))
         shape1 = int(np.ceil(abs(y1 - y0) / res))
 
-        approx =  int(np.sqrt(n_cell_lim))
-        window_size = None #default of OCSMesh.raster.Raster
-        mem_lim = 0 # default of rasterio
+        approx = int(np.sqrt(n_cell_lim))
+        window_size = None  # default of OCSMesh.raster.Raster
+        mem_lim = 0  # default of rasterio
         if approx < max(shape0, shape1):
             window_size = np.min([shape0, shape1, approx])
             # Memory limit in MB
             mem_lim = n_cell_lim * np.float32(1).itemsize / 10e6
-
 
         # NOTE: Upper-left vs lower-left origin
         # (this only works for upper-left)
         transform = from_origin(x0 - res / 2, y1 + res / 2, res, res)
 
         rast_profile = {
-                'driver': 'GTiff',
-                'dtype': np.float32,
-                'width': shape0,
-                'height': shape1,
-                'crs': utm_crs,
-                'transform': transform,
-                'count': 1,
+            "driver": "GTiff",
+            "dtype": np.float32,
+            "width": shape0,
+            "height": shape1,
+            "crs": utm_crs,
+            "transform": transform,
+            "count": 1,
         }
-        with rasterio.open(str(out_rast), 'w', **rast_profile) as dst:
+        with rasterio.open(str(out_rast), "w", **rast_profile) as dst:
             # For places where raster is DEM is not provided it's
             # assumed deep ocean for contouring purposes
             if window_size is not None:
-                write_wins = get_iter_windows(
-                    shape0, shape1, chunk_size=window_size)
+                write_wins = get_iter_windows(shape0, shape1, chunk_size=window_size)
                 for win in write_wins:
                     z = np.full((win.width, win.height), -99999, dtype=np.float32)
                     dst.write(z, 1, window=win)
@@ -976,7 +923,6 @@ class HfunCollector(BaseHfun):
                 z = np.full((shape0, shape1), -99999, dtype=np.float32)
                 dst.write(z, 1)
                 del z
-
 
             # Reproject if needed (for now only needed if constant
             # value levels or subtidal limiters are added)
@@ -1003,11 +949,10 @@ class HfunCollector(BaseHfun):
                     source=rasterio.band(hfun.raster.src, 1),
                     destination=rasterio.band(dst, 1),
                     resampling=Resampling.nearest,
-                    init_dest_nodata=False, # To avoid overwrite
+                    init_dest_nodata=False,  # To avoid overwrite
                     num_threads=self._nprocs,
-                    warp_mem_limit=mem_lim)
-
-
+                    warp_mem_limit=mem_lim,
+                )
 
         return Raster(out_rast, chunk_size=window_size)
 
@@ -1021,10 +966,7 @@ class HfunCollector(BaseHfun):
             hfun_rast = HfunRaster(big_raster, **self._size_info)
             rast_hfun_list.append(hfun_rast)
 
-
-
-        mesh_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunMesh)]
+        mesh_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunMesh)]
         if self._base_mesh and self._base_as_hfun:
             mesh_hfun_list.insert(0, self._base_mesh)
 
@@ -1041,7 +983,6 @@ class HfunCollector(BaseHfun):
         if hfun_rast:
             self._apply_constraints_fast(hfun_rast)
 
-
         return hfun_rast
 
     def _apply_flow_limiters_fast(self, big_hfun):
@@ -1049,9 +990,9 @@ class HfunCollector(BaseHfun):
         for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
             # TODO: Account for source index
             if hmin is None:
-                hmin = self._size_info['hmin']
+                hmin = self._size_info["hmin"]
             if hmax is None:
-                hmax = self._size_info['hmax']
+                hmax = self._size_info["hmax"]
 
             # To avoid sharp gradient where no raster is projected
             if zmin is None:
@@ -1066,13 +1007,12 @@ class HfunCollector(BaseHfun):
         for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
             # TODO: Account for source index
             level0 = None
-            level1 =  None
+            level1 = None
             if ctr0 is not None:
                 level0 = ctr0.level
             if ctr1 is not None:
                 level1 = ctr1.level
             big_hfun.add_constant_value(const_val, level0, level1)
-
 
     def _apply_constraints_fast(self, big_hfun):
 
@@ -1084,15 +1024,12 @@ class HfunCollector(BaseHfun):
         if constraint_list:
             big_hfun.apply_constraints(constraint_list)
 
-
     def _get_hfun_composite_fast(self, big_hfun):
 
         # In fast method all DEM hfuns have more priority than all
         # other inputs
-        dem_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
-        nondem_hfun_list = [
-            i for i in self._hfun_list if not isinstance(i, HfunRaster)]
+        dem_hfun_list = [i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        nondem_hfun_list = [i for i in self._hfun_list if not isinstance(i, HfunRaster)]
 
         epsg4326 = CRS.from_user_input("EPSG:4326")
 
@@ -1108,8 +1045,7 @@ class HfunCollector(BaseHfun):
         # Calculate multipoly and clip big hfun
         big_cut_shape = None
         if big_hfun:
-            dem_gdf = gpd.GeoDataFrame(
-                    geometry=dem_box_list, crs=epsg4326)
+            dem_gdf = gpd.GeoDataFrame(geometry=dem_box_list, crs=epsg4326)
             big_cut_shape = dem_gdf.unary_union
             big_msh_t = big_hfun.msh_t()
             if hasattr(big_msh_t, "crs"):
@@ -1117,14 +1053,11 @@ class HfunCollector(BaseHfun):
                     utils.reproject(big_msh_t, epsg4326)
 
             big_msh_t = utils.clip_mesh_by_shape(
-                big_msh_t,
-                big_cut_shape,
-                use_box_only=False,
-                fit_inside=False)
+                big_msh_t, big_cut_shape, use_box_only=False, fit_inside=False
+            )
 
-
-            index.append(big_msh_t.tria3['index'] + offset)
-            coord.append(big_msh_t.vert2['coord'])
+            index.append(big_msh_t.tria3["index"] + offset)
+            coord.append(big_msh_t.vert2["coord"])
             value.append(big_msh_t.value)
             offset = offset + coord[-1].shape[0]
 
@@ -1141,10 +1074,8 @@ class HfunCollector(BaseHfun):
 
             nondem_shape = utils.get_mesh_polygons(hfun.mesh.msh_t)
             if not epsg4326.equals(hfun.crs):
-                transformer = Transformer.from_crs(
-                    hfun.crs, epsg4326, always_xy=True)
-                nondem_shape = ops.transform(
-                        transformer.transform, nondem_shape)
+                transformer = Transformer.from_crs(hfun.crs, epsg4326, always_xy=True)
+                nondem_shape = ops.transform(transformer.transform, nondem_shape)
 
             # In fast method all DEM hfuns have more priority than all
             # other inputs
@@ -1154,7 +1085,8 @@ class HfunCollector(BaseHfun):
                     big_cut_shape,
                     use_box_only=False,
                     fit_inside=True,
-                    inverse=True)
+                    inverse=True,
+                )
 
             for ishp in nondem_shape_list:
                 nondem_msh_t = utils.clip_mesh_by_shape(
@@ -1162,33 +1094,32 @@ class HfunCollector(BaseHfun):
                     ishp,
                     use_box_only=False,
                     fit_inside=True,
-                    inverse=True)
+                    inverse=True,
+                )
 
             nondem_shape_list.append(nondem_shape)
 
-            index.append(nondem_msh_t.tria3['index'] + offset)
-            coord.append(nondem_msh_t.vert2['coord'])
+            index.append(nondem_msh_t.tria3["index"] + offset)
+            coord.append(nondem_msh_t.vert2["coord"])
             value.append(nondem_msh_t.value)
             offset += coord[-1].shape[0]
 
         composite_hfun = jigsaw_msh_t()
-        composite_hfun.mshID = 'euclidean-mesh'
+        composite_hfun.mshID = "euclidean-mesh"
         composite_hfun.ndims = 2
 
         composite_hfun.vert2 = np.array(
-                [(coord, 0) for coord in np.vstack(coord)],
-                dtype=jigsaw_msh_t.VERT2_t)
+            [(coord, 0) for coord in np.vstack(coord)], dtype=jigsaw_msh_t.VERT2_t
+        )
         composite_hfun.tria3 = np.array(
-                [(index, 0) for index in np.vstack(index)],
-                dtype=jigsaw_msh_t.TRIA3_t)
-        composite_hfun.value = np.array(
-                np.vstack(value),
-                dtype=jigsaw_msh_t.REALS_t)
+            [(index, 0) for index in np.vstack(index)], dtype=jigsaw_msh_t.TRIA3_t
+        )
+        composite_hfun.value = np.array(np.vstack(value), dtype=jigsaw_msh_t.REALS_t)
 
         # TODO: Get user input for wether to force hmin and hmax on
         # final hfun (which includes non-raster and basemesh sizes)
-        hmin = self._size_info['hmin']
-        hmax = self._size_info['hmax']
+        hmin = self._size_info["hmin"]
+        hmax = self._size_info["hmax"]
         if hmin:
             composite_hfun.value[composite_hfun.value < hmin] = hmin
         if hmax:

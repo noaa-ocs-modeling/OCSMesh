@@ -1,14 +1,15 @@
 #! python
 import unittest
 from copy import deepcopy
+
 import numpy as np
+
 import ocsmesh
 
 
 class SizeFromMesh(unittest.TestCase):
-
     def setUp(self):
-        rast = ocsmesh.raster.Raster('test_dem.tif')
+        rast = ocsmesh.raster.Raster("test_dem.tif")
 
         hfun_orig = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=1500)
         hfun_orig.add_contour(level=0, expansion_rate=0.001, target_size=100)
@@ -29,8 +30,9 @@ class SizeFromMesh(unittest.TestCase):
 
         # TODO: Come up with a more robust criteria
         threshold = 0.2
-        err_value = np.max(np.abs(hfun_val_diff))/np.max(self.hfun_orig_val)
+        err_value = np.max(np.abs(hfun_val_diff)) / np.max(self.hfun_orig_val)
         self.assertTrue(err_value < threshold)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

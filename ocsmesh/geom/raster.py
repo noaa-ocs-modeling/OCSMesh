@@ -9,8 +9,8 @@ from ocsmesh.raster import Raster
 
 
 class SourceRaster:
-    '''Descriptor class used for referencing a :class:`ocsmesh.Raster`
-    object.'''
+    """Descriptor class used for referencing a :class:`ocsmesh.Raster`
+    object."""
 
     def __set__(self, obj, val: Union[Raster, str, os.PathLike]):
 
@@ -19,12 +19,12 @@ class SourceRaster:
 
         if not isinstance(val, Raster):
             raise TypeError(
-                f'Argument raster must be of type {Raster}, '
-                f'not type {type(val)}.')
-        obj.__dict__['source_raster'] = val
+                f"Argument raster must be of type {Raster}, " f"not type {type(val)}."
+            )
+        obj.__dict__["source_raster"] = val
 
     def __get__(self, obj, val):
-        return obj.__dict__['source_raster']
+        return obj.__dict__["source_raster"]
 
 
 class RasterGeom(BaseGeom):
@@ -32,10 +32,10 @@ class RasterGeom(BaseGeom):
     _source_raster = SourceRaster()
 
     def __init__(
-            self,
-            raster: Union[Raster, str, os.PathLike],
-            zmin=None,
-            zmax=None,
+        self,
+        raster: Union[Raster, str, os.PathLike],
+        zmin=None,
+        zmax=None,
     ):
         """
         Input parameters
@@ -48,7 +48,8 @@ class RasterGeom(BaseGeom):
         self._zmax = zmax
 
     def get_multipolygon(  # type: ignore[override]
-            self, zmin: float = None, zmax: float = None) -> MultiPolygon:
+        self, zmin: float = None, zmax: float = None
+    ) -> MultiPolygon:
         """Returns the shapely.geometry.MultiPolygon object that represents
         the hull of the raster given optional zmin and zmax contraints.
         """
@@ -59,7 +60,6 @@ class RasterGeom(BaseGeom):
             return MultiPolygon([self.raster.get_bbox()])
 
         return self.raster.get_multipolygon(zmin=zmin, zmax=zmax)
-
 
     @property
     def raster(self):
@@ -75,9 +75,9 @@ class RasterGeom(BaseGeom):
         # dd087257c15692dd7d8c8e201d251ab5e66ff67f on main branch for
         # ellipsoidal ploting routing (removed).
         for polygon in self.multipolygon:
-            plt.plot(*polygon.exterior.xy, color='k')
+            plt.plot(*polygon.exterior.xy, color="k")
             for interior in polygon.interiors:
-                plt.plot(*interior.xy, color='r')
+                plt.plot(*interior.xy, color="r")
         if show:
             plt.show()
 

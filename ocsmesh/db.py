@@ -1,28 +1,23 @@
 import pathlib
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.event import listen
-from sqlalchemy.sql import select, func
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import create_engine
-from sqlalchemy import Column, Float, String
+
 from geoalchemy2 import Geometry
 from geoalchemy2 import Raster as _Raster
-
+from sqlalchemy import Column, Float, String, create_engine
+from sqlalchemy.event import listen
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.sql import func, select
 
 Base = declarative_base()
 
 
 class Geom(Base):
-    __tablename__ = 'geom'
+    __tablename__ = "geom"
     id = Column(String, primary_key=True, nullable=False)
     tag = Column(String)
     geom = Column(
-        Geometry(
-            geometry_type='MULTIPOLYGON',
-            management=True
-            ),
-        nullable=False
-        )
+        Geometry(geometry_type="MULTIPOLYGON", management=True), nullable=False
+    )
 
 
 class GeomCollection(Base):
@@ -33,29 +28,25 @@ class GeomCollection(Base):
     zmax = Column(Float)
     driver = Column(String, nullable=False)
     geom = Column(
-        Geometry(
-            geometry_type='MULTIPOLYGON',
-            management=True
-            ),
-        nullable=False
-        )
+        Geometry(geometry_type="MULTIPOLYGON", management=True), nullable=False
+    )
 
 
 class Hfun(Base):
-    __tablename__ = 'hfun'
+    __tablename__ = "hfun"
     id = Column(String, primary_key=True, nullable=False)
     hfun = Column(
         Geometry(
-            geometry_type='MULTIPOLYGON',
+            geometry_type="MULTIPOLYGON",
             management=True,
             dimension=3,
-            ),
-        nullable=False
-        )
+        ),
+        nullable=False,
+    )
 
 
 class HfunCollection(Base):
-    __tablename__ = 'hfun_collection'
+    __tablename__ = "hfun_collection"
     id = Column(String, primary_key=True, nullable=False)
 
 
@@ -66,14 +57,8 @@ class Raster(Base):
 
 
 class TileIndexRasters(Base):
-    __tablename__ = 'tile_index_rasters'
-    geom = Column(
-        Geometry(
-            'POLYGON',
-            management=True,
-            srid=4326
-            ),
-        nullable=False)
+    __tablename__ = "tile_index_rasters"
+    geom = Column(Geometry("POLYGON", management=True, srid=4326), nullable=False)
     # raster = Column(Raster(srid=4326, spatial_index=False))
     url = Column(String, primary_key=True, nullable=False)
     name = Column(String, nullable=False)
@@ -81,17 +66,16 @@ class TileIndexRasters(Base):
 
 
 def spatialite_session(path, echo=False):
-
     def _engine(path, echo=False):
         path = pathlib.Path(path)
         _new_db = not path.is_file()
-        engine = create_engine(f'sqlite:///{str(path)}', echo=echo)
+        engine = create_engine(f"sqlite:///{str(path)}", echo=echo)
 
         def load_spatialite(dbapi_conn, connection_record):
             dbapi_conn.enable_load_extension(True)
-            dbapi_conn.load_extension('mod_spatialite')
+            dbapi_conn.load_extension("mod_spatialite")
 
-        listen(engine, 'connect', load_spatialite)
+        listen(engine, "connect", load_spatialite)
         if _new_db:
             conn = engine.connect()
             conn.execute(select([func.InitSpatialMetaData()]))

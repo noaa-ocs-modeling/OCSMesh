@@ -1,34 +1,32 @@
 #!/usr/bin/env python
-import sys
 import gc
 import logging
-from pathlib import Path
+import sys
 from copy import deepcopy
+from pathlib import Path
 
+import geopandas as gpd
 import jigsawpy
 import numpy as np
-import geopandas as gpd
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import MultiPolygon, Polygon
 
-from ocsmesh import Raster, Geom, Hfun, Mesh
-from ocsmesh import utils
-
+from ocsmesh import Geom, Hfun, Mesh, Raster, utils
 
 logging.basicConfig(
     stream=sys.stdout,
-    format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S'
-    )
-#logging.getLogger().setLevel(logging.DEBUG)
-#logging.getLogger().setLevel(logging.INFO)
+    format="%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+    datefmt="%Y-%m-%d:%H:%M:%S",
+)
+# logging.getLogger().setLevel(logging.DEBUG)
+# logging.getLogger().setLevel(logging.INFO)
 
 _logger = logging.getLogger(__name__)
 
-class RemeshByDEM:
 
+class RemeshByDEM:
     @property
     def script_name(self):
-        return 'remesh_by_dem'
+        return "remesh_by_dem"
 
     def __init__(self, sub_parser):
 
@@ -47,45 +45,59 @@ class RemeshByDEM:
 
         this_parser = sub_parser.add_parser(self.script_name)
 
-        this_parser.add_argument('--mesh', required=True, type=Path)
-        this_parser.add_argument('--mesh-crs', default='EPSG:4326')
-
+        this_parser.add_argument("--mesh", required=True, type=Path)
+        this_parser.add_argument("--mesh-crs", default="EPSG:4326")
 
         this_parser.add_argument(
-            '--contour',
-            action='append', nargs='+', type=float, dest='contours',
-            metavar='CONTOUR_DEFN', default=[],
+            "--contour",
+            action="append",
+            nargs="+",
+            type=float,
+            dest="contours",
+            metavar="CONTOUR_DEFN",
+            default=[],
             help="Each contour's (level, [expansion, target])"
-                 " to be applied on all size functions in collector")
+            " to be applied on all size functions in collector",
+        )
         this_parser.add_argument(
-            '--constant',
-            action='append', nargs=2, type=float, dest='constants',
-            metavar='CONST_DEFN', default=[],
+            "--constant",
+            action="append",
+            nargs=2,
+            type=float,
+            dest="constants",
+            metavar="CONST_DEFN",
+            default=[],
             help="Specify constant mesh size above a given contour level"
-                 " by passing (lower_bound, target_size) for each constant")
-        this_parser.add_argument('--hmin', type=float, default=250)
-        this_parser.add_argument('--zmax', type=float, default=0)
+            " by passing (lower_bound, target_size) for each constant",
+        )
+        this_parser.add_argument("--hmin", type=float, default=250)
+        this_parser.add_argument("--zmax", type=float, default=0)
         this_parser.add_argument(
-            '--clip-by-base', action='store_true',
-            help='Flag to clip input DEMs using base mesh polygon')
+            "--clip-by-base",
+            action="store_true",
+            help="Flag to clip input DEMs using base mesh polygon",
+        )
 
-        this_parser.add_argument('--geom', type=Path)
-        this_parser.add_argument('--hfun', type=Path)
-        this_parser.add_argument('--hfun-crs', default='EPSG:4326')
+        this_parser.add_argument("--geom", type=Path)
+        this_parser.add_argument("--hfun", type=Path)
+        this_parser.add_argument("--hfun-crs", default="EPSG:4326")
 
-        this_parser.add_argument('-s', '--sieve', type=float)
+        this_parser.add_argument("-s", "--sieve", type=float)
         this_parser.add_argument(
-            '--interpolate', nargs='+', type=Path, default=[],
+            "--interpolate",
+            nargs="+",
+            type=Path,
+            default=[],
             help="To interpolate from depth of DEMs not involved in"
-                 " the remeshing process")
+            " the remeshing process",
+        )
 
-        this_parser.add_argument('-o', '--output', type=Path)
-        this_parser.add_argument('-f', '--output-format', default='2dm')
-        this_parser.add_argument('-k', '--keep-intermediate', action='store_true')
-        this_parser.add_argument('--nprocs', type=int, default=-1)
+        this_parser.add_argument("-o", "--output", type=Path)
+        this_parser.add_argument("-f", "--output-format", default="2dm")
+        this_parser.add_argument("-k", "--keep-intermediate", action="store_true")
+        this_parser.add_argument("--nprocs", type=int, default=-1)
 
-        this_parser.add_argument('dem', nargs='+', type=Path)
-
+        this_parser.add_argument("dem", nargs="+", type=Path)
 
     @staticmethod
     def _read_geom_hfun(geom_file, hfun_file, hfun_crs):
@@ -108,7 +120,6 @@ class RemeshByDEM:
         _logger.info("Done")
 
         return geom, hfun
-
 
     def run(self, args):
 
@@ -141,18 +152,20 @@ class RemeshByDEM:
             if len(contour) > 3:
                 raise ValueError(
                     "Invalid format for contour specification."
-                    " It should be level [expansion target-size].")
+                    " It should be level [expansion target-size]."
+                )
             level, expansion_rate, target_size = [
-                    *contour, *[None]*(3-len(contour))]
+                *contour,
+                *[None] * (3 - len(contour)),
+            ]
             contour_defns.append((level, expansion_rate, target_size))
 
         constant_defns = []
         for lower_bound, target_size in constants:
             constant_defns.append((lower_bound, target_size))
 
-
         if out_path is None:
-            out_path = base_path.parent / ('remeshed.' + out_format)
+            out_path = base_path.parent / ("remeshed." + out_format)
         out_path.parent.mkdir(exist_ok=True, parents=True)
 
         nprocs = -1 if nprocs is None else nprocs
@@ -182,8 +195,7 @@ class RemeshByDEM:
 
         log_calculation = True
         # Read geometry and hfun from files if provided
-        if (geom_file and hfun_file
-                and geom_file.is_file() and hfun_file.is_file()):
+        if geom_file and hfun_file and geom_file.is_file() and hfun_file.is_file():
             geom, hfun = self._read_geom_hfun(geom_file, hfun_file, hfun_crs)
             log_calculation = False
 
@@ -199,12 +211,7 @@ class RemeshByDEM:
             else:
                 _logger.info("Union raster data with base mesh")
                 geom_inputs = [deepcopy(init_mesh), *geom_rast_list]
-            geom = Geom(
-                    geom_inputs,
-                    base_mesh=geom_base_mesh,
-                    zmax=zmax,
-                    nprocs=nprocs)
-
+            geom = Geom(geom_inputs, base_mesh=geom_base_mesh, zmax=zmax, nprocs=nprocs)
 
             # NOTE: Instead of passing base mesh to be used as boundary,
             # it is passed as an hfun itself
@@ -216,22 +223,22 @@ class RemeshByDEM:
                 [hfun_base_mesh, *hfun_rast_list],
                 hmin=hmin,
                 hmax=np.max(hfun_base_mesh.msh_t().value),
-                nprocs=nprocs)
+                nprocs=nprocs,
+            )
 
             for level, expansion_rate, target_size in contour_defns:
                 if expansion_rate is None:
                     expansion_rate = 0.1
                 if target_size is None:
                     target_size = hmin
-                _logger.info(f"Adding contour to collector:"
-                             f" {level} {expansion_rate} {target_size}")
-                hfun.add_contour(
-                    level, expansion_rate, target_size)
+                _logger.info(
+                    f"Adding contour to collector:"
+                    f" {level} {expansion_rate} {target_size}"
+                )
+                hfun.add_contour(level, expansion_rate, target_size)
 
             for lower_bound, target_size in constant_defns:
-                hfun.add_constant_value(
-                        value=target_size, lower_bound=lower_bound)
-
+                hfun.add_constant_value(value=target_size, lower_bound=lower_bound)
 
             if write_intermediate:
                 _logger.info("Calculating final geometry")
@@ -239,9 +246,8 @@ class RemeshByDEM:
 
                 _logger.info("Writing geom to disk")
                 gpd.GeoDataFrame(
-                        {'geometry': gpd.GeoSeries(poly_geom)},
-                        crs=geom.crs
-                    ).to_file(str(out_path)+'.geom.shp')
+                    {"geometry": gpd.GeoSeries(poly_geom)}, crs=geom.crs
+                ).to_file(str(out_path) + ".geom.shp")
                 del poly_geom
                 gc.collect()
 
@@ -251,23 +257,22 @@ class RemeshByDEM:
                 _logger.info("Writing hfun to disk")
                 # This writes in EPSG:4326
                 Mesh(jig_hfun).write(
-                    str(out_path)+'.hfun.2dm',
-                    format='2dm', overwrite=True)
+                    str(out_path) + ".hfun.2dm", format="2dm", overwrite=True
+                )
                 del jig_hfun
                 gc.collect()
 
                 # Read back from file to avoid recalculation of hfun
                 # and geom
                 geom, hfun = self._read_geom_hfun(
-                    str(out_path) + '.geom.shp',
-                    str(out_path) + '.hfun.2dm',
-                    "EPSG:4326")
+                    str(out_path) + ".geom.shp",
+                    str(out_path) + ".hfun.2dm",
+                    "EPSG:4326",
+                )
 
                 log_calculation = False
         else:
-            raise ValueError(
-                "Input not valid to initialize geom and hfun")
-
+            raise ValueError("Input not valid to initialize geom and hfun")
 
         if log_calculation:
             # NOTE: If intermediate files are written then we calculated
@@ -289,13 +294,11 @@ class RemeshByDEM:
         _logger.info("Projecting initial mesh to be in meters unit")
         utils.msh_t_to_utm(jig_init)
 
-
         # pylint: disable=C0325
         if not (jig_geom.crs == jig_hfun.crs == jig_init.crs):
             raise ValueError(
-                "Converted UTM CRS for geometry, hfun and init mesh"
-                "is not equivalent")
-
+                "Converted UTM CRS for geometry, hfun and init mesh" "is not equivalent"
+            )
 
         _logger.info("Calculate remeshing region of interest")
         # Prep for Remeshing
@@ -306,15 +309,14 @@ class RemeshByDEM:
 
         _logger.info("Clip mesh by inverse of region of interest")
         fixed_mesh_w_hole = utils.clip_mesh_by_shape(
-            jig_init, region_of_interest, fit_inside=True, inverse=True)
+            jig_init, region_of_interest, fit_inside=True, inverse=True
+        )
 
-        _logger.info(
-                "Get all initial mesh vertices in the region of interest")
-        vert_idx_to_refin = utils.get_verts_in_shape(
-            jig_hfun, region_of_interest)
+        _logger.info("Get all initial mesh vertices in the region of interest")
+        vert_idx_to_refin = utils.get_verts_in_shape(jig_hfun, region_of_interest)
 
-        fixed_mesh_w_hole.point['IDtag'][:] = -1
-        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
+        fixed_mesh_w_hole.point["IDtag"][:] = -1
+        fixed_mesh_w_hole.edge2["IDtag"][:] = -1
 
         refine_opts = jigsawpy.jigsaw_jig_t()
         refine_opts.hfun_scal = "absolute"
@@ -322,8 +324,8 @@ class RemeshByDEM:
         refine_opts.hfun_hmax = np.max(jig_hfun.value)
         refine_opts.mesh_dims = +2
         # Mesh becomes TOO refined on exact boundaries from DEM
-#    refine_opts.mesh_top1 = True
-#    refine_opts.geom_feat = True
+        #    refine_opts.mesh_top1 = True
+        #    refine_opts.geom_feat = True
 
         jig_remeshed = jigsawpy.jigsaw_msh_t()
         jig_remeshed.ndims = +2
@@ -331,35 +333,30 @@ class RemeshByDEM:
         _logger.info("Remeshing...")
         # Remeshing
         jigsawpy.lib.jigsaw(
-                refine_opts,
-                jig_geom,
-                jig_remeshed,
-                init=fixed_mesh_w_hole,
-                hfun=jig_hfun)
+            refine_opts, jig_geom, jig_remeshed, init=fixed_mesh_w_hole, hfun=jig_hfun
+        )
         jig_remeshed.crs = fixed_mesh_w_hole.crs
         _logger.info("Done")
 
-        if jig_remeshed.tria3['index'].shape[0] == 0:
-            _err = 'ERROR: Jigsaw returned empty mesh.'
+        if jig_remeshed.tria3["index"].shape[0] == 0:
+            _err = "ERROR: Jigsaw returned empty mesh."
             _logger.error(_err)
             raise ValueError(_err)
 
         # TODO: This is irrelevant right now since output file is
         # always is EPSG:4326, enable when APIs for remeshing is added
-#    if out_crs is not None:
-#        utils.reproject(jig_remeshed, out_crs)
+        #    if out_crs is not None:
+        #        utils.reproject(jig_remeshed, out_crs)
 
-        _logger.info('Finalizing mesh...')
+        _logger.info("Finalizing mesh...")
         utils.finalize_mesh(jig_remeshed, sieve)
 
         _logger.info("Interpolating depths on mesh...")
         # Interpolation
-        utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-                jig_init, jig_remeshed)
+        utils.interpolate_euclidean_mesh_to_euclidean_mesh(jig_init, jig_remeshed)
         final_mesh = Mesh(jig_remeshed)
         final_mesh.interpolate(interp_rast_list, nprocs=nprocs)
         _logger.info("Done")
-
 
         _logger.info("Writing final mesh to disk...")
         # This writes EPSG:4326 to file, whatever the crs of the object

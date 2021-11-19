@@ -5,17 +5,17 @@ import geopandas as gpd
 from pyproj import CRS
 from shapely.geometry import MultiPolygon, Polygon
 
+
 class Patch:
+    def __init__(
+        self,
+        shape: Union[None, MultiPolygon, Polygon] = None,
+        shape_crs: CRS = CRS.from_user_input("EPSG:4326"),
+        shapefile: Union[None, str, Path] = None,
+    ):
 
-    def __init__(self,
-                 shape: Union[None, MultiPolygon, Polygon] = None,
-                 shape_crs: CRS = CRS.from_user_input("EPSG:4326"),
-                 shapefile: Union[None, str, Path] = None
-                 ):
-
-        if not(shape or shapefile):
-            raise ValueError(
-                "No patch input provided")
+        if not (shape or shapefile):
+            raise ValueError("No patch input provided")
 
         # crs input is only for shape, shapefile needs to provide
         # its own crs
@@ -30,17 +30,15 @@ class Patch:
 
         elif shape is not None:
             raise TypeError(
-                f"Type of shape input must be either {MultiPolygon}"
-                f" or {Polygon}")
+                f"Type of shape input must be either {MultiPolygon}" f" or {Polygon}"
+            )
 
         elif not self._shapefile.is_file():
-            raise ValueError(
-                "Not shape input for patch definition")
-
+            raise ValueError("Not shape input for patch definition")
 
     def get_multipolygon(self) -> MultiPolygon:
 
-        if self._shape: # pylint: disable=R1705
+        if self._shape:  # pylint: disable=R1705
             return self._shape, self._shape_crs
 
         elif self._shapefile.is_file():
@@ -56,5 +54,4 @@ class Patch:
 
             return multipolygon, gdf.crs
 
-        raise ValueError(
-            "Error retrieving shape information for patch")
+        raise ValueError("Error retrieving shape information for patch")

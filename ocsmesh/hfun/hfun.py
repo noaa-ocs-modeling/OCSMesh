@@ -1,7 +1,7 @@
 from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.hfun.raster import HfunRaster
-from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.hfun.collector import HfunCollector
+from ocsmesh.hfun.mesh import HfunMesh
+from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.mesh.mesh import EuclideanMesh2D
 from ocsmesh.raster import Raster
 
@@ -17,7 +17,7 @@ class Hfun:
         hfun: Object used to define and compute mesh size function.
         """
 
-        if isinstance(hfun, Raster): # pylint: disable=R1705
+        if isinstance(hfun, Raster):  # pylint: disable=R1705
             return HfunRaster(hfun, **kwargs)
 
         elif isinstance(hfun, EuclideanMesh2D):
@@ -28,8 +28,9 @@ class Hfun:
 
         else:
             raise TypeError(
-                f'Argument hfun must be of type {BaseHfun} or a derived type, '
-                f'not type {type(hfun)}.')
+                f"Argument hfun must be of type {BaseHfun} or a derived type, "
+                f"not type {type(hfun)}."
+            )
 
     @staticmethod
     def is_valid_type(hfun_object):

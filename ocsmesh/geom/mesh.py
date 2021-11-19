@@ -1,32 +1,33 @@
 import os
 from typing import Union
 
+from ocsmesh.geom.base import BaseGeom
+from ocsmesh.mesh.base import BaseMesh
+from ocsmesh.mesh.mesh import Mesh
+
 # from jigsawpy import jigsaw_msh_t  # type: ignore[import]
 # import matplotlib.pyplot as plt  # type: ignore[import]
 # import mpl_toolkits.mplot3d as m3d  # type: ignore[import]
 # import numpy as np  # type: ignore[import]
 # from shapely import ops  # type: ignore[import]
 
-from ocsmesh.geom.base import BaseGeom
-from ocsmesh.mesh.mesh import Mesh
-from ocsmesh.mesh.base import BaseMesh
-
 
 class MeshDescriptor:
-
     def __set__(self, obj, val: Union[BaseMesh, str, os.PathLike]):
 
         if isinstance(val, (str, os.PathLike)):  # type: ignore[misc]
             val = Mesh.open(val)
 
         if not isinstance(val, BaseMesh):
-            raise TypeError(f'Argument mesh must be of type {Mesh}, {str} '
-                            f'or {os.PathLike}, not type {type(val)}')
+            raise TypeError(
+                f"Argument mesh must be of type {Mesh}, {str} "
+                f"or {os.PathLike}, not type {type(val)}"
+            )
 
-        obj.__dict__['mesh'] = val
+        obj.__dict__["mesh"] = val
 
     def __get__(self, obj, val):
-        return obj.__dict__['mesh']
+        return obj.__dict__["mesh"]
 
 
 class MeshGeom(BaseGeom):

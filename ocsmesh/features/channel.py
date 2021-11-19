@@ -1,5 +1,4 @@
 class Channel:
-
     def __init__(self, level=0, width=1000, tolerance=50, sources=[]):
 
         # Even a tolerance of 1 for simplifying polygon for channel
@@ -8,8 +7,8 @@ class Channel:
         # preserve topology
 
         self._level = level
-        self._width = width # and less
-        self._tolerance = tolerance # to simplify
+        self._width = width  # and less
+        self._tolerance = tolerance  # to simplify
 
         self._sources = []
         if not isinstance(sources, (list, tuple)):
@@ -52,12 +51,12 @@ class Channel:
 
         src_class = type(source).__name__
         if src_class == "Raster":
-            channels = source.get_channels(
-                    self._level, self._width, self._tolerance)
+            channels = source.get_channels(self._level, self._width, self._tolerance)
             crs = source.crs
         elif src_class in ("RasterGeom", "HfunRaster"):
             channels = source.raster.get_channels(
-                    self._level, self._width, self._tolerance)
+                self._level, self._width, self._tolerance
+            )
             crs = source.raster.crs
         else:
             raise TypeError("")
