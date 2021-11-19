@@ -5,6 +5,7 @@ factory `Geom` object from this module which creates the correct
 geometry type based on the input arguments passed to it
 
 """
+from typing import Union, Iterable, Any
 
 from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
 
@@ -16,11 +17,22 @@ from ocsmesh.geom.mesh import MeshGeom
 from ocsmesh.geom.shapely import PolygonGeom, MultiPolygonGeom
 from ocsmesh.geom.collector import GeomCollector
 
+CanCreateSingleGeom = Union[Raster, BaseMesh, Polygon, MultiPolygon]
+CanCreateMultipleGeom = Iterable[CanCreateSingleGeom]
+CanCreateGeom = Union[CanCreateSingleGeom, CanCreateMultipleGeom]
+
+GeomType = Union[
+        RasterGeom,
+        MeshGeom,
+        PolygonGeom,
+        MultiPolygonGeom,
+        GeomCollector
+        ]
 
 class Geom(BaseGeom):
     """ Geometry object factory
 
-    Factory class that creates and returns correct geometry object
+    Factory class that creates and returns concrete geometry object
     based on the input types.
 
     Methods
@@ -35,14 +47,18 @@ class Geom(BaseGeom):
     instead.
     """
 
-    def __new__(cls, geom, **kwargs):
-        r"""
+    def __new__(
+            cls,
+            geom: CanCreateGeom,
+            **kwargs: Any
+            ) -> GeomType:
+        """
         Parameters
         ----------
-        geom
+        geom : CanCreateGeom
             Object to create the domain geometry from. The type of
             this object determines the created geometry object type
-        **kwargs : dict
+        **kwargs : dict, optional
             Keyword arguments passed to the constructor of the
             correct geometry type
         """
@@ -67,10 +83,10 @@ class Geom(BaseGeom):
             f'not type {type(geom)}.')
 
     @staticmethod
-    def is_valid_type(geom):
+    def is_valid_type(geom: Any) -> bool:
         return isinstance(geom, BaseGeom)
 
-    def get_multipolygon(self, **kwargs) -> MultiPolygon:
+    def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:
 
         # FIXME: Need to override the superclass method here to avoid
         # instantiation of abstract class error 
