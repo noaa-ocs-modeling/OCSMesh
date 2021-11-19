@@ -17,18 +17,17 @@ from ocsmesh.utils import msh_t_to_2dm
 
 logging.basicConfig(
     stream=sys.stdout,
-    format='%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
-    datefmt='%Y-%m-%d:%H:%M:%S'
-    )
-#logging.getLogger().setLevel(logging.DEBUG)
-#logging.getLogger().setLevel(logging.INFO)
+    format="%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s",
+    datefmt="%Y-%m-%d:%H:%M:%S",
+)
+# logging.getLogger().setLevel(logging.DEBUG)
+# logging.getLogger().setLevel(logging.INFO)
 
 
 class MeshUpgrader:
-
     @property
     def script_name(self):
-        return 'mesh_upgrader'
+        return "mesh_upgrader"
 
     def __init__(self, sub_parser):
         # e.g
@@ -40,10 +39,10 @@ class MeshUpgrader:
 
         this_parser = sub_parser.add_parser(self.script_name)
 
-        this_parser.add_argument('--basemesh', required=True)
-        this_parser.add_argument('--demlo', nargs='*', required=True)
-        this_parser.add_argument('--demhi', nargs='*', required=True)
-        this_parser.add_argument('--out', required=True)
+        this_parser.add_argument("--basemesh", required=True)
+        this_parser.add_argument("--demlo", nargs="*", required=True)
+        this_parser.add_argument("--demhi", nargs="*", required=True)
+        this_parser.add_argument("--out", required=True)
 
     def run(self, args):
 
@@ -73,16 +72,13 @@ class MeshUpgrader:
             hfun_hirast_list.append(Raster(dem_path))
             interp_rast_list.append(Raster(dem_path))
 
-
         hfun_rast_list = [*hfun_lorast_list, *hfun_hirast_list]
 
-        geom = Geom(
-            geom_rast_list, base_mesh=base_mesh_4_geom,
-            zmax=15, nprocs=4)
+        geom = Geom(geom_rast_list, base_mesh=base_mesh_4_geom, zmax=15, nprocs=4)
 
         hfun = Hfun(
-            hfun_rast_list, base_mesh=base_mesh_4_hfun,
-            hmin=30, hmax=15000, nprocs=4)
+            hfun_rast_list, base_mesh=base_mesh_4_hfun, hmin=30, hmax=15000, nprocs=4
+        )
 
         ## Add contour refinements at 0 separately for GEBCO and NCEI
         ctr1 = Contour(level=0, sources=hfun_hirast_list)
@@ -94,33 +90,27 @@ class MeshUpgrader:
         ## Add constant values from 0 to inf on hi-res rasters
         hfun.add_constant_value(30, 0, source_index=list(range(len(demhi_paths))))
 
-
         # Calculate geom
         geom_mp = geom.get_multipolygon()
         # Write to disk
-        gpd.GeoDataFrame(
-                {'geometry': geom_mp},
-                crs="EPSG:4326"
-                ).to_file(str(out_path) + '.geom.shp')
+        gpd.GeoDataFrame({"geometry": geom_mp}, crs="EPSG:4326").to_file(
+            str(out_path) + ".geom.shp"
+        )
         del geom_mp
 
         # Calculate hfun
         hfun_msh_t = hfun.msh_t()
         # Write to disk
-        sms2dm.writer(
-                msh_t_to_2dm(hfun_msh_t),
-                str(out_path) + '.hfun.2dm',
-                True)
+        sms2dm.writer(msh_t_to_2dm(hfun_msh_t), str(out_path) + ".hfun.2dm", True)
         del hfun_msh_t
 
-
         # Read back stored values to pass to mesh driver
-        read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
+        read_gdf = gpd.read_file(str(out_path) + ".geom.shp")
         geom_from_disk = MultiPolygonGeom(
-            MultiPolygon(list(read_gdf.geometry)),
-            crs=read_gdf.crs)
+            MultiPolygon(list(read_gdf.geometry)), crs=read_gdf.crs
+        )
 
-        read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
+        read_hfun = Mesh.open(str(out_path) + ".hfun.2dm", crs="EPSG:4326")
         hfun_from_disk = HfunMesh(read_hfun)
 
         jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
@@ -136,10 +126,10 @@ class MeshUpgrader:
         del hfun_from_disk
         gc.collect()
 
-        mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
+        mesh.write(str(out_path) + ".raw.2dm", format="2dm", overwrite=True)
 
         ## Interpolate DEMs on the mesh
         mesh.interpolate(interp_rast_list, nprocs=4)
 
         ## Output
-        mesh.write(out_path, format='2dm', overwrite=True)
+        mesh.write(out_path, format="2dm", overwrite=True)

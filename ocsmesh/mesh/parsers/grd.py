@@ -15,7 +15,7 @@ def buffer_to_dict(buf: TextIO):
     NE, NP = map(int, buf.readline().split())
     nodes = {}
     for _ in range(NP):
-        line = buf.readline().strip('\n').split()
+        line = buf.readline().strip("\n").split()
         # Gr3/fort.14 format cannot distinguish between a 2D mesh with one
         # vector value (e.g. velocity, which uses 2 columns) or a 3D mesh with
         # one scalar value. This is a design problem of the mesh format, which
@@ -24,12 +24,11 @@ def buffer_to_dict(buf: TextIO):
         # Here, we assume the input mesh is strictly a 2D mesh, and the data
         # that follows is an array of values.
         if len(line[3:]) == 1:
-            nodes[line[0]] = [
-                (float(line[1]), float(line[2])), float(line[3])]
+            nodes[line[0]] = [(float(line[1]), float(line[2])), float(line[3])]
         else:
             nodes[line[0]] = [
                 (float(line[1]), float(line[2])),
-                [float(line[i]) for i in range(3, len(line[3:]))]
+                [float(line[i]) for i in range(3, len(line[3:]))],
             ]
     elements = {}
     for _ in range(NE):
@@ -39,9 +38,7 @@ def buffer_to_dict(buf: TextIO):
     try:
         NOPE = int(buf.readline().split()[0])
     except IndexError:
-        return {'description': description,
-                'nodes': nodes,
-                'elements': elements}
+        return {"description": description, "nodes": nodes, "elements": elements}
     # let NOPE=-1 mean an ellipsoidal-mesh
     # reassigning NOPE to 0 until further implementation is applied.
     boundaries: Dict = defaultdict(dict)
@@ -51,10 +48,11 @@ def buffer_to_dict(buf: TextIO):
         NETA = int(buf.readline().split()[0])
         _cnt = 0
         boundaries[None][_bnd_id] = {}
-        boundaries[None][_bnd_id]['indexes'] = []
+        boundaries[None][_bnd_id]["indexes"] = []
         while _cnt < NETA:
-            boundaries[None][_bnd_id]['indexes'].append(
-                buf.readline().split()[0].strip())
+            boundaries[None][_bnd_id]["indexes"].append(
+                buf.readline().split()[0].strip()
+            )
             _cnt += 1
         _bnd_id += 1
     NBOU = int(buf.readline().split()[0])
@@ -68,24 +66,26 @@ def buffer_to_dict(buf: TextIO):
         else:
             _bnd_id = len(boundaries[ibtype])
         boundaries[ibtype][_bnd_id] = {}
-        boundaries[ibtype][_bnd_id]['indexes'] = []
+        boundaries[ibtype][_bnd_id]["indexes"] = []
         while _pnt_cnt < npts:
             line = buf.readline().split()
             if len(line) == 1:
-                boundaries[ibtype][_bnd_id]['indexes'].append(line[0])
+                boundaries[ibtype][_bnd_id]["indexes"].append(line[0])
             else:
                 index_construct = []
                 for val in line:
-                    if '.' in val:
+                    if "." in val:
                         continue
                     index_construct.append(val)
-                boundaries[ibtype][_bnd_id]['indexes'].append(index_construct)
+                boundaries[ibtype][_bnd_id]["indexes"].append(index_construct)
             _pnt_cnt += 1
         _nbnd_cnt += 1
-    return {'description': description,
-            'nodes': nodes,
-            'elements': elements,
-            'boundaries': boundaries}
+    return {
+        "description": description,
+        "nodes": nodes,
+        "elements": elements,
+        "boundaries": boundaries,
+    }
 
 
 def to_string(description, nodes, elements, boundaries=None, crs=None):
@@ -119,18 +119,19 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
 
     # ocean boundaries
     if boundaries is not None:
-        out.append(f"{len(boundaries[None]):d} "
-                   "! total number of ocean boundaries")
+        out.append(f"{len(boundaries[None]):d} " "! total number of ocean boundaries")
         # count total number of ocean boundaries
         _sum = 0
         for bnd in boundaries[None].values():
-            _sum += len(bnd['indexes'])
+            _sum += len(bnd["indexes"])
         out.append(f"{int(_sum):d} ! total number of ocean boundary nodes")
         # write ocean boundary indexes
         for i, boundary in boundaries[None].items():
-            out.append(f"{len(boundary['indexes']):d}"
-                       f" ! number of nodes for ocean_boundary_{i}")
-            for idx in boundary['indexes']:
+            out.append(
+                f"{len(boundary['indexes']):d}"
+                f" ! number of nodes for ocean_boundary_{i}"
+            )
+            for idx in boundary["indexes"]:
                 out.append(f"{idx}")
     else:
         out.append("0 ! total number of ocean boundaries")
@@ -148,7 +149,7 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
     for ibtype in boundaries:
         if ibtype is not None:
             for bnd in boundaries[ibtype].values():
-                _cnt += np.asarray(bnd['indexes']).size
+                _cnt += np.asarray(bnd["indexes"]).size
     out.append(f"{_cnt:d} ! Total number of non-ocean boundary nodes")
     # all additional boundaries
     for ibtype, bndrys in boundaries.items():
@@ -158,9 +159,10 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
             line = [
                 f"{len(boundary['indexes']):d}",
                 f"{ibtype}",
-                f"! boundary {ibtype}:{bdry_id}"]
-            out.append(' '.join(line))
-            for idx in boundary['indexes']:
+                f"! boundary {ibtype}:{bdry_id}",
+            ]
+            out.append(" ".join(line))
+            for idx in boundary["indexes"]:
                 out.append(f"{idx}")
     return "\n".join(out)
 
@@ -174,35 +176,34 @@ def read(resource: Union[str, os.PathLike], boundaries: bool = True, crs=True):
             :class:`io.StringIO`
     """
     resource = pathlib.Path(resource)
-    with open(resource, 'r') as stream:
+    with open(resource, "r") as stream:
         try:
             grd = buffer_to_dict(stream)
         except Exception as excepting:
-            err_msg = f'Resource {str(resource)} is not a valid grd file'
+            err_msg = f"Resource {str(resource)} is not a valid grd file"
             raise Exception(err_msg) from excepting
 
     if boundaries is False:
-        grd.pop('boundaries', None)
+        grd.pop("boundaries", None)
     if crs is True:
         crs = None
     if crs is None:
-        for try_crs in grd['description'].split():
+        for try_crs in grd["description"].split():
             try:
                 crs = CRS.from_user_input(try_crs)
                 break
             except CRSError:
                 pass
     if crs is None:
-        warnings.warn(f'File {str(resource)} does not contain CRS '
-                      'information.')
+        warnings.warn(f"File {str(resource)} does not contain CRS " "information.")
     if crs is not False:
-        grd.update({'crs': crs})
+        grd.update({"crs": crs})
     return grd
 
 
 def write(grd, path, overwrite=False):
     path = pathlib.Path(path)
     if path.is_file() and not overwrite:
-        raise Exception('File exists, pass overwrite=True to allow overwrite.')
-    with open(path, 'w') as f:
+        raise Exception("File exists, pass overwrite=True to allow overwrite.")
+    with open(path, "w") as f:
         f.write(to_string(**grd))

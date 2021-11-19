@@ -12,22 +12,22 @@ from ocsmesh.mesh.mesh import Mesh
 # from shapely import ops  # type: ignore[import]
 
 
-
 class MeshDescriptor:
-
     def __set__(self, obj, val: Union[BaseMesh, str, os.PathLike]):
 
         if isinstance(val, (str, os.PathLike)):  # type: ignore[misc]
             val = Mesh.open(val)
 
         if not isinstance(val, BaseMesh):
-            raise TypeError(f'Argument mesh must be of type {Mesh}, {str} '
-                            f'or {os.PathLike}, not type {type(val)}')
+            raise TypeError(
+                f"Argument mesh must be of type {Mesh}, {str} "
+                f"or {os.PathLike}, not type {type(val)}"
+            )
 
-        obj.__dict__['mesh'] = val
+        obj.__dict__["mesh"] = val
 
     def __get__(self, obj, val):
-        return obj.__dict__['mesh']
+        return obj.__dict__["mesh"]
 
 
 class MeshGeom(BaseGeom):

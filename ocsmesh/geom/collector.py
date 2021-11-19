@@ -26,6 +26,7 @@ from ocsmesh.raster import Raster
 
 _logger = logging.getLogger(__name__)
 
+
 class ContourPatchInfoCollector:
     def __init__(self):
         self._contour_patch_info = []
@@ -39,22 +40,21 @@ class ContourPatchInfoCollector:
 
 
 class GeomCollector(BaseGeom):
-
     def __init__(
-            self,
-            in_list: Sequence[
-                Union[str, Raster, RasterGeom, MeshGeom,
-                      MultiPolygonGeom, PolygonGeom]],
-            base_mesh: Mesh = None,
-            zmin: float = None,
-            zmax: float = None,
-            nprocs: int = None,
-            chunk_size: int = None,
-            overlap: int = None,
-            verbosity: int = 0,
-            base_shape: Union[Polygon, MultiPolygon] = None,
-            base_shape_crs: Union[str, CRS] = 'EPSG:4326'
-            ):
+        self,
+        in_list: Sequence[
+            Union[str, Raster, RasterGeom, MeshGeom, MultiPolygonGeom, PolygonGeom]
+        ],
+        base_mesh: Mesh = None,
+        zmin: float = None,
+        zmax: float = None,
+        nprocs: int = None,
+        chunk_size: int = None,
+        overlap: int = None,
+        verbosity: int = 0,
+        base_shape: Union[Polygon, MultiPolygon] = None,
+        base_shape_crs: Union[str, CRS] = "EPSG:4326",
+    ):
 
         # TODO: Like hfun collector and ops, later move the geom
         # combine functionality here and just call it from ops instead
@@ -75,7 +75,6 @@ class GeomCollector(BaseGeom):
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
-
         self._elev_info = dict(zmin=zmin, zmax=zmax)
         self._nprocs = nprocs
         self._chunk_size = chunk_size
@@ -94,7 +93,7 @@ class GeomCollector(BaseGeom):
 
         # TODO: CRS considerations -- geom combine doesn't necessarily
         # return EPSG:4326 (unlike hfun collector msh_t)
-        self._crs = 'EPSG:4326'
+        self._crs = "EPSG:4326"
 
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
@@ -107,9 +106,9 @@ class GeomCollector(BaseGeom):
                     clip_shape = self._base_shape
                     if not self._base_shape_crs.equals(in_item.crs):
                         transformer = Transformer.from_crs(
-                            self._base_shape_crs, in_item.crs, always_xy=True)
-                        clip_shape = ops.transform(
-                                transformer.transform, clip_shape)
+                            self._base_shape_crs, in_item.crs, always_xy=True
+                        )
+                        clip_shape = ops.transform(transformer.transform, clip_shape)
                     try:
                         in_item.clip(clip_shape)
                     except ValueError as err:
@@ -131,15 +130,17 @@ class GeomCollector(BaseGeom):
                 geom = MeshGeom(in_item)
 
             elif isinstance(in_item, str):
-                if in_item.endswith('.tif'):
+                if in_item.endswith(".tif"):
                     raster = Raster(in_item)
                     if self._base_shape:
                         clip_shape = self._base_shape
                         if not self._base_shape_crs.equals(raster.crs):
                             transformer = Transformer.from_crs(
-                                self._base_shape_crs, raster.crs, always_xy=True)
+                                self._base_shape_crs, raster.crs, always_xy=True
+                            )
                             clip_shape = ops.transform(
-                                    transformer.transform, clip_shape)
+                                transformer.transform, clip_shape
+                            )
                         try:
                             in_item.clip(clip_shape)
                         except ValueError as err:
@@ -157,8 +158,7 @@ class GeomCollector(BaseGeom):
 
                     geom = RasterGeom(raster, **self._elev_info)
 
-                elif in_item.endswith(
-                        ('.14', '.grd', '.gr3', '.msh', '.2dm')):
+                elif in_item.endswith((".14", ".grd", ".gr3", ".msh", ".2dm")):
                     geom = MeshGeom(Mesh.open(in_item))
 
                 else:
@@ -166,10 +166,9 @@ class GeomCollector(BaseGeom):
 
             self._geom_list.append(geom)
 
-
     def get_multipolygon(self, **kwargs) -> MultiPolygon:
-        '''Returns a :class:shapely.geometry.MultiPolygon object representing
-        the geometry constrained by the arguments.'''
+        """Returns a :class:shapely.geometry.MultiPolygon object representing
+        the geometry constrained by the arguments."""
 
         # For now we don't need to do any calculations here, the
         # ops will take care of extracting everything. Later the logic
@@ -190,22 +189,25 @@ class GeomCollector(BaseGeom):
                 base_multipoly = self._base_shape
                 if not self._base_shape_crs.equals(epsg4326):
                     transformer = Transformer.from_crs(
-                        self._base_shape_crs, epsg4326, always_xy=True)
+                        self._base_shape_crs, epsg4326, always_xy=True
+                    )
                     base_multipoly = ops.transform(
-                            transformer.transform, base_multipoly)
+                        transformer.transform, base_multipoly
+                    )
 
             elif self._base_mesh:
                 # TODO: Make sure all calcs are in EPSG:4326
                 base_multipoly = self._base_mesh.hull.multipolygon()
 
-            feather_files.append(self._extract_global_boundary(
-                temp_path, base_multipoly))
-            feather_files.extend(self._extract_nonraster_boundary(
-                temp_path, base_multipoly))
-            feather_files.extend(self._extract_features(
-                temp_path, base_multipoly))
+            feather_files.append(
+                self._extract_global_boundary(temp_path, base_multipoly)
+            )
+            feather_files.extend(
+                self._extract_nonraster_boundary(temp_path, base_multipoly)
+            )
+            feather_files.extend(self._extract_features(temp_path, base_multipoly))
 
-            gdf = gpd.GeoDataFrame(columns=['geometry'], crs=epsg4326)
+            gdf = gpd.GeoDataFrame(columns=["geometry"], crs=epsg4326)
             for f in feather_files:
                 gdf = gdf.append(gpd.read_feather(f))
 
@@ -215,18 +217,19 @@ class GeomCollector(BaseGeom):
 
             elif not isinstance(mp, MultiPolygon):
                 raise ValueError(
-                    "Union of all shapes resulted in invalid geometry"
-                    + " type")
+                    "Union of all shapes resulted in invalid geometry" + " type"
+                )
 
         return mp
 
-    def add_patch(self,
-            shape: Union[MultiPolygon, Polygon] = None,
-            level: Union[Tuple[float, float], float] = None,
-            contour_defn: Union[FilledContour, Contour] = None,
-            patch_defn: Patch = None,
-            shapefile: Union[None, str, Path] = None,
-            ):
+    def add_patch(
+        self,
+        shape: Union[MultiPolygon, Polygon] = None,
+        level: Union[Tuple[float, float], float] = None,
+        contour_defn: Union[FilledContour, Contour] = None,
+        patch_defn: Patch = None,
+        shapefile: Union[None, str, Path] = None,
+    ):
 
         # Always lazy
 
@@ -242,7 +245,8 @@ class GeomCollector(BaseGeom):
             else:
                 raise ValueError(
                     "Level must be specified either by min and max values"
-                    " or by only max value ")
+                    " or by only max value "
+                )
 
             contour_defn = FilledContour(level1=level)
 
@@ -252,7 +256,8 @@ class GeomCollector(BaseGeom):
         elif not isinstance(contour_defn, FilledContour):
             raise TypeError(
                 f"Filled contour definition must be of type"
-                f" {FilledContour} not {type(contour_defn)}!")
+                f" {FilledContour} not {type(contour_defn)}!"
+            )
 
         elif level is not None:
             msg = "Level is ignored since a contour definition is provided!"
@@ -268,28 +273,25 @@ class GeomCollector(BaseGeom):
 
         elif not isinstance(patch_defn, Patch):
             raise TypeError(
-                f"Patch definition must be of type {Patch} not"
-                f" {type(patch_defn)}!")
-
+                f"Patch definition must be of type {Patch} not" f" {type(patch_defn)}!"
+            )
 
         # If patch defn is None it means the patch applies to
         # all the sources of the accompanying contour
-        self._contour_patch_info_coll.add(
-            contour_defn, patch_defn)
-
+        self._contour_patch_info_coll.add(contour_defn, patch_defn)
 
     def _type_chk(self, input_list):
-        ''' Check the input type for constructor '''
+        """Check the input type for constructor"""
         valid_types = (str, Raster, BaseGeom, BaseMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
                 f'Input list items must be of type {", ".join(valid_types)}'
-                f', or a derived type.')
+                f", or a derived type."
+            )
 
     def _get_raster_sources(self):
         raster_types = (RasterGeom, Raster)
-        rasters = [
-            i for i in self._geom_list if isinstance(i, raster_types)]
+        rasters = [i for i in self._geom_list if isinstance(i, raster_types)]
         return rasters
 
     def _get_raster_source_files(self):
@@ -309,14 +311,12 @@ class GeomCollector(BaseGeom):
 
     def _get_non_raster_sources(self):
         raster_types = (RasterGeom, Raster)
-        non_rasters = [
-            i for i in self._geom_list if not isinstance(i, raster_types)]
+        non_rasters = [i for i in self._geom_list if not isinstance(i, raster_types)]
         return non_rasters
 
     def _get_valid_multipolygon(
-            self,
-            polygon: Union[Polygon, MultiPolygon]
-            ) -> MultiPolygon:
+        self, polygon: Union[Polygon, MultiPolygon]
+    ) -> MultiPolygon:
 
         # TODO: Performance bottleneck for valid checks
         if not polygon.is_valid:
@@ -337,18 +337,25 @@ class GeomCollector(BaseGeom):
 
         out_path = Path(out_dir)
 
-        geom_path = out_path / 'global_boundary.feather'
+        geom_path = out_path / "global_boundary.feather"
 
         raster_files = self._get_raster_source_files()
-        zmin = self._elev_info['zmin']
-        zmax = self._elev_info['zmax']
+        zmin = self._elev_info["zmin"]
+        zmax = self._elev_info["zmax"]
         _logger.info("Extracting global boundaries")
         combine_geometry(
-            raster_files, geom_path, "feather",
-            None, base_multipoly, False,
-            zmin, zmax,
-            self._chunk_size, self._overlap,
-            self._nprocs)
+            raster_files,
+            geom_path,
+            "feather",
+            None,
+            base_multipoly,
+            False,
+            zmin,
+            zmax,
+            self._chunk_size,
+            self._overlap,
+            self._nprocs,
+        )
 
         return geom_path
 
@@ -360,13 +367,11 @@ class GeomCollector(BaseGeom):
         feather_files = []
         for e, geom in enumerate(non_rasters):
 
-            geom_path = out_path / f'nonraster_{os.getpid()}_{e}.feather'
+            geom_path = out_path / f"nonraster_{os.getpid()}_{e}.feather"
 
             crs = geom.crs
-            multipoly = self._get_valid_multipolygon(
-                    geom.get_multipolygon())
-            gdf_non_raster = gpd.GeoDataFrame(
-                    {'geometry': multipoly}, crs=crs)
+            multipoly = self._get_valid_multipolygon(geom.get_multipolygon())
+            gdf_non_raster = gpd.GeoDataFrame({"geometry": multipoly}, crs=crs)
             if crs != CRS.from_user_input("EPSG:4326"):
                 gdf_non_raster = gdf_non_raster.to_crs("EPSG:4326")
 
@@ -389,10 +394,9 @@ class GeomCollector(BaseGeom):
 
         out_path = Path(out_dir)
 
-
         raster_files = self._get_raster_source_files()
-        zmin = self._elev_info['zmin']
-        zmax = self._elev_info['zmax']
+        zmin = self._elev_info["zmin"]
+        zmax = self._elev_info["zmax"]
 
         feather_files = []
         for e, (ctr_defn, ptch_defn) in enumerate(self._contour_patch_info_coll):
@@ -406,8 +410,7 @@ class GeomCollector(BaseGeom):
             patch_raster_files = raster_files
             if ctr_defn.has_source:
                 patch_rasters = ctr_defn.sources
-                patch_raster_files = self._get_raster_files_from_source(
-                        patch_rasters)
+                patch_raster_files = self._get_raster_files_from_source(patch_rasters)
 
             # Pass patch shape instead of base mesh
             # See explanation in add_patch
@@ -415,18 +418,24 @@ class GeomCollector(BaseGeom):
             combine_poly = base_multipoly
             if ptch_defn:
                 patch_mp, crs = ptch_defn.get_multipolygon()
-                gdf_patch = gpd.GeoDataFrame(
-                        {'geometry': patch_mp}, crs=crs)
+                gdf_patch = gpd.GeoDataFrame({"geometry": patch_mp}, crs=crs)
                 if crs != CRS.from_user_input("EPSG:4326"):
                     gdf_patch = gdf_patch.to_crs("EPSG:4326")
                 combine_poly = MultiPolygon(list(gdf_patch.geometry))
-            geom_path = out_path / f'patch_{os.getpid()}_{e}.feather'
+            geom_path = out_path / f"patch_{os.getpid()}_{e}.feather"
             combine_geometry(
-                patch_raster_files, geom_path, "feather",
-                None, combine_poly, True,
-                patch_zmin, patch_zmax,
-                self._chunk_size, self._overlap,
-                self._nprocs)
+                patch_raster_files,
+                geom_path,
+                "feather",
+                None,
+                combine_poly,
+                True,
+                patch_zmin,
+                patch_zmax,
+                self._chunk_size,
+                self._overlap,
+                self._nprocs,
+            )
 
             if geom_path.is_file():
                 feather_files.append(geom_path)

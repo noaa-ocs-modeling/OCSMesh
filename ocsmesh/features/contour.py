@@ -3,16 +3,17 @@ from pathlib import Path
 
 
 class ContourBase(ABC):
-
     def __init__(self, sources=[], shapefile=None):
         if sources and shapefile:
             raise ValueError(
-                "Both sources and shapefile cannot be specified at the same time!")
+                "Both sources and shapefile cannot be specified at the same time!"
+            )
 
         # Either based on shape or the source-level
         if shapefile and Path(shapefile).is_file():
             raise NotImplementedError(
-                "Contour based on shapefiles are not supported yet!")
+                "Contour based on shapefiles are not supported yet!"
+            )
 
         self._sources = []
         if not isinstance(sources, (list, tuple)):
@@ -51,11 +52,10 @@ class ContourBase(ABC):
     def _get_contour_from_source(self, source):
         pass
 
-#    @abstractmethod
+    #    @abstractmethod
     def _get_contour_from_shapefile(self, shapefile):
         # TODO: Support shapefile?
-        raise NotImplementedError(
-                "Contour based on shapefiles are not supported yet!")
+        raise NotImplementedError("Contour based on shapefiles are not supported yet!")
 
     @property
     @abstractmethod
@@ -64,7 +64,6 @@ class ContourBase(ABC):
 
 
 class Contour(ContourBase):
-
     def __init__(self, level=None, sources=[], shapefile=None):
 
         super().__init__(sources, shapefile)
@@ -89,13 +88,14 @@ class Contour(ContourBase):
 
 
 class FilledContour(ContourBase):
-
-    def __init__(self,
-                 level0=None,
-                 level1=None,
-                 sources=[],
-                 max_contour_defn : Contour = None,
-                 shapefile=None):
+    def __init__(
+        self,
+        level0=None,
+        level1=None,
+        sources=[],
+        max_contour_defn: Contour = None,
+        shapefile=None,
+    ):
 
         super().__init__(sources, shapefile)
         if max_contour_defn:
@@ -111,9 +111,9 @@ class FilledContour(ContourBase):
     def _get_contour_from_source(self, source):
         z_info = {}
         if self._level0 is not None:
-            z_info['zmin'] = self._level0
+            z_info["zmin"] = self._level0
         if self._level1 is not None:
-            z_info['zmax'] = self._level1
+            z_info["zmax"] = self._level1
 
         src_class = type(source).__name__
         if src_class == "Raster":

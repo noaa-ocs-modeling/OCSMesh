@@ -7,29 +7,25 @@ from matplotlib.colors import LinearSegmentedColormap, Normalize
 def get_topobathy_kwargs(values, vmin, vmax, colors=256):
     vmin = np.min(values) if vmin is None else vmin
     vmax = np.max(values) if vmax is None else vmax
-    if vmax <= 0.:
+    if vmax <= 0.0:
         cmap = plt.cm.seismic
-        col_val = 0.
+        col_val = 0.0
         levels = np.linspace(vmin, vmax, colors)
     else:
-        wet_count = int(np.floor(
-            colors*(float((values < 0.).sum()) / float(values.size))))
-        col_val = float(wet_count)/colors
+        wet_count = int(
+            np.floor(colors * (float((values < 0.0).sum()) / float(values.size)))
+        )
+        col_val = float(wet_count) / colors
         dry_count = colors - wet_count
-        colors_undersea = plt.cm.bwr(np.linspace(1., 0., wet_count))
-        colors_land = plt.cm.terrain(np.linspace(0.25, 1., dry_count))
+        colors_undersea = plt.cm.bwr(np.linspace(1.0, 0.0, wet_count))
+        colors_land = plt.cm.terrain(np.linspace(0.25, 1.0, dry_count))
         colors = np.vstack((colors_undersea, colors_land))
-        cmap = LinearSegmentedColormap.from_list('cut_terrain', colors)
+        cmap = LinearSegmentedColormap.from_list("cut_terrain", colors)
         wlevels = np.linspace(vmin, 0.0, wet_count, endpoint=False)
         dlevels = np.linspace(0.0, vmax, dry_count)
         levels = np.hstack((wlevels, dlevels))
     if vmax > 0:
-        norm = FixPointNormalize(
-            sealevel=0.0,
-            vmax=vmax,
-            vmin=vmin,
-            col_val=col_val
-            )
+        norm = FixPointNormalize(sealevel=0.0, vmax=vmax, vmin=vmin, col_val=col_val)
     else:
         norm = None
     return cmap, norm, levels, col_val
@@ -55,8 +51,8 @@ class FixPointNormalize(Normalize):
     This may be useful for a `terrain` map, to set the "sea level"
     to a color in the blue/turquise range.
     """
-    def __init__(self, vmin=None, vmax=None, sealevel=0, col_val=0.5,
-                 clip=False):
+
+    def __init__(self, vmin=None, vmax=None, sealevel=0, col_val=0.5, clip=False):
         # sealevel is the fix point of the colormap (in data units)
         self.sealevel = sealevel
         # col_val is the color value in the range [0,1] that should represent
@@ -73,14 +69,12 @@ class FixPointNormalize(Normalize):
 
 def figure(f):
     def decorator(*argv, **kwargs):
-        axes = get_axes(
-            kwargs.get('axes', None),
-            kwargs.get('figsize', None)
-            )
-        kwargs.update({'axes': axes})
+        axes = get_axes(kwargs.get("axes", None), kwargs.get("figsize", None))
+        kwargs.update({"axes": axes})
         f(*argv, **kwargs)
-        if kwargs.get('show', False):
-            plt.gca().axis('scaled')
+        if kwargs.get("show", False):
+            plt.gca().axis("scaled")
             plt.show()
         return axes
+
     return decorator
