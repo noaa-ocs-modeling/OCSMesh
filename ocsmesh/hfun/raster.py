@@ -24,7 +24,7 @@ from ocsmesh.geom.shapely import PolygonGeom
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 
-# supress feather warning
+# suppress feather warning
 warnings.filterwarnings(
     'ignore', message='.*initial implementation of Parquet.*')
 
