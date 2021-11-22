@@ -73,7 +73,7 @@ class BaseGeom(ABC):
         Returns
         -------
         jigsaw_msh_t
-            Calculated vertex-edge representation of the geometry 
+            Calculated vertex-edge representation of the geometry
             if a projected or local UTM CRS.
         """
 

@@ -1,3 +1,15 @@
+"""This module defines geometry collector.
+`
+Geometry collector objects accepts a list of valid basic `Geom`
+inputs and creates an object that merges the results of all the
+other types of geometries, e.g. mesh-based and raster-based.
+
+Notes
+-----
+This enables the user to process multiple DEM without having to worry
+about the details of merging the output polygons taken from each DEM.
+"""
+
 import os
 import logging
 import warnings
@@ -5,7 +17,7 @@ import tempfile
 from numbers import Number
 from pathlib import Path
 from multiprocessing import cpu_count
-from typing import Union, Sequence, Tuple
+from typing import Union, Sequence, Tuple, Optional, Iterable, List, Any
 
 import geopandas as gpd
 from pyproj import CRS, Transformer
@@ -24,13 +36,24 @@ from ocsmesh.features.contour import FilledContour, Contour
 from ocsmesh.features.patch import Patch
 from ocsmesh.ops import combine_geometry
 
+CanCreateSingleGeom = Union[Raster, BaseMesh, Polygon, MultiPolygon]
+CanCreateMultipleGeom = Iterable[Union[CanCreateSingleGeom, str]]
+CanCreateGeom = Union[CanCreateSingleGeom, CanCreateMultipleGeom]
+
 _logger = logging.getLogger(__name__)
 
 class ContourPatchInfoCollector:
-    def __init__(self):
+    """Helper class for information related to contour patches"""
+
+    def __init__(self) -> None:
         self._contour_patch_info = []
 
-    def add(self, contour_defn, patch_defn):
+    def add(self,
+            contour_defn: FilledContour,
+            patch_defn: Optional[Patch]
+            ) -> None:
+        """Add contour definition information to the contour collection
+        """
         self._contour_patch_info.append((contour_defn, patch_defn))
 
     def __iter__(self):
@@ -39,22 +62,84 @@ class ContourPatchInfoCollector:
 
 
 class GeomCollector(BaseGeom):
+    """Geometry object based on multiple input types
+
+    Geometry type that merges the information from different types of
+    inputs such as raster, mesh and shapely geometries.
+
+    Attributes
+    ----------
+    crs : CRSDescriptor
+        EPSG:4326. All the inputs are transformed before merging
+    multipolygon : MultiPolygon
+        Lazily calculated `shapely` (multi)polygon of the geometry
+
+    Methods
+    -------
+    msh_t(**kwargs)
+        Returns the `jigsawpy` vertex-edge representation of the geometry
+    get_multipolygon(**kwargs)
+        Returns `shapely` object representation of the geometry
+
+    add_patch(shape=None, level=None, contour_defn=None,
+              patch_defn=None, shapefile=None)
+        Define local (patch) contour extraction definition from all
+        the input data (e.g. raster, mesh, etc.)
+    """
 
     def __init__(
             self,
-            in_list: Sequence[
-                Union[str, Raster, RasterGeom, MeshGeom,
-                      MultiPolygonGeom, PolygonGeom]],
-            base_mesh: Mesh = None,
-            zmin: float = None,
-            zmax: float = None,
-            nprocs: int = None,
-            chunk_size: int = None,
-            overlap: int = None,
+            in_list: CanCreateMultipleGeom,
+            base_mesh: Optional[Mesh] = None,
+            zmin: Optional[float] = None,
+            zmax: Optional[float] = None,
+            nprocs: Optional[int] = None,
+            chunk_size: Optional[int] = None,
+            overlap: Optional[int] = None,
             verbosity: int = 0,
-            base_shape: Union[Polygon, MultiPolygon] = None,
+            base_shape: Optional[Union[Polygon, MultiPolygon]] = None,
             base_shape_crs: Union[str, CRS] = 'EPSG:4326'
-            ):
+            ) -> None:
+        """Initialize geometry collector object
+
+        Parameters
+        ----------
+        in_list : list
+            List of objects that from which single geometry object
+            can be created. This includes path to a raster or mesh
+            file as a string, as well as Raster, Mesh or Polygon
+            objects. Note that objects are not copied and currently
+            any clipping that happens during processing will affect
+            the objects pass to the `GeomCollector` constructor.
+        base_mesh : Mesh or None, default=None
+            Base mesh to be used for extracting boundaries of the
+            domain. If not `None` all the input rasters all clipped
+            by `base_mesh` polygon before further processing. This
+            is useful for cases where we'd like to locally refine
+            features of the domain (domain region >> inputs region)
+            or when input rasters are much larger that the domain
+            and we'd like to extract contours only within domain
+            to save on computation.
+        zmin : float or None, default=None
+            Minimum elevation for extracting domain.
+        zmax : float or None, default=None
+            Maximum elevation for extracting domain.
+        nprocs: int or None, default=None
+            Number of processors to use in parallel parts of the
+            collector computation
+        chunk_size: int or None, default=None
+            Chunk size for windowed calculation on rasters
+        overlap: int or None default=None
+            Window overlap for windowed calculation on rasters
+        verbosity: int, default=0,
+            Verbosity of the output
+        base_shape: Polygon or MultiPolygon or None, default=None
+            Similar to `base_mesh`, but instead of calculating the
+            polygon from mesh, directly receive it from the calling
+            code.
+        base_shape_crs: str or CRS, default='EPSG:4326'
+            CRS of the input `base_shape`.
+        """
 
         # TODO: Like hfun collector and ops, later move the geom
         # combine functionality here and just call it from ops instead
@@ -167,9 +252,34 @@ class GeomCollector(BaseGeom):
             self._geom_list.append(geom)
 
 
-    def get_multipolygon(self, **kwargs) -> MultiPolygon:
-        '''Returns a :class:shapely.geometry.MultiPolygon object representing
-        the geometry constrained by the arguments.'''
+    def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:
+        """Returns the `shapely` representation of the geometry
+
+        Calculates and returns the `MultiPolygon` representation of
+        the geometry.
+
+        Parameters
+        ----------
+        **kwargs : dict, optional
+            Currently unused for this class, needed for generic API
+            support
+
+        Returns
+        -------
+        MultiPolygon
+            Calculated and merged polygons from all geometry inputs.
+
+        Notes
+        -----
+        All calculations are done lazily and the results is **not**
+        cached. During this process all the stored contour extraction
+        specs are applied on all the inputs and then the resulting
+        shapes are merged.
+
+        Calculation for each DEM and feature is stored on disk as
+        feather files.  In the last steps are all these feather files
+        are combined using the out of core calculation by `GeoPandas`.
+        """
 
         # For now we don't need to do any calculations here, the
         # ops will take care of extracting everything. Later the logic
@@ -220,13 +330,52 @@ class GeomCollector(BaseGeom):
 
         return mp
 
-    def add_patch(self,
-            shape: Union[MultiPolygon, Polygon] = None,
-            level: Union[Tuple[float, float], float] = None,
-            contour_defn: Union[FilledContour, Contour] = None,
-            patch_defn: Patch = None,
-            shapefile: Union[None, str, Path] = None,
-            ):
+    def add_patch(
+            self,
+            shape: Optional[Union[MultiPolygon, Polygon]] = None,
+            level: Optional[Union[Tuple[float, float], float]] = None,
+            contour_defn: Optional[Union[FilledContour, Contour]] = None,
+            patch_defn: Optional[Patch] = None,
+            shapefile: Optional[Union[str, Path]] = None,
+            ) -> None:
+
+        """Specifies an area of geometry inputs to extract contours
+
+        Specifies a localized area of geometry inputs to extract
+        contours from.
+
+        Parameters
+        ----------
+        shape : MultiPolygon or Polygon or None, default=None
+            `shapely` (multi)polygon to specify the area from which
+            contour specification for this patch should be extracted.
+            CRS is assumed to be ``EPSG:4326``.
+        level: float or tuple of float, default=None
+            Contour level specification for this patch. If provided,
+            it could either be a single floating point number for
+            the maximum elevation or a tuple indicating minimum and
+            maximum elevations for contour extraction.
+        contour_defn : FilledContour or Contour or None, default=None
+            Alternative way of specifying maximum or minimum or both
+            elevation levels for contour extraction.
+        patch_defn : Patch or None, default=None
+            Alternative way to specify which region within the input
+            the contours need to be extracted from.
+        shapefile: str or Path or None, default=None
+            Alternative way to specify which region within the input
+            the contours need to be extracted from.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method doesn't result in any calculations. It simply
+        stores the information about the user specified contour.
+        During the `get_multipolygon` call the contours are actually
+        calculated on all the inputs.
+        """
 
         # Always lazy
 
@@ -278,26 +427,79 @@ class GeomCollector(BaseGeom):
             contour_defn, patch_defn)
 
 
-    def _type_chk(self, input_list):
-        ''' Check the input type for constructor '''
+    def _type_chk(self, input_list) -> None:
+        """Checks the if the input types are supported for geometry
+
+        Checks if geometry collector supports handling geometry created
+        from the input types.
+
+        Parameters
+        ----------
+        input_list : List[Any]
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        TypeError
+            If the any of the inputs are not supported
+        """
+
         valid_types = (str, Raster, BaseGeom, BaseMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
                 f'Input list items must be of type {", ".join(valid_types)}'
                 f', or a derived type.')
 
-    def _get_raster_sources(self):
+    def _get_raster_sources(self) -> List[Union[RasterGeom, Raster]]:
+        """Get the list rasters from inputs to the object constructor
+
+        Retruns
+        -------
+        list of RasterGeom or Raster
+            Filtered input list to return only rasters
+        """
+
         raster_types = (RasterGeom, Raster)
         rasters = [
             i for i in self._geom_list if isinstance(i, raster_types)]
         return rasters
 
-    def _get_raster_source_files(self):
+    def _get_raster_source_files(self) -> List[Path]:
+        """Get the list of raster temporary files
+
+        Returns
+        -------
+        list of path-like
+            List of path to geom input raster object temporary files.
+        """
 
         rasters = self._get_raster_sources()
         return self._get_raster_files_from_source(rasters)
 
-    def _get_raster_files_from_source(self, rasters):
+    def _get_raster_files_from_source(
+            self,
+            rasters: Iterable[Union[Raster, RasterGeom]]
+            ) -> List[Path]:
+        """Get the list of raster temporary files
+
+        Get the list of raster temporary files for input argument
+        `rasters`.
+
+        Parameters
+        ----------
+        rasters : iterable
+            List of raster objects or geometries for which the
+            temporary file address is returned
+
+        Returns
+        -------
+        list of path-like
+            List of path to method input raster object temporary files.
+        """
+
         raster_files = []
         for r in rasters:
             if isinstance(r, Raster):
@@ -307,7 +509,14 @@ class GeomCollector(BaseGeom):
 
         return raster_files
 
-    def _get_non_raster_sources(self):
+    def _get_non_raster_sources(self) -> List[Any]:
+        """Get the list non-rasters from inputs in the constructor
+
+        Retruns
+        -------
+        list
+            Filtered input list to return only non-rasters
+        """
         raster_types = (RasterGeom, Raster)
         non_rasters = [
             i for i in self._geom_list if not isinstance(i, raster_types)]
@@ -317,6 +526,22 @@ class GeomCollector(BaseGeom):
             self,
             polygon: Union[Polygon, MultiPolygon]
             ) -> MultiPolygon:
+        """Get a valid multipolygon from the input `polygon`
+
+        Validates and if applicable creates a multipolygon from the
+        input argument `polygon`
+
+        Parameters
+        ----------
+        polygon : Polygon or MultiPolygon
+            The input polygon or multipolygon which might not be
+            topologically valid.
+
+        Returns
+        -------
+        MultiPolygon
+            A validated `shapely` `MultiPolygon` entity
+        """
 
         # TODO: Performance bottleneck for valid checks
         if not polygon.is_valid:
@@ -333,7 +558,26 @@ class GeomCollector(BaseGeom):
 
         return polygon
 
-    def _extract_global_boundary(self, out_dir, base_multipoly):
+    def _extract_global_boundary(
+            self,
+            out_dir: Union[Path, str],
+            base_multipoly: Optional[MultiPolygon]
+            ) -> Path:
+        """Calculates the final boundary from all the raster inputs
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory into which feather files should be written
+        base_multipoly : MultiPolygon
+            Base shape to use for clipping DEM data.
+
+        Returns
+        -------
+        path-like
+            Path to a feather file containing the final boundary
+            based on raster inputs
+        """
 
         out_path = Path(out_dir)
 
@@ -352,7 +596,26 @@ class GeomCollector(BaseGeom):
 
         return geom_path
 
-    def _extract_nonraster_boundary(self, out_dir, base_multipoly):
+    def _extract_nonraster_boundary(
+            self,
+            out_dir: Union[Path, str],
+            base_multipoly: Optional[MultiPolygon]
+            ) -> Path:
+        """Calculates the final boundary from all the non-raster inputs
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory into which feather files should be written
+        base_multipoly : MultiPolygon
+            Base shape to use for clipping elevation data mesh.
+
+        Returns
+        -------
+        path-like
+            Path to a feather file containing the final boundary
+            based on non-raster inputs
+        """
 
         out_path = Path(out_dir)
 
@@ -378,14 +641,58 @@ class GeomCollector(BaseGeom):
 
         return feather_files
 
-    def _extract_features(self, out_dir, base_multipoly):
+    def _extract_features(
+            self,
+            out_dir: Union[Path, str],
+            base_multipoly: Optional[MultiPolygon]
+            ) -> List[Path]:
+        """Calculates the local feature polygons
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory into which feather files should be written
+        base_multipoly : MultiPolygon
+            Base shape to use for clipping elevation data.
+
+        Returns
+        -------
+        list of path-like
+            Paths to feather files containing all the extracted features
+
+        Notes
+        -----
+        Currently the only feature available is patch feature extraction
+        """
+
 
         feather_files = []
         feather_files.extend(self._apply_patch(out_dir, base_multipoly))
 
         return feather_files
 
-    def _apply_patch(self, out_dir, base_multipoly):
+    def _apply_patch(
+            self,
+            out_dir: Union[Path, str],
+            base_multipoly: Optional[MultiPolygon]
+            ) -> List[Path]:
+        """Extracts contours based on patch specifications
+
+        Extracts the domain filled contours based on the specifications
+        user provided earlier by `add_patch`
+
+        Parameters
+        ----------
+        out_dir : str
+            Output directory into which feather files should be written
+        base_multipoly : MultiPolygon
+            Base shape to use for clipping elevation data.
+
+        Returns
+        -------
+        list of path-like
+            List of extracted contours stored on files on the disk
+        """
 
         out_path = Path(out_dir)
 

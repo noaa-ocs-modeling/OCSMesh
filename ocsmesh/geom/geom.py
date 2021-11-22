@@ -5,7 +5,7 @@ factory `Geom` object from this module which creates the correct
 geometry type based on the input arguments passed to it
 
 """
-from typing import Union, Iterable, Any
+from typing import Union, Any
 
 from shapely.geometry import Polygon, MultiPolygon  # type: ignore[import]
 
@@ -15,11 +15,7 @@ from ocsmesh.geom.base import BaseGeom
 from ocsmesh.geom.raster import RasterGeom
 from ocsmesh.geom.mesh import MeshGeom
 from ocsmesh.geom.shapely import PolygonGeom, MultiPolygonGeom
-from ocsmesh.geom.collector import GeomCollector
-
-CanCreateSingleGeom = Union[Raster, BaseMesh, Polygon, MultiPolygon]
-CanCreateMultipleGeom = Iterable[CanCreateSingleGeom]
-CanCreateGeom = Union[CanCreateSingleGeom, CanCreateMultipleGeom]
+from ocsmesh.geom.collector import GeomCollector, CanCreateGeom
 
 GeomType = Union[
         RasterGeom,
@@ -89,5 +85,5 @@ class Geom(BaseGeom):
     def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:
 
         # FIXME: Need to override the superclass method here to avoid
-        # instantiation of abstract class error 
+        # instantiation of abstract class error
         raise NotImplementedError

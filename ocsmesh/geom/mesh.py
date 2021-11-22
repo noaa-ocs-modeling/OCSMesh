@@ -42,11 +42,11 @@ class MeshGeom(BaseGeom):
     Attributes
     ----------
     mesh : BaseMesh
-        Reference to the underlying mesh object used to create 
+        Reference to the underlying mesh object used to create
         the geometry
     crs : CRS
         CRS of the underlying mesh
-        
+
     Methods
     -------
     get_multipolygon(**kwargs)

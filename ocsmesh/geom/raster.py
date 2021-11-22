@@ -39,7 +39,7 @@ class RasterGeom(BaseGeom):
 
     Attributes
     ----------
-    raster    
+    raster
         Reference to the source raster object
     crs
         CRS of the input raster
