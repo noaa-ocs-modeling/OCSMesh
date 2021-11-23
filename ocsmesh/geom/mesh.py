@@ -77,7 +77,7 @@ class MeshGeom(BaseGeom):
 
         self._mesh = mesh
 
-    def get_multipolygon(self, **kwargs):
+    def get_multipolygon(self, **kwargs) -> MultiPolygon:
         """Returns the `shapely` representation of the geometry
 
         Calculates and returns the `MultiPolygon` representation of

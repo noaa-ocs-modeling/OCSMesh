@@ -7,7 +7,7 @@ from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
-from typing import Union, Sequence, List, Tuple
+from typing import Union, Sequence, List, Tuple, Iterable
 
 import numpy as np
 import geopandas as gpd
@@ -30,6 +30,10 @@ from ocsmesh.features.patch import Patch
 from ocsmesh.features.channel import Channel
 from ocsmesh.features.constraint import (
     TopoConstConstraint, TopoFuncConstraint)
+
+CanCreateSingleHfun = Union[Raster, EuclideanMesh2D]
+CanCreateMultipleHfun = Iterable[Union[CanCreateSingleHfun, str]]
+CanCreateHfun = Union[CanCreateSingleHfun, CanCreateMultipleHfun]
 
 _logger = logging.getLogger(__name__)
 

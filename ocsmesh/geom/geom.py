@@ -3,7 +3,6 @@
 Instead of importing specific geometry types, users can import
 factory `Geom` object from this module which creates the correct
 geometry type based on the input arguments passed to it
-
 """
 from typing import Union, Any
 
@@ -80,6 +79,7 @@ class Geom(BaseGeom):
 
     @staticmethod
     def is_valid_type(geom: Any) -> bool:
+        """Checks if an object is a valid geometry type"""
         return isinstance(geom, BaseGeom)
 
     def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:

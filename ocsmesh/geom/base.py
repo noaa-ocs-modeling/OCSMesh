@@ -75,6 +75,13 @@ class BaseGeom(ABC):
         jigsaw_msh_t
             Calculated vertex-edge representation of the geometry
             if a projected or local UTM CRS.
+
+        Notes
+        -----
+        The output of this method needs to have length unit for
+        distances (i.e. not degrees) since mesh size is specified
+        in length units and the domain and size function are the
+        passed to the mesh engine for cartesian meshing.
         """
 
         return multipolygon_to_jigsaw_msh_t(
