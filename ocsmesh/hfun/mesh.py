@@ -1,11 +1,15 @@
+"""This module define class for mesh based size function
+"""
+
 import functools
 import logging
 import operator
 from collections import defaultdict
-from typing import Union
+from typing import Union, Optional
 from multiprocessing import cpu_count, Pool
 from time import time
 
+from matplotlib.transforms import Bbox
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
 import numpy as np
@@ -16,20 +20,108 @@ from shapely.geometry import (
 
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor
+from ocsmesh import Mesh
 from ocsmesh import utils
 
 
 _logger = logging.getLogger(__name__)
 
 class HfunMesh(BaseHfun):
+    """Mesh based size function.
+
+    Creates a mesh based size function. The mesh size is specified
+    at each point of the mesh based on the specified criteria.
+
+    Attributes
+    ----------
+    hmin
+    hmax
+    mesh
+    crs
+
+    Methods
+    -------
+    msh_t()
+        Return mesh sizes specified on the points of the  underlying
+        mesh.
+    size_from_mesh()
+        Calculate values of the size function at each point on the
+        underlying mesh, based on the length of edges connected to
+        that point.
+    add_patch(multipolygon, expansion_rate=None,
+              target_size=None, nprocs=None)
+        Add a region of fixed size refinement with optional expansion
+        rate for points outside the region to achieve smooth size
+        transition.
+    add_feature(feature, expansion_rate, target_size=None,
+                max_verts=200, *, nprocs=None, pool=None)
+        Decorated method to add size refinement based on the specified
+        `expansion_rate`, `target_size`, and distance from the input
+        feature lines `feature`.
+    get_bbox(**kwargs)
+        Return  the bounding box of the underlying mesh.
+
+    Notes
+    -----
+    Unlike raster size function, mesh based size function doesn't
+    support constraint at this point.
+    """
 
     _crs = CRSDescriptor()
 
-    def __init__(self, mesh):
+    def __init__(self, mesh: Mesh) -> None:
+        """Initialize a mesh based size function object
+
+        Parameters
+        ----------
+        mesh : Mesh
+            Input mesh object whose points are used for specifying
+            sizes of the mesh to be generated. Note the underlying
+            mesh is not copied, it is overriden by methods in the
+            object of this type.
+
+        Notes
+        -----
+        When a size function is created from a mesh, it takes
+        the values associated with the underlying mesh. Unless
+        `size_from_mesh` is called or refinements are applied, the
+        values can be meaningless.
+
+        Unlike raster size function where the user defines the
+        minimum and maximum, for mesh based hfun, the minimum and
+        maximum is based on the values stored on the mesh.
+
+        Note that currently object of this type holds onto a crs
+        variable separate from `mesh.crs`. Because of this, if the
+        user is not careful, one might run into unexpected behavior!
+        """
+
         self._mesh = mesh
         self._crs = mesh.crs
 
     def msh_t(self) -> jigsaw_msh_t:
+        """Return the size function specified on the underlying mesh
+
+        Return the size function values stored on the underlying mesh.
+        The return value is in a projected CRS. If the input mesh
+        CRS is geographic, then a local UTM CRS is calculated and used
+        for the output of this method.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        jigsaw_msh_t
+            The size function specified on the points of input mesh.
+
+        Notes
+        -----
+        This method effectively overrides the CRS of the objects and
+        modifies it if the CRS is initially geographic. Note that
+        this also affects the underlying mesh object which is **not**
+        copied in the contructor.
+        """
 
         utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
         if utm_crs is not None:
@@ -47,15 +139,28 @@ class HfunMesh(BaseHfun):
 
         return self.mesh.msh_t
 
-    def size_from_mesh(self):
+    def size_from_mesh(self) -> None:
+        """Calculates sizes based on the underlying mesh edge lengths.
 
-        '''
-        Get size function values based on the mesh underlying
-        this size function. This method overwrites the values
-        in underlying msh_t.
-        Also note that for calculation coordinates are projected
-        to utm, but the projected coordinates are discarded
-        '''
+        Get size function values based on the underlying input mesh
+        This method overwrites the values in underlying `msh_t`.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        The size calculations are done in a projected CRS or a local
+        UTM CRS. However, this method does not modify the
+        CRS of the size function, it only updates the values and
+        discard the projected CRS it used for calculations.
+
+
+        """
 
         # Make sure it's in utm so that sizes are in meters
         hfun_msh = self.mesh.msh_t
@@ -94,10 +199,40 @@ class HfunMesh(BaseHfun):
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
-            expansion_rate: float = None,
-            target_size: float = None,
-            nprocs: int = None
-    ):
+            expansion_rate: Optional[float] = None,
+            target_size: Optional[float] = None,
+            nprocs: Optional[int] = None
+            ) -> None:
+        """Add refinement as a region of fixed size with an optional rate
+
+        Add a refinement based on a region specified by `multipolygon`.
+        The fixed `target_size` refinement can be expanded outside the
+        region specified by the shape if `expansion_rate` is provided.
+
+        Parameters
+        ----------
+        multipolygon : MultiPolygon or Polygon
+            Shape of the region to use specified `target_size` for
+            refinement.
+        expansion_rate : float or None, default=None
+            Optional rate to use for expanding refinement outside
+            the specified shape in `multipolygon`.
+        target_size : float or None, default=None
+            Fixed target size of mesh to use for refinement in
+            `multipolygon`
+        nprocs : int or None, default=None
+            Number of processors to use in parallel sections of the
+            algorithm
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        """
 
         # TODO: Add pool input support like add_feature for performance
 
@@ -172,6 +307,50 @@ class HfunMesh(BaseHfun):
             *, # kwarg-only comes after this
             pool: Pool
     ):
+        """Add refinement for specified linestring `feature`
+
+        Add refinement for the specified linestrings `feature`.
+        The refinement is relaxed with `expansion_rate` and distance
+        from the extracted contour lines.
+
+        Parameters
+        ----------
+        feature : LineString or MultiLineString
+            The user-specified line strings for applying refinement on.
+        expansion_rate : float
+            Rate to use for expanding refinement with distance away
+            from the extracted contours.
+        target_size : float or None, default=None
+            Target size to use on the extracted contours and expand
+            from with distance.
+        max_verts : int, default=200
+            Number of maximum vertices in a feature line that is
+            passed to a separate process in parallel section of
+            the algorithm.
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_patch :
+            Add refinement for region specified polygon
+
+        Notes
+        -----
+        See https://outline.com/YU7nSM for an explanation
+        about tree algorithms.
+
+        Creating a local projection allows having similar area/length
+        calculations as if great circle calculations was being used.
+
+        Another useful refererence:
+        https://gis.stackexchange.com/questions/214261/should-we-always-calculate-length-and-area-in-lat-lng-to-get-accurate-sizes-leng
+        """
         # TODO: Partition features if they are too "long" which results in an
         # improvement for parallel pool. E.g. if a feature is too long, 1
         # processor will be busy and the rest will be idle.
@@ -279,19 +458,40 @@ class HfunMesh(BaseHfun):
 
     @property
     def hmin(self):
+        """Read-only attribute for the minimum mesh size constraint"""
+
         return np.min(self.mesh.msh_t.value)
 
     @property
     def hmax(self):
+        """Read-only attribute for the maximum mesh size constraint"""
+
         return np.max(self.mesh.msh_t.value)
 
     @property
     def mesh(self):
+        """Read-only attribute to reference to the input mesh"""
+
         return self._mesh
 
     @property
     def crs(self):
+        """Read-only attribute holding onto hfun CRS"""
+
         return self._crs
 
-    def get_bbox(self, **kwargs):
+    def get_bbox(self, **kwargs) -> Union[Polygon, Bbox]:
+        """Returns the bounding box of the underlying mesh
+
+        Parameters
+        ----------
+        kwargs : dict, optional
+            Arguments passed to the underlying mesh `get_bbox`
+
+        Returns
+        -------
+        Polygon or Bbox
+            The bounding box of the underlying mesh
+        """
+
         return self.mesh.get_bbox(**kwargs)

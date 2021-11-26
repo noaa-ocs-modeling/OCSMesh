@@ -159,10 +159,10 @@ class HfunRaster(BaseHfun, Raster):
         Optionally use an expansion rate for points outside detected
         narrow regions for smooth size transition.
     add_feature(feature, expansion_rate, target_size=None,
-                max_verts=200, nprocs, pool)
+                max_verts=200, *, nprocs=None, pool=None)
         Decorated method to add size refinement based on the specified
-        `rate`, `target_size`, and distance from the input feature
-        lines `feature`.
+        `expansion_rate`, `target_size`, and distance from the input
+        feature lines `feature`.
     get_xy_memcache(window, dst_crs)
         Get XY grid cached onto disk. Useful for when XY needs to be
         projected to UTM so as to avoid reprojecting on every call.
@@ -710,7 +710,7 @@ class HfunRaster(BaseHfun, Raster):
             target_size: Optional[float] = None,
             nprocs: Optional[int] = None
             ) -> None:
-        """Add refinement as a region of fixed size with an optional `rate`
+        """Add refinement as a region of fixed size with an optional rate
 
         Add a refinement based on a region specified by `multipolygon`.
         The fixed `target_size` refinement can be expanded outside the
@@ -1037,9 +1037,6 @@ class HfunRaster(BaseHfun, Raster):
 
         Notes
         -----
-        This method extracts contours at specified levels and
-        the calls `add_feature` by passing those contour lines.
-
         See https://outline.com/YU7nSM for an explanation
         about tree algorithms.
 
