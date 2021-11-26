@@ -8,12 +8,14 @@ from multiprocessing import cpu_count, Pool
 import operator
 import tempfile
 from time import time
-from typing import Union, List, Callable, Any, Optional, Iterable
+from typing import Union, List, Callable, Any, Optional, Iterable, Tuple
 from contextlib import ExitStack
 import warnings
 try:
+    # pylint: disable=C0412
     from typing import Literal
 except ImportError:
+    # pylint: disable=C0412
     from typing_extensions import Literal
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
@@ -116,13 +118,9 @@ class HfunRaster(BaseHfun, Raster):
     Attributes
     ----------
     raster
-        Reference to the original input raster object
     hmin
-        Minimum mesh size constraint
     hmax
-        Maximum mesh size constraint
     verbosity
-        Verbosity of the output
 
     Methods
     -------
@@ -745,6 +743,10 @@ class HfunRaster(BaseHfun, Raster):
             Add refinement for auto-extracted contours
         add_channel :
             Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
         """
 
         # TODO: Add pool input support like add_feature for performance
@@ -874,6 +876,10 @@ class HfunRaster(BaseHfun, Raster):
             Add refinement for region specified polygon
         add_channel :
             Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
 
         Notes
         -----
@@ -913,12 +919,58 @@ class HfunRaster(BaseHfun, Raster):
     def add_channel(
             self,
             level: float = 0,
-            width: float = 1000, # in meters
+            width: float = 1000,
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
             nprocs: Optional[int] = None,
             tolerance: Optional[float] = None
-    ):
+            ) -> None:
+        """Add refinement for auto detected channels
+
+        Automatically detects narrow regions in the domain and apply
+        refinement size with an expanion rate (if provided) outside
+        the detected area.
+
+        Parameters
+        ----------
+        level : float, default=0
+            High water mark at which domain is extracted for narrow
+            region or channel calculations.
+        width : float, default=1000
+            The cut-off width for channel detection.
+        target_size : float, default=200
+            Target size to use on the detected channels and expand
+            from with distance.
+        expansion_rate : float or None, default=None
+            Rate to use for expanding refinement with distance away
+            from the detected channels.
+        nprocs : int or None, default=None
+            Number of processes to use for parallel sections of the
+            workflow.
+        tolerance: float or None, default=None
+            Tolerance to use for simplifying the polygon extracted
+            from DEM data. If `None` don't simplify.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_feature :
+            Add refinement for specified line string
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        """
 
         channels = self.raster.get_channels(
                 level=level, width=width, tolerance=tolerance)
@@ -978,6 +1030,10 @@ class HfunRaster(BaseHfun, Raster):
             Add refinement for region specified polygon
         add_channel :
             Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
 
         Notes
         -----
@@ -1107,7 +1163,35 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
 
-    def get_xy_memcache(self, window, dst_crs):
+    def get_xy_memcache(
+            self,
+            window : rasterio.windows.Window,
+            dst_crs: Union[CRS, str]
+            ) -> npt.NDArray[float]:
+        """Get the transformed locations of raster points.
+
+        Get the locations of raster points in the `dst_crs` CRS.
+        This method caches these transformed values for fast retrieval
+        upon multiple calls.
+
+        Parameters
+        ----------
+        window : rasterio.windows.Window
+            The raster window for querying location data.
+        dst_crs : CRS or str
+            The destination CRS for the raster points locations.
+
+        Returns
+        -------
+        np.ndarray
+            Locations of raster points after projecting to `dst_crs`
+
+        See Also
+        --------
+        get_xy :
+            Get the locations of raster points from the raster file.
+        """
+
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
             _logger.info('Transform points to local CRS...')
@@ -1132,11 +1216,60 @@ class HfunRaster(BaseHfun, Raster):
     @_apply_constraints
     def add_subtidal_flow_limiter(
             self,
-            hmin=None,
-            hmax=None,
-            upper_bound=None,
-            lower_bound=None
-    ):
+            hmin: Optional[float] = None,
+            hmax: Optional[float] = None,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None
+            ) -> None:
+        """Add mesh refinement based on topography.
+
+        Calculates a pre-defined function of topography to use
+        as values for refinement. The function values are cut off
+        using `hmin` and `hmax` and is applied to the region bounded
+        by `lower_bound` and `upper_bound`.
+
+        Parameters
+        ----------
+        hmin : float or None, default=None
+            Minimum mesh size in the refinement
+        hmax : float or None, default=None
+            Maximum mesh size in the refinement
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        The size refinement value is calculated from the topography
+        using:
+
+        .. math::
+            h = {1 \\over 3} \\times {{|z|} \\over {\\left\\| \\grad z \\right\\|}}
+
+        where :math:`z` is the elevation and :math:`h` is the value of
+        the mesh size. This refinement is not applied wherever the
+        magnitude of the gradient of topography is equal to zero.
+        """
 
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
@@ -1200,7 +1333,46 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, hfun_values, window=window)
 
     @_apply_constraints
-    def add_constant_value(self, value, lower_bound=None, upper_bound=None):
+    def add_constant_value(
+            self,
+            value: float,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None
+            ) -> None:
+        """Add refinement of fixed value in the region specified by bounds.
+
+        Apply fixed value mesh size refinement to the region specified
+        by bounds (if provided) or the whole domain.
+
+        Parameters
+        ----------
+        value : float
+            Fixed value to use for refinement size
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        """
+
         lower_bound = -float('inf') if lower_bound is None \
             else float(lower_bound)
         upper_bound = float('inf') if upper_bound is None \
@@ -1228,18 +1400,26 @@ class HfunRaster(BaseHfun, Raster):
 
     @property
     def raster(self):
+        """Read-only attribute to reference to the input raster"""
+
         return self._raster
 
     @property
     def hmin(self):
+        """Read-only attribute for the minimum mesh size constraint"""
+
         return self._hmin
 
     @property
     def hmax(self):
+        """Read-only attribute for the maximum mesh size constraint"""
+
         return self._hmax
 
     @property
     def verbosity(self):
+        """Modifiable attribute for the verbosity of the output"""
+
         return self._verbosity
 
     @verbosity.setter
@@ -1247,7 +1427,30 @@ class HfunRaster(BaseHfun, Raster):
         self._verbosity = verbosity
 
 
-def transform_point(x, y, src_crs, utm_crs):
+def transform_point(
+        x: npt.NDArray[float],
+        y: npt.NDArray[float],
+        src_crs: Union[CRS, str],
+        utm_crs: Union[CRS, str],
+        ) -> Tuple[npt.NDArray[float], npt.NDArray[float]]:
+    """Transform input locations to the destination CRS `utm_crs`
+
+    Parameters
+    ----------
+    x : npt.NDArray[float]
+        Vector of x locations.
+    y : npt.NDArray[float]
+        Vector of y locations.
+    src_crs : Union[CRS, str]
+        Source CRS for location transformation.
+    utm_crs : Union[CRS, str]
+        Destination CRS for location transformation.
+
+    Returns
+    -------
+    Tuple[npt.NDArray[float], npt.NDArray[float]]
+        Tuplpe of transformed x and y arrays.
+    """
     transformer = Transformer.from_crs(src_crs, utm_crs, always_xy=True)
     return transformer.transform(x, y)
 
@@ -1256,7 +1459,24 @@ def transform_polygon(
     polygon: Polygon,
     src_crs: CRS = None,
     utm_crs: CRS = None
-):
+    ) -> Polygon:
+    """Transform the input polygon to the destination CRS `utm_crs`
+
+    Parameters
+    ----------
+    polygon : Polygon
+        Input polygon to be transformed from `src_crs` to `utm_crs`.
+    src_crs : Union[CRS, str]
+        Source CRS for location transformation.
+    utm_crs : Union[CRS, str]
+        Destination CRS for location transformation.
+
+    Returns
+    -------
+    Polygon
+        Transformed polygon in the destination `utm_crs`.
+    """
+
     if utm_crs is not None:
         transformer = Transformer.from_crs(
             src_crs, utm_crs, always_xy=True)
