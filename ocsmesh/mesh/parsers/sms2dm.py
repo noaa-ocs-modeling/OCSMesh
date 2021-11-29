@@ -16,8 +16,13 @@ def read(path, crs=None):
             if line[0] in ['E3T', 'E4Q']:
                 if line[0] not in sms2dm:
                     sms2dm[line[0]] = {}
+                v = []
+                if line[0] == 'E3T':
+                    v = line[2:5]
+                elif line[0] == 'E4Q':
+                    v = line[2:6]
                 sms2dm[line[0]].update({
-                    line[1]: line[2:]
+                    line[1]: v
                     })
             if line[0] == 'ND':
                 if line[0] not in sms2dm:
