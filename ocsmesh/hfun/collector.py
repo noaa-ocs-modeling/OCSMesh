@@ -1,3 +1,16 @@
+"""This module defines size function collector.
+`
+Size function collector objects accepts a list of valid basic `Hfun`
+inputs and creates an object that merges the results of all the
+other types of size functions, e.g. mesh-based and raster-based.
+
+Notes
+-----
+This enables the user to define size on multiple DEM and mesh
+without having to worry about the details of merging the output size
+functions defined on each DEM or mesh.
+"""
+
 import os
 import gc
 import logging
@@ -7,7 +20,7 @@ from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
-from typing import Union, Sequence, List, Tuple, Iterable
+from typing import Union, Sequence, List, Tuple, Iterable, Any, Optional
 
 import numpy as np
 import geopandas as gpd
@@ -37,28 +50,94 @@ CanCreateHfun = Union[CanCreateSingleHfun, CanCreateMultipleHfun]
 
 _logger = logging.getLogger(__name__)
 
-class RefinementContourInfoCollector:
+class _RefinementContourInfoCollector:
+    """Collection for contour refinement specification
 
-    def __init__(self):
+    Accumulates information about the specified contour refinements
+    to be applied later when computing the return size function.
+    Provides interator interface for looping over the collection items.
+    """
+
+    def __init__(self) -> None:
         self._contours_info = {}
 
-    def add(self, contour_defn, **size_info):
+    def add(self, contour_defn: Contour, **size_info: Any) -> None:
+        """Add contour specification to the collection
+
+        Parameters
+        ----------
+        contour_defn : Contour
+            The level at which contour lines need to be extracted.
+        size_info : dict
+            Information related to contour application such as
+            target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
+
         self._contours_info[contour_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Contour, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Contour
+            Contour definition added to the collection.
+        info : dict
+            Dictionary of contour refinement specifications.
+        """
+
         for defn, info in self._contours_info.items():
             yield defn, info
 
 
 
 
-class RefinementContourCollector:
+class _RefinementContourCollector:
+    """Collection for extracted refinement contours
 
-    def __init__(self, contours_info):
+    Extracts and stores on the disk the contours specified by the user.
+    Provides interator interface for looping over the collection items.
+    """
+
+    def __init__(
+            self,
+            contours_info: _RefinementContourInfoCollector
+            ) -> None:
+        """Initialize the collection object with empty output list.
+
+        Parameters
+        ----------
+        contours_info : _RefinementPatchInfoCollector
+            Handle to the collection of user specified contours
+            specification.
+        """
+
         self._contours_info = contours_info
         self._container: List[Union[Tuple, None]] = []
 
-    def calculate(self, source_list, out_path):
+    def calculate(
+            self,
+            source_list: Iterable[HfunRaster],
+            out_path: Union[Path, str]
+            ) -> None:
+        """Extract specified contours and store on disk in `out_path`.
+
+        Parameters
+        ----------
+        source_list : list of HfunRaster
+            List of raster size functions from which the contours
+            must be calculated.
+        out_path : path-like
+            Path for storing calculated contours and their crs data.
+
+        Returns
+        -------
+        None
+        """
 
         out_dir = Path(out_path)
         out_dir.mkdir(exist_ok=True, parents=True)
@@ -89,7 +168,16 @@ class RefinementContourCollector:
                 self._container.append((feather_path, crs_path))
 
 
-    def __iter__(self):
+    def __iter__(self) -> gpd.GeoDataFrame:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        gpd.GeoDataFrame
+            Data from containing the extracted contour line and the
+            CRS information.
+        """
+
         for raster_data in self._container:
             feather_path, crs_path = raster_data
             gdf = gpd.read_feather(feather_path)
@@ -100,75 +188,242 @@ class RefinementContourCollector:
 
 
 
-class ConstantValueContourInfoCollector:
+class _ConstantValueContourInfoCollector:
+    """Collection for constant value refinement specification"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._contours_info = {}
 
-    def add(self, src_idx, contour_defn0, contour_defn1, value):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            contour_defn0: Contour,
+            contour_defn1: Contour,
+            value: float
+            ) -> None:
+        """Add a new fixed-value refinement specification to the spec.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which constant value refinement
+            must be applied.
+        contour_defn0 : Contour
+            Lower bound of region to apply constant value refinement.
+        contour_defn1 : Contour
+            Upper bound of region to apply constant value refinement.
+        value : float
+            Fixed-value to be applied as refinement.
+
+        Returns
+        -------
+        None
+        """
+
         srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
                 (srcs, contour_defn0, contour_defn1)] = value
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Tuple[Sequence[int], Contour, Contour], dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Tuple[Sequence[int], Contour, Contour]
+            The lower and upper bound contours definitions provided
+            by the user as well as the list of source.
+        info : dict
+            Dictionary of specifications for constant value refinement.
+        """
+
         for defn, info in self._contours_info.items():
             yield defn, info
 
 
 
-class RefinementPatchInfoCollector:
+class _RefinementPatchInfoCollector:
+    """Collection for patch refinement specifications"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._patch_info = {}
 
-    def add(self, patch_defn, **size_info):
+    def add(self, patch_defn: Patch, **size_info: Any) -> None:
+        """Add patch refinement specifications to the collection
+
+        Parameters
+        ----------
+        patch_defn : Patch
+            Shape of the region to apply the refinement during
+            application.
+        size_info : dict
+            Information related to patch application such as
+            target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
+
         self._patch_info[patch_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Patch, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Patch
+            Patch object representing the shape of the patch area.
+        info : dict
+            Dictionary of specifications for patch refinement.
+        """
+
         for defn, info in self._patch_info.items():
             yield defn, info
 
 
 
-class FlowLimiterInfoCollector:
+class _FlowLimiterInfoCollector:
+    """Collection for subtidal flow limiter refinement spec."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._flow_lim_info = []
 
-    def add(self, src_idx, hmin, hmax, upper_bound, lower_bound):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            hmin: float,
+            hmax: float,
+            upper_bound: float,
+            lower_bound: float
+            ) -> None:
+        """Add subtidal flow limiter refinement spec to the collection.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which subtidal flow limiter
+            refinement must be applied.
+        hmin : float
+            Minimum mesh size to be applied based on limiter
+            calculations.
+        hmax : float
+            Maximum mesh size to be applied based on limiter
+            calculations.
+        upper_bound : float
+            Elevation upper bound of the area that the limiter
+            refinement is applied.
+        lower_bound : float
+            Elevation lower bound of the area that the limiter
+            refinement is applied.
+
+        Returns
+        -------
+        None
+        """
 
         srcs = tuple(src_idx) if src_idx is not None else None
         self._flow_lim_info.append(
                 (src_idx, hmin, hmax, upper_bound, lower_bound))
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Sequence[int], float, float, float, float]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        src_idx : tuple of int
+            Similar to `add`
+        hmin : float
+            Similar to `add`
+        hmax : float
+            Similar to `add`
+        ub : float
+            Similar to `add`
+        lb : float
+            Similar to `add`
+        """
 
         for src_idx, hmin, hmax, ub, lb in self._flow_lim_info:
             yield src_idx, hmin, hmax, ub, lb
 
 
 
-class ChannelRefineInfoCollector:
+class _ChannelRefineInfoCollector:
+    """Collection for channel refinement specifications"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._ch_info_dict = {}
 
-    def add(self, channel_defn, **size_info):
+    def add(self,
+            channel_defn: Channel,
+            **size_info: Any
+            ) -> None:
+        """Add channel refinement spec to the collection.
+
+        Parameters
+        ----------
+        channel_defn : Channel
+            Definition of channel detection specification.
+        size_info : dict
+            Information related to channel refinement application
+            such as target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
 
         self._ch_info_dict[channel_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Channel, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Channel
+            Similar to `channel_defn` in `add`
+        info : dict
+            Similar to `size_info` in `add`
+        """
+
         for defn, info in self._ch_info_dict.items():
             yield defn, info
 
 
-class ChannelRefineCollector:
+class _ChannelRefineCollector:
+    """Collection for extracted refinement channels"""
 
-    def __init__(self, channels_info):
+    def __init__(self, channels_info) -> None:
+        """Initialize the collection object with empty output list.
+
+        Parameters
+        ----------
+        channels_info : _ChannelRefineInfoCollector
+            Handle to the collection of user specified channel
+            refinement specification.
+        """
+
         self._channels_info = channels_info
         self._container: List[Union[Tuple, None]] = []
 
-    def calculate(self, source_list, out_path):
+    def calculate(
+            self,
+            source_list,
+            out_path
+            ) -> None:
+        """Extract specified channels and store on disk in `out_path`.
+
+        Parameters
+        ----------
+        source_list : list of HfunRaster
+            List of raster size functions from which the channels
+            must be calculated.
+        out_path : path-like
+            Path for storing calculated channels and their crs data.
+
+        Returns
+        -------
+        None
+        """
 
         out_dir = Path(out_path)
         out_dir.mkdir(exist_ok=True, parents=True)
@@ -199,6 +454,15 @@ class ChannelRefineCollector:
                 self._container.append((feather_path, crs_path))
 
     def __iter__(self):
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        gpd.GeoDataFrame
+            Data from containing the extracted channel polygons and
+            the CRS information.
+        """
+
         for raster_data in self._container:
             feather_path, crs_path = raster_data
             gdf = gpd.read_feather(feather_path)
@@ -207,16 +471,44 @@ class ChannelRefineCollector:
             yield gdf
 
 
-class ConstraintInfoCollector:
+class _ConstraintInfoCollector:
+    """Collection for the applied constraints"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._constraints_info = []
 
-    def add(self, src_idx, constraint):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            constraint: Union[TopoConstConstraint, TopoFuncConstraint]
+            ) -> None:
+        """Add size function constraint spec to the collection.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which constant value refinement
+            must be applied.
+        constraint : TopoConstConstraint or TopoFuncConstraint
+            The constraint definition object.
+
+        Returns
+        -------
+        None
+        """
+
         srcs = tuple(src_idx) if src_idx is not None else None
         self._constraints_info.append((srcs, constraint))
 
-    def __iter__(self):
+    def __iter__(self) -> Union[TopoConstConstraint, TopoFuncConstraint]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        TopoConstConstraint or TopoFuncConstraint
+            The constraint object provided in `add`
+        """
+
         for defn in self._constraints_info:
             yield defn
 
@@ -263,21 +555,21 @@ class HfunCollector(BaseHfun):
             if self._base_as_hfun:
                 self._base_mesh.size_from_mesh()
 
-        self._contour_info_coll = RefinementContourInfoCollector()
-        self._contour_coll = RefinementContourCollector(
+        self._contour_info_coll = _RefinementContourInfoCollector()
+        self._contour_coll = _RefinementContourCollector(
                 self._contour_info_coll)
 
-        self._const_val_contour_coll = ConstantValueContourInfoCollector()
+        self._const_val_contour_coll = _ConstantValueContourInfoCollector()
 
-        self._refine_patch_info_coll = RefinementPatchInfoCollector()
+        self._refine_patch_info_coll = _RefinementPatchInfoCollector()
 
-        self._flow_lim_coll = FlowLimiterInfoCollector()
+        self._flow_lim_coll = _FlowLimiterInfoCollector()
 
-        self._ch_info_coll = ChannelRefineInfoCollector()
-        self._channels_coll = ChannelRefineCollector(
+        self._ch_info_coll = _ChannelRefineInfoCollector()
+        self._channels_coll = _ChannelRefineCollector(
                 self._ch_info_coll)
 
-        self._constraint_info_coll = ConstraintInfoCollector()
+        self._constraint_info_coll = _ConstraintInfoCollector()
 
         self._type_chk(in_list)
 
