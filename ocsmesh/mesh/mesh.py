@@ -18,6 +18,7 @@ try:
 except ImportError:
     from typing_extensions import Literal
 
+import pandas as pd
 import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
 from matplotlib.path import Path
@@ -336,7 +337,8 @@ class EuclideanMesh2D(EuclideanMesh):
             self,
             raster: Union[Raster, List[Raster]],
             method: Literal['spline', 'linear', 'nearest'] = 'spline',
-            nprocs: Optional[int] = None
+            nprocs: Optional[int] = None,
+            info_out_path: Union[pathlib.Path, str, None] = None,
             ) -> None:
         """Interplate values from raster inputs to the mesh nodes.
 
@@ -349,6 +351,8 @@ class EuclideanMesh2D(EuclideanMesh):
             Method of interpolation.
         nprocs : int or None, default=None
             Number of workers to use when interpolating data.
+        info_out_path : pathlike or str or None
+            Path for the output node interpolation information file
 
         Returns
         -------
@@ -381,8 +385,55 @@ class EuclideanMesh2D(EuclideanMesh):
 
         values = self.msh_t.value.flatten()
 
-        for idxs, _values in res:
-            values[idxs] = _values
+        interp_info_map = {}
+        for (mask, _values), rast in zip(res, raster):
+            values[mask] = _values
+
+            if info_out_path is not None:
+                vert_cs = None
+                rast_crs = rast.crs
+                if rast_crs.is_vertical:
+                    if rast_crs.sub_crs_list is not None:
+                        for sub_crs in rast_crs.sub_crs_list:
+                            if sub_crs.is_vertical:
+                                # TODO: What if sub CRS is compound, etc.?
+                                vert_cs = sub_crs
+                    elif rast_crs.source_crs is not None:
+                        if rast_crs.source_crs.is_vertical:
+                            # TODO: What if source CRS is compound, etc.?
+                            vert_cs = rast_crs.source_crs
+
+
+                vert_cs_name = vert_cs.name
+                idxs = np.argwhere(mask).ravel()
+                interp_info_map.update({
+                    idx: (rast.path, vert_cs_name)
+                    for idx in idxs})
+
+        if info_out_path is not None:
+            coords = self.msh_t.vert2['coord'].copy()
+            geo_coords = coords.copy()
+            if not self.crs.is_geographic:
+                transformer = Transformer.from_crs(
+                    self.crs, CRS.from_epsg(4326), always_xy=True)
+                geo_coords[:, 0], geo_coords[:, 1] = transformer.transform(
+                    coords[:, 0], coords[:, 1])
+            vd_idxs=np.array(list(interp_info_map.keys()))
+            df_interp_info = pd.DataFrame(
+                index=vd_idxs,
+                data={
+                    'x': coords[vd_idxs, 0],
+                    'y': coords[vd_idxs, 1],
+                    'lat': geo_coords[vd_idxs, 0],
+                    'lon': geo_coords[vd_idxs, 1],
+                    'elev': values[vd_idxs],
+                    'crs': [i[1] for i in interp_info_map.values()],
+                    'source': [i[0] for i in interp_info_map.values()]
+                }
+            )
+            df_interp_info.sort_index().to_csv(
+                info_out_path, header=False, index=True)
+
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
