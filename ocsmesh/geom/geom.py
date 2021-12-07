@@ -25,7 +25,7 @@ GeomType = Union[
         ]
 
 class Geom(BaseGeom):
-    """ Geometry object factory
+    """Geometry object factory
 
     Factory class that creates and returns concrete geometry object
     based on the input types.
