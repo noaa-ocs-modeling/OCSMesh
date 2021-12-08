@@ -36,7 +36,7 @@ jobs:
         args: --style semver
     - name: Build documentation site with Sphinx
       run: |
-          pip -r docs/requirements.txt
+          pip install -r docs/requirements.txt
           cd docs
           make html
     - name: Deploy to GitHub Pages
