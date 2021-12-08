@@ -1,0 +1,6 @@
+sphinx
+sphinx-rtd-theme
+dunamai
+mistune==0.8.4
+m2r2
+numpydoc
