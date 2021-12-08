@@ -1,3 +1,6 @@
+"""This module define class for raster based size function
+"""
+
 import functools
 import gc
 import logging
@@ -5,13 +8,20 @@ from multiprocessing import cpu_count, Pool
 import operator
 import tempfile
 from time import time
-from typing import Union, List
+from typing import Union, List, Callable, Any, Optional, Iterable, Tuple
 from contextlib import ExitStack
 import warnings
+try:
+    # pylint: disable=C0412
+    from typing import Literal
+except ImportError:
+    # pylint: disable=C0412
+    from typing_extensions import Literal
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
 import numpy as np
+import numpy.typing as npt
 from pyproj import CRS, Transformer
 import rasterio
 from scipy.spatial import cKDTree
@@ -24,7 +34,7 @@ from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.geom.shapely import PolygonGeom
 from ocsmesh.features.constraint import (
-        TopoConstConstraint, TopoFuncConstraint)
+        Constraint, TopoConstConstraint, TopoFuncConstraint)
 from ocsmesh import utils
 
 # supress feather warning
@@ -34,7 +44,28 @@ warnings.filterwarnings(
 _logger = logging.getLogger(__name__)
 
 
-def _apply_constraints(method):
+def _apply_constraints(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator for (re)applying constraint after updating hfun spec
+
+    This function is a deocrator that takes in a callable and assumes
+    the callable is a method whose first argument is an object. In the
+    wrapper function, after the wrapped method is called the
+    `apply_added_constraints` method is called on the object and
+    then the return value of the wrapped method is returned to the
+    caller.
+
+    Parameters
+    ----------
+    method : callable
+        Method to be wrapped so that the constraints are automatically
+        re-applied after method is executed.
+
+    Returns
+    -------
+    callable
+        The wrapped method
+    """
+
     def wrapped(obj, *args, **kwargs):
         rv = method(obj, *args, **kwargs)
         obj.apply_added_constraints()
@@ -43,8 +74,9 @@ def _apply_constraints(method):
 
 
 class HfunInputRaster:
+    """Descriptor class for holding reference to the input raster"""
 
-    def __set__(self, obj, raster: Raster):
+    def __set__(self, obj, raster: Raster) -> None:
         if not isinstance(raster, Raster):
             raise TypeError(f'Argument raster must be of type {Raster}, not '
                             f'type {type(raster)}.')
@@ -72,37 +104,211 @@ class HfunInputRaster:
         obj._chunk_size = raster.chunk_size
         obj._overlap = raster.overlap
 
-    def __get__(self, obj, val) -> Raster:
+    def __get__(self, obj, objtype=None) -> Raster:
         return obj.__dict__['raster']
 
 
-class FeatureCache:
-
-    def __get__(self, obj, val):
-        features = obj.__dict__.get('features')
-        if features is None:
-            features = {}
-
-
 class HfunRaster(BaseHfun, Raster):
+    """Raster based size function.
+
+    Creates a raster based size function. The mesh size is specified
+    at each point of the grid of the input raster, based on the
+    specified criteria.
+
+    Attributes
+    ----------
+    raster
+    hmin
+    hmax
+    verbosity
+
+    Methods
+    -------
+    msh_t()
+        Return mesh sizes interpolated on an size-optimized
+        unstructured mesh
+    apply_added_constraints()
+        Re-apply the existing constraint. Mostly used internally.
+    apply_constraints(constraint_list)
+        Apply constraint objects in the `constraint_list`.
+    add_topo_bound_constraint(...)
+        Add size fixed-per-point value constraint to the area
+        bounded by specified bounds with expansion/contraction
+        rate `rate` specified.
+    add_topo_func_constraint(...)
+        Add size value constraint based on function of depth/elevation
+        to the area bounded by specified bounds with the expansion or
+        contraction rate `rate` specified.
+    add_patch(...)
+        Add a region of fixed size refinement with optional expansion
+        rate for points outside the region to achieve smooth size
+        transition.
+    add_contour(level expansion_rate target_size=None, nprocs=None)
+        Add refinement based on contour lines auto-extrcted from the
+        underlying raster data. The size is calculated based on the
+        specified `rate`, `target_size` and the distance from the
+        extracted feature line.
+    add_channel(...)
+        Add refinement for auto-detected narrow domain regions.
+        Optionally use an expansion rate for points outside detected
+        narrow regions for smooth size transition.
+    add_feature(...)
+        Decorated method to add size refinement based on the specified
+        `expansion_rate`, `target_size`, and distance from the input
+        feature lines `feature`.
+    get_xy_memcache(window, dst_crs)
+        Get XY grid cached onto disk. Useful for when XY needs to be
+        projected to UTM so as to avoid reprojecting on every call.
+    add_subtidal_flow_limiter(...)
+        Add mesh size refinement based on the value as well as
+        gradient of the topography within the region between
+        specified by lower and upper bound on topography.
+    add_constant_value(value, lower_bound=None, upper_bound=None)
+        Add fixed size mesh refinement in the region specified by
+        upper and lower bounds on topography.
+
+    Notes
+    -----
+    Currently the implementation of this size function is such that
+    when an object is created, the "size" values of this object is
+    set to be maximum `np.float32`, and maximum and minimum constraints
+    are not applied. After application of any refinement or constrant
+    these constraints are actually applied. As a result if a raster
+    based size function is created and no `add_*` or `apply_*` method
+    is called, the values of `hmin` and `hmax` attributes as well as
+    any value on the size function grid is meaningless.
+
+    An important distinction that must be made is between
+    **refinements** and **constraints**. These two concepts are applied
+    differently when it comes to calculating the sizes. Refinements
+    specification guarantees that the sizes in the specified region
+    is at most equal to the specified value, however it does **not**
+    have any guarantee on the minimum of sizes. In other words if
+    multiple refinements are specified, then the size at everypoint
+    is equal to the minimum calculated from all of those refinements.
+    Contraints are applied a bit differently. Constraints ensure that
+    a given condition is met at a given point. A list of specified
+    constraints is created and after application of any refinements
+    or other constraints, all the constraint are re-applied.
+    As a result constraint can be used to ensure the size at a given
+    point is not smaller that a specified value. Constraint can also
+    be used similar to refinements to ensure the size is smaller
+    than a specified value.
+
+    Another important different between contraints and refinements is
+    that for refinements the final value is the minimum of all, but
+    constraints are applied one at a time and depending on their type
+    and condition, it might result on a value between all specified
+    maximums and minimums.
+
+    Note that constraints can be conflicting, currently there's no
+    automatic conflict resolutions and the constrains are applied in
+    the order specified, so if applicable the last one overrides all
+    else.
+    """
 
     _raster = HfunInputRaster()
-    _feature_cache = FeatureCache()
 
-    def __init__(self, raster: Raster, hmin: float = None, hmax: float = None,
-                 verbosity=0):
+    def __init__(self,
+                 raster: Raster,
+                 hmin: Optional[float] = None,
+                 hmax: Optional[float] = None,
+                 verbosity: int = 0
+                 ) -> None:
+        """Initialize a raster based size function object
+
+        Parameters
+        ----------
+        raster : Raster
+            The input raster file. The sizes are calculated on the
+            grid points of the raster's grid. The input raster is
+            not modified so that its elevation data can be used for
+            topo-based refinement calculations.
+        hmin : float or None, default=None
+            Global minimum size of mesh for the size function, if not
+            specified, the calculated values during refinement and
+            constraint applications are not capped off.
+        hmax : float or None, default=None
+            Global maximum size of mesh for the size function, if not
+            specified, the calculated values during refinement and
+            constraint applications are not capped off.
+        verbosity : int, default=0
+            The verbosity of the outputs.
+
+        Notes
+        -----
+        All the points in the raster grid are set to have maximum
+        `np.float32` value. The `hmin` and `hmax` arguments,
+        even if provided, are not applied in during initialization.
+        """
 
         self._xy_cache = {}
         # NOTE: unlike Raster, HfunRaster has no "path" set
         self._raster = raster
+        # TODO: Store max and min as two separate constraints instead
+        # of private attributes
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
         self._constraints = []
 
 
-    def msh_t(self, window: rasterio.windows.Window = None,
-              marche: bool = False, verbosity=None) -> jigsaw_msh_t:
+    def msh_t(
+            self,
+            window: Optional[rasterio.windows.Window] = None,
+            marche: bool = False,
+            verbosity : Optional[bool] = None
+            ) -> jigsaw_msh_t:
+        """Interpolates mesh size function on an unstructred mesh
+
+        Interpolate the calculated mesh sizes from the raster grid
+        onto an unstructured mesh. This mesh is generated by meshing
+        the input raster using the size function values. The return
+        value is in a projected CRS. If the input raster CRS is
+        geographic, then a local UTM CRS is calculated and used
+        for the output of this method.
+
+        Parameters
+        ----------
+        window : rasterio.windows.Window or None, default=None
+            If provided, a single window on raster for which the
+            mesh size is to be returned.
+        marche : bool, default=False
+            Whether to run `marche` algorithm on the complete
+            size function before calculating the unstructured mesh
+            and interpolate values on it.
+        verbosity : bool or None, default=None
+            The verbosity of the output.
+
+        Returns
+        -------
+        jigsaw_msh_t
+            Size function calculated and interpolated on an
+            unstructured mesh.
+
+        Notes
+        -----
+        In case the underlying raster is created in windowed
+        calculation mode, this method calculated the mesh for each
+        window separately and then combines (no remeshing) the
+        elements of all the windows.
+
+        The output of this method needs to have length unit for
+        distances (i.e. not degrees) since mesh size is specified
+        in length units and the domain and size function are the
+        passed to the mesh engine for cartesian meshing.
+
+        The reason the full high-resolution size function is
+        interpolated on a generated mesh it to save memory and
+        have the ability to process and combine many DEMs. By doing
+        more sizes are specified at points where the size needs to
+        be smaller in the final mesh.
+
+        To generate the mesh for size function interpolation, the
+        raster size function (called ``hmat``) is passed to the mesh
+        engine along with the bounding box of the size function as
+        the meshing domain.
+        """
 
 
         if window is None:
@@ -304,12 +510,44 @@ class HfunRaster(BaseHfun, Raster):
         return output_mesh
 
 
-    def apply_added_constraints(self):
+    def apply_added_constraints(self) -> None:
+        """Apply all the added constraints
+
+        This method is implemented for internal use. It's public
+        because it needs to be called from outside the class through
+        a decorator.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+        """
 
         self.apply_constraints(self._constraints)
 
 
-    def apply_constraints(self, constraint_list):
+    def apply_constraints(
+            self,
+            constraint_list: Iterable[Constraint]
+            ) -> None:
+        """Applies constraints specified by the list of contraint objects.
+
+        Applies constraints from the provided list `constraint_list`,
+        but doesn't not store them in the internal size function
+        constraint list. This is mostly for internal use.
+
+        Parameters
+        ----------
+        constraint_list : iterable of Constraint
+            List of constraint objects to be applied to (not stored in)
+            the size function.
+
+        Returns
+        -------
+        None
+        """
 
         # TODO: Validate conflicting constraints
 
@@ -353,11 +591,49 @@ class HfunRaster(BaseHfun, Raster):
     @_apply_constraints
     def add_topo_bound_constraint(
             self,
-            value,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01):
+            value: Union[float, npt.NDArray[np.float32]],
+            upper_bound: float = np.inf,
+            lower_bound: float = -np.inf,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01
+            ) -> None:
+        """Add a fixed-value or fixed-matrix constraint.
+
+        Add a fixed-value or fixed-matrix constraint to the region
+        of the size function specified by lower and upper elevation
+        of the underlying DEM. Optionally a `rate` can be specified
+        to relax the constraint gradually outside the bounds.
+
+        Parameters
+        ----------
+        value : float or array-like
+            A single fixed value or array of values to be used for
+            mesh size if condition is not met based on `value_type`.
+            In case of an array the dimensions must match or be
+            broadcastable to the raster grid.
+        upper_bound : float, default=np.inf
+            Maximum elevation to cut off the region where the
+            constraint needs to be applied
+        lower_bound : float, default=-np.inf
+            Minimum elevation to cut off the region where the
+            constraint needs to be applied
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the specified `value` at each
+            point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the region defined
+            by `lower_bound` and `upper_bound`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_topo_func_constraint :
+            Addint constraint based on function of topography
+        """
 
         # TODO: Validate conflicting constraints, right now last one wins
         self._constraints.append(TopoConstConstraint(
@@ -367,12 +643,50 @@ class HfunRaster(BaseHfun, Raster):
     @_apply_constraints
     def add_topo_func_constraint(
             self,
-            func=lambda i: i / 2.0,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01):
+            func: Callable[npt.NDArray[np.float32], npt.NDArray[np.float32]]
+                = lambda i: i / 2.0,
+            upper_bound: float = np.inf,
+            lower_bound: float = -np.inf,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01
+            ) -> None:
+        """Add constraint based on a function of the topography
 
+        Add a constraint based on the provided function `func` of
+        the topography and apply to the region of the size function
+        specified by lower and upper elevation of the underlying DEM.
+        Optionally a `rate` can be specified to relax the constraint
+        gradually outside the bounds.
+
+        Parameters
+        ----------
+        func : callable
+            A function to be applied on the topography to acquire the
+            values to be used for mesh size if condition is not met
+            based on `value_type`.
+        upper_bound : float, default=np.inf
+            Maximum elevation to cut off the region where the
+            constraint needs to be applied
+        lower_bound : float, default=-np.inf
+            Minimum elevation to cut off the region where the
+            constraint needs to be applied
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the value calculated from the
+            specified `func` at each point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the region defined
+            by `lower_bound` and `upper_bound`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_topo_bound_constraint :
+            Add fixed-value or fixed-matrix constraint.
+        """
 
         # TODO: Validate conflicting constraints, right now last one wins
         self._constraints.append(TopoFuncConstraint(
@@ -384,10 +698,48 @@ class HfunRaster(BaseHfun, Raster):
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
-            expansion_rate: float = None,
-            target_size: float = None,
-            nprocs: int = None
-            ):
+            expansion_rate: Optional[float] = None,
+            target_size: Optional[float] = None,
+            nprocs: Optional[int] = None
+            ) -> None:
+        """Add refinement as a region of fixed size with an optional rate
+
+        Add a refinement based on a region specified by `multipolygon`.
+        The fixed `target_size` refinement can be expanded outside the
+        region specified by the shape if `expansion_rate` is provided.
+
+        Parameters
+        ----------
+        multipolygon : MultiPolygon or Polygon
+            Shape of the region to use specified `target_size` for
+            refinement.
+        expansion_rate : float or None, default=None
+            Optional rate to use for expanding refinement outside
+            the specified shape in `multipolygon`.
+        target_size : float or None, default=None
+            Fixed target size of mesh to use for refinement in
+            `multipolygon`
+        nprocs : int or None, default=None
+            Number of processors to use in parallel sections of the
+            algorithm
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
+        """
 
         # TODO: Add pool input support like add_feature for performance
 
@@ -480,12 +832,53 @@ class HfunRaster(BaseHfun, Raster):
             self,
             level: Union[List[float], float],
             expansion_rate: float,
-            target_size: float = None,
-            nprocs: int = None,
-    ):
-        """ See https://outline.com/YU7nSM for an excellent explanation about
-        tree algorithms.
+            target_size: Optional[float] = None,
+            nprocs: Optional[int] = None
+            ) -> None:
+        """Add refinement for auto extracted contours
+
+        Add refinement for the contour lines extracted based on
+        level or levels specified by `level`. The refinement
+        is relaxed with `expansion_rate` and distance from the
+        extracted contour lines.
+
+        Parameters
+        ----------
+        level : float or list of floats
+            Level(s) at which contour lines should be extracted.
+        expansion_rate : float
+            Rate to use for expanding refinement with distance away
+            from the extracted contours.
+        target_size : float or None, default=None
+            Target size to use on the extracted contours and expand
+            from with distance.
+        nprocs : int or None, default=None
+            Number of processors to use in parallel sections of the
+            algorithm
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        This method extracts contours at specified levels and
+        the calls `add_feature` by passing those contour lines.
         """
+
         if not isinstance(level, list):
             level = [level]
 
@@ -518,12 +911,58 @@ class HfunRaster(BaseHfun, Raster):
     def add_channel(
             self,
             level: float = 0,
-            width: float = 1000, # in meters
+            width: float = 1000,
             target_size: float = 200,
-            expansion_rate: float = None,
-            nprocs: int = None,
-            tolerance: Union[None, float] = None
-    ):
+            expansion_rate: Optional[float] = None,
+            nprocs: Optional[int] = None,
+            tolerance: Optional[float] = None
+            ) -> None:
+        """Add refinement for auto detected channels
+
+        Automatically detects narrow regions in the domain and apply
+        refinement size with an expanion rate (if provided) outside
+        the detected area.
+
+        Parameters
+        ----------
+        level : float, default=0
+            High water mark at which domain is extracted for narrow
+            region or channel calculations.
+        width : float, default=1000
+            The cut-off width for channel detection.
+        target_size : float, default=200
+            Target size to use on the detected channels and expand
+            from with distance.
+        expansion_rate : float or None, default=None
+            Rate to use for expanding refinement with distance away
+            from the detected channels.
+        nprocs : int or None, default=None
+            Number of processes to use for parallel sections of the
+            workflow.
+        tolerance: float or None, default=None
+            Tolerance to use for simplifying the polygon extracted
+            from DEM data. If `None` don't simplify.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_feature :
+            Add refinement for specified line string
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        """
 
         channels = self.raster.get_channels(
                 level=level, width=width, tolerance=tolerance)
@@ -542,24 +981,66 @@ class HfunRaster(BaseHfun, Raster):
             self,
             feature: Union[LineString, MultiLineString],
             expansion_rate: float,
-            target_size: float = None,
-            max_verts=200,
+            target_size: Optional[float] = None,
+            max_verts: int = 200,
             *, # kwarg-only comes after this
             pool: Pool,
-    ):
-        '''Adds a linear distance size function constraint to the mesh.
+            ) -> None:
+        """Add refinement for specified linestring `feature`
 
-        Arguments:
-            feature: shapely.geometryLineString or MultiLineString
+        Add refinement for the specified linestrings `feature`.
+        The refinement is relaxed with `expansion_rate` and distance
+        from the extracted contour lines.
 
+        Parameters
+        ----------
+        feature : LineString or MultiLineString
+            The user-specified line strings for applying refinement on.
+        expansion_rate : float
+            Rate to use for expanding refinement with distance away
+            from the extracted contours.
+        target_size : float or None, default=None
+            Target size to use on the extracted contours and expand
+            from with distance.
+        max_verts : int, default=200
+            Number of maximum vertices in a feature line that is
+            passed to a separate process in parallel section of
+            the algorithm.
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        See https://outline.com/YU7nSM for an explanation
+        about tree algorithms.
+
+        Creating a local projection allows having similar area/length
+        calculations as if great circle calculations was being used.
+
+        Another useful refererence:
         https://gis.stackexchange.com/questions/214261/should-we-always-calculate-length-and-area-in-lat-lng-to-get-accurate-sizes-leng
+        """
 
-        "Creating a local projection allowed us to have similar area/length
-        calculations as if we was using great circle calculations."
-
-        TODO: Consider using BallTree with haversine or Vincenty metrics
-        instead of a locally projected window.
-        '''
+        # TODO: Consider using BallTree with haversine or Vincenty
+        # metrics instead of a locally projected window.
 
         # TODO: Partition features if they are too "long" which results in an
         # improvement for parallel pool. E.g. if a feature is too long, 1
@@ -671,7 +1152,35 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
 
-    def get_xy_memcache(self, window, dst_crs):
+    def get_xy_memcache(
+            self,
+            window : rasterio.windows.Window,
+            dst_crs: Union[CRS, str]
+            ) -> npt.NDArray[float]:
+        """Get the transformed locations of raster points.
+
+        Get the locations of raster points in the `dst_crs` CRS.
+        This method caches these transformed values for fast retrieval
+        upon multiple calls.
+
+        Parameters
+        ----------
+        window : rasterio.windows.Window
+            The raster window for querying location data.
+        dst_crs : CRS or str
+            The destination CRS for the raster points locations.
+
+        Returns
+        -------
+        np.ndarray
+            Locations of raster points after projecting to `dst_crs`
+
+        See Also
+        --------
+        get_xy :
+            Get the locations of raster points from the raster file.
+        """
+
         tmpfile = self._xy_cache.get(f'{window}{dst_crs}')
         if tmpfile is None:
             _logger.info('Transform points to local CRS...')
@@ -696,11 +1205,60 @@ class HfunRaster(BaseHfun, Raster):
     @_apply_constraints
     def add_subtidal_flow_limiter(
             self,
-            hmin=None,
-            hmax=None,
-            upper_bound=None,
-            lower_bound=None
-    ):
+            hmin: Optional[float] = None,
+            hmax: Optional[float] = None,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None
+            ) -> None:
+        """Add mesh refinement based on topography.
+
+        Calculates a pre-defined function of topography to use
+        as values for refinement. The function values are cut off
+        using `hmin` and `hmax` and is applied to the region bounded
+        by `lower_bound` and `upper_bound`.
+
+        Parameters
+        ----------
+        hmin : float or None, default=None
+            Minimum mesh size in the refinement
+        hmax : float or None, default=None
+            Maximum mesh size in the refinement
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_constant_value :
+            Add refinement with fixed value
+
+        Notes
+        -----
+        The size refinement value is calculated from the topography
+        using:
+
+        .. math::
+            h = {1 \\over 3} \\times {{|z|} \\over {\\left\\| \\grad z \\right\\|}}
+
+        where :math:`z` is the elevation and :math:`h` is the value of
+        the mesh size. This refinement is not applied wherever the
+        magnitude of the gradient of topography is equal to zero.
+        """
 
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
@@ -764,7 +1322,46 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, hfun_values, window=window)
 
     @_apply_constraints
-    def add_constant_value(self, value, lower_bound=None, upper_bound=None):
+    def add_constant_value(
+            self,
+            value: float,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None
+            ) -> None:
+        """Add refinement of fixed value in the region specified by bounds.
+
+        Apply fixed value mesh size refinement to the region specified
+        by bounds (if provided) or the whole domain.
+
+        Parameters
+        ----------
+        value : float
+            Fixed value to use for refinement size
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_feature :
+            Add refinement for specified line string
+        add_contour :
+            Add refinement for auto-extracted contours
+        add_patch :
+            Add refinement for region specified polygon
+        add_channel :
+            Add refinement for auto-extracted narrow regions
+        add_subtidal_flow_limiter :
+            Add refinement based on topograph
+        """
+
         lower_bound = -float('inf') if lower_bound is None \
             else float(lower_bound)
         upper_bound = float('inf') if upper_bound is None \
@@ -792,22 +1389,26 @@ class HfunRaster(BaseHfun, Raster):
 
     @property
     def raster(self):
+        """Read-only attribute to reference to the input raster"""
+
         return self._raster
 
     @property
-    def output(self):
-        return self
-
-    @property
     def hmin(self):
+        """Read-only attribute for the minimum mesh size constraint"""
+
         return self._hmin
 
     @property
     def hmax(self):
+        """Read-only attribute for the maximum mesh size constraint"""
+
         return self._hmax
 
     @property
     def verbosity(self):
+        """Modifiable attribute for the verbosity of the output"""
+
         return self._verbosity
 
     @verbosity.setter
@@ -815,7 +1416,30 @@ class HfunRaster(BaseHfun, Raster):
         self._verbosity = verbosity
 
 
-def transform_point(x, y, src_crs, utm_crs):
+def transform_point(
+        x: npt.NDArray[float],
+        y: npt.NDArray[float],
+        src_crs: Union[CRS, str],
+        utm_crs: Union[CRS, str],
+        ) -> Tuple[npt.NDArray[float], npt.NDArray[float]]:
+    """Transform input locations to the destination CRS `utm_crs`
+
+    Parameters
+    ----------
+    x : npt.NDArray[float]
+        Vector of x locations.
+    y : npt.NDArray[float]
+        Vector of y locations.
+    src_crs : Union[CRS, str]
+        Source CRS for location transformation.
+    utm_crs : Union[CRS, str]
+        Destination CRS for location transformation.
+
+    Returns
+    -------
+    Tuple[npt.NDArray[float], npt.NDArray[float]]
+        Tuplpe of transformed x and y arrays.
+    """
     transformer = Transformer.from_crs(src_crs, utm_crs, always_xy=True)
     return transformer.transform(x, y)
 
@@ -824,7 +1448,24 @@ def transform_polygon(
     polygon: Polygon,
     src_crs: CRS = None,
     utm_crs: CRS = None
-):
+    ) -> Polygon:
+    """Transform the input polygon to the destination CRS `utm_crs`
+
+    Parameters
+    ----------
+    polygon : Polygon
+        Input polygon to be transformed from `src_crs` to `utm_crs`.
+    src_crs : Union[CRS, str]
+        Source CRS for location transformation.
+    utm_crs : Union[CRS, str]
+        Destination CRS for location transformation.
+
+    Returns
+    -------
+    Polygon
+        Transformed polygon in the destination `utm_crs`.
+    """
+
     if utm_crs is not None:
         transformer = Transformer.from_crs(
             src_crs, utm_crs, always_xy=True)

@@ -1,2 +1,3 @@
-from ocsmesh.mesh.mesh import Mesh  # type: ignore[attr-defined]
-__all__ = ["Mesh"]
+from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
+
+__all__ = ["Mesh", "EuclideanMesh2D"]

@@ -24,11 +24,11 @@ except OSError as e:
     os.symlink(src_libpath, tgt_libpath)
 
 
+from .raster import Raster
+from .mesh import Mesh
 from .geom import Geom
 from .hfun import Hfun
-from .raster import Raster
 from .driver import JigsawDriver
-from .mesh import Mesh
 
 if util.find_spec("colored_traceback") is not None:
     import colored_traceback

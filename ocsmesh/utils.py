@@ -1647,6 +1647,7 @@ def merge_msh_t(
 def add_pool_args(func):
     def wrapper(*args, nprocs=None, pool=None, **kwargs):
 
+        # TODO: Modify docstring?
         if pool is not None:
             rv = func(*args, **kwargs, pool=pool)
 

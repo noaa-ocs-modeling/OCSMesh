@@ -1,3 +1,16 @@
+"""This module defines size function collector.
+`
+Size function collector objects accepts a list of valid basic `Hfun`
+inputs and creates an object that merges the results of all the
+other types of size functions, e.g. mesh-based and raster-based.
+
+Notes
+-----
+This enables the user to define size on multiple DEM and mesh
+without having to worry about the details of merging the output size
+functions defined on each DEM or mesh.
+"""
+
 import os
 import gc
 import logging
@@ -7,9 +20,15 @@ from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
-from typing import Union, Sequence, List, Tuple
+from typing import (
+    Union, Sequence, List, Tuple, Iterable, Any, Optional, Callable)
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 import numpy as np
+import numpy.typing as npt
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, box
@@ -31,30 +50,102 @@ from ocsmesh.features.channel import Channel
 from ocsmesh.features.constraint import (
     TopoConstConstraint, TopoFuncConstraint)
 
+CanCreateSingleHfun = Union[Raster, EuclideanMesh2D]
+CanCreateMultipleHfun = Iterable[Union[CanCreateSingleHfun, str]]
+CanCreateHfun = Union[CanCreateSingleHfun, CanCreateMultipleHfun]
+
+SizeFuncList = Sequence[Union[HfunRaster, HfunMesh]]
+
 _logger = logging.getLogger(__name__)
 
-class RefinementContourInfoCollector:
+class _RefinementContourInfoCollector:
+    """Collection for contour refinement specification
 
-    def __init__(self):
+    Accumulates information about the specified contour refinements
+    to be applied later when computing the return size function.
+    Provides interator interface for looping over the collection items.
+    """
+
+    def __init__(self) -> None:
         self._contours_info = {}
 
-    def add(self, contour_defn, **size_info):
+    def add(self, contour_defn: Contour, **size_info: Any) -> None:
+        """Add contour specification to the collection
+
+        Parameters
+        ----------
+        contour_defn : Contour
+            The level at which contour lines need to be extracted.
+        size_info : dict
+            Information related to contour application such as
+            target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
+
         self._contours_info[contour_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Contour, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Contour
+            Contour definition added to the collection.
+        info : dict
+            Dictionary of contour refinement specifications.
+        """
+
         for defn, info in self._contours_info.items():
             yield defn, info
 
 
 
 
-class RefinementContourCollector:
+class _RefinementContourCollector:
+    """Collection for extracted refinement contours
 
-    def __init__(self, contours_info):
+    Extracts and stores on the disk the contours specified by the user.
+    Provides interator interface for looping over the collection items.
+    """
+
+    def __init__(
+            self,
+            contours_info: _RefinementContourInfoCollector
+            ) -> None:
+        """Initialize the collection object with empty output list.
+
+        Parameters
+        ----------
+        contours_info : _RefinementPatchInfoCollector
+            Handle to the collection of user specified contours
+            specification.
+        """
+
         self._contours_info = contours_info
         self._container: List[Union[Tuple, None]] = []
 
-    def calculate(self, source_list, out_path):
+    def calculate(
+            self,
+            source_list: Iterable[HfunRaster],
+            out_path: Union[Path, str]
+            ) -> None:
+        """Extract specified contours and store on disk in `out_path`.
+
+        Parameters
+        ----------
+        source_list : list of HfunRaster
+            List of raster size functions from which the contours
+            must be calculated.
+        out_path : path-like
+            Path for storing calculated contours and their crs data.
+
+        Returns
+        -------
+        None
+        """
 
         out_dir = Path(out_path)
         out_dir.mkdir(exist_ok=True, parents=True)
@@ -85,7 +176,16 @@ class RefinementContourCollector:
                 self._container.append((feather_path, crs_path))
 
 
-    def __iter__(self):
+    def __iter__(self) -> gpd.GeoDataFrame:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        gpd.GeoDataFrame
+            Data from containing the extracted contour line and the
+            CRS information.
+        """
+
         for raster_data in self._container:
             feather_path, crs_path = raster_data
             gdf = gpd.read_feather(feather_path)
@@ -96,75 +196,242 @@ class RefinementContourCollector:
 
 
 
-class ConstantValueContourInfoCollector:
+class _ConstantValueContourInfoCollector:
+    """Collection for constant value refinement specification"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._contours_info = {}
 
-    def add(self, src_idx, contour_defn0, contour_defn1, value):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            contour_defn0: Contour,
+            contour_defn1: Contour,
+            value: float
+            ) -> None:
+        """Add a new fixed-value refinement specification to the spec.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which constant value refinement
+            must be applied.
+        contour_defn0 : Contour
+            Lower bound of region to apply constant value refinement.
+        contour_defn1 : Contour
+            Upper bound of region to apply constant value refinement.
+        value : float
+            Fixed-value to be applied as refinement.
+
+        Returns
+        -------
+        None
+        """
+
         srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
                 (srcs, contour_defn0, contour_defn1)] = value
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Tuple[Sequence[int], Contour, Contour], dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Tuple[Sequence[int], Contour, Contour]
+            The lower and upper bound contours definitions provided
+            by the user as well as the list of source.
+        info : dict
+            Dictionary of specifications for constant value refinement.
+        """
+
         for defn, info in self._contours_info.items():
             yield defn, info
 
 
 
-class RefinementPatchInfoCollector:
+class _RefinementPatchInfoCollector:
+    """Collection for patch refinement specifications"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._patch_info = {}
 
-    def add(self, patch_defn, **size_info):
+    def add(self, patch_defn: Patch, **size_info: Any) -> None:
+        """Add patch refinement specifications to the collection
+
+        Parameters
+        ----------
+        patch_defn : Patch
+            Shape of the region to apply the refinement during
+            application.
+        size_info : dict
+            Information related to patch application such as
+            target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
+
         self._patch_info[patch_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Patch, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Patch
+            Patch object representing the shape of the patch area.
+        info : dict
+            Dictionary of specifications for patch refinement.
+        """
+
         for defn, info in self._patch_info.items():
             yield defn, info
 
 
 
-class FlowLimiterInfoCollector:
+class _FlowLimiterInfoCollector:
+    """Collection for subtidal flow limiter refinement spec."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._flow_lim_info = []
 
-    def add(self, src_idx, hmin, hmax, upper_bound, lower_bound):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            hmin: float,
+            hmax: float,
+            upper_bound: float,
+            lower_bound: float
+            ) -> None:
+        """Add subtidal flow limiter refinement spec to the collection.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which subtidal flow limiter
+            refinement must be applied.
+        hmin : float
+            Minimum mesh size to be applied based on limiter
+            calculations.
+        hmax : float
+            Maximum mesh size to be applied based on limiter
+            calculations.
+        upper_bound : float
+            Elevation upper bound of the area that the limiter
+            refinement is applied.
+        lower_bound : float
+            Elevation lower bound of the area that the limiter
+            refinement is applied.
+
+        Returns
+        -------
+        None
+        """
 
         srcs = tuple(src_idx) if src_idx is not None else None
         self._flow_lim_info.append(
                 (src_idx, hmin, hmax, upper_bound, lower_bound))
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Sequence[int], float, float, float, float]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        src_idx : tuple of int
+            Similar to `add`
+        hmin : float
+            Similar to `add`
+        hmax : float
+            Similar to `add`
+        ub : float
+            Similar to `add`
+        lb : float
+            Similar to `add`
+        """
 
         for src_idx, hmin, hmax, ub, lb in self._flow_lim_info:
             yield src_idx, hmin, hmax, ub, lb
 
 
 
-class ChannelRefineInfoCollector:
+class _ChannelRefineInfoCollector:
+    """Collection for channel refinement specifications"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._ch_info_dict = {}
 
-    def add(self, channel_defn, **size_info):
+    def add(self,
+            channel_defn: Channel,
+            **size_info: Any
+            ) -> None:
+        """Add channel refinement spec to the collection.
+
+        Parameters
+        ----------
+        channel_defn : Channel
+            Definition of channel detection specification.
+        size_info : dict
+            Information related to channel refinement application
+            such as target size, rate, etc.
+
+        Returns
+        -------
+        None
+        """
 
         self._ch_info_dict[channel_defn] = size_info
 
-    def __iter__(self):
+    def __iter__(self) -> Tuple[Channel, dict]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        defn : Channel
+            Similar to `channel_defn` in `add`
+        info : dict
+            Similar to `size_info` in `add`
+        """
+
         for defn, info in self._ch_info_dict.items():
             yield defn, info
 
 
-class ChannelRefineCollector:
+class _ChannelRefineCollector:
+    """Collection for extracted refinement channels"""
 
-    def __init__(self, channels_info):
+    def __init__(self, channels_info) -> None:
+        """Initialize the collection object with empty output list.
+
+        Parameters
+        ----------
+        channels_info : _ChannelRefineInfoCollector
+            Handle to the collection of user specified channel
+            refinement specification.
+        """
+
         self._channels_info = channels_info
         self._container: List[Union[Tuple, None]] = []
 
-    def calculate(self, source_list, out_path):
+    def calculate(
+            self,
+            source_list,
+            out_path
+            ) -> None:
+        """Extract specified channels and store on disk in `out_path`.
+
+        Parameters
+        ----------
+        source_list : list of HfunRaster
+            List of raster size functions from which the channels
+            must be calculated.
+        out_path : path-like
+            Path for storing calculated channels and their crs data.
+
+        Returns
+        -------
+        None
+        """
 
         out_dir = Path(out_path)
         out_dir.mkdir(exist_ok=True, parents=True)
@@ -195,6 +462,15 @@ class ChannelRefineCollector:
                 self._container.append((feather_path, crs_path))
 
     def __iter__(self):
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        gpd.GeoDataFrame
+            Data from containing the extracted channel polygons and
+            the CRS information.
+        """
+
         for raster_data in self._container:
             feather_path, crs_path = raster_data
             gdf = gpd.read_feather(feather_path)
@@ -203,37 +479,156 @@ class ChannelRefineCollector:
             yield gdf
 
 
-class ConstraintInfoCollector:
+class _ConstraintInfoCollector:
+    """Collection for the applied constraints"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._constraints_info = []
 
-    def add(self, src_idx, constraint):
+    def add(self,
+            src_idx: Optional[Sequence[int]],
+            constraint: Union[TopoConstConstraint, TopoFuncConstraint]
+            ) -> None:
+        """Add size function constraint spec to the collection.
+
+        Parameters
+        ----------
+        src_idx : tuple of int or None
+            Indices of sources (indexed based on all `HfunCollector`
+            **not** just rasters) on which constant value refinement
+            must be applied.
+        constraint : TopoConstConstraint or TopoFuncConstraint
+            The constraint definition object.
+
+        Returns
+        -------
+        None
+        """
+
         srcs = tuple(src_idx) if src_idx is not None else None
         self._constraints_info.append((srcs, constraint))
 
-    def __iter__(self):
+    def __iter__(self) -> Union[TopoConstConstraint, TopoFuncConstraint]:
+        """Iterator method for this collection object
+
+        Yields
+        ------
+        TopoConstConstraint or TopoFuncConstraint
+            The constraint object provided in `add`
+        """
+
         for defn in self._constraints_info:
             yield defn
 
 
 
 class HfunCollector(BaseHfun):
+    """Define size function based on multiple inputs of different types
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+    msh_t()
+        Return mesh sizes interpolated on an size-optimized
+        unstructured mesh
+    add_topo_bound_constraint(...)
+        Add size fixed-per-point value constraint to the area
+        bounded by specified bounds with expansion/contraction
+        rate `rate` specified. This refinement is only applied on
+        rasters with specified indices. The index is w.r.t the
+        full input list for collector object creation.
+    add_topo_func_constraint(...)
+                             upper_bound=np.inf, lower_bound=-np.inf,
+                             value_type='min', rate=0.01)
+        Add size value constraint based on function of depth/elevation
+        to the area bounded by specified bounds with the expansion or
+        contraction rate `rate` specified. This constraint is only
+        applied on rasters with specified indices. The index is w.r.t
+        the full input list for collector object creation.
+    add_patch(...)
+        Add a region of fixed size refinement with optional expansion
+        rate for points outside the region to achieve smooth size
+        transition.
+    add_contour(...)
+        Add refinement based on contour lines auto-extrcted from the
+        underlying raster data. The size is calculated based on the
+        specified `rate`, `target_size` and the distance from the
+        extracted feature line. For refinement contours are extracted
+        only from raster inputs, but are applied on all input size
+        function bases.
+    add_channel(...)
+        Add refinement for auto-detected narrow domain regions.
+        Optionally use an expansion rate for points outside detected
+        narrow regions for smooth size transition.
+    add_subtidal_flow_limiter(...)
+        Add mesh size refinement based on the value as well as
+        gradient of the topography within the region between
+        specified by lower and upper bound on topography.
+        This refinement is only applied on rasters with specified
+        indices. The index is w.r.t the full input list for collector
+        object creation.
+    add_constant_value(...)
+        Add fixed size mesh refinement in the region specified by
+        upper and lower bounds on topography.  This refinement is
+        only applied on rasters with specified indices. The index is
+        w.r.t the full input list for collector object creation.
+
+    Notes
+    -----
+    All the refinements and constraints of this collector size
+    function are applied lazily. That means the size values are **not**
+    evaluated at the time they are called. Instead the effect of
+    all these refinements and constraints on the size is calculated
+    when `msh_t()` method is called.
+
+    Two distinct algorithms are implemented for storing the size
+    function values during evaluation and before creating the
+    "background mesh" on which sizes are specified. Currently
+    the difference between algorithms are only due to how raster
+    inputs to the collector are processed. The **exact** algorithm
+    is more computationally expensive; it processes all refinements
+    on the original rasters and applies the indivitually on all
+    of those individual rasters; this results in exponential time
+    calculation of contours or raster features as the extracted
+    features on all rasters must be applied on all rasters. Application
+    of features usually involve distance calculation using a tree
+    and can be very expensive when many rasters-features are involved.
+    The **fast** approach is less exact and can use more memory, but
+    it is much faster. The approach it takes is to still extract
+    the raster features individually but then apply it to a lower
+    resolution large raster that covers all the input rasters.
+    """
 
     def __init__(
             self,
-            in_list: Sequence[
-                Union[str, Raster, Mesh, HfunRaster, HfunMesh]],
-            base_mesh: Mesh = None,
-            hmin: float = None,
-            hmax: float = None,
-            nprocs: int = None,
+            in_list: CanCreateMultipleHfun,
+            base_mesh: Optional[Mesh] = None,
+            hmin: Optional[float] = None,
+            hmax: Optional[float] = None,
+            nprocs: Optional[int] = None,
             verbosity: int = 0,
-            method: str = 'exact',
+            method: Literal['exact', 'fast'] = 'exact',
             base_as_hfun: bool = True,
-            base_shape: Union[Polygon, MultiPolygon] = None,
+            base_shape: Optional[Union[Polygon, MultiPolygon]] = None,
             base_shape_crs: Union[str, CRS] = 'EPSG:4326'
-            ):
+            ) -> None:
+        """Initialize a collector size function object
+
+        Parameters
+        ----------
+        in_list : CanCreateMultipleHfun
+        base_mesh : Mesh or None, default=None
+        hmin : float or None, default=None
+        hmax : float or None, default=None
+        nprocs : int or None, default=None
+        verbosity : int, default=0
+        method : {'exact', 'fast'}, default='exact
+        base_as_hfun : bool, default=True
+        base_shape: Polygon or MultiPolygon or None, default=None
+        base_shape_crs: str or CRS, default='EPSG:4326'
+        """
 
         # NOTE: Input Hfuns and their Rasters can get modified
 
@@ -259,21 +654,21 @@ class HfunCollector(BaseHfun):
             if self._base_as_hfun:
                 self._base_mesh.size_from_mesh()
 
-        self._contour_info_coll = RefinementContourInfoCollector()
-        self._contour_coll = RefinementContourCollector(
+        self._contour_info_coll = _RefinementContourInfoCollector()
+        self._contour_coll = _RefinementContourCollector(
                 self._contour_info_coll)
 
-        self._const_val_contour_coll = ConstantValueContourInfoCollector()
+        self._const_val_contour_coll = _ConstantValueContourInfoCollector()
 
-        self._refine_patch_info_coll = RefinementPatchInfoCollector()
+        self._refine_patch_info_coll = _RefinementPatchInfoCollector()
 
-        self._flow_lim_coll = FlowLimiterInfoCollector()
+        self._flow_lim_coll = _FlowLimiterInfoCollector()
 
-        self._ch_info_coll = ChannelRefineInfoCollector()
-        self._channels_coll = ChannelRefineCollector(
+        self._ch_info_coll = _ChannelRefineInfoCollector()
+        self._channels_coll = _ChannelRefineCollector(
                 self._ch_info_coll)
 
-        self._constraint_info_coll = ConstraintInfoCollector()
+        self._constraint_info_coll = _ConstraintInfoCollector()
 
         self._type_chk(in_list)
 
@@ -354,6 +749,31 @@ class HfunCollector(BaseHfun):
 
 
     def msh_t(self) -> jigsaw_msh_t:
+        """Interpolates mesh size functions on an unstructred mesh
+
+        Calculates and the interpolate the mesh sizes from all inputs
+        onto an unstructured mesh. This mesh is generated by meshing
+        the inputs using the size function values. The return
+        value is in a projected CRS. If the inputs CRS the same and
+        geographic, then a local UTM CRS is calculated and used
+        for the output of this method.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        jigsaw_msh_t
+            Size function calculated and interpolated on an
+            unstructured mesh.
+
+        Notes
+        -----
+        The actual application of refinements and constrains for this
+        collector size function happens after calling this method.
+        This calculation is cached in case of 'exact' algorithm and
+        not cached for 'fast' algorithm.
+        """
 
         composite_hfun = jigsaw_msh_t()
 
@@ -380,12 +800,49 @@ class HfunCollector(BaseHfun):
 
     def add_topo_bound_constraint(
             self,
-            value,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01,
-            source_index: Union[List[int], int, None] = None):
+            value: Union[float, npt.NDArray[np.float32]],
+            upper_bound: float = np.inf,
+            lower_bound: float = -np.inf,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01,
+            source_index: Union[List[int], int, None] = None
+            ) -> None:
+        """Add a fixed-value or fixed-matrix constraint.
+
+        Add a fixed-value or fixed-matrix constraint to the region
+        of the size function specified by lower and upper elevation
+        of the underlying DEM. Optionally a `rate` can be specified
+        to relax the constraint gradually outside the bounds.
+
+        Parameters
+        ----------
+        value : float or array-like
+            A single fixed value or array of values to be used for
+            mesh size if condition is not met based on `value_type`.
+            In case of an array the dimensions must match or be
+            broadcastable to the raster grid.
+        upper_bound : float, default=np.inf
+            Maximum elevation to cut off the region where the
+            constraint needs to be applied
+        lower_bound : float, default=-np.inf
+            Minimum elevation to cut off the region where the
+            constraint needs to be applied
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the specified `value` at each
+            point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the region defined
+            by `lower_bound` and `upper_bound`.
+        source_index : int or list of ints or None, default=None
+            The index of raster entries from the input list argument
+            of the constructor of collector size function. If `None`
+            all input rasters are used.
+
+        Returns
+        -------
+        None
+        """
 
         self._applied = False
 
@@ -399,12 +856,50 @@ class HfunCollector(BaseHfun):
 
     def add_topo_func_constraint(
             self,
-            func=lambda i: i / 2.0,
-            upper_bound=np.inf,
-            lower_bound=-np.inf,
-            value_type: str = 'min',
-            rate=0.01,
-            source_index: Union[List[int], int, None] = None):
+            func: Callable[npt.NDArray[np.float32], npt.NDArray[np.float32]]
+                = lambda i: i / 2.0,
+            upper_bound: float = np.inf,
+            lower_bound: float = -np.inf,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01,
+            source_index: Union[List[int], int, None] = None
+            ) -> None:
+        """Add constraint based on a function of the topography
+
+        Add a constraint based on the provided function `func` of
+        the topography and apply to the region of the size function
+        specified by lower and upper elevation of the underlying DEM.
+        Optionally a `rate` can be specified to relax the constraint
+        gradually outside the bounds.
+
+        Parameters
+        ----------
+        func : callable
+            A function to be applied on the topography to acquire the
+            values to be used for mesh size if condition is not met
+            based on `value_type`.
+        upper_bound : float, default=np.inf
+            Maximum elevation to cut off the region where the
+            constraint needs to be applied
+        lower_bound : float, default=-np.inf
+            Minimum elevation to cut off the region where the
+            constraint needs to be applied
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the value calculated from the
+            specified `func` at each point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the region defined
+            by `lower_bound` and `upper_bound`.
+        source_index : int or list of ints or None, default=None
+            The index of raster entries from the input list argument
+            of the constructor of collector size function. If `None`
+            all input rasters are used.
+
+        Returns
+        -------
+        None
+        """
 
         self._applied = False
 
@@ -418,16 +913,38 @@ class HfunCollector(BaseHfun):
 
     def add_contour(
             self,
-            level: Union[List[float], float] = None,
+            level: Union[List[float], float, None] = None,
             expansion_rate: float = 0.01,
-            target_size: float = None,
-            contour_defn: Contour = None,
-    ):
+            target_size: Optional[float] = None,
+            contour_defn: Optional[Contour] = None
+            ) -> None:
+        """Add refinement for auto extracted contours
 
-        '''
-        Contours are defined by contour defn or by raster sources only,
-        but are applied on both raster and mesh hfun
-        '''
+        Add refinement for the contour lines extracted based on
+        level or levels specified by `level`. The refinement
+        is relaxed with `expansion_rate` and distance from the
+        extracted contour lines. Contours are extracted only from the
+        raster inputs, but are applied on all inputs passed to the
+        collector constructor.
+
+        Parameters
+        ----------
+        level : float or list of floats or None, default=None
+            Level(s) at which contour lines should be extracted.
+        expansion_rate : float, default=0.01
+            Rate to use for expanding refinement with distance away
+            from the extracted contours.
+        target_size : float or None, default=None
+            Target size to use on the extracted contours and expand
+            from with distance.
+        contour_defn : Contour or None, default=None
+            Contour definition objects which defines contour extraction
+            specification from rasters.
+
+        Returns
+        -------
+        None
+        """
 
         # Always lazy
         self._applied = False
@@ -466,11 +983,42 @@ class HfunCollector(BaseHfun):
     def add_channel(
             self,
             level: float = 0,
-            width: float = 1000, # in meters
+            width: float = 1000,
             target_size: float = 200,
-            expansion_rate: float = None,
-            tolerance: Union[None, float] = 50,
-            channel_defn = None):
+            expansion_rate: Optional[float] = None,
+            tolerance: Optional[float] = None,
+            channel_defn: Optional[Channel] = None
+            ) -> None:
+        """Add refinement for auto detected channels
+
+        Automatically detects narrow regions in the domain and apply
+        refinement size with an expanion rate (if provided) outside
+        the detected area.
+
+        Parameters
+        ----------
+        level : float, default=0
+            High water mark at which domain is extracted for narrow
+            region or channel calculations.
+        width : float, default=1000
+            The cut-off width for channel detection.
+        target_size : float, default=200
+            Target size to use on the detected channels and expand
+            from with distance.
+        expansion_rate : float or None, default=None
+            Rate to use for expanding refinement with distance away
+            from the detected channels.
+        tolerance : float or None, default=None
+            Tolerance to use for simplifying the polygon extracted
+            from DEM data. If `None` don't simplify.
+        channel_defn : Contour or None
+            Channel definition objects which defines channel
+            extraction specification from rasters.
+
+        Returns
+        -------
+        None
+        """
 
         self._applied = False
 
@@ -498,11 +1046,44 @@ class HfunCollector(BaseHfun):
 
     def add_subtidal_flow_limiter(
             self,
-            hmin=None,
-            hmax=None,
-            upper_bound=None,
-            lower_bound=None,
-            source_index: Union[List[int], int, None] = None):
+            hmin: Optional[float] = None,
+            hmax: Optional[float] = None,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None,
+            source_index: Union[List[int], int, None] = None
+            ) -> None:
+        """Add mesh refinement based on topography.
+
+        Calculates a pre-defined function of topography to use
+        as values for refinement. The function values are cut off
+        using `hmin` and `hmax` and is applied to the region bounded
+        by `lower_bound` and `upper_bound`.
+
+        Parameters
+        ----------
+        hmin : float or None, default=None
+            Minimum mesh size in the refinement
+        hmax : float or None, default=None
+            Maximum mesh size in the refinement
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        source_index : int or list of ints or None, default=None
+            The index of raster entries from the input list argument
+            of the constructor of collector size function. If `None`
+            all input rasters are used.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        hfun.raster.HfunRaster.add_subtidal_flow_limiter :
+        """
 
         self._applied = False
 
@@ -520,11 +1101,35 @@ class HfunCollector(BaseHfun):
 
 
     def add_constant_value(
-            self, value,
-            lower_bound=None,
-            upper_bound=None,
+            self,
+            value: float,
+            lower_bound: Optional[float] = None,
+            upper_bound: Optional[float] = None,
             source_index: Union[List[int], int, None] =None):
+        """Add refinement of fixed value in the region specified by bounds.
 
+        Apply fixed value mesh size refinement to the region specified
+        by bounds (if provided) or the whole domain.
+
+        Parameters
+        ----------
+        value : float
+            Fixed value to use for refinement size
+        lower_bound : float or None, default=None
+            Lower limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        upper_bound : float or None, default=None
+            Higher limit of the cut-off elevation for region to apply
+            the fixed `value`.
+        source_index : int or list of ints or None, default=None
+            The index of raster entries from the input list argument
+            of the constructor of collector size function. If `None`
+            all input rasters are used.
+
+        Returns
+        -------
+        None
+        """
 
         self._applied = False
 
@@ -543,12 +1148,44 @@ class HfunCollector(BaseHfun):
 
     def add_patch(
             self,
-            shape: Union[MultiPolygon, Polygon] = None,
-            patch_defn: Patch = None,
+            shape: Union[MultiPolygon, Polygon, None] = None,
+            patch_defn: Optional[Patch] = None,
             shapefile: Union[None, str, Path] = None,
-            expansion_rate: float = None,
-            target_size: float = None,
-    ):
+            expansion_rate: Optional[float] = None,
+            target_size: Optional[float] = None,
+            ) -> None:
+        """Add refinement as a region of fixed size with an optional rate
+
+        Add a refinement based on a region specified by `shape`,
+        `patch_defn` or `shapefile`.  The fixed `target_size`
+        refinement can be expanded outside the region specified by the
+        shape if `expansion_rate` is provided.
+
+        Parameters
+        ----------
+        shape : MultiPolygon or Polygon or None, default=None
+            Shape of the region to use specified `target_size` for
+            refinement. Only one of `shape`, `patch_defn` or `shapefile`
+            must be specified.
+        patch_defn : Patch or None, default=None
+            Shape of the region to use specified `target_size` for
+            refinement. Only one of `shape`, `patch_defn` or `shapefile`
+            must be specified.
+        shapefile : None or str or Path, default=None
+            Shape of the region to use specified `target_size` for
+            refinement. Only one of `shape`, `patch_defn` or `shapefile`
+            must be specified.
+        expansion_rate : float or None, default=None
+            Optional rate to use for expanding refinement outside
+            the specified shape in `multipolygon`.
+        target_size : float or None, default=None
+            Fixed target size of mesh to use for refinement in
+            `multipolygon`
+
+        Returns
+        -------
+        None
+        """
 
         # "shape" should be in 4326 CRS. For shapefile or patch_defn
         # CRS info is included
@@ -569,8 +1206,26 @@ class HfunCollector(BaseHfun):
 
 
     @staticmethod
-    def _type_chk(input_list):
-        ''' Check the input type for constructor '''
+    def _type_chk(input_list: List[Any]) -> None:
+        """Checks the if the input types are supported for size function
+
+        Checks if size function collector supports handling
+        size functions created from the input types.
+
+        Parameters
+        ----------
+        input_list : List[Any]
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        TypeError
+            If the any of the inputs are not supported
+        """
+
         valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
@@ -578,7 +1233,23 @@ class HfunCollector(BaseHfun):
                 f' {", ".join(str(i) for i in valid_types)},'
                 f' or a derived type.')
 
-    def _apply_features(self):
+    def _apply_features(self) -> None:
+        """Internal: apply all specified refinements and constraints
+
+        Apply all specified refinements and constrains for the exact
+        algorithm.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_features_fast :
+        """
 
         if not self._applied:
             self._apply_contours()
@@ -591,7 +1262,23 @@ class HfunCollector(BaseHfun):
         self._applied = True
 
 
-    def _apply_constraints(self):
+    def _apply_constraints(self) -> None:
+        """Internal: apply specified constraints.
+
+        Apply specified constraints for the exact algorithm.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_constraints_fast :
+        """
+
         if self._method == 'fast':
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
@@ -611,7 +1298,19 @@ class HfunCollector(BaseHfun):
                 hfun.apply_constraints(constraint_list)
 
 
-    def _apply_contours(self, apply_to=None):
+    def _apply_contours(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        """Internal: apply specified constraints.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which contours must be applied. If `None`
+            all inputs are used to apply the calculated contours.
+
+        Returns
+        -------
+        None
+        """
 
         # TODO: Consider CRS before applying to different hfuns
         #
@@ -665,7 +1364,19 @@ class HfunCollector(BaseHfun):
 #                    [(hfun, self._contour_coll, self._nprocs)
 #                     for hfun in apply_to])
 
-    def _apply_channels(self, apply_to=None):
+    def _apply_channels(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        """Internal: apply specified channel refinements.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which channels must be applied. If `None`
+            all inputs are used to apply the calculated channels.
+
+        Returns
+        -------
+        None
+        """
 
         raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
@@ -706,7 +1417,23 @@ class HfunCollector(BaseHfun):
                         })
 
 
-    def _apply_flow_limiters(self):
+    def _apply_flow_limiters(self) -> None:
+        """Internal: apply specified sub tidal flow limiter refinements
+
+        Applies specified subtidal flow limiter refinements for
+        the exact algorithm.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_flow_limiters_fast :
+        """
 
         if self._method == 'fast':
             raise NotImplementedError(
@@ -727,6 +1454,18 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_const_val(self):
+        """Internal: apply specified constant value refinements.
+
+        Applies constant value refinements for the exact algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_const_val_fast :
+        """
 
         if self._method == 'fast':
             raise NotImplementedError(
@@ -748,7 +1487,19 @@ class HfunCollector(BaseHfun):
                 hfun.add_constant_value(const_val, level0, level1)
 
 
-    def _apply_patch(self, apply_to=None):
+    def _apply_patch(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        """Internal: apply the specified patch refinements.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which patches must be applied. If `None`
+            all inputs are used to apply the patches.
+
+        Returns
+        -------
+        None
+        """
 
         raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
@@ -773,7 +1524,28 @@ class HfunCollector(BaseHfun):
                         shape, nprocs=self._nprocs, **size_info)
 
 
-    def _write_hfun_to_disk(self, out_path):
+    def _write_hfun_to_disk(
+            self,
+            out_path: Union[str, Path]
+            ) -> List[Union[str, Path]]:
+        """Internal: write individual size function output mesh to file
+
+        Calculate the interpolated on-mesh size function from each
+        individual input, clip overlaps based on priority, and
+        write the results to disk for later combining.
+
+        Parameters
+        ----------
+        out_path : path-like
+            The path of the (temporary) directory to which mesh size
+            functions must be written.
+
+        Returns
+        -------
+        list of path-like
+            List of individual file path for mesh size function of
+            each input.
+        """
 
         out_dir = Path(out_path)
         path_list = []
@@ -837,7 +1609,29 @@ class HfunCollector(BaseHfun):
 
 
 
-    def _get_hfun_composite(self, hfun_path_list):
+    def _get_hfun_composite(
+            self,
+            hfun_path_list: List[Union[str, Path]]
+            ) -> jigsaw_msh_t:
+        """Internal: combine the size functions written to disk
+
+        Combine the size functions written to disk from the list of
+        input files `hfun_path_list`. This is used for `exact` method.
+
+        Parameters
+        ----------
+        hfun_path_list : list of path-like
+
+        Retruns
+        -------
+        jigsaw_msh_t
+            The combined size function interpolated on an optimized
+            mesh.
+
+        See Also
+        --------
+        _get_hfun_composite_fast :
+        """
 
         collection = []
         _logger.info('Reading 2dm hfun files...')
@@ -883,7 +1677,20 @@ class HfunCollector(BaseHfun):
         return composite_hfun
 
 
-    def _create_big_raster(self, out_path):
+    def _create_big_raster(self, out_path: Union[str, Path]) -> Raster:
+        """Internal: create a large raster covering all input rasters.
+
+        Parameters
+        ----------
+        out_path : path-like
+            Path of the (tempoerary) directory to which the large
+            raster needs to be written
+
+        Returns
+        -------
+        Raster
+            Lower resolution raster covering all input rasters.
+        """
 
         out_dir = Path(out_path)
         out_rast = out_dir / 'big_raster.tif'
@@ -1011,7 +1818,26 @@ class HfunCollector(BaseHfun):
 
         return Raster(out_rast, chunk_size=window_size)
 
-    def _apply_features_fast(self, big_raster):
+    def _apply_features_fast(self, big_raster: HfunRaster):
+        """Internal: apply all specified refinements and constraints
+
+        Apply all specified refinements and constrains for the fast
+        algorithm.
+
+        Parameters
+        ----------
+        big_raster : HfunRaster
+            The lower-resolution large raster that covers all the
+            input rasters.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_features :
+        """
 
         # NOTE: Caching applied doesn't work here since we apply
         # everything on a temporary big raster
@@ -1044,7 +1870,26 @@ class HfunCollector(BaseHfun):
 
         return hfun_rast
 
-    def _apply_flow_limiters_fast(self, big_hfun):
+    def _apply_flow_limiters_fast(self, big_hfun: HfunRaster) -> None:
+        """Internal: apply specified sub tidal flow limiter refinements
+
+        Applies specified subtidal flow limiter refinements for
+        the fast algorithm.
+
+        Parameters
+        ----------
+        big_hfun : HfunRaster
+            The lower-resolution large raster that covers all the
+            input rasters.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_flow_limiters :
+        """
 
         for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
             # TODO: Account for source index
@@ -1062,6 +1907,18 @@ class HfunCollector(BaseHfun):
             big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
 
     def _apply_const_val_fast(self, big_hfun):
+        """Internal: apply specified constant value refinements.
+
+        Applies constant value refinements for the fast algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_const_val :
+        """
 
         for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
             # TODO: Account for source index
@@ -1074,7 +1931,22 @@ class HfunCollector(BaseHfun):
             big_hfun.add_constant_value(const_val, level0, level1)
 
 
-    def _apply_constraints_fast(self, big_hfun):
+    def _apply_constraints_fast(self, big_hfun: HfunRaster) -> None:
+        """Internal: apply specified constraints.
+
+        Apply specified constraints for the fast algorithm.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_constraints
+        """
 
         constraint_list = []
         for src_idx, constraint_defn in self._constraint_info_coll:
@@ -1086,6 +1958,27 @@ class HfunCollector(BaseHfun):
 
 
     def _get_hfun_composite_fast(self, big_hfun):
+        """Internal: combine the size function functions for fast method
+
+        Combine the size functions of the large raster with non-raster
+        inputs. This is used for `fast` method.
+
+        Parameters
+        ----------
+        big_hfun : HfunRaster
+            The single large raster based size function covering all
+            input rasters.
+
+        Retruns
+        -------
+        jigsaw_msh_t
+            The combined size function interpolated on an optimized
+            mesh.
+
+        See Also
+        --------
+        _get_hfun_composite
+        """
 
         # In fast method all DEM hfuns have more priority than all
         # other inputs
