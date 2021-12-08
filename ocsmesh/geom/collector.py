@@ -79,9 +79,7 @@ class GeomCollector(BaseGeom):
         Returns the `jigsawpy` vertex-edge representation of the geometry
     get_multipolygon(**kwargs)
         Returns `shapely` object representation of the geometry
-
-    add_patch(shape=None, level=None, contour_defn=None,
-              patch_defn=None, shapefile=None)
+    add_patch(...)
         Define local (patch) contour extraction definition from all
         the input data (e.g. raster, mesh, etc.)
     """

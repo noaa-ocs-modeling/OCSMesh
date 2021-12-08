@@ -180,8 +180,6 @@ class Overlap:
 class Raster:
     """Wrapper class for basic raster handling
 
-    This
-
     Attributes
     ----------
     x
@@ -224,15 +222,11 @@ class Raster:
         Get values at all the points in the raster.
     get_xyz(window=None, band=None)
         Get raster position tuples and values horizontally stacked.
-    get_multipolygon(zmin=None, zmax=None, window=None,
-                     overlap=None, band=1)
+    get_multipolygon(zmin=None, zmax=None, window=None, overlap=None, band=1)
         Extract multipolygon from raster data.
     get_bbox(crs=None, output_type='polygon')
         Get the raster bounding box.
-    contourf(band=1, window=None, axes=None, vmin=None, vmax=None,
-             cmap='topobathy', levels=None, show=False, title=None,
-             figsize=None, colors=256, cbar_label=None, norm=None,
-             **kwargs)
+    contourf(...)
         Plot a filled contour from the raster data.
     tags(i=None)
         Get tags set on raster dataset.
@@ -348,10 +342,6 @@ class Raster:
             Options to be passed as metadata to raster database. These
             options override values taken from source raster in case
             `use_src_meta` is `True`
-
-        Returns
-        -------
-        None
 
         Yields
         ------

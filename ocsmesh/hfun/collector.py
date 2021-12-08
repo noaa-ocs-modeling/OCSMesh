@@ -533,19 +533,13 @@ class HfunCollector(BaseHfun):
     msh_t()
         Return mesh sizes interpolated on an size-optimized
         unstructured mesh
-    add_topo_bound_constraint(value,
-                              upper_bound=np.inf, lower_bound=-np.inf,
-                              value_type='min', rate=0.01,
-                              source_index=None)
+    add_topo_bound_constraint(...)
         Add size fixed-per-point value constraint to the area
         bounded by specified bounds with expansion/contraction
         rate `rate` specified. This refinement is only applied on
         rasters with specified indices. The index is w.r.t the
         full input list for collector object creation.
-    add_topo_func_constraint(func=lambda i: i / 2.0,
-                             upper_bound=np.inf, lower_bound=-np.inf,
-                             value_type='min', rate=0.01,
-                             source_index=None)
+    add_topo_func_constraint(...)
                              upper_bound=np.inf, lower_bound=-np.inf,
                              value_type='min', rate=0.01)
         Add size value constraint based on function of depth/elevation
@@ -553,35 +547,29 @@ class HfunCollector(BaseHfun):
         contraction rate `rate` specified. This constraint is only
         applied on rasters with specified indices. The index is w.r.t
         the full input list for collector object creation.
-    add_patch(shape=None, patch_defn=None, shapefile=None,
-              expansion_rate=None, target_size=None)
+    add_patch(...)
         Add a region of fixed size refinement with optional expansion
         rate for points outside the region to achieve smooth size
         transition.
-    add_contour(level=None, expansion_rate=0.01, target_size=None,
-                contour_defn=None)
+    add_contour(...)
         Add refinement based on contour lines auto-extrcted from the
         underlying raster data. The size is calculated based on the
         specified `rate`, `target_size` and the distance from the
         extracted feature line. For refinement contours are extracted
         only from raster inputs, but are applied on all input size
         function bases.
-    add_channel(level=0, width=1000, target_size=200,
-                expansion_rate=None, tolerance=50, channel_defn=None)
+    add_channel(...)
         Add refinement for auto-detected narrow domain regions.
         Optionally use an expansion rate for points outside detected
         narrow regions for smooth size transition.
-    add_subtidal_flow_limiter(hmin=None, hmax=None,
-                              upper_bound=None, lower_bound=None,
-                              source_index=None)
+    add_subtidal_flow_limiter(...)
         Add mesh size refinement based on the value as well as
         gradient of the topography within the region between
         specified by lower and upper bound on topography.
         This refinement is only applied on rasters with specified
         indices. The index is w.r.t the full input list for collector
         object creation.
-    add_constant_value(value, lower_bound=None, upper_bound=None,
-                       source_index=None)
+    add_constant_value(...)
         Add fixed size mesh refinement in the region specified by
         upper and lower bounds on topography.  This refinement is
         only applied on rasters with specified indices. The index is
@@ -1094,7 +1082,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        `hfun.raster.add_subtidal_flow_limiter` documentation.
+        hfun.raster.HfunRaster.add_subtidal_flow_limiter :
         """
 
         self._applied = False
@@ -1260,7 +1248,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_features_fast
+        _apply_features_fast :
         """
 
         if not self._applied:
@@ -1288,7 +1276,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_constraints_fast
+        _apply_constraints_fast :
         """
 
         if self._method == 'fast':
@@ -1444,7 +1432,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_flow_limiters_fast
+        _apply_flow_limiters_fast :
         """
 
         if self._method == 'fast':
@@ -1476,7 +1464,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_const_val_fast
+        _apply_const_val_fast :
         """
 
         if self._method == 'fast':
@@ -1642,7 +1630,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _get_hfun_composite_fast
+        _get_hfun_composite_fast :
         """
 
         collection = []
@@ -1848,7 +1836,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_features
+        _apply_features :
         """
 
         # NOTE: Caching applied doesn't work here since we apply
@@ -1900,7 +1888,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_flow_limiters
+        _apply_flow_limiters :
         """
 
         for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
@@ -1929,7 +1917,7 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
-        _apply_const_val
+        _apply_const_val :
         """
 
         for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:

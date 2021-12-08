@@ -131,20 +131,15 @@ class HfunRaster(BaseHfun, Raster):
         Re-apply the existing constraint. Mostly used internally.
     apply_constraints(constraint_list)
         Apply constraint objects in the `constraint_list`.
-    add_topo_bound_constraint(value, upper_bound=np.inf,
-                              lower_bound=-np.inf,
-                              value_type='min', rate=0.01)
+    add_topo_bound_constraint(...)
         Add size fixed-per-point value constraint to the area
         bounded by specified bounds with expansion/contraction
         rate `rate` specified.
-    add_topo_func_constraint(func=lambda i: i / 2.0,
-                             upper_bound=np.inf, lower_bound=-np.inf,
-                             value_type='min', rate=0.01)
+    add_topo_func_constraint(...)
         Add size value constraint based on function of depth/elevation
         to the area bounded by specified bounds with the expansion or
         contraction rate `rate` specified.
-    add_patch(multipolygon expansion_rate=None, target_size=None,
-              nprocs=None)
+    add_patch(...)
         Add a region of fixed size refinement with optional expansion
         rate for points outside the region to achieve smooth size
         transition.
@@ -153,21 +148,18 @@ class HfunRaster(BaseHfun, Raster):
         underlying raster data. The size is calculated based on the
         specified `rate`, `target_size` and the distance from the
         extracted feature line.
-    add_channel(level=0, width=1000, target_size=200,
-                expansion_rate=None, nprocs=None, tolerance=None)
+    add_channel(...)
         Add refinement for auto-detected narrow domain regions.
         Optionally use an expansion rate for points outside detected
         narrow regions for smooth size transition.
-    add_feature(feature, expansion_rate, target_size=None,
-                max_verts=200, *, nprocs=None, pool=None)
+    add_feature(...)
         Decorated method to add size refinement based on the specified
         `expansion_rate`, `target_size`, and distance from the input
         feature lines `feature`.
     get_xy_memcache(window, dst_crs)
         Get XY grid cached onto disk. Useful for when XY needs to be
         projected to UTM so as to avoid reprojecting on every call.
-    add_subtidal_flow_limiter(hmin=None, hmax=None,
-                              upper_bound=None, lower_bound=None)
+    add_subtidal_flow_limiter(...)
         Add mesh size refinement based on the value as well as
         gradient of the topography within the region between
         specified by lower and upper bound on topography.
