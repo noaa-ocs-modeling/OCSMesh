@@ -1,0 +1,46 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      #      - main
+      - feature/docgen
+  release:
+    types:
+      - published
+
+
+jobs:
+  create-documentation:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Set up Conda environment for Python
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.9 # TODO: For testing use matrix of env
+        environment-file: ./environment.yml
+        activate-environment: ocsmesh-env
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        python ./setup.py install_jigsaw
+        pip install .
+    - name: Retrieve latest version from Git tags
+      uses: mtkennerly/dunamai-action@v1
+      with:
+        env-var: VERSION
+        args: --style semver
+    - name: Build documentation site with Sphinx
+      run: |
+          pip -r docs/requirements.txt
+          cd docs
+          make html
+    - name: Deploy to GitHub Pages
+      uses: JamesIves/github-pages-deploy-action@4.1.5
+      with:
+        branch: gh-pages
+        folder: docs/build/html
