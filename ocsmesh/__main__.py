@@ -147,6 +147,10 @@ def create_parser():
 
     return parser, cmd_cli
 
+def dummy_documentation():
+    parser, ocsmesh_cli = create_parser()
+    return parser
+
 
 def main():
     parser, ocsmesh_cli = create_parser()
