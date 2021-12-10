@@ -39,7 +39,9 @@ class MeshUpgrader:
         #       --demhi ncei19_*.tif \
         #       --out demo/final_mesh.2dm
 
-        this_parser = sub_parser.add_parser(self.script_name)
+        this_parser = sub_parser.add_parser(
+            self.script_name,
+            help="Create a new mesh based on a base-mesh and input DEMs.")
 
         this_parser.add_argument('--basemesh', required=True)
         this_parser.add_argument('--demlo', nargs='*', required=True)

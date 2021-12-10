@@ -45,7 +45,9 @@ class RemeshByDEM:
         #   --zmax <MAX_ELEV_DEM> \
         #   <DEM_FILES>*.tif
 
-        this_parser = sub_parser.add_parser(self.script_name)
+        this_parser = sub_parser.add_parser(
+            self.script_name,
+            help="Locally refine an existing input mesh based on input DEMs")
 
         this_parser.add_argument('--mesh', required=True, type=Path)
         this_parser.add_argument('--mesh-crs', default='EPSG:4326')

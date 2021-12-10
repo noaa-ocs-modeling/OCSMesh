@@ -35,7 +35,11 @@ class RemeshByShape:
 
     def __init__(self, sub_parser):
 
-        this_parser = sub_parser.add_parser(self.script_name)
+        this_parser = sub_parser.add_parser(
+            self.script_name,
+            help="Locally refine an existing input mesh based"
+                 + " on input DEMs within the region specified"
+                 + " by input shape and cut-off depth.")
 
         this_parser.add_argument('--in-crs', default='EPSG:4326')
         this_parser.add_argument('--shape', type=str)
