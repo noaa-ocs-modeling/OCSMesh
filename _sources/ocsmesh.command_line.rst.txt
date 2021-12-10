@@ -1,4 +1,7 @@
 Command line interface
 ======================
 
-.. automodule:: ocsmesh.cli
+.. argparse::
+   :module: ocsmesh.__main__
+   :func: dummy_documentation
+   :prog: ocsmesh

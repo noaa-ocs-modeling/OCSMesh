@@ -6,5 +6,4 @@
    ocsmesh.size_function
    ocsmesh.mesh
    ocsmesh.utilities
-..
    ocsmesh.command_line
