@@ -16,7 +16,7 @@ dependencies:
   - geopandas
   - utm
   - scipy
-  - numpy
+  - numpy>=1.21
   - matplotlib
   - requests
   - tqdm
