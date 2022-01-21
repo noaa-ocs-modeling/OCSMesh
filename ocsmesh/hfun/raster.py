@@ -643,7 +643,7 @@ class HfunRaster(BaseHfun, Raster):
     @_apply_constraints
     def add_topo_func_constraint(
             self,
-            func: Callable[npt.NDArray[np.float32], npt.NDArray[np.float32]]
+            func: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]]
                 = lambda i: i / 2.0,
             upper_bound: float = np.inf,
             lower_bound: float = -np.inf,

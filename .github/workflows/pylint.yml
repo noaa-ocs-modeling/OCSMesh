@@ -9,12 +9,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Conda environment for Python
-      uses: conda-incubator/setup-miniconda@v2
+    - name: Setup Mamba environment for Python
+      uses: mamba-org/provision-with-micromamba@main
       with:
-        python-version: 3.9 # TODO: For testing use matrix of env
         environment-file: ./environment.yml
-        activate-environment: ocsmesh-env
+        environment-name: ocsmesh-env
+        extra-specs: |
+          python=3.9
     - name: Install dependencies
       shell: bash -l {0}
       run: |
