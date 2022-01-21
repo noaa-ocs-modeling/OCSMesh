@@ -9,7 +9,7 @@ dependencies:
   - netcdf4
   - udunits2
   - pyproj
-  - shapely
+  - shapely=1.7
   - rasterio
   - fiona
   - pygeos
