@@ -39,15 +39,13 @@ jobs:
 
     - name: Export Conda environment
       shell: bash -l {0}
-      run: |
-        conda install -cconda-forge conda-lock
-        conda lock -f ./environment.yml -p linux-64 -p win-64
+      run: conda env export -n ocsmesh-env > environment_py${{ matrix.python-version }}.yml
 
     - name: 'Upload conda environment'
       uses: actions/upload-artifact@v2
       with:
         name: conda-environment-${{ matrix.python-version }}
-        path: conda*.lock
+        path: environment_py${{ matrix.python-version }}.yml
         retention-days: 7
 
 
