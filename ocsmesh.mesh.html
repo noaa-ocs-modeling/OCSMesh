@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mesh representation &mdash; ocsmesh 0.0.0.post1.dev0+b5faf64 documentation</title>
+  <title>Mesh representation &mdash; ocsmesh 0.0.0.post1.dev0+2185a66 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -69,8 +69,509 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="mesh-representation">
-<h1>Mesh representation<a class="headerlink" href="#mesh-representation" title="Permalink to this headline"></a></h1>
+  <section id="module-ocsmesh.mesh">
+<span id="mesh-representation"></span><h1>Mesh representation<a class="headerlink" href="#module-ocsmesh.mesh" title="Permalink to this headline"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">Mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.Mesh" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.mesh.base.BaseMesh</span></code></p>
+<p>Mesh object factory</p>
+<p>Factory class that creates and returns concrete mesh object
+based on the input types.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord" title="ocsmesh.mesh.Mesh.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t" title="ocsmesh.mesh.Mesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 41%" />
+<col style="width: 59%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>open(path, crs=None)</strong></p></td>
+<td><p>Read mesh data from a file on disk.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Construct a concrete mesh object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>Input jigsaw mesh object</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MeshType</dt><dd><p>Mesh object created from the input</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>TypeError</dt><dd><p>Input <cite>mesh</cite> is not a <cite>jigsaw_msh_t</cite> object.</p>
+</dd>
+<dt>NotImplementedError</dt><dd><p>Input <cite>mesh</cite> object cannot be used to create a EuclideanMesh2D</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord" title="ocsmesh.mesh.Mesh.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t" title="ocsmesh.mesh.Mesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.mesh.Mesh.open" title="ocsmesh.mesh.Mesh.open"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open</span></code></a>(path[, crs])</p></td>
+<td><p>Read mesh from a file on disk</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.open">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">open</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">matplotlib.path.Path</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">pyproj.crs.crs.CRS</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D" title="ocsmesh.mesh.mesh.EuclideanMesh2D"><span class="pre">ocsmesh.mesh.mesh.EuclideanMesh2D</span></a></span></span><a class="headerlink" href="#ocsmesh.mesh.Mesh.open" title="Permalink to this definition"></a></dt>
+<dd><p>Read mesh from a file on disk</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>path</strong><span class="classifier">path-like</span></dt><dd><p>Path to the file containig mesh.</p>
+</dd>
+<dt><strong>crs</strong><span class="classifier">CRS or None, default=None</span></dt><dd><p>CRS of the mesh in the path. Overwrites any info read
+from file, no transformation is done.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MeshType</dt><dd><p>Mesh object created by reading the file.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>TypeError</dt><dd><p>If cannot determine the input mesh type.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Currently only SMS-2DM and GRD formats are supported for
+reading.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.coord">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">coord</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.float32</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#ocsmesh.mesh.Mesh.coord" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property for coordinates of mesh points</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>If the number of mesh dimensions is not 2 or 3.</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The property is read-only, however the returned value is not.
+That means if the user mutates the returned numpy array
+object, it will affect the mesh.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.msh_t">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">msh_t</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></em><a class="headerlink" href="#ocsmesh.mesh.Mesh.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<p class="rubric">Notes</p>
+<p>The property is read-only, however the returned value is not.
+That means if the user mutates the returned jigsaw_msh_t
+object, it will affect the mesh.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">EuclideanMesh2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.mesh.mesh.EuclideanMesh</span></code></p>
+<p>2D Euclidean mesh definition</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.boundaries" title="ocsmesh.mesh.EuclideanMesh2D.boundaries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundaries</span></code></a></dt><dd><p>Handle to boundaries calculator helper object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.vert2" title="ocsmesh.mesh.EuclideanMesh2D.vert2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vert2</span></code></a></dt><dd><p>Reference to underlying mesh 2D vertices structure</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.value" title="ocsmesh.mesh.EuclideanMesh2D.value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">value</span></code></a></dt><dd><p>Reference to underlying mesh values</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.bbox" title="ocsmesh.mesh.EuclideanMesh2D.bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bbox</span></code></a></dt><dd><p>Calculates and returns bounding box of the mesh hull.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 45%" />
+<col style="width: 55%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>get_bbox(crs=None, output_type=None)</strong></p></td>
+<td><p>Gets the bounding box of the mesh elements.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>tricontourf(**kwargs)</strong></p></td>
+<td><p>Create a contour plot from the value data on the nodes of the mesh</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>interpolate(raster, method=’spline’, nprocs=None)</strong></p></td>
+<td><p>Interpolate raster date on the nodes.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>get_contour(level)</strong></p></td>
+<td><p>Get contour lines from node value data at specified levels.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>get_multipolygon(zmin=None, zmax=None)</strong></p></td>
+<td><p>Get multipolygon of the mesh hull.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Initialize Euclidean 2D mesh object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>The underlying jigsaw_msh_t object to hold onto mesh data.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Raises</dt>
+<dd class="field-even"><dl class="simple">
+<dt>ValueError</dt><dd><p>If number of mesh dimensions is not equal to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.bbox" title="ocsmesh.mesh.EuclideanMesh2D.bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bbox</span></code></a></dt><dd><p>Calculates and returns bounding box of the mesh hull.</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.boundaries" title="ocsmesh.mesh.EuclideanMesh2D.boundaries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundaries</span></code></a></dt><dd><p>Handle to boundaries calculator helper object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.coord" title="ocsmesh.mesh.EuclideanMesh2D.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.crs" title="ocsmesh.mesh.EuclideanMesh2D.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Reference to underlying mesh crs</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.elements" title="ocsmesh.mesh.EuclideanMesh2D.elements"><code class="xref py py-obj docutils literal notranslate"><span class="pre">elements</span></code></a></dt><dd><p>Reference to element handler helper object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.hull" title="ocsmesh.mesh.EuclideanMesh2D.hull"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hull</span></code></a></dt><dd><p>Reference to hull calculator helper object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t" title="ocsmesh.mesh.EuclideanMesh2D.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.nodes" title="ocsmesh.mesh.EuclideanMesh2D.nodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodes</span></code></a></dt><dd><p>Reference to node handler helper object</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quad4" title="ocsmesh.mesh.EuclideanMesh2D.quad4"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quad4</span></code></a></dt><dd><p>Reference to underlying mesh quadrangle element structure</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quads" title="ocsmesh.mesh.EuclideanMesh2D.quads"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quads</span></code></a></dt><dd><p>Reference to underlying mesh quadrangle element index array</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tria3" title="ocsmesh.mesh.EuclideanMesh2D.tria3"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tria3</span></code></a></dt><dd><p>Reference to underlying mesh tirangle element structure</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.triangles" title="ocsmesh.mesh.EuclideanMesh2D.triangles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">triangles</span></code></a></dt><dd><p>Reference to underlying mesh triangle element index array</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.value" title="ocsmesh.mesh.EuclideanMesh2D.value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">value</span></code></a></dt><dd><p>Reference to underlying mesh values</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.vert2" title="ocsmesh.mesh.EuclideanMesh2D.vert2"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vert2</span></code></a></dt><dd><p>Reference to underlying mesh 2D vertices structure</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_bbox" title="ocsmesh.mesh.EuclideanMesh2D.get_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox</span></code></a>([crs, output_type])</p></td>
+<td><p>Get the bounding box of mesh elements.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_contour" title="ocsmesh.mesh.EuclideanMesh2D.get_contour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_contour</span></code></a>(level)</p></td>
+<td><p>Extract contour lines at the specified <cite>level</cite> from mesh values</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_multipolygon" title="ocsmesh.mesh.EuclideanMesh2D.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>([zmin, zmax])</p></td>
+<td><p>Calculate multipolygon covering mesh elements (hull)</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.interpolate" title="ocsmesh.mesh.EuclideanMesh2D.interpolate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">interpolate</span></code></a>(raster[, method, nprocs])</p></td>
+<td><p>Interplate values from raster inputs to the mesh nodes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tricontourf" title="ocsmesh.mesh.EuclideanMesh2D.tricontourf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tricontourf</span></code></a>(**kwargs)</p></td>
+<td><p>Generate contour for the data of triangular elements of the mesh</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.write" title="ocsmesh.mesh.EuclideanMesh2D.write"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write</span></code></a>(path[, overwrite, format])</p></td>
+<td><p>Export the mesh object to the disk</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.get_bbox">
+<span class="sig-name descname"><span class="pre">get_bbox</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'polygon'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'bbox'</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">matplotlib.transforms.Bbox</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.get_bbox" title="Permalink to this definition"></a></dt>
+<dd><p>Get the bounding box of mesh elements.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>crs</strong><span class="classifier">str or CRS or None, default=None</span></dt><dd><p>CRS to transform the calculated bounding box into before
+returning</p>
+</dd>
+<dt><strong>output_type</strong><span class="classifier">{ None, ‘polygon’, ‘bbox’}, default=None</span></dt><dd><p>Output type</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>Polygon or Bbox</dt><dd><p>Bounding box of the mesh elements.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.boundaries">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">boundaries</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.boundaries" title="Permalink to this definition"></a></dt>
+<dd><p>Handle to boundaries calculator helper object</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.tricontourf">
+<span class="sig-name descname"><span class="pre">tricontourf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.axes._axes.Axes</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.tricontourf" title="Permalink to this definition"></a></dt>
+<dd><p>Generate contour for the data of triangular elements of the mesh</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Passed to underlying <cite>matplotlib</cite> API.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>Axes</dt><dd><p>Axes on which the filled contour is drawn.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.interpolate">
+<span class="sig-name descname"><span class="pre">interpolate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raster</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'spline'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'linear'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'nearest'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'spline'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.interpolate" title="Permalink to this definition"></a></dt>
+<dd><p>Interplate values from raster inputs to the mesh nodes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>raster</strong><span class="classifier">Raster or list of Raster</span></dt><dd><p>A single or a list of rasters from which values are
+interpolated onto the mesh</p>
+</dd>
+<dt><strong>method</strong><span class="classifier">{‘spline’, ‘linear’, ‘nearest’}, default=’spline’</span></dt><dd><p>Method of interpolation.</p>
+</dd>
+<dt><strong>nprocs</strong><span class="classifier">int or None, default=None</span></dt><dd><p>Number of workers to use when interpolating data.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.get_contour">
+<span class="sig-name descname"><span class="pre">get_contour</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.linestring.LineString</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.get_contour" title="Permalink to this definition"></a></dt>
+<dd><p>Extract contour lines at the specified <cite>level</cite> from mesh values</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>level</strong><span class="classifier">float</span></dt><dd><p>The level at which contour lines must be extracted.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>LineString</dt><dd><p>Extracted and merged contour lines.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>ValueError</dt><dd><p>If mesh has nodes that have null value <cite>np.nan</cite>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Calculate multipolygon covering mesh elements (hull)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>zmin</strong><span class="classifier">float or None</span></dt><dd><p>Minimum elevation to consider for multipolygon extraction</p>
+</dd>
+<dt><strong>zmax</strong><span class="classifier">float or None</span></dt><dd><p>Maximum elevation to consider for multipolygon extraction</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Calculated multipolygon shape</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.vert2">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">vert2</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.vert2" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh 2D vertices structure</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.value">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">value</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.value" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh values</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.bbox">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">bbox</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.bbox" title="Permalink to this definition"></a></dt>
+<dd><p>Calculates and returns bounding box of the mesh hull.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_bbox" title="ocsmesh.mesh.EuclideanMesh2D.get_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox</span></code></a></dt><dd></dd>
+</dl>
+</div>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.coord">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">coord</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.float32</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></em><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.coord" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property for coordinates of mesh points</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>If the number of mesh dimensions is not 2 or 3.</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The property is read-only, however the returned value is not.
+That means if the user mutates the returned numpy array
+object, it will affect the mesh.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh crs</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.elements">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">elements</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.elements" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to element handler helper object</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.hull">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">hull</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.hull" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to hull calculator helper object</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.msh_t">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">msh_t</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></em><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<p class="rubric">Notes</p>
+<p>The property is read-only, however the returned value is not.
+That means if the user mutates the returned jigsaw_msh_t
+object, it will affect the mesh.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.nodes">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">nodes</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.nodes" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to node handler helper object</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.quad4">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">quad4</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.quad4" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh quadrangle element structure</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.quads">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">quads</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.quads" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh quadrangle element index array</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.tria3">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tria3</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.tria3" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh tirangle element structure</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.triangles">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">triangles</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.triangles" title="Permalink to this definition"></a></dt>
+<dd><p>Reference to underlying mesh triangle element index array</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">os.PathLike</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'grd'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'2dm'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'msh'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'vtk'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'grd'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.write" title="Permalink to this definition"></a></dt>
+<dd><p>Export the mesh object to the disk</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>path</strong><span class="classifier">path-like</span></dt><dd><p>Path to which the mesh should be exported.</p>
+</dd>
+<dt><strong>overwrite</strong><span class="classifier">bool, default=False</span></dt><dd><p>Whether to overwrite, if a file already exists in <cite>path</cite></p>
+</dd>
+<dt><strong>format</strong><span class="classifier">{ ‘grd’, ‘2dm’, ‘msh’, ‘vtk’ }</span></dt><dd><p>Format of the export, SMS-2DM or GRD.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>ValueError</dt><dd><p>If specified export format is <strong>not</strong> supported.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 

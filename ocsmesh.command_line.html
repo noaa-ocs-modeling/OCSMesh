@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Command line interface &mdash; ocsmesh 0.0.0.post1.dev0+b5faf64 documentation</title>
+  <title>Command line interface &mdash; ocsmesh 0.0.0.post1.dev0+2185a66 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -41,7 +41,31 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Command line interface</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Command line interface</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#Positional Arguments">Positional Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Named Arguments">Named Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#Sub-commands:">Sub-commands:</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#geom">geom</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Positional Arguments_repeat1">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Named Arguments_repeat1">Named Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Sub-commands:_repeat1">Sub-commands:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#hfun">hfun</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Positional Arguments_repeat3">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Named Arguments_repeat3">Named Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Sub-commands:_repeat2">Sub-commands:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#scripts">scripts</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#Positional Arguments_repeat5">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Sub-commands:_repeat3">Sub-commands:</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
 </ul>
 
         </div>
@@ -70,6 +94,453 @@
              
   <section id="command-line-interface">
 <h1>Command line interface<a class="headerlink" href="#command-line-interface" title="Permalink to this headline"></a></h1>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">ocsmesh</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+               <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
+               <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span>
+               <span class="p">{</span><span class="n">geom</span><span class="p">,</span><span class="n">hfun</span><span class="p">,</span><span class="n">scripts</span><span class="p">}</span> <span class="o">...</span>
+</pre></div>
+</div>
+<section id="Positional Arguments">
+<h2>Positional Arguments<a class="headerlink" href="#Positional Arguments" title="Permalink to this headline"></a></h2>
+<dl class="option-list">
+<dt><kbd>command</kbd></dt>
+<dd><p>Possible choices: geom, hfun, scripts</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments">
+<h2>Named Arguments<a class="headerlink" href="#Named Arguments" title="Permalink to this headline"></a></h2>
+<dl class="option-list">
+<dt><kbd>--log-level</kbd></dt>
+<dd><p>Possible choices: info, debug, warning</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Number of parallel threads to use when computing geom and hfun.</p>
+</dd>
+<dt><kbd>--geom-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the geom, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--hfun-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the hfun, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--chunk-size</kbd></dt>
+<dd><p>Size of square window to be used for processing the raster</p>
+</dd>
+<dt><kbd>--overlap</kbd></dt>
+<dd><p>Size of overlap to be used for between raster windows</p>
+</dd>
+</dl>
+</section>
+<section id="Sub-commands:">
+<h2>Sub-commands:<a class="headerlink" href="#Sub-commands:" title="Permalink to this headline"></a></h2>
+<section id="geom">
+<h3>geom<a class="headerlink" href="#geom" title="Permalink to this headline"></a></h3>
+<p>Perform operations related to domain creation and modification.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">geom</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span>
+             <span class="p">{</span><span class="n">build</span><span class="p">}</span> <span class="o">...</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat1">
+<h4>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat1" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>geom_cmd</kbd></dt>
+<dd><p>Possible choices: build</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat1">
+<h4>Named Arguments<a class="headerlink" href="#Named Arguments_repeat1" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>--log-level</kbd></dt>
+<dd><p>Possible choices: info, debug, warning</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Number of parallel threads to use when computing geom and hfun.</p>
+</dd>
+<dt><kbd>--geom-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the geom, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--hfun-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the hfun, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--chunk-size</kbd></dt>
+<dd><p>Size of square window to be used for processing the raster</p>
+</dd>
+<dt><kbd>--overlap</kbd></dt>
+<dd><p>Size of overlap to be used for between raster windows</p>
+</dd>
+</dl>
+</section>
+<section id="Sub-commands:_repeat1">
+<h4>Sub-commands:<a class="headerlink" href="#Sub-commands:_repeat1" title="Permalink to this headline"></a></h4>
+<section id="build">
+<h5>build<a class="headerlink" href="#build" title="Permalink to this headline"></a></h5>
+<p>Build command for domain definition</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">geom</span> <span class="n">build</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span> <span class="o">-</span><span class="n">o</span> <span class="n">OUTPUT</span>
+                   <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">OUTPUT_FORMAT</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">output</span><span class="o">-</span><span class="n">crs</span> <span class="n">OUTPUT_CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mesh</span> <span class="n">MESH</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">ignore</span><span class="o">-</span><span class="n">mesh</span><span class="o">-</span><span class="n">boundary</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mesh</span><span class="o">-</span><span class="n">crs</span> <span class="n">MESH_CRS</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">zmin</span> <span class="n">ZMIN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">zmax</span> <span class="n">ZMAX</span><span class="p">]</span>
+                   <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat2">
+<h6>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat2" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>dem</kbd></dt>
+<dd><p>Digital elevation model list to be used in geometry creation</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat2">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat2" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--log-level</kbd></dt>
+<dd><p>Possible choices: info, debug, warning</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Number of parallel threads to use when computing geom and hfun.</p>
+</dd>
+<dt><kbd>--geom-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the geom, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--hfun-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the hfun, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--chunk-size</kbd></dt>
+<dd><p>Size of square window to be used for processing the raster</p>
+</dd>
+<dt><kbd>--overlap</kbd></dt>
+<dd><p>Size of overlap to be used for between raster windows</p>
+</dd>
+<dt><kbd>-o, --output</kbd></dt>
+<dd></dd>
+<dt><kbd>-f, --output-format</kbd></dt>
+<dd><p>Default: “shapefile”</p>
+</dd>
+<dt><kbd>--output-crs</kbd></dt>
+<dd><p>Default: “EPSG:4326”</p>
+</dd>
+<dt><kbd>--mesh</kbd></dt>
+<dd><p>Mesh to extract hull from</p>
+</dd>
+<dt><kbd>--ignore-mesh-boundary</kbd></dt>
+<dd><p>Flag to ignore mesh boundary for final boundary union</p>
+<p>Default: False</p>
+</dd>
+<dt><kbd>--mesh-crs</kbd></dt>
+<dd><p>CRS of the input base mesh (overrides)</p>
+</dd>
+<dt><kbd>--zmin</kbd></dt>
+<dd><p>Maximum elevation to consider</p>
+</dd>
+<dt><kbd>--zmax</kbd></dt>
+<dd><p>Maximum elevation to consider</p>
+</dd>
+</dl>
+</section>
+</section>
+</section>
+</section>
+<section id="hfun">
+<h3>hfun<a class="headerlink" href="#hfun" title="Permalink to this headline"></a></h3>
+<p>Perform operations related to size function creation and modification.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">hfun</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
+             <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span>
+             <span class="p">{</span><span class="n">build</span><span class="p">}</span> <span class="o">...</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat3">
+<h4>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat3" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>hfun_cmd</kbd></dt>
+<dd><p>Possible choices: build</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat3">
+<h4>Named Arguments<a class="headerlink" href="#Named Arguments_repeat3" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>--log-level</kbd></dt>
+<dd><p>Possible choices: info, debug, warning</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Number of parallel threads to use when computing geom and hfun.</p>
+</dd>
+<dt><kbd>--geom-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the geom, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--hfun-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the hfun, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--chunk-size</kbd></dt>
+<dd><p>Size of square window to be used for processing the raster</p>
+</dd>
+<dt><kbd>--overlap</kbd></dt>
+<dd><p>Size of overlap to be used for between raster windows</p>
+</dd>
+</dl>
+</section>
+<section id="Sub-commands:_repeat2">
+<h4>Sub-commands:<a class="headerlink" href="#Sub-commands:_repeat2" title="Permalink to this headline"></a></h4>
+<section id="build_repeat1">
+<h5>build<a class="headerlink" href="#build_repeat1" title="Permalink to this headline"></a></h5>
+<p>Build command for mesh size definition</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">hfun</span> <span class="n">build</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span> <span class="o">-</span><span class="n">o</span> <span class="n">OUTPUT</span>
+                   <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">OUTPUT_FORMAT</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">mesh</span> <span class="n">MESH</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hmax</span> <span class="n">HMAX</span><span class="p">]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">hmin</span> <span class="n">HMIN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">contour</span> <span class="n">CONTOUR</span> <span class="p">[</span><span class="n">CONTOUR</span> <span class="o">...</span><span class="p">]]</span>
+                   <span class="p">[</span><span class="o">--</span><span class="n">constant</span> <span class="n">CONST_DEFN</span> <span class="n">CONST_DEFN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">method</span> <span class="n">METHOD</span><span class="p">]</span>
+                   <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat4">
+<h6>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat4" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>dem</kbd></dt>
+<dd><p>Digital elevation model list to be used in size function creation</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat4">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat4" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--log-level</kbd></dt>
+<dd><p>Possible choices: info, debug, warning</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Number of parallel threads to use when computing geom and hfun.</p>
+</dd>
+<dt><kbd>--geom-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the geom, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--hfun-nprocs</kbd></dt>
+<dd><p>Number of processors used when computing the hfun, overrides –nprocs argument.</p>
+</dd>
+<dt><kbd>--chunk-size</kbd></dt>
+<dd><p>Size of square window to be used for processing the raster</p>
+</dd>
+<dt><kbd>--overlap</kbd></dt>
+<dd><p>Size of overlap to be used for between raster windows</p>
+</dd>
+<dt><kbd>-o, --output</kbd></dt>
+<dd></dd>
+<dt><kbd>-f, --output-format</kbd></dt>
+<dd><p>Default: “2dm”</p>
+</dd>
+<dt><kbd>--mesh</kbd></dt>
+<dd><p>Base mesh size function</p>
+</dd>
+<dt><kbd>--hmax</kbd></dt>
+<dd><p>Maximum element size</p>
+</dd>
+<dt><kbd>--hmin</kbd></dt>
+<dd><p>Minimum element size</p>
+</dd>
+<dt><kbd>--contour</kbd></dt>
+<dd><p>Each contour’s (level, [expansion, target]) to be applied on all size functions in collector</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--constant</kbd></dt>
+<dd><p>Specify constant mesh size above a given contour level by passing (lower_bound, target_size) for each constant</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--method</kbd></dt>
+<dd><p>Method used to calculate size function ({exact} <a href="#id1"><span class="problematic" id="id2">|</span></a>fast)</p>
+<p>Default: “exact”</p>
+</dd>
+</dl>
+</section>
+</section>
+</section>
+</section>
+<section id="scripts">
+<h3>scripts<a class="headerlink" href="#scripts" title="Permalink to this headline"></a></h3>
+<p>Access to experimental OCSMesh scripts.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">{</span><span class="n">remesh_by_shape</span><span class="p">,</span><span class="n">remesh_by_dem</span><span class="p">,</span><span class="n">mesh_upgrader</span><span class="p">}</span> <span class="o">...</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat5">
+<h4>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat5" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>scripts_cmd</kbd></dt>
+<dd><p>Possible choices: remesh_by_shape, remesh_by_dem, mesh_upgrader</p>
+</dd>
+</dl>
+</section>
+<section id="Sub-commands:_repeat3">
+<h4>Sub-commands:<a class="headerlink" href="#Sub-commands:_repeat3" title="Permalink to this headline"></a></h4>
+<section id="remesh_by_shape">
+<h5>remesh_by_shape<a class="headerlink" href="#remesh_by_shape" title="Permalink to this headline"></a></h5>
+<p>Locally refine an existing input mesh based on input DEMs within the region specified by input shape and cut-off depth.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">remesh_by_shape</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="ow">in</span><span class="o">-</span><span class="n">crs</span> <span class="n">IN_CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">shape</span> <span class="n">SHAPE</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">u</span><span class="p">]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">cutoff</span> <span class="n">CUTOFF</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">factor</span> <span class="n">FACTOR</span><span class="p">]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">contour</span> <span class="n">CONTOUR_DEFN</span> <span class="p">[</span><span class="n">CONTOUR_DEFN</span> <span class="o">...</span><span class="p">]]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">patch</span> <span class="n">PATCH_DEFN</span> <span class="n">PATCH_DEFN</span> <span class="n">PATCH_DEFN</span><span class="p">]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">constant</span> <span class="n">CONST_DEFN</span> <span class="n">CONST_DEFN</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">s</span> <span class="n">SIEVE</span><span class="p">]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">interpolate</span> <span class="n">INTERPOLATE</span> <span class="p">[</span><span class="n">INTERPOLATE</span> <span class="o">...</span><span class="p">]]</span>
+                                <span class="p">[</span><span class="o">-</span><span class="n">o</span> <span class="n">OUTPUT</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">OUTPUT_FORMAT</span><span class="p">]</span>
+                                <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                                <span class="n">mesh</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat6">
+<h6>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat6" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>mesh</kbd></dt>
+<dd></dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat5">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat5" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--in-crs</kbd></dt>
+<dd><p>Default: “EPSG:4326”</p>
+</dd>
+<dt><kbd>--shape</kbd></dt>
+<dd></dd>
+<dt><kbd>-u, --upstream</kbd></dt>
+<dd><p>Default: False</p>
+</dd>
+<dt><kbd>--cutoff</kbd></dt>
+<dd><p>Refinement cutoff depth in meters (positive up)</p>
+<p>Default: -250</p>
+</dd>
+<dt><kbd>--factor</kbd></dt>
+<dd><p>Default: 2</p>
+</dd>
+<dt><kbd>--contour</kbd></dt>
+<dd><p>Each contour’s (level, [expansion, target]) to be applied on all size functions in collector</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--patch</kbd></dt>
+<dd><p>Specify patch mesh size above a given contour level by passing (lower_bound, expansion, target_size) for each patch</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--constant</kbd></dt>
+<dd><p>Specify constant mesh size above a given contour level by passing (lower_bound, target_size) for each constant</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>-s, --sieve</kbd></dt>
+<dd></dd>
+<dt><kbd>--interpolate</kbd></dt>
+<dd><p>To interpolate from depth of DEMs not involved in the remeshing process</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>-o, --output</kbd></dt>
+<dd></dd>
+<dt><kbd>-f, --output-format</kbd></dt>
+<dd><p>Default: “2dm”</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Default: -1</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="remesh_by_dem">
+<h5>remesh_by_dem<a class="headerlink" href="#remesh_by_dem" title="Permalink to this headline"></a></h5>
+<p>Locally refine an existing input mesh based on input DEMs</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">remesh_by_dem</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">--</span><span class="n">mesh</span> <span class="n">MESH</span> <span class="p">[</span><span class="o">--</span><span class="n">mesh</span><span class="o">-</span><span class="n">crs</span> <span class="n">MESH_CRS</span><span class="p">]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">contour</span> <span class="n">CONTOUR_DEFN</span> <span class="p">[</span><span class="n">CONTOUR_DEFN</span> <span class="o">...</span><span class="p">]]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">constant</span> <span class="n">CONST_DEFN</span> <span class="n">CONST_DEFN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hmin</span> <span class="n">HMIN</span><span class="p">]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">zmax</span> <span class="n">ZMAX</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">clip</span><span class="o">-</span><span class="n">by</span><span class="o">-</span><span class="n">base</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">geom</span> <span class="n">GEOM</span><span class="p">]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">hfun</span> <span class="n">HFUN</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">crs</span> <span class="n">HFUN_CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">s</span> <span class="n">SIEVE</span><span class="p">]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">interpolate</span> <span class="n">INTERPOLATE</span> <span class="p">[</span><span class="n">INTERPOLATE</span> <span class="o">...</span><span class="p">]]</span>
+                              <span class="p">[</span><span class="o">-</span><span class="n">o</span> <span class="n">OUTPUT</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">f</span> <span class="n">OUTPUT_FORMAT</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">k</span><span class="p">]</span>
+                              <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+                              <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat7">
+<h6>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat7" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>dem</kbd></dt>
+<dd></dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat6">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat6" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--mesh</kbd></dt>
+<dd></dd>
+<dt><kbd>--mesh-crs</kbd></dt>
+<dd><p>Default: “EPSG:4326”</p>
+</dd>
+<dt><kbd>--contour</kbd></dt>
+<dd><p>Each contour’s (level, [expansion, target]) to be applied on all size functions in collector</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--constant</kbd></dt>
+<dd><p>Specify constant mesh size above a given contour level by passing (lower_bound, target_size) for each constant</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>--hmin</kbd></dt>
+<dd><p>Default: 250</p>
+</dd>
+<dt><kbd>--zmax</kbd></dt>
+<dd><p>Default: 0</p>
+</dd>
+<dt><kbd>--clip-by-base</kbd></dt>
+<dd><p>Flag to clip input DEMs using base mesh polygon</p>
+<p>Default: False</p>
+</dd>
+<dt><kbd>--geom</kbd></dt>
+<dd></dd>
+<dt><kbd>--hfun</kbd></dt>
+<dd></dd>
+<dt><kbd>--hfun-crs</kbd></dt>
+<dd><p>Default: “EPSG:4326”</p>
+</dd>
+<dt><kbd>-s, --sieve</kbd></dt>
+<dd></dd>
+<dt><kbd>--interpolate</kbd></dt>
+<dd><p>To interpolate from depth of DEMs not involved in the remeshing process</p>
+<p>Default: []</p>
+</dd>
+<dt><kbd>-o, --output</kbd></dt>
+<dd></dd>
+<dt><kbd>-f, --output-format</kbd></dt>
+<dd><p>Default: “2dm”</p>
+</dd>
+<dt><kbd>-k, --keep-intermediate</kbd></dt>
+<dd><p>Default: False</p>
+</dd>
+<dt><kbd>--nprocs</kbd></dt>
+<dd><p>Default: -1</p>
+</dd>
+</dl>
+</section>
+</section>
+<section id="mesh_upgrader">
+<h5>mesh_upgrader<a class="headerlink" href="#mesh_upgrader" title="Permalink to this headline"></a></h5>
+<p>Create a new mesh based on a base-mesh and input DEMs.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">mesh_upgrader</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">--</span><span class="n">basemesh</span> <span class="n">BASEMESH</span> <span class="o">--</span><span class="n">demlo</span> <span class="p">[</span><span class="n">DEMLO</span> <span class="o">...</span><span class="p">]</span>
+                              <span class="o">--</span><span class="n">demhi</span> <span class="p">[</span><span class="n">DEMHI</span> <span class="o">...</span><span class="p">]</span> <span class="o">--</span><span class="n">out</span> <span class="n">OUT</span>
+</pre></div>
+</div>
+<section id="Named Arguments_repeat7">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat7" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--basemesh</kbd></dt>
+<dd></dd>
+<dt><kbd>--demlo</kbd></dt>
+<dd></dd>
+<dt><kbd>--demhi</kbd></dt>
+<dd></dd>
+<dt><kbd>--out</kbd></dt>
+<dd></dd>
+</dl>
+</section>
+</section>
+</section>
+</section>
+</section>
 </section>
 
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Domain definition &mdash; ocsmesh 0.0.0.post1.dev0+b5faf64 documentation</title>
+  <title>Domain definition &mdash; ocsmesh 0.0.0.post1.dev0+2185a66 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -69,8 +69,935 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="domain-definition">
-<h1>Domain definition<a class="headerlink" href="#domain-definition" title="Permalink to this headline"></a></h1>
+  <section id="module-ocsmesh.geom">
+<span id="domain-definition"></span><h1>Domain definition<a class="headerlink" href="#module-ocsmesh.geom" title="Permalink to this headline"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">Geom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ocsmesh.mesh.base.BaseMesh</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ocsmesh.mesh.base.BaseMesh</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.Geom" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.base.BaseGeom</span></code></p>
+<p>Geometry object factory</p>
+<p>Factory class that creates and returns concrete geometry object
+based on the input types.</p>
+<p class="rubric">Notes</p>
+<p>The object created when using this class is not an instance of
+this class or a subclass of it. It is a subclass of BaseGeom
+instead.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.Geom.crs" title="ocsmesh.geom.Geom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.Geom.multipolygon" title="ocsmesh.geom.Geom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28%" />
+<col style="width: 72%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>is_valid_type(geom)</strong></p></td>
+<td><p>Static method to check if an object is a valid geometry type</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>geom</strong><span class="classifier">CanCreateGeom</span></dt><dd><p>Object to create the domain geometry from. The type of
+this object determines the created geometry object type</p>
+</dd>
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to the constructor of the
+correct geometry type</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.Geom.crs" title="ocsmesh.geom.Geom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.Geom.multipolygon" title="ocsmesh.geom.Geom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.Geom.get_multipolygon" title="ocsmesh.geom.Geom.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>(**kwargs)</p></td>
+<td><p>Calculate the <cite>shapely</cite> representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.Geom.is_valid_type" title="ocsmesh.geom.Geom.is_valid_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_valid_type</span></code></a>(geom)</p></td>
+<td><p>Checks if an object is a valid geometry type</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.Geom.msh_t" title="ocsmesh.geom.Geom.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom.is_valid_type">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_valid_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#ocsmesh.geom.Geom.is_valid_type" title="Permalink to this definition"></a></dt>
+<dd><p>Checks if an object is a valid geometry type</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.geom.Geom.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Calculate the <cite>shapely</cite> representation of the geometry</p>
+<p>This abstract method defines the expected API for a geometry
+object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises</dt>
+<dd class="field-odd"><dl class="simple">
+<dt>NotImplementedError</dt><dd><p>If method is not redefined in the subclass</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span></em><a class="headerlink" href="#ocsmesh.geom.Geom.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.Geom.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.Geom.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></em><a class="headerlink" href="#ocsmesh.geom.Geom.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+<p>This read-only attribute is calculated lazily and has the same
+value as calling <cite>get_multipolygon</cite> without any arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">RasterGeom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raster</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">os.PathLike</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.RasterGeom" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.base.BaseGeom</span></code></p>
+<p>Raster based geometry.</p>
+<p>Create geometry based on a raster object. All the calculations
+are done on the raster image.</p>
+<p class="rubric">Notes</p>
+<p>This is the main object to use for handling DEM data. The objects
+of this class hold a reference to the original raster object and
+use that handle to extract data using <cite>Raster</cite> API.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.RasterGeom.raster" title="ocsmesh.geom.RasterGeom.raster"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster</span></code></a></dt><dd><p>Read-only attribute for reference to the source raster</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.RasterGeom.crs" title="ocsmesh.geom.RasterGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute returning the CRS of the source raster</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 39%" />
+<col style="width: 61%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>msh_t(**kwargs)</strong></p></td>
+<td><p>Returns the <cite>jigsawpy</cite> vertex-edge representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>get_multipolygon(zmin=None, zmax=None)</strong></p></td>
+<td><p>Returns <cite>shapely</cite> object representation of the geometry</p></td>
+</tr>
+</tbody>
+</table>
+<p>Initialize a raster based geometry object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>raster</strong><span class="classifier">Raster or str or path-like</span></dt><dd><p>Input raster for generating the geometry, i.e. the
+simulation domain</p>
+</dd>
+<dt><strong>zmin</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Minimum elevation cut-off for calculating polygon</p>
+</dd>
+<dt><strong>zmax</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Maximum elevation cut-off for calculating polygon</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.RasterGeom.crs" title="ocsmesh.geom.RasterGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute returning the CRS of the source raster</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.RasterGeom.multipolygon" title="ocsmesh.geom.RasterGeom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.RasterGeom.raster" title="ocsmesh.geom.RasterGeom.raster"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster</span></code></a></dt><dd><p>Read-only attribute for reference to the source raster</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.RasterGeom.get_multipolygon" title="ocsmesh.geom.RasterGeom.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>([zmin, zmax])</p></td>
+<td><p>Returns the <cite>shapely</cite> representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.RasterGeom.make_plot" title="ocsmesh.geom.RasterGeom.make_plot"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_plot</span></code></a>([ax, show])</p></td>
+<td><p>Create a plot from the boundaries of the geometry polygon</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.RasterGeom.msh_t" title="ocsmesh.geom.RasterGeom.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.geom.RasterGeom.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>shapely</cite> representation of the geometry</p>
+<p>Calculates and returns the <cite>MultiPolygon</cite> representation of
+the geometry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>zmin</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Minimum elevation cut-off for calculating polygon, overrides
+value provided during object construction</p>
+</dd>
+<dt><strong>zmax</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Maximum elevation cut-off for calculating polygon, overrides
+value provided during object construction</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Calculated polygon from raster data based on the minimum
+and maximum elevations of interest.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.raster">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">raster</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a></em><a class="headerlink" href="#ocsmesh.geom.RasterGeom.raster" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for reference to the source raster</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span></em><a class="headerlink" href="#ocsmesh.geom.RasterGeom.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute returning the CRS of the source raster</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.make_plot">
+<span class="sig-name descname"><span class="pre">make_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">matplotlib.axes._axes.Axes</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.axes._axes.Axes</span></span></span><a class="headerlink" href="#ocsmesh.geom.RasterGeom.make_plot" title="Permalink to this definition"></a></dt>
+<dd><p>Create a plot from the boundaries of the geometry polygon</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>ax</strong><span class="classifier">Axes or None, default=None</span></dt><dd><p>An existing axes to draw the geomtry polygon on</p>
+</dd>
+<dt><strong>show</strong><span class="classifier">bool, default=False</span></dt><dd><p>Whether to call <cite>pyplot.show()</cite> after drawing the polygon</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>Axes</dt><dd><p>The axes onto which the polygon boundaries are drawn</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.RasterGeom.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.RasterGeom.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></em><a class="headerlink" href="#ocsmesh.geom.RasterGeom.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+<p>This read-only attribute is calculated lazily and has the same
+value as calling <cite>get_multipolygon</cite> without any arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">MeshGeom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">ocsmesh.mesh.base.BaseMesh</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">os.PathLike</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.MeshGeom" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.base.BaseGeom</span></code></p>
+<p>Mesh based geometry.</p>
+<p>Create a geometry based on an input mesh. All the calculations
+for polygon are done on the underlying mesh object.</p>
+<p class="rubric">Notes</p>
+<p>This class is a handy tool for reusing existing mesh extent
+for geometry (i.e. domain) definition and then remeshing that
+domain.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.MeshGeom.mesh" title="ocsmesh.geom.MeshGeom.mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mesh</span></code></a><span class="classifier">BaseMesh</span></dt><dd><p>Read-only attribute for reference to the source mesh</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.MeshGeom.crs" title="ocsmesh.geom.MeshGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a><span class="classifier">CRS</span></dt><dd><p>Read-only attribute returning the CRS of the underlying mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 68%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>get_multipolygon(**kwargs)</strong></p></td>
+<td><p>Returns <cite>shapely</cite> object representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>msh_t(**kwargs)</strong></p></td>
+<td><p>Returns the <cite>jigsawpy</cite> vertex-edge representation of the geometry</p></td>
+</tr>
+</tbody>
+</table>
+<p>Initialize a mesh based geometry object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh:</strong></dt><dd><p>Input object used to compute the output mesh hull.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.MeshGeom.crs" title="ocsmesh.geom.MeshGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute returning the CRS of the underlying mesh</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.MeshGeom.mesh" title="ocsmesh.geom.MeshGeom.mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mesh</span></code></a></dt><dd><p>Read-only attribute for reference to the source mesh</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.MeshGeom.multipolygon" title="ocsmesh.geom.MeshGeom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.MeshGeom.get_multipolygon" title="ocsmesh.geom.MeshGeom.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>shapely</cite> representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.MeshGeom.msh_t" title="ocsmesh.geom.MeshGeom.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.geom.MeshGeom.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>shapely</cite> representation of the geometry</p>
+<p>Calculates and returns the <cite>MultiPolygon</cite> representation of
+the geometry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Currently unused for this class, needed for generic API
+support</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Calculated polygon from mesh based on the element boundaries</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom.mesh">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">mesh</span></span><a class="headerlink" href="#ocsmesh.geom.MeshGeom.mesh" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for reference to the source mesh</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><a class="headerlink" href="#ocsmesh.geom.MeshGeom.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute returning the CRS of the underlying mesh</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.MeshGeom.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.MeshGeom.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></em><a class="headerlink" href="#ocsmesh.geom.MeshGeom.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+<p>This read-only attribute is calculated lazily and has the same
+value as calling <cite>get_multipolygon</cite> without any arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">PolygonGeom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polygon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">shapely.geometry.polygon.Polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">pyproj.crs.crs.CRS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.PolygonGeom" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.shapely.ShapelyGeom</span></code></p>
+<p>Geometry based on <cite>shapely.geometry.Polygon</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.polygon" title="ocsmesh.geom.PolygonGeom.polygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">polygon</span></code></a><span class="classifier">Polygon</span></dt><dd><p>Read-only attribute referencing the underlying <cite>Polygon</cite></p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.crs" title="ocsmesh.geom.PolygonGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a><span class="classifier">crs</span></dt><dd><p>Read-only attribute returning the CRS associated with the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 32%" />
+<col style="width: 68%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>get_multipolygon(**kwargs)</strong></p></td>
+<td><p>Returns <cite>shapely</cite> object representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>msh_t(**kwargs)</strong></p></td>
+<td><p>Returns the <cite>jigsawpy</cite> vertex-edge representation of the geometry</p></td>
+</tr>
+</tbody>
+</table>
+<p>Initialize a <cite>shapely</cite> based geometry object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>polygon</strong><span class="classifier">Polygon</span></dt><dd><p>Input polygon to be used for geometry object</p>
+</dd>
+<dt><strong>crs</strong><span class="classifier">CRS or str</span></dt><dd><p>The CRS of the input <cite>Polygon</cite></p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.crs" title="ocsmesh.geom.PolygonGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute returning the CRS associated with the geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.multipolygon" title="ocsmesh.geom.PolygonGeom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.polygon" title="ocsmesh.geom.PolygonGeom.polygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">polygon</span></code></a></dt><dd><p>Read-only attribute referencing the underlying <cite>Polygon</cite></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.get_multipolygon" title="ocsmesh.geom.PolygonGeom.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>(**kwargs)</p></td>
+<td><p>Returns a <cite>MultiPolygon</cite> from the underlying <cite>shapely</cite> geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.msh_t" title="ocsmesh.geom.PolygonGeom.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.geom.PolygonGeom.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a <cite>MultiPolygon</cite> from the underlying <cite>shapely</cite> geometry</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Currently unused for this class, needed for generic API
+support</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Multipolygon created from the input single polygon</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom.polygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">polygon</span></span><a class="headerlink" href="#ocsmesh.geom.PolygonGeom.polygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute referencing the underlying <cite>Polygon</cite></p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><a class="headerlink" href="#ocsmesh.geom.PolygonGeom.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute returning the CRS associated with the geometry</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.PolygonGeom.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.PolygonGeom.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></em><a class="headerlink" href="#ocsmesh.geom.PolygonGeom.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+<p>This read-only attribute is calculated lazily and has the same
+value as calling <cite>get_multipolygon</cite> without any arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.MultiPolygonGeom">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">MultiPolygonGeom</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multipolygon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">pyproj.crs.crs.CRS</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.MultiPolygonGeom" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.shapely.ShapelyGeom</span></code></p>
+<p>Initialize a <cite>shapely</cite> based geometry object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>multipolygon</strong><span class="classifier">MultiPolygon</span></dt><dd><p>Input multipolygon to be used for geometry object</p>
+</dd>
+<dt><strong>crs</strong><span class="classifier">CRS or str</span></dt><dd><p>The CRS of the input <cite>Polygon</cite></p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.crs" title="ocsmesh.geom.MultiPolygonGeom.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.multipolygon" title="ocsmesh.geom.MultiPolygonGeom.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute referencing the underlying <cite>MultiPolygon</cite></p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.get_multipolygon" title="ocsmesh.geom.MultiPolygonGeom.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the underlying <cite>shapely</cite> MultiPolygon</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.msh_t" title="ocsmesh.geom.MultiPolygonGeom.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.MultiPolygonGeom.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.MultiPolygonGeom.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the underlying <cite>shapely</cite> MultiPolygon</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Currently unused for this class, needed for generic API
+support</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Underlying <cite>Multipolygon</cite></p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.MultiPolygonGeom.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><a class="headerlink" href="#ocsmesh.geom.MultiPolygonGeom.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute referencing the underlying <cite>MultiPolygon</cite></p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.MultiPolygonGeom.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span></em><a class="headerlink" href="#ocsmesh.geom.MultiPolygonGeom.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.MultiPolygonGeom.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.MultiPolygonGeom.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.geom.</span></span><span class="sig-name descname"><span class="pre">GeomCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">ocsmesh.raster.Raster</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ocsmesh.mesh.base.BaseMesh</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh" title="ocsmesh.mesh.mesh.Mesh"><span class="pre">ocsmesh.mesh.mesh.Mesh</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_shape_crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'EPSG:4326'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.geom.GeomCollector" title="Permalink to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ocsmesh.geom.base.BaseGeom</span></code></p>
+<p>Geometry object based on multiple input types</p>
+<p>Geometry type that merges the information from different types of
+inputs such as raster, mesh and shapely geometries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Attributes</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.GeomCollector.crs" title="ocsmesh.geom.GeomCollector.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a><span class="classifier">CRSDescriptor</span></dt><dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.GeomCollector.multipolygon" title="ocsmesh.geom.GeomCollector.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a><span class="classifier">MultiPolygon</span></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 23%" />
+<col style="width: 77%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><strong>msh_t(**kwargs)</strong></p></td>
+<td><p>Returns the <cite>jigsawpy</cite> vertex-edge representation of the geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>get_multipolygon(**kwargs)</strong></p></td>
+<td><p>Returns <cite>shapely</cite> object representation of the geometry</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_patch(…)</strong></p></td>
+<td><p>Define local (patch) contour extraction definition from all the input data (e.g. raster, mesh, etc.)</p></td>
+</tr>
+</tbody>
+</table>
+<p>Initialize geometry collector object</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>in_list</strong><span class="classifier">list</span></dt><dd><p>List of objects that from which single geometry object
+can be created. This includes path to a raster or mesh
+file as a string, as well as Raster, Mesh or Polygon
+objects. Note that objects are not copied and currently
+any clipping that happens during processing will affect
+the objects pass to the <cite>GeomCollector</cite> constructor.</p>
+</dd>
+<dt><strong>base_mesh</strong><span class="classifier">Mesh or None, default=None</span></dt><dd><p>Base mesh to be used for extracting boundaries of the
+domain. If not <cite>None</cite> all the input rasters all clipped
+by <cite>base_mesh</cite> polygon before further processing. This
+is useful for cases where we’d like to locally refine
+features of the domain (domain region &gt;&gt; inputs region)
+or when input rasters are much larger that the domain
+and we’d like to extract contours only within domain
+to save on computation.</p>
+</dd>
+<dt><strong>zmin</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Minimum elevation for extracting domain.</p>
+</dd>
+<dt><strong>zmax</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Maximum elevation for extracting domain.</p>
+</dd>
+<dt><strong>nprocs: int or None, default=None</strong></dt><dd><p>Number of processors to use in parallel parts of the
+collector computation</p>
+</dd>
+<dt><strong>chunk_size: int or None, default=None</strong></dt><dd><p>Chunk size for windowed calculation on rasters</p>
+</dd>
+<dt><strong>overlap: int or None default=None</strong></dt><dd><p>Window overlap for windowed calculation on rasters</p>
+</dd>
+<dt><strong>verbosity: int, default=0,</strong></dt><dd><p>Verbosity of the output</p>
+</dd>
+<dt><strong>base_shape: Polygon or MultiPolygon or None, default=None</strong></dt><dd><p>Similar to <cite>base_mesh</cite>, but instead of calculating the
+polygon from mesh, directly receive it from the calling
+code.</p>
+</dd>
+<dt><strong>base_shape_crs: str or CRS, default=’EPSG:4326’</strong></dt><dd><p>CRS of the input <cite>base_shape</cite>.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Attributes</dt>
+<dd class="field-even"><dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.geom.GeomCollector.crs" title="ocsmesh.geom.GeomCollector.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd>
+<dt><a class="reference internal" href="#ocsmesh.geom.GeomCollector.multipolygon" title="ocsmesh.geom.GeomCollector.multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multipolygon</span></code></a></dt><dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Methods</p>
+<table class="longtable docutils align-default">
+<colgroup>
+<col style="width: 10%" />
+<col style="width: 90%" />
+</colgroup>
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.GeomCollector.add_patch" title="ocsmesh.geom.GeomCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, level, contour_defn, ...])</p></td>
+<td><p>Specifies an area of geometry inputs to extract contours</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.geom.GeomCollector.get_multipolygon" title="ocsmesh.geom.GeomCollector.get_multipolygon"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_multipolygon</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>shapely</cite> representation of the geometry</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.geom.GeomCollector.msh_t" title="ocsmesh.geom.GeomCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>(**kwargs)</p></td>
+<td><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p></td>
+</tr>
+</tbody>
+</table>
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector.get_multipolygon">
+<span class="sig-name descname"><span class="pre">get_multipolygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.geom.GeomCollector.get_multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>shapely</cite> representation of the geometry</p>
+<p>Calculates and returns the <cite>MultiPolygon</cite> representation of
+the geometry.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Currently unused for this class, needed for generic API
+support</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>MultiPolygon</dt><dd><p>Calculated and merged polygons from all geometry inputs.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>All calculations are done lazily and the results is <strong>not</strong>
+cached. During this process all the stored contour extraction
+specs are applied on all the inputs and then the resulting
+shapes are merged.</p>
+<p>Calculation for each DEM and feature is stored on disk as
+feather files.  In the last steps are all these feather files
+are combined using the out of core calculation by <cite>GeoPandas</cite>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector.add_patch">
+<span class="sig-name descname"><span class="pre">add_patch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">shapely.geometry.polygon.Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contour_defn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">ocsmesh.features.contour.FilledContour</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ocsmesh.features.contour.Contour</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patch_defn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">ocsmesh.features.patch.Patch</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shapefile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.geom.GeomCollector.add_patch" title="Permalink to this definition"></a></dt>
+<dd><p>Specifies an area of geometry inputs to extract contours</p>
+<p>Specifies a localized area of geometry inputs to extract
+contours from.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>shape</strong><span class="classifier">MultiPolygon or Polygon or None, default=None</span></dt><dd><p><cite>shapely</cite> (multi)polygon to specify the area from which
+contour specification for this patch should be extracted.
+CRS is assumed to be <code class="docutils literal notranslate"><span class="pre">EPSG:4326</span></code>.</p>
+</dd>
+<dt><strong>level: float or tuple of float, default=None</strong></dt><dd><p>Contour level specification for this patch. If provided,
+it could either be a single floating point number for
+the maximum elevation or a tuple indicating minimum and
+maximum elevations for contour extraction.</p>
+</dd>
+<dt><strong>contour_defn</strong><span class="classifier">FilledContour or Contour or None, default=None</span></dt><dd><p>Alternative way of specifying maximum or minimum or both
+elevation levels for contour extraction.</p>
+</dd>
+<dt><strong>patch_defn</strong><span class="classifier">Patch or None, default=None</span></dt><dd><p>Alternative way to specify which region within the input
+the contours need to be extracted from.</p>
+</dd>
+<dt><strong>shapefile: str or Path or None, default=None</strong></dt><dd><p>Alternative way to specify which region within the input
+the contours need to be extracted from.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>This method doesn’t result in any calculations. It simply
+stores the information about the user specified contour.
+During the <cite>get_multipolygon</cite> call the contours are actually
+calculated on all the inputs.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector.crs">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">crs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pyproj.crs.crs.CRS</span></em><a class="headerlink" href="#ocsmesh.geom.GeomCollector.crs" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for CRS of the input geometry</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector.msh_t">
+<span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsawpy.msh_t.jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.geom.GeomCollector.msh_t" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the <cite>jigsawpy</cite> representation of the geometry.</p>
+<p>This method calculates the vertex-edge representation of
+the geometry in the form of <cite>jigsaw_msh_t</cite>. The return value
+is in a projected CRS. If the geometry CRS is geographic, then
+a local UTM CRS is calculated and used for this representation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to <cite>get_multipolygon</cite> method</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Calculated vertex-edge representation of the geometry
+if a projected or local UTM CRS.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The output of this method needs to have length unit for
+distances (i.e. not degrees) since mesh size is specified
+in length units and the domain and size function are the
+passed to the mesh engine for cartesian meshing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="ocsmesh.geom.GeomCollector.multipolygon">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">multipolygon</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">shapely.geometry.multipolygon.MultiPolygon</span></em><a class="headerlink" href="#ocsmesh.geom.GeomCollector.multipolygon" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only attribute for <cite>shapely</cite> representation of the geometry</p>
+<p>This read-only attribute is calculated lazily and has the same
+value as calling <cite>get_multipolygon</cite> without any arguments.</p>
+</dd></dl>
+
+</dd></dl>
+
 </section>
 
 
