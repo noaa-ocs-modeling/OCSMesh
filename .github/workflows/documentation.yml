@@ -36,6 +36,7 @@ jobs:
         env-var: VERSION
         args: --style semver
     - name: Build documentation site with Sphinx
+      shell: bash -l {0}
       run: |
           pip install -r docs/requirements.txt
           cd docs
