@@ -92,9 +92,13 @@ def create_parser():
     parser = argparse.ArgumentParser(**sub_parse_common)
     subp = parser.add_subparsers(dest='command')
 
-    geom_parser = subp.add_parser('geom', **sub_parse_common)
+    geom_parser = subp.add_parser(
+        'geom', **sub_parse_common,
+        help="Perform operations related to domain creation and modification.")
     geom_subp = geom_parser.add_subparsers(dest='geom_cmd')
-    geom_bld = geom_subp.add_parser('build', **sub_parse_common)
+    geom_bld = geom_subp.add_parser(
+        'build', **sub_parse_common,
+        help="Build command for domain definition")
     geom_bld.add_argument('-o', '--output', required=True)
     geom_bld.add_argument('-f', '--output-format', default="shapefile")
     geom_bld.add_argument('--output-crs', default="EPSG:4326")
@@ -114,9 +118,13 @@ def create_parser():
         'dem', nargs='+',
         help='Digital elevation model list to be used in geometry creation')
 
-    hfun_parser = subp.add_parser('hfun', **sub_parse_common)
+    hfun_parser = subp.add_parser(
+        'hfun', **sub_parse_common,
+        help="Perform operations related to size function creation and modification.")
     hfun_subp = hfun_parser.add_subparsers(dest='hfun_cmd')
-    hfun_bld = hfun_subp.add_parser('build', **sub_parse_common)
+    hfun_bld = hfun_subp.add_parser(
+        'build', **sub_parse_common,
+        help="Build command for mesh size definition")
     hfun_bld.add_argument('-o', '--output', required=True)
     hfun_bld.add_argument('-f', '--output-format', default="2dm")
     hfun_bld.add_argument('--mesh', help='Base mesh size function')
@@ -142,10 +150,16 @@ def create_parser():
         help='Digital elevation model list to be used in size function creation')
 
     # Scripts don't use common arguments as they are standalon code
-    scripts_parser = subp.add_parser('scripts')
+    scripts_parser = subp.add_parser(
+        'scripts',
+        help='Access to experimental OCSMesh scripts.')
     cmd_cli = CmdCli(scripts_parser)
 
     return parser, cmd_cli
+
+def dummy_documentation():
+    parser, ocsmesh_cli = create_parser()
+    return parser
 
 
 def main():
