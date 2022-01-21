@@ -72,7 +72,8 @@ extensions = [
 #    'sphinx.ext.napoleon',
     'm2r2',
     'numpydoc',
-    'sphinxarg.ext'
+    'sphinxarg.ext',
+    'sphinx.ext.githubpages'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
