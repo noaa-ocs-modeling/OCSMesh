@@ -40,7 +40,7 @@ jobs:
     - name: Export Conda environment
       shell: bash -l {0}
       run: |
-        mamba install -cconda-forge conda-lock
+        conda install -cconda-forge conda-lock
         conda lock -f ./environment.yml -p linux-64 -p win-64
 
     - name: 'Upload conda environment'
