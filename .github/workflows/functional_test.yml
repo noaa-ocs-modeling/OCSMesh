@@ -37,10 +37,22 @@ jobs:
         wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O fullsize_dem.tif
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
 
+    - name: Export Conda environment
+      shell: bash -l [0]
+      run: conda env export > curr_env.yml
+
+    - name: 'Upload conda environment'
+      uses: actions/upload-artifact@v2
+      with:
+        name: conda-environment-${{ matrix.python-version }}
+        path: curr_env.yml
+        retention-days: 7
+
+
     - name: 'Upload test dem'
       uses: actions/upload-artifact@v2
       with:
-        name: test-dem
+        name: test-dem-${{ matrix.python-version }}
         path: test_dem.tif
         retention-days: 7
 
@@ -51,7 +63,7 @@ jobs:
     - name: 'Upload Geom build results'
       uses: actions/upload-artifact@v2
       with:
-        name: geom-build-results
+        name: geom-build-results-${{ matrix.python-version }}
         path: test_shape
         retention-days: 7
 
@@ -62,7 +74,7 @@ jobs:
     - name: 'Upload Hfun build results'
       uses: actions/upload-artifact@v2
       with:
-        name: hfun-build-results
+        name: hfun-build-results-${{ matrix.python-version }}
         path: test.2dm
         retention-days: 7
 
@@ -73,7 +85,7 @@ jobs:
     - name: 'Upload remesh results'
       uses: actions/upload-artifact@v2
       with:
-        name: remesh-bydem-results
+        name: remesh-bydem-results-${{ matrix.python-version }}
         path: remeshed.2dm
         retention-days: 7
 
