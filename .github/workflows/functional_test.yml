@@ -39,7 +39,7 @@ jobs:
 
     - name: Export Conda environment
       shell: bash -l {0}
-      run: conda env export > env_py${{ matrix.python-version }}.yml
+      run: conda list > env_py${{ matrix.python-version }}.yml
 
     - name: 'Upload conda environment'
       uses: actions/upload-artifact@v2
