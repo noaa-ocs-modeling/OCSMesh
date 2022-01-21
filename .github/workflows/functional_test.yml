@@ -38,7 +38,7 @@ jobs:
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
 
     - name: Export Conda environment
-      shell: bash -l [0]
+      shell: bash -l {0}
       run: conda env export > curr_env.yml
 
     - name: 'Upload conda environment'
