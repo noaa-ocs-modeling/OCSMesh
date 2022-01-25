@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 0.0.0.post1.dev0+6aea55e documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 0.0.0.post1.dev0+15430ec documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -612,41 +612,37 @@ the filled contour to return.</p>
 <dt class="sig sig-object py" id="ocsmesh.raster.Raster.contourf">
 <span class="sig-name descname"><span class="pre">contourf</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">band</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">rasterio.windows.Window</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">matplotlib.axes._axes.Axes</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'topobathy'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">show</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">title</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">figsize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">256</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cbar_label</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">norm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">matplotlib.axes._axes.Axes</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.contourf" title="Permalink to this definition"></a></dt>
 <dd><p>Plot filled contour for raster data.</p>
-<dl class="field-list">
+<dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><dl>
-<dt><strong>band</strong><span class="classifier">int, default=1</span></dt><dd><blockquote>
-<div><p>Raster band from which data is used.</p>
-</div></blockquote>
-<dl class="simple">
-<dt>window<span class="classifier">windows.Window or None, default=None</span></dt><dd><p>Raster window from which data is used.</p>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>band</strong><span class="classifier">int, default=1</span></dt><dd><p>Raster band from which data is used.</p>
 </dd>
-<dt>axes<span class="classifier">Axes or None, default=None</span></dt><dd><p>Matplotlib axes to draw contour on&gt;</p>
+<dt><strong>window</strong><span class="classifier">windows.Window or None, default=None</span></dt><dd><p>Raster window from which data is used.</p>
 </dd>
-<dt>vmin<span class="classifier">float or None, default=None</span></dt><dd><p>Minimum value of the filled contour.</p>
+<dt><strong>axes</strong><span class="classifier">Axes or None, default=None</span></dt><dd><p>Matplotlib axes to draw contour on&gt;</p>
 </dd>
-<dt>vmax<span class="classifier">float or None, default=None</span></dt><dd><p>Maximum value of the filled contour.</p>
+<dt><strong>vmin</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Minimum value of the filled contour.</p>
 </dd>
-<dt>cmap<span class="classifier">str, default=’topobathy’</span></dt><dd><p>Colormap to use for filled contour.</p>
+<dt><strong>vmax</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Maximum value of the filled contour.</p>
 </dd>
-<dt>levels<span class="classifier">list of float or None, default=None</span></dt><dd><p>Prespecified list of contour levels.</p>
+<dt><strong>cmap</strong><span class="classifier">str, default=’topobathy’</span></dt><dd><p>Colormap to use for filled contour.</p>
 </dd>
-<dt>show<span class="classifier">bool, default=False</span></dt><dd><p>Whether to show the contour on creation or not.</p>
+<dt><strong>levels</strong><span class="classifier">list of float or None, default=None</span></dt><dd><p>Prespecified list of contour levels.</p>
 </dd>
-<dt>title<span class="classifier">str or None, default=None</span></dt><dd><p>Title used on the axes of the contour</p>
+<dt><strong>show</strong><span class="classifier">bool, default=False</span></dt><dd><p>Whether to show the contour on creation or not.</p>
 </dd>
-<dt>figsize<span class="classifier">tuple of float or None, default=None</span></dt><dd><p>Figure size used for the contour figure</p>
+<dt><strong>title</strong><span class="classifier">str or None, default=None</span></dt><dd><p>Title used on the axes of the contour</p>
 </dd>
-<dt>colors<span class="classifier">int, default=256</span></dt><dd><p>Contour colors associated with levels</p>
+<dt><strong>figsize</strong><span class="classifier">tuple of float or None, default=None</span></dt><dd><p>Figure size used for the contour figure</p>
 </dd>
-<dt>cbar_label<span class="classifier">str or None, default=None</span></dt><dd><p>Label of the colorbar</p>
+<dt><strong>colors</strong><span class="classifier">int, default=256</span></dt><dd><p>Contour colors associated with levels</p>
 </dd>
-<dt>norm<span class="classifier">Normalize or None, default=None</span></dt><dd><p>Normalizer object</p>
+<dt><strong>cbar_label</strong><span class="classifier">str or None, default=None</span></dt><dd><p>Label of the colorbar</p>
 </dd>
-<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs<span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to the matplotlib contourf()
+<dt><strong>norm</strong><span class="classifier">Normalize or None, default=None</span></dt><dd><p>Normalizer object</p>
+</dd>
+<dt><strong>**kwargs</strong><span class="classifier">dict, optional</span></dt><dd><p>Keyword arguments passed to the matplotlib contourf()
 function</p>
-</dd>
-</dl>
 </dd>
 </dl>
 </dd>
@@ -776,17 +772,13 @@ contour plot object</p>
 <dt class="sig sig-object py" id="ocsmesh.raster.Raster.add_band">
 <span class="sig-name descname"><span class="pre">add_band</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">tags</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.add_band" title="Permalink to this definition"></a></dt>
 <dd><p>Add a new band for <cite>values</cite> with tags <cite>tags</cite> to the raster</p>
-<dl class="field-list">
+<dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><dl>
-<dt><strong>values</strong><span class="classifier">array-like</span></dt><dd><blockquote>
-<div><p>The values to be added to the raster, it must have the
+<dd class="field-odd"><dl class="simple">
+<dt><strong>values</strong><span class="classifier">array-like</span></dt><dd><p>The values to be added to the raster, it must have the
 correct shape as the raster.</p>
-</div></blockquote>
-<dl class="simple">
-<dt><a href="#id3"><span class="problematic" id="id4">**</span></a>tags<span class="classifier">dict, optional</span></dt><dd><p>The tags to be added for the new band of data.</p>
 </dd>
-</dl>
+<dt><strong>**tags</strong><span class="classifier">dict, optional</span></dt><dd><p>The tags to be added for the new band of data.</p>
 </dd>
 </dl>
 </dd>
