@@ -16,3 +16,17 @@ The Jigsaw library must be initialized first by running `./setup.py install_jigs
 * 3.7 <= Python < 3.10
 * CMake 
 * C/C++ compilers
+
+## How to Cite
+Title : OCSMesh: a data-driven automated unstructured mesh generation software for coastal ocean modeling
+
+Personal Author(s) : Mani, Soroosh;Calzada, Jaime R.;Moghimi, Saeed;Zhang, Y. Joseph;Myers, Edward;Pe’eri, Shachak;
+
+Corporate Authors(s) : Coast Survey Development Laboratory (U.S.)
+
+Published Date : 2021
+
+Series : NOAA Technical Memorandum NOS CS ; 47
+
+DOI : https://doi.org/10.25923/csba-m072
+
