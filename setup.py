@@ -109,13 +109,13 @@ setuptools.setup(
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
-                      "numpy>=1.21",
+                      "numpy>=1.21", # introduce npt.NDArray
                       "pygeos",
                       "pyproj>=3.0",
                       "rasterio",
                       "requests",
-                      "scipy",
-                      "shapely<1.8",
+                      "scipy<1.8",   # dropping python 3.7
+                      "shapely<1.8", # deprecation of API
                       "tqdm",
                       "typing_extensions",
                       "utm",
