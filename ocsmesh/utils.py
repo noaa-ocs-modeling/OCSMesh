@@ -766,6 +766,7 @@ def get_verts_in_shape(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
         from_box: bool = False,
+        num_adjacent: int = 0
         ) -> Sequence[int]:
 
     if from_box:
@@ -790,7 +791,50 @@ def get_verts_in_shape(
     in_shp_idx = pt_series.sindex.query_bulk(
             shp_series, predicate="intersects")
 
+    in_shp_idx = select_adjacent(mesh, in_shp_idx, num_layers=num_adjacent)
+
     return in_shp_idx
+
+def select_adjacent(mesh, in_indices, num_layers):
+
+    selected_indices = in_indices.copy()
+
+    if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
+
+        for i in range(num_layers):
+
+            coord = mesh.vert2['coord']
+
+            # TODO: What about edge2
+            mesh_types = {
+                'tria3': 'TRIA3_t',
+                'quad4': 'QUAD4_t',
+                'hexa8': 'HEXA8_t'
+            }
+            elm_dict = {
+                key: getattr(mesh, key)['index'] for key in mesh_types}
+
+            mark_func = np.any
+
+            mark_dict = {
+                key: mark_func(
+                    (np.isin(elems.ravel(), selected_indices).reshape(
+                        elems.shape)), 1)
+                for key, elems in elm_dict.items()}
+
+            picked_elems = {
+                    key: elm_dict[key][mark_dict[key], :]
+                    for key in elm_dict}
+            
+            selected_indices = np.unique(np.concatenate(
+                [pick.ravel() for pick in picked_elems.values()]))
+
+        return selected_indices
+
+
+    msg = (f"Not implemented for"
+           f" mshID={mesh.mshID} and dim={mesh.ndims}")
+    raise NotImplementedError(msg)
 
 
 @must_be_euclidean_mesh
@@ -850,7 +894,8 @@ def clip_mesh_by_shape(
         fit_inside: bool = True,
         inverse: bool = False,
         in_place: bool = False,
-        check_cross_edges: bool = False
+        check_cross_edges: bool = False,
+        adjacent_layers: int = 0
         ) -> jigsaw_msh_t:
 
 
@@ -866,7 +911,7 @@ def clip_mesh_by_shape(
         shape_box = box(*shape.bounds)
 
         # TODO: Optimize for multipolygons (use separate bboxes)
-        in_box_idx = get_verts_in_shape(mesh, shape_box, True)
+        in_box_idx = get_verts_in_shape(mesh, shape_box, True, adjacent_layers)
 
         if edge_flag and not inverse:
             x_edge_idx = get_cross_edges(mesh, shape_box)
@@ -882,7 +927,7 @@ def clip_mesh_by_shape(
                         mesh, x_edge_idx, in_place)
             return mesh
 
-    in_shp_idx = get_verts_in_shape(mesh, shape, False)
+    in_shp_idx = get_verts_in_shape(mesh, shape, False, adjacent_layers)
 
     if edge_flag and not inverse:
         x_edge_idx = get_cross_edges(mesh, shape)
