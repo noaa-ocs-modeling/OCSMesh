@@ -2,14 +2,14 @@ name: ocsmesh
 channels:
   - conda-forge
 dependencies:
-  - python=3.7
+  - python
   - gdal
   - geos
   - proj
   - netcdf4
   - udunits2
   - pyproj
-  - shapely<1.8
+  - shapely>=1.8
   - rasterio
   - fiona
   - pygeos

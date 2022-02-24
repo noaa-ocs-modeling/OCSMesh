@@ -564,7 +564,7 @@ class Raster:
             ax.contourf(x, y, new_mask, levels=[0, 1])
             plt.close(fig)
             polygon_collection.extend(
-                    list(utils.get_multipolygon_from_pathplot(ax)))
+                    utils.get_multipolygon_from_pathplot(ax).geoms)
 
         union_result = ops.unary_union(polygon_collection)
         if not isinstance(union_result, MultiPolygon):
@@ -1067,7 +1067,7 @@ class Raster:
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
         out_image, out_transform = rasterio.mask.mask(
-            self.src, geom, crop=True)
+            self.src, geom.geoms, crop=True)
         meta_update = {
             "driver": "GTiff",
             "height": out_image.shape[1],
@@ -1127,7 +1127,7 @@ class Raster:
                 mask = np.zeros_like(values)
                 try:
                     mask, _, _ = rasterio.mask.raster_geometry_mask(
-                        self.src, geom,
+                        self.src, geom.geoms,
                         all_touched=True, invert=True)
                     mask = mask[rasterio.windows.window_index(window)]
 

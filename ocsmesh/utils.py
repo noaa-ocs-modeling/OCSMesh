@@ -18,7 +18,7 @@ from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
-        LineString, LinearRing)
+        MultiLineString, LineString, LinearRing)
 from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
@@ -118,7 +118,7 @@ def get_boundary_segments(mesh):
                 new_boundary_edges, np.nonzero(labels == i)),
                 axis=1)
         conn_edges = new_boundary_edges[conn_mask]
-        this_segment = linemerge(boundary_coords[conn_edges])
+        this_segment = linemerge(boundary_coords[conn_edges].tolist())
         if not this_segment.is_simple:
             # Pinched nodes also result in non-simple linestring,
             # but they can be handled gracefully, here we are looking
@@ -171,11 +171,11 @@ def get_mesh_polygons(mesh):
 
         # NOTE: This logic requires polygons to be sorted by area
         pass_valid_polys = []
-        while len(pnts):
+        while len(pnts.geoms):
 
 
-            idx = np.random.randint(len(pnts))
-            pnt = pnts[idx]
+            idx = np.random.randint(len(pnts.geoms))
+            pnt = pnts.geoms[idx]
 
             polys_gdf = gpd.GeoDataFrame(
                 {'geometry': polys, 'list_index': range(len(polys))})
@@ -184,7 +184,7 @@ def get_mesh_polygons(mesh):
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1:]])
+                pnts = MultiPoint([*pnts.geoms[:idx], *pnts.geoms[idx + 1:]])
                 if pnts.is_empty:
                     break
 
@@ -861,7 +861,7 @@ def get_cross_edges(
     all_edges = get_mesh_edges(mesh, unique=True)
     edge_coords = coords[all_edges, :]
     gdf_edg = gpd.GeoDataFrame(
-        geometry=gpd.GeoSeries(linemerge(edge_coords)))
+        geometry=gpd.GeoSeries(linemerge(edge_coords.tolist())))
 
     gdf_x = gpd.sjoin(
             gdf_edg.explode(),

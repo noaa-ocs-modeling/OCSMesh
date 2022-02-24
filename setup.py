@@ -116,7 +116,7 @@ setuptools.setup(
                       "rasterio",
                       "requests",
                       "scipy<1.8",   # dropping python 3.7
-                      "shapely<1.8", # deprecation of API
+                      "shapely>=1.8",
                       "tqdm",
                       "typing_extensions",
                       "utm",
