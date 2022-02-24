@@ -110,6 +110,7 @@ setuptools.setup(
                       "matplotlib",
                       "netCDF4",
                       "numpy>=1.21", # introduce npt.NDArray
+                      "pyarrow",
                       "pygeos",
                       "pyproj>=3.0",
                       "rasterio",

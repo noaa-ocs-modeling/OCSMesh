@@ -25,3 +25,4 @@ dependencies:
   - pytz
   - geoalchemy2
   - colored-traceback
+  - typing-extensions

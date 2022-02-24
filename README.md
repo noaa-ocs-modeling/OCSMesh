@@ -1,5 +1,6 @@
 ![lint workflow](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main)
 ![fnc workflow](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main)
+![fnc2 workflow](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test_2.yml/badge.svg?branch=main)
 
 ## OCSMesh
 OCSMesh is a Python package for processing DEM data into georeferenced
@@ -19,7 +20,7 @@ The Jigsaw library and its Python wrapper  must be instlled
 before OCSMesh can be used. Jigsaw is available on `conda-forge`
 channel.
 
-First you need to download the `environment.yml` file
+First you need to download the `environment.yml` file.
 
 ```bash
 wget https://raw.githubusercontent.com/noaa-ocs-modeling/OCSMesh/main/environment.yml

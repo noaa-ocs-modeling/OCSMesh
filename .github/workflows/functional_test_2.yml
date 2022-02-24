@@ -1,0 +1,97 @@
+name: Functional (pip)
+
+on: [push]
+
+jobs:
+  basic-functional-tests-using-pip:
+
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest ]
+        python-version: [ '3.7', '3.8', '3.9' ]
+
+    steps:
+    - name: Checkout 
+      uses: actions/checkout@v2
+
+    - name: OS binaries
+      shell: bash -l {0}
+      run: |
+        sudo apt install gdal-bin
+
+    - name: Install Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install packages
+      shell: bash -l {0}
+      run: |
+        python ./setup.py install_jigsaw
+        pip install .
+
+    - name: Prepare example DEM
+      shell: bash -l {0}
+      run: |
+        wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O fullsize_dem.tif
+        gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
+
+    - name: Export Conda environment
+      shell: bash -l {0}
+      run: conda list > environment_py${{ matrix.python-version }}.yml
+
+    - name: 'Upload conda environment'
+      uses: actions/upload-artifact@v2
+      with:
+        name: conda-environment-${{ matrix.python-version }}
+        path: environment_py${{ matrix.python-version }}.yml
+        retention-days: 7
+
+
+    - name: 'Upload test dem'
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-dem-${{ matrix.python-version }}
+        path: test_dem.tif
+        retention-days: 7
+
+    - name: Run geom build test
+      shell: bash -l {0}
+      run: source tests/cli/build_geom.sh
+
+    - name: 'Upload Geom build results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: geom-build-results-${{ matrix.python-version }}
+        path: test_shape
+        retention-days: 7
+
+    - name: Run hfun build test
+      shell: bash -l {0}
+      run: source tests/cli/build_hfun.sh
+
+    - name: 'Upload Hfun build results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: hfun-build-results-${{ matrix.python-version }}
+        path: test.2dm
+        retention-days: 7
+
+    - name: Run remesh test
+      shell: bash -l {0}
+      run: source tests/cli/remesh_by_dem.sh
+
+    - name: 'Upload remesh results'
+      uses: actions/upload-artifact@v2
+      with:
+        name: remesh-bydem-results-${{ matrix.python-version }}
+        path: remeshed.2dm
+        retention-days: 7
+
+    - name: Run Python API tests
+      shell: bash -l {0}
+      run: python -m unittest discover tests/api -p "*.py"
