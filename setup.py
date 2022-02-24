@@ -102,22 +102,24 @@ setuptools.setup(
     python_requires='>=3.7, <3.10',
     setup_requires=['wheel', 'numpy'],
     install_requires=[
-                      "typing_extensions",
+                      "colored-traceback",
+                      "fiona",
+                      "geoalchemy2",
+                      "geopandas",
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
-                      "scipy",
+                      "numpy>=1.21", # introduce npt.NDArray
+                      "pyarrow",
+                      "pygeos",
                       "pyproj>=3.0",
-                      "fiona",
                       "rasterio",
-                      'tqdm',
-                      # "pysheds",
-                      "colored_traceback",
                       "requests",
-                      "shapely",
-                      "geoalchemy2",
+                      "scipy<1.8",   # dropping python 3.7
+                      "shapely<1.8", # deprecation of API
+                      "tqdm",
+                      "typing_extensions",
                       "utm",
-                      "geopandas",
                       ],
     entry_points={
         'console_scripts': [
