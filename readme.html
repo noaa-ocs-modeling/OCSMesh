@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCSMesh &mdash; ocsmesh 0.0.0.post1.dev0+6aea55e documentation</title>
+  <title>OCSMesh &mdash; ocsmesh 0.0.0.post1.dev0+0561fb7 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -69,16 +69,48 @@
              
   <a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main"><img alt="lint workflow" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main" /></a>
 <a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main"><img alt="fnc workflow" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main" /></a>
+<a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test_2.yml/badge.svg?branch=main"><img alt="fnc2 workflow" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test_2.yml/badge.svg?branch=main" /></a>
 <section id="ocsmesh">
 <h1>OCSMesh<a class="headerlink" href="#ocsmesh" title="Permalink to this headline"></a></h1>
-<section id="a-python-package-for-processing-dem-data-into-georeferenced-unstructured-meshes-using-the-jigsaw-python-library">
-<h2>A Python package for processing DEM data into georeferenced unstructured meshes using the <a class="reference external" href="https://github.com/dengwirda/jigsaw-python">jigsaw-python</a> library.<a class="headerlink" href="#a-python-package-for-processing-dem-data-into-georeferenced-unstructured-meshes-using-the-jigsaw-python-library" title="Permalink to this headline"></a></h2>
+<p>OCSMesh is a Python package for processing DEM data into georeferenced
+unstructured meshes using the
+<a class="reference external" href="https://github.com/dengwirda/jigsaw-python">jigsaw-python</a> library.</p>
 <section id="installation">
-<h3>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h3>
-<p>The Jigsaw library must be initialized first by running <code class="docutils literal notranslate"><span class="pre">./setup.py</span> <span class="pre">install_jigsaw</span></code>, then, the package can be installed normally by doing <code class="docutils literal notranslate"><span class="pre">./setup.py</span> <span class="pre">install</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>./setup.py install_jigsaw <span class="c1"># installs the Jigsaw C-library to the current Python environment</span>
-./setup.py install <span class="c1"># Installs the OCSMesh library to the current Python environment</span>
-./setup.py develop <span class="c1"># run this if you are a developer.</span>
+<h2>Installation<a class="headerlink" href="#installation" title="Permalink to this headline"></a></h2>
+<p>Two ways of installing OCSMesh are described below:</p>
+<section id="using-conda">
+<h3>Using <code class="docutils literal notranslate"><span class="pre">conda</span></code><a class="headerlink" href="#using-conda" title="Permalink to this headline"></a></h3>
+<p>The recommended way to setup the environment for installing OCSMesh is to
+use <cite>``conda`</cite> &lt;<a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html#linux-installers">https://docs.conda.io/en/latest/miniconda.html#linux-installers</a>&gt;`_
+with the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file provided in the repo to install
+required libraries.</p>
+<p>The Jigsaw library and its Python wrapper  must be instlled
+before OCSMesh can be used. Jigsaw is available on <code class="docutils literal notranslate"><span class="pre">conda-forge</span></code>
+channel.</p>
+<p>First you need to download the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>wget https://raw.githubusercontent.com/noaa-ocs-modeling/OCSMesh/main/environment.yml
+
+conda env create -f environment.yml -n your-env-name
+conda activate your-env-name
+
+conda install -y -c conda-forge jigsawpy
+pip install ocsmesh
+</pre></div>
+</div>
+</section>
+<section id="from-github-repo">
+<h3>From GitHub repo<a class="headerlink" href="#from-github-repo" title="Permalink to this headline"></a></h3>
+<p>OCSMesh can be installed from the GitHub repository as well.
+After downloading the repo, you need to first install Jigsaw using
+the script provided in OCSMesh repo by calling:
+<code class="docutils literal notranslate"><span class="pre">./setup.py</span> <span class="pre">install_jigsaw</span></code> in the OCSMesh root directory.
+Then OCSMesh can be installed.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/noaa-ocs-modeling/ocsmesh
+<span class="nb">cd</span> ocsmesh
+python ./setup.py install_jigsaw <span class="c1"># To install latest Jigsaw from GitHub</span>
+python ./setup.py install <span class="c1"># Installs the OCSMesh library to the current Python environment</span>
+<span class="c1"># OR</span>
+python ./setup.py develop <span class="c1"># Run this if you are a developer.</span>
 </pre></div>
 </div>
 </section>
@@ -91,6 +123,15 @@
 </ul>
 </section>
 </section>
+</section>
+<section id="how-to-cite">
+<h1>How to Cite<a class="headerlink" href="#how-to-cite" title="Permalink to this headline"></a></h1>
+<p>Title : OCSMesh: a data-driven automated unstructured mesh generation software for coastal ocean modeling</p>
+<p>Personal Author(s) : Mani, Soroosh;Calzada, Jaime R.;Moghimi, Saeed;Zhang, Y. Joseph;Myers, Edward;Pe’eri, Shachak;</p>
+<p>Corporate Authors(s) : Coast Survey Development Laboratory (U.S.)</p>
+<p>Published Date : 2021</p>
+<p>Series : NOAA Technical Memorandum NOS CS ; 47</p>
+<p>DOI : <a class="reference external" href="https://doi.org/10.25923/csba-m072">https://doi.org/10.25923/csba-m072</a></p>
 </section>
 
 
