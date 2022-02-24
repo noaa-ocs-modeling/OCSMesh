@@ -15,7 +15,7 @@ dependencies:
   - pygeos
   - geopandas
   - utm
-  - scipy
+  - scipy<1.8
   - numpy>=1.21
   - matplotlib
   - requests
