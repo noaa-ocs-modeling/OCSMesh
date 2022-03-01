@@ -801,7 +801,7 @@ def select_adjacent(mesh, in_indices, num_layers):
 
     if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
 
-        for i in range(num_layers):
+        for i in range(num_layers - 1):
 
             coord = mesh.vert2['coord']
 
