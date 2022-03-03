@@ -1708,3 +1708,43 @@ def add_pool_args(func):
         return rv
 
     return wrapper
+
+def drop_extra_vertex_from_line(lstr: LineString) -> LineString:
+
+    coords = np.array(lstr.coords)
+
+    vecs = coords[1:] - coords[:-1]
+
+    is_zero = lambda i: np.isclose(i, 0)
+    isnt_zero = lambda i: np.logical_not(np.isclose(i, 0))
+
+    vec_sizes = np.sqrt(vecs[:, 0] ** 2 + vecs[:, 1] ** 2)
+    uvecs = vecs / vec_sizes.reshape(-1, 1)
+    uvecs = uvecs[isnt_zero(vec_sizes)]
+    nondup_coords = np.vstack([coords[:-1][isnt_zero(vec_sizes)], coords[-1]])
+
+    vec_diffs = np.diff(uvecs, axis=0)
+    diff_sizes = np.sqrt(vec_diffs[:, 0] ** 2 + vec_diffs[:, 1] ** 2)
+
+    new_coords = np.vstack(
+        [nondup_coords[0],
+         nondup_coords[1:-1][isnt_zero(diff_sizes)],
+         nondup_coords[-1]
+         ])
+
+    return LineString(new_coords)
+
+def drop_extra_vertex_from_polygon(
+        mpoly: Union[Polygon, MultiPolygon]) -> MultiPolygon:
+
+    if isinstance(mpoly, Polygon):
+        mpoly = MultiPolygon([mpoly])
+    poly_seam_list = []
+    for poly in mpoly.geoms:
+        extr = drop_extra_vertex_from_line(poly.exterior)
+        inters = [
+            drop_extra_vertex_from_line(lstr)
+            for lstr in poly.interiors]
+        poly_seam_list.append(Polygon(extr, inters))
+
+    return MultiPolygon(poly_seam_list)
