@@ -855,7 +855,7 @@ def get_cross_edges(
 
     gdf_shape = gpd.GeoDataFrame(
             geometry=gpd.GeoSeries(shape))
-    exteriors = [pl.exterior for pl in gdf_shape.explode().geometry]
+    exteriors = [pl.exterior for pl in gdf_shape.explode(index_parts=True).geometry]
 
     # TODO: Reduce domain of search for faster results
     all_edges = get_mesh_edges(mesh, unique=True)
@@ -864,9 +864,9 @@ def get_cross_edges(
         geometry=gpd.GeoSeries(linemerge(edge_coords.tolist())))
 
     gdf_x = gpd.sjoin(
-            gdf_edg.explode(),
+            gdf_edg.explode(index_parts=True),
             gpd.GeoDataFrame(geometry=gpd.GeoSeries(exteriors)),
-            how='inner', op='intersects')
+            how='inner', predicate='intersects')
 
 
     cut_coords = [
