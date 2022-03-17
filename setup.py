@@ -109,6 +109,7 @@ setuptools.setup(
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
+                      "numba",
                       "numpy>=1.21", # introduce npt.NDArray
                       "pyarrow",
                       "pygeos",

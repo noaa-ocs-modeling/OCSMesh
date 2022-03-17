@@ -2003,7 +2003,7 @@ def _mesh_interpolate_worker(
         coords_crs: CRS,
         raster_path: Union[str, Path],
         chunk_size: Optional[int],
-        method: Literal['spline', 'linear', 'nearest']):
+        method: Literal['spline', 'linear', 'nearest'] = "spline"):
     """Interpolator worker function to be used in parallel calls
 
     Parameters
@@ -2058,16 +2058,7 @@ def _mesh_interpolate_worker(
                 np.min(yi) <= coords[:, 1],
                 np.max(yi) >= coords[:, 1]))
 
-        # Inspired by StackOverflow 35807321
         interp_mask = None
-        if np.any(zi.mask):
-            m_interp = RegularGridInterpolator(
-                (xi, np.flip(yi)),
-                np.flipud(zi.mask).T.astype(bool),
-                method=method
-            )
-            # Pick nodes NOT "contaminated" by masked values
-            interp_mask = m_interp(coords[_idxs]) > 0
 
         if method == 'spline':
             f = RectBivariateSpline(
@@ -2080,6 +2071,16 @@ def _mesh_interpolate_worker(
             _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
 
         elif method in ['nearest', 'linear']:
+            # Inspired by StackOverflow 35807321
+            if np.any(zi.mask):
+                m_interp = RegularGridInterpolator(
+                    (xi, np.flip(yi)),
+                    np.flipud(zi.mask).T.astype(bool),
+                    method=method
+                )
+                # Pick nodes NOT "contaminated" by masked values
+                interp_mask = m_interp(coords[_idxs]) > 0
+
             f = RegularGridInterpolator(
                 (xi, np.flip(yi)),
                 np.flipud(zi).T,
