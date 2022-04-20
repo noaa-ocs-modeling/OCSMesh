@@ -1628,12 +1628,17 @@ def merge_msh_t(
         can_overlap=True,
         check_cross_edges=False):
 
-    # TODO: Add support for quad4 and hexa8
 
     dst_crs = CRS.from_user_input(out_crs)
 
+    mesh_types = {
+        'tria3': 'TRIA3_t',
+        'quad4': 'QUAD4_t',
+        'hexa8': 'HEXA8_t'
+    }
+
     coord = []
-    index = []
+    elems = {k: [] for k in mesh_types}
     value = []
     offset = 0
 
@@ -1665,7 +1670,10 @@ def merge_msh_t(
         mesh_shape_list.append(mesh_shape)
 
 
-        index.append(mesh.tria3['index'] + offset)
+        for k in mesh_types:
+            cnn = getattr(mesh, k)
+            if cnn is None: continue
+            elems[k].append(cnn['index'] + offset)
         coord.append(mesh.vert2['coord'])
         value.append(mesh.value)
         offset += coord[-1].shape[0]
@@ -1677,16 +1685,18 @@ def merge_msh_t(
     composite_mesh.vert2 = np.array(
             [(coord, 0) for coord in np.vstack(coord)],
             dtype=jigsaw_msh_t.VERT2_t)
-    composite_mesh.tria3 = np.array(
-            [(index, 0) for index in np.vstack(index)],
-            dtype=jigsaw_msh_t.TRIA3_t)
     composite_mesh.value = np.array(
             np.vstack(value),
             dtype=jigsaw_msh_t.REALS_t)
+    for k, v in mesh_types.items():
+        setattr(composite_mesh, k, np.array(
+            [(cnn, 0) for cnn in np.vstack(elems[k])],
+            dtype=getattr(jigsaw_msh_t, v)))
 
     composite_mesh.crs = dst_crs
 
     return composite_mesh
+
 
 
 def add_pool_args(func):
