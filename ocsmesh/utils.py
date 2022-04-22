@@ -286,7 +286,7 @@ def put_id_tags(mesh):
 def _get_sieve_mask(mesh, polygons, sieve_area):
 
     # NOTE: Some polygons are ghost polygons (interior)
-    areas = [p.area for p in polygons]
+    areas = [p.area for p in polygons.geoms]
     if sieve_area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
@@ -298,7 +298,7 @@ def _get_sieve_mask(mesh, polygons, sieve_area):
     # if the path surrounds the node, these need to be removed.
     vert2_mask = np.full((mesh.vert2['coord'].shape[0],), False)
     for idx in remove:
-        path = Path(polygons[idx].exterior.coords, closed=True)
+        path = Path(polygons.geoms[idx].exterior.coords, closed=True)
         vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
 
     return vert2_mask
