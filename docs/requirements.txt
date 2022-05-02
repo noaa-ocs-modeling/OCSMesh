@@ -1,7 +1,0 @@
-sphinx
-sphinx-rtd-theme
-sphinx-argparse
-dunamai
-mistune==0.8.4
-m2r2
-numpydoc

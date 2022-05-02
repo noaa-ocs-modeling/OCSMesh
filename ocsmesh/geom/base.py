@@ -145,7 +145,7 @@ def multipolygon_to_jigsaw_msh_t(
         multipolygon = ops.transform(transformer.transform, multipolygon)
 
     vert2: List[Tuple[Tuple[float, float], int]] = []
-    for polygon in multipolygon:
+    for polygon in multipolygon.geoms:
         if np.all(
                 np.asarray(
                     polygon.exterior.coords).flatten() == float('inf')):
@@ -158,7 +158,7 @@ def multipolygon_to_jigsaw_msh_t(
 
     # edge2
     edge2: List[Tuple[int, int]] = []
-    for polygon in multipolygon:
+    for polygon in multipolygon.geoms:
         polygon = [polygon.exterior, *polygon.interiors]
         for linear_ring in polygon:
             _edge2 = []

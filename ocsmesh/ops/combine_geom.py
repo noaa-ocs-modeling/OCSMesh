@@ -150,7 +150,7 @@ class GeomCombine:
             # inland are considered (?)
             self._base_exterior = MultiPolygon(
                     list(ops.polygonize(
-                        [poly.exterior for poly in base_mult_poly])))
+                        [poly.exterior for poly in base_mult_poly.geoms])))
 
 
         z_info = {}

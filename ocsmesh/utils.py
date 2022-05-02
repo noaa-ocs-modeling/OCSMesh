@@ -118,7 +118,7 @@ def get_boundary_segments(mesh):
                 new_boundary_edges, np.nonzero(labels == i)),
                 axis=1)
         conn_edges = new_boundary_edges[conn_mask]
-        this_segment = linemerge(boundary_coords[conn_edges])
+        this_segment = linemerge(boundary_coords[conn_edges].tolist())
         if not this_segment.is_simple:
             # Pinched nodes also result in non-simple linestring,
             # but they can be handled gracefully, here we are looking
@@ -171,11 +171,11 @@ def get_mesh_polygons(mesh):
 
         # NOTE: This logic requires polygons to be sorted by area
         pass_valid_polys = []
-        while len(pnts):
+        while len(pnts.geoms) > 0:
 
 
-            idx = np.random.randint(len(pnts))
-            pnt = pnts[idx]
+            idx = np.random.randint(len(pnts.geoms))
+            pnt = pnts.geoms[idx]
 
             polys_gdf = gpd.GeoDataFrame(
                 {'geometry': polys, 'list_index': range(len(polys))})
@@ -184,7 +184,7 @@ def get_mesh_polygons(mesh):
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pnts = MultiPoint([*pnts[:idx], *pnts[idx + 1:]])
+                pnts = MultiPoint([*pnts.geoms[:idx], *pnts.geoms[idx + 1:]])
                 if pnts.is_empty:
                     break
 
@@ -286,7 +286,7 @@ def put_id_tags(mesh):
 def _get_sieve_mask(mesh, polygons, sieve_area):
 
     # NOTE: Some polygons are ghost polygons (interior)
-    areas = [p.area for p in polygons]
+    areas = [p.area for p in polygons.geoms]
     if sieve_area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
@@ -298,7 +298,7 @@ def _get_sieve_mask(mesh, polygons, sieve_area):
     # if the path surrounds the node, these need to be removed.
     vert2_mask = np.full((mesh.vert2['coord'].shape[0],), False)
     for idx in remove:
-        path = Path(polygons[idx].exterior.coords, closed=True)
+        path = Path(polygons.geoms[idx].exterior.coords, closed=True)
         vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
 
     return vert2_mask
@@ -766,6 +766,7 @@ def get_verts_in_shape(
         mesh: jigsaw_msh_t,
         shape: Union[box, Polygon, MultiPolygon],
         from_box: bool = False,
+        num_adjacent: int = 0
         ) -> Sequence[int]:
 
     if from_box:
@@ -790,7 +791,50 @@ def get_verts_in_shape(
     in_shp_idx = pt_series.sindex.query_bulk(
             shp_series, predicate="intersects")
 
+    in_shp_idx = select_adjacent(mesh, in_shp_idx, num_layers=num_adjacent)
+
     return in_shp_idx
+
+def select_adjacent(mesh, in_indices, num_layers):
+
+    selected_indices = in_indices.copy()
+
+    if mesh.mshID == 'euclidean-mesh' and mesh.ndims == 2:
+
+        for i in range(num_layers - 1):
+
+            coord = mesh.vert2['coord']
+
+            # TODO: What about edge2
+            mesh_types = {
+                'tria3': 'TRIA3_t',
+                'quad4': 'QUAD4_t',
+                'hexa8': 'HEXA8_t'
+            }
+            elm_dict = {
+                key: getattr(mesh, key)['index'] for key in mesh_types}
+
+            mark_func = np.any
+
+            mark_dict = {
+                key: mark_func(
+                    (np.isin(elems.ravel(), selected_indices).reshape(
+                        elems.shape)), 1)
+                for key, elems in elm_dict.items()}
+
+            picked_elems = {
+                    key: elm_dict[key][mark_dict[key], :]
+                    for key in elm_dict}
+
+            selected_indices = np.unique(np.concatenate(
+                [pick.ravel() for pick in picked_elems.values()]))
+
+        return selected_indices
+
+
+    msg = (f"Not implemented for"
+           f" mshID={mesh.mshID} and dim={mesh.ndims}")
+    raise NotImplementedError(msg)
 
 
 @must_be_euclidean_mesh
@@ -811,18 +855,18 @@ def get_cross_edges(
 
     gdf_shape = gpd.GeoDataFrame(
             geometry=gpd.GeoSeries(shape))
-    exteriors = [pl.exterior for pl in gdf_shape.explode().geometry]
+    exteriors = [pl.exterior for pl in gdf_shape.explode(index_parts=True).geometry]
 
     # TODO: Reduce domain of search for faster results
     all_edges = get_mesh_edges(mesh, unique=True)
     edge_coords = coords[all_edges, :]
     gdf_edg = gpd.GeoDataFrame(
-        geometry=gpd.GeoSeries(linemerge(edge_coords)))
+        geometry=gpd.GeoSeries(linemerge(edge_coords.tolist())))
 
     gdf_x = gpd.sjoin(
-            gdf_edg.explode(),
+            gdf_edg.explode(index_parts=True),
             gpd.GeoDataFrame(geometry=gpd.GeoSeries(exteriors)),
-            how='inner', op='intersects')
+            how='inner', predicate='intersects')
 
 
     cut_coords = [
@@ -850,7 +894,8 @@ def clip_mesh_by_shape(
         fit_inside: bool = True,
         inverse: bool = False,
         in_place: bool = False,
-        check_cross_edges: bool = False
+        check_cross_edges: bool = False,
+        adjacent_layers: int = 0
         ) -> jigsaw_msh_t:
 
 
@@ -866,7 +911,7 @@ def clip_mesh_by_shape(
         shape_box = box(*shape.bounds)
 
         # TODO: Optimize for multipolygons (use separate bboxes)
-        in_box_idx = get_verts_in_shape(mesh, shape_box, True)
+        in_box_idx = get_verts_in_shape(mesh, shape_box, True, adjacent_layers)
 
         if edge_flag and not inverse:
             x_edge_idx = get_cross_edges(mesh, shape_box)
@@ -882,7 +927,7 @@ def clip_mesh_by_shape(
                         mesh, x_edge_idx, in_place)
             return mesh
 
-    in_shp_idx = get_verts_in_shape(mesh, shape, False)
+    in_shp_idx = get_verts_in_shape(mesh, shape, False, adjacent_layers)
 
     if edge_flag and not inverse:
         x_edge_idx = get_cross_edges(mesh, shape)
@@ -1583,12 +1628,17 @@ def merge_msh_t(
         can_overlap=True,
         check_cross_edges=False):
 
-    # TODO: Add support for quad4 and hexa8
 
     dst_crs = CRS.from_user_input(out_crs)
 
+    mesh_types = {
+        'tria3': 'TRIA3_t',
+        'quad4': 'QUAD4_t',
+        'hexa8': 'HEXA8_t'
+    }
+
     coord = []
-    index = []
+    elems = {k: [] for k in mesh_types}
     value = []
     offset = 0
 
@@ -1620,7 +1670,9 @@ def merge_msh_t(
         mesh_shape_list.append(mesh_shape)
 
 
-        index.append(mesh.tria3['index'] + offset)
+        for k in mesh_types:
+            cnn = getattr(mesh, k)
+            elems[k].append(cnn['index'] + offset)
         coord.append(mesh.vert2['coord'])
         value.append(mesh.value)
         offset += coord[-1].shape[0]
@@ -1632,16 +1684,18 @@ def merge_msh_t(
     composite_mesh.vert2 = np.array(
             [(coord, 0) for coord in np.vstack(coord)],
             dtype=jigsaw_msh_t.VERT2_t)
-    composite_mesh.tria3 = np.array(
-            [(index, 0) for index in np.vstack(index)],
-            dtype=jigsaw_msh_t.TRIA3_t)
     composite_mesh.value = np.array(
             np.vstack(value),
             dtype=jigsaw_msh_t.REALS_t)
+    for k, v in mesh_types.items():
+        setattr(composite_mesh, k, np.array(
+            [(cnn, 0) for cnn in np.vstack(elems[k])],
+            dtype=getattr(jigsaw_msh_t, v)))
 
     composite_mesh.crs = dst_crs
 
     return composite_mesh
+
 
 
 def add_pool_args(func):
@@ -1663,3 +1717,43 @@ def add_pool_args(func):
         return rv
 
     return wrapper
+
+def drop_extra_vertex_from_line(lstr: LineString) -> LineString:
+
+    coords = np.array(lstr.coords)
+
+    vecs = coords[1:] - coords[:-1]
+
+    is_zero = lambda i: np.isclose(i, 0)
+    isnt_zero = lambda i: np.logical_not(np.isclose(i, 0))
+
+    vec_sizes = np.sqrt(vecs[:, 0] ** 2 + vecs[:, 1] ** 2)
+    uvecs = vecs / vec_sizes.reshape(-1, 1)
+    uvecs = uvecs[isnt_zero(vec_sizes)]
+    nondup_coords = np.vstack([coords[:-1][isnt_zero(vec_sizes)], coords[-1]])
+
+    vec_diffs = np.diff(uvecs, axis=0)
+    diff_sizes = np.sqrt(vec_diffs[:, 0] ** 2 + vec_diffs[:, 1] ** 2)
+
+    new_coords = np.vstack(
+        [nondup_coords[0],
+         nondup_coords[1:-1][isnt_zero(diff_sizes)],
+         nondup_coords[-1]
+         ])
+
+    return LineString(new_coords)
+
+def drop_extra_vertex_from_polygon(
+        mpoly: Union[Polygon, MultiPolygon]) -> MultiPolygon:
+
+    if isinstance(mpoly, Polygon):
+        mpoly = MultiPolygon([mpoly])
+    poly_seam_list = []
+    for poly in mpoly.geoms:
+        extr = drop_extra_vertex_from_line(poly.exterior)
+        inters = [
+            drop_extra_vertex_from_line(lstr)
+            for lstr in poly.interiors]
+        poly_seam_list.append(Polygon(extr, inters))
+
+    return MultiPolygon(poly_seam_list)

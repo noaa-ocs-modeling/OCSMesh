@@ -489,7 +489,7 @@ class EuclideanMesh2D(EuclideanMesh):
         n_parents = np.zeros((len(rings),))
         represent = np.array([r.coords[0] for r in rings])
         for e, ring in enumerate(rings[:-1]):
-            path = Path(ring, closed=True)
+            path = Path(ring.coords, closed=True)
             n_parents = n_parents + np.pad(
                 np.array([
                     path.contains_point(pt) for pt in represent[e+1:]]),

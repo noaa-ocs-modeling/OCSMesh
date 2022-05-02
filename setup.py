@@ -116,7 +116,7 @@ setuptools.setup(
                       "rasterio",
                       "requests",
                       "scipy<1.8",   # dropping python 3.7
-                      "shapely<1.8", # deprecation of API
+                      "shapely>=1.8",
                       "tqdm",
                       "typing_extensions",
                       "utm",
@@ -125,6 +125,18 @@ setuptools.setup(
         'console_scripts': [
             "ocsmesh=ocsmesh.__main__:main",
             "interp=ocsmesh.interp:main"
+        ]
+    },
+    extras_require={
+        'testing': ['pylint>=2.11.1'],
+        'documentation': [
+            'sphinx',
+            'sphinx-rtd-theme',
+            'sphinx-argparse',
+            'dunamai',
+            'mistune==0.8.4',
+            'm2r2',
+            'numpydoc'
         ]
     },
     tests_require=['nose'],
