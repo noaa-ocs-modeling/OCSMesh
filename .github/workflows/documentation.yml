@@ -37,7 +37,6 @@ jobs:
     - name: Build documentation site with Sphinx
       shell: bash -l {0}
       run: |
-          pip install -r docs/requirements.txt
           cd docs
           make html
     - name: Deploy to GitHub Pages
