@@ -4,6 +4,7 @@ import warnings
 from ocsmesh.cli.remesh_by_shape_factor import RemeshByShape
 from ocsmesh.cli.remesh import RemeshByDEM
 from ocsmesh.cli.mesh_upgrader import MeshUpgrader
+from ocsmesh.cli.subset_n_combine import SubsetAndCombine
 
 class CmdCli:
 
@@ -14,7 +15,7 @@ class CmdCli:
 
         parser.add_argument("--loglevel")
         scripts_subp = parser.add_subparsers(dest='scripts_cmd')
-        for cls in [RemeshByShape, RemeshByDEM, MeshUpgrader]:
+        for cls in [RemeshByShape, RemeshByDEM, MeshUpgrader, SubsetAndCombine]:
             item = cls(scripts_subp)
             self._script_dict[item.script_name] = item
 
