@@ -127,6 +127,18 @@ setuptools.setup(
             "interp=ocsmesh.interp:main"
         ]
     },
+    extras_require={
+        'testing': ['pylint>=2.11.1'],
+        'documentation': [
+            'sphinx',
+            'sphinx-rtd-theme',
+            'sphinx-argparse',
+            'dunamai',
+            'mistune==0.8.4',
+            'm2r2',
+            'numpydoc'
+        ]
+    },
     tests_require=['nose'],
     test_suite='nose.collector',
 )

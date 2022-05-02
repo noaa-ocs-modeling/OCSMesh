@@ -20,9 +20,7 @@ jobs:
       shell: bash -l {0}
       run: |
         python ./setup.py install_jigsaw
-        pip install .
+        pip install .[testing]
     - name: Analysing the code with pylint
       shell: bash -l {0}
-      run: |
-        conda install -cconda-forge pylint=2.11.1 # For fail-on option
-        pylint ocsmesh
+      run: pylint ocsmesh
