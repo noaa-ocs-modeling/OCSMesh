@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Command line interface &mdash; ocsmesh 0.0.0.post1.dev0+7f2d3a4 documentation</title>
+  <title>Command line interface &mdash; ocsmesh 0.0.0.post1.dev0+217201e documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -59,6 +59,7 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="#scripts">scripts</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#Positional Arguments_repeat5">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#Named Arguments_repeat5">Named Arguments</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#Sub-commands:_repeat3">Sub-commands:</a></li>
 </ul>
 </li>
@@ -362,15 +363,24 @@
 <section id="scripts">
 <h3>scripts<a class="headerlink" href="#scripts" title="Permalink to this headline"></a></h3>
 <p>Access to experimental OCSMesh scripts.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">{</span><span class="n">remesh_by_shape</span><span class="p">,</span><span class="n">remesh_by_dem</span><span class="p">,</span><span class="n">mesh_upgrader</span><span class="p">}</span> <span class="o">...</span>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">loglevel</span> <span class="n">LOGLEVEL</span><span class="p">]</span>
+                <span class="p">{</span><span class="n">remesh_by_shape</span><span class="p">,</span><span class="n">remesh_by_dem</span><span class="p">,</span><span class="n">mesh_upgrader</span><span class="p">,</span><span class="n">subset_n_combine</span><span class="p">}</span>
+                <span class="o">...</span>
 </pre></div>
 </div>
 <section id="Positional Arguments_repeat5">
 <h4>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat5" title="Permalink to this headline"></a></h4>
 <dl class="option-list">
 <dt><kbd>scripts_cmd</kbd></dt>
-<dd><p>Possible choices: remesh_by_shape, remesh_by_dem, mesh_upgrader</p>
+<dd><p>Possible choices: remesh_by_shape, remesh_by_dem, mesh_upgrader, subset_n_combine</p>
 </dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat5">
+<h4>Named Arguments<a class="headerlink" href="#Named Arguments_repeat5" title="Permalink to this headline"></a></h4>
+<dl class="option-list">
+<dt><kbd>--loglevel</kbd></dt>
+<dd></dd>
 </dl>
 </section>
 <section id="Sub-commands:_repeat3">
@@ -396,8 +406,8 @@
 <dd></dd>
 </dl>
 </section>
-<section id="Named Arguments_repeat5">
-<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat5" title="Permalink to this headline"></a></h6>
+<section id="Named Arguments_repeat6">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat6" title="Permalink to this headline"></a></h6>
 <dl class="option-list">
 <dt><kbd>--in-crs</kbd></dt>
 <dd><p>Default: “EPSG:4326”</p>
@@ -464,8 +474,8 @@
 <dd></dd>
 </dl>
 </section>
-<section id="Named Arguments_repeat6">
-<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat6" title="Permalink to this headline"></a></h6>
+<section id="Named Arguments_repeat7">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat7" title="Permalink to this headline"></a></h6>
 <dl class="option-list">
 <dt><kbd>--mesh</kbd></dt>
 <dd></dd>
@@ -524,8 +534,8 @@
                               <span class="o">--</span><span class="n">demhi</span> <span class="p">[</span><span class="n">DEMHI</span> <span class="o">...</span><span class="p">]</span> <span class="o">--</span><span class="n">out</span> <span class="n">OUT</span>
 </pre></div>
 </div>
-<section id="Named Arguments_repeat7">
-<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat7" title="Permalink to this headline"></a></h6>
+<section id="Named Arguments_repeat8">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat8" title="Permalink to this headline"></a></h6>
 <dl class="option-list">
 <dt><kbd>--basemesh</kbd></dt>
 <dd></dd>
@@ -535,6 +545,72 @@
 <dd></dd>
 <dt><kbd>--out</kbd></dt>
 <dd></dd>
+</dl>
+</section>
+</section>
+<section id="subset_n_combine">
+<h5>subset_n_combine<a class="headerlink" href="#subset_n_combine" title="Permalink to this headline"></a></h5>
+<p>Subset and combine the two input meshes based on the region of interset</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">subset_n_combine</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">rasters</span> <span class="n">RASTERS</span> <span class="p">[</span><span class="n">RASTERS</span> <span class="o">...</span><span class="p">]]</span>
+                                 <span class="p">[</span><span class="o">-</span><span class="n">o</span> <span class="n">DIRECTORY</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">a</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">c</span> <span class="n">CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">CUTOFF</span><span class="p">]</span>
+                                 <span class="p">[</span><span class="o">-</span><span class="n">s</span> <span class="n">WIND_SPEED</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">n</span> <span class="n">N_LAYERS</span><span class="p">]</span>
+                                 <span class="p">[</span><span class="o">--</span><span class="n">adv</span><span class="o">-</span><span class="n">upstream</span><span class="o">-</span><span class="n">area</span><span class="o">-</span><span class="nb">max</span> <span class="n">AREA</span><span class="p">]</span>
+                                 <span class="p">[</span><span class="o">--</span><span class="n">adv</span><span class="o">-</span><span class="n">rel</span><span class="o">-</span><span class="n">island</span><span class="o">-</span><span class="n">area</span><span class="o">-</span><span class="nb">min</span> <span class="n">AREA</span><span class="p">]</span>
+                                 <span class="n">fine_mesh</span> <span class="n">coarse_mesh</span> <span class="n">region_of_interset</span>
+</pre></div>
+</div>
+<section id="Positional Arguments_repeat8">
+<h6>Positional Arguments<a class="headerlink" href="#Positional Arguments_repeat8" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>fine_mesh</kbd></dt>
+<dd><p>Path to the fine mesh</p>
+</dd>
+<dt><kbd>coarse_mesh</kbd></dt>
+<dd><p>Path to the coarse mesh</p>
+</dd>
+<dt><kbd>region_of_interset</kbd></dt>
+<dd><p>Path to the shape file for region of interest or storm track</p>
+</dd>
+</dl>
+</section>
+<section id="Named Arguments_repeat9">
+<h6>Named Arguments<a class="headerlink" href="#Named Arguments_repeat9" title="Permalink to this headline"></a></h6>
+<dl class="option-list">
+<dt><kbd>--rasters</kbd></dt>
+<dd><p>List of rasters used for calculating depth cutoff</p>
+</dd>
+<dt><kbd>-o, --out</kbd></dt>
+<dd><p>Output directory</p>
+</dd>
+<dt><kbd>-a, --outall</kbd></dt>
+<dd><p>Flag to indicate all intermediate shapes to be written to disk</p>
+<p>Default: False</p>
+</dd>
+<dt><kbd>-c, --crs</kbd></dt>
+<dd><p>Input mesh CRS and output CRS [experimental]</p>
+<p>Default: “epsg:4326”</p>
+</dd>
+<dt><kbd>-d, --cutoff</kbd></dt>
+<dd><p>Cut-off depth (positive up) for calculating region subsetted from fine mesh</p>
+<p>Default: -200</p>
+</dd>
+<dt><kbd>-s, --isotach-speed</kbd></dt>
+<dd><p>Possible choices: 34, 50, 64</p>
+<p>Isotach (34, 50 or 64) to use if region of interset is storm track</p>
+<p>Default: 34</p>
+</dd>
+<dt><kbd>-n, --adv-buffer-n-layers</kbd></dt>
+<dd><p>Number of buffer layers to mesh between fine and coarse mesh</p>
+<p>Default: 9</p>
+</dd>
+<dt><kbd>--adv-upstream-area-max</kbd></dt>
+<dd><p>Advanced option: maximum segment area for calculating upstream</p>
+<p>Default: 100</p>
+</dd>
+<dt><kbd>--adv-rel-island-area-min</kbd></dt>
+<dd><p>Advanced option: minimum segment area for dropping islands during shape cleanup</p>
+<p>Default: 0.01</p>
+</dd>
 </dl>
 </section>
 </section>
