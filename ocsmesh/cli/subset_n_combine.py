@@ -13,7 +13,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 from scipy.spatial import cKDTree
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
-from shapely.ops import polygonize, unary_union, transform
+from shapely.ops import polygonize, unary_union
 
 from ocsmesh import Raster, Geom, Mesh, Hfun, utils
 
@@ -133,7 +133,7 @@ class SubsetAndCombine:
             ref_area = poly.area
             new_interiors = [
                     intr for intr in poly.interiors
-                    if Polygon(intr).area / ref_area > rel_size] 
+                    if Polygon(intr).area / ref_area > rel_size]
             return Polygon(poly.exterior, new_interiors)
 
         return poly
@@ -162,16 +162,14 @@ class SubsetAndCombine:
         if "RADII" in gdf_region_of_interset.columns:
             gdf_specific_isotach = gdf_region_of_interset[
                     gdf_region_of_interset.RADII.astype(int) == wind_speed]
-            isotach_exterior_polygon = MultiPolygon([
-                    i for i in polygonize(
-                        [ext for ext in gdf_specific_isotach.exterior])
-                    ])
+            isotach_exterior_polygon = MultiPolygon(
+                list(polygonize(list(gdf_specific_isotach.exterior))))
             region_of_interest = isotach_exterior_polygon
 
         else:
             region_of_interest = gdf_region_of_interset.unary_union
 
-        
+
         return region_of_interest
 
     def _calculate_clipping_polygon(
@@ -229,7 +227,7 @@ class SubsetAndCombine:
             polygon,
             fine_mesh, fine_polygon,
             coarse_mesh, coarse_polygon):
-        
+
         fine_clip_plus_layer = utils.clip_mesh_by_shape(
                 fine_mesh, fine_polygon,
                 fit_inside=False, adjacent_layers=1)
@@ -245,7 +243,7 @@ class SubsetAndCombine:
         # Add the one layer to the buffer to make boundaries shape conformal
         return unary_union(
                 [polygon, poly_1_lyr_hires, poly_1_lyr_lowres])
-        
+
 
     def _add_overlap_to_polygon(self, mesh, polygon):
 
@@ -352,6 +350,7 @@ class SubsetAndCombine:
 
         coords = mesh.vert2['coord']
 
+        # pylint: disable=E0633
         coords[:, 0], coords[:, 1] = transformer.transform(
                 coords[:, 0], coords[:, 1])
         mesh.vert2['coord'][:] = coords
@@ -383,12 +382,12 @@ class SubsetAndCombine:
         neigh_idxs = tree_old.query_ball_tree(tree_new, r=1e-6)
 
         # 4. Create a map for shared nodes
-        map_idx_shared = dict()
+        map_idx_shared = {}
         for idx_tree_old, neigh_idx_list in enumerate(neigh_idxs):
             num_match = len(neigh_idx_list)
             if num_match == 0:
                 continue
-            elif num_match > 1:
+            if num_match > 1:
                 raise ValueError("More than one node match on boundary!")
 
             idx_tree_new = neigh_idx_list[0]
@@ -563,8 +562,8 @@ class SubsetAndCombine:
             upstream_size_max=upstream_size_max,
             upstream_poly_list=[poly_fine])
         _logger.info(f"Done in {time() - start} sec")
-        
-        
+
+
         _logger.info("Calculate clipped polygons...")
         jig_clip_hires_0 = utils.clip_mesh_by_shape(
                 mesh_fine.msh_t, poly_clipper,
@@ -577,7 +576,7 @@ class SubsetAndCombine:
                 inverse=True,
                 adjacent_layers=9)
         _logger.info(f"Done in {time() - start} sec")
-        
+
         _logger.info("Calculate clipped polygons...")
         start = time()
         poly_clip_hires_0 = self._remove_holes(
@@ -642,7 +641,7 @@ class SubsetAndCombine:
         _logger.info(f"Done in {time() - start} sec")
 
         # NOTE: This call also detects overlap issues
-        utils.finalize_mesh(jig_combined_mesh) 
+        utils.finalize_mesh(jig_combined_mesh)
 
         self._interpolate_values(jig_combined_mesh, mesh_fine, mesh_coarse)
 

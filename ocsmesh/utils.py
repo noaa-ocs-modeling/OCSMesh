@@ -18,7 +18,7 @@ from scipy import sparse
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
-        MultiLineString, LineString, LinearRing)
+        LineString, LinearRing)
 from shapely.ops import polygonize, linemerge
 import geopandas as gpd
 import utm
@@ -171,7 +171,7 @@ def get_mesh_polygons(mesh):
 
         # NOTE: This logic requires polygons to be sorted by area
         pass_valid_polys = []
-        while len(pnts.geoms):
+        while len(pnts.geoms) > 0:
 
 
             idx = np.random.randint(len(pnts.geoms))
@@ -825,7 +825,7 @@ def select_adjacent(mesh, in_indices, num_layers):
             picked_elems = {
                     key: elm_dict[key][mark_dict[key], :]
                     for key in elm_dict}
-            
+
             selected_indices = np.unique(np.concatenate(
                 [pick.ravel() for pick in picked_elems.values()]))
 
@@ -1672,7 +1672,6 @@ def merge_msh_t(
 
         for k in mesh_types:
             cnn = getattr(mesh, k)
-            if cnn is None: continue
             elems[k].append(cnn['index'] + offset)
         coord.append(mesh.vert2['coord'])
         value.append(mesh.value)
