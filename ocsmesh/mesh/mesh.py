@@ -339,6 +339,7 @@ class EuclideanMesh2D(EuclideanMesh):
             method: Literal['spline', 'linear', 'nearest'] = 'spline',
             nprocs: Optional[int] = None,
             info_out_path: Union[pathlib.Path, str, None] = None,
+            filter_by_shape: bool = False
             ) -> None:
         """Interplate values from raster inputs to the mesh nodes.
 
@@ -353,6 +354,8 @@ class EuclideanMesh2D(EuclideanMesh):
             Number of workers to use when interpolating data.
         info_out_path : pathlike or str or None
             Path for the output node interpolation information file
+        filter_by_shape : bool
+            Flag for node filtering based on raster bbox or shape
 
         Returns
         -------
@@ -373,14 +376,16 @@ class EuclideanMesh2D(EuclideanMesh):
                 res = pool.starmap(
                     _mesh_interpolate_worker,
                     [(self.vert2['coord'], self.crs,
-                        _raster.tmpfile, _raster.chunk_size, method)
+                        _raster.tmpfile, _raster.chunk_size,
+                        method, filter_by_shape)
                      for _raster in raster]
                     )
             pool.join()
         else:
             res = [_mesh_interpolate_worker(
                         self.vert2['coord'], self.crs,
-                        _raster.tmpfile, _raster.chunk_size, method)
+                        _raster.tmpfile, _raster.chunk_size,
+                        method, filter_by_shape)
                    for _raster in raster]
 
         values = self.msh_t.value.flatten()
@@ -416,6 +421,7 @@ class EuclideanMesh2D(EuclideanMesh):
             if not self.crs.is_geographic:
                 transformer = Transformer.from_crs(
                     self.crs, CRS.from_epsg(4326), always_xy=True)
+                # pylint: disable=E0633
                 geo_coords[:, 0], geo_coords[:, 1] = transformer.transform(
                     coords[:, 0], coords[:, 1])
             vd_idxs=np.array(list(interp_info_map.keys()))
@@ -2003,7 +2009,8 @@ def _mesh_interpolate_worker(
         coords_crs: CRS,
         raster_path: Union[str, Path],
         chunk_size: Optional[int],
-        method: Literal['spline', 'linear', 'nearest'] = "spline"):
+        method: Literal['spline', 'linear', 'nearest'] = "spline",
+        filter_by_shape: bool = False):
     """Interpolator worker function to be used in parallel calls
 
     Parameters
@@ -2018,6 +2025,8 @@ def _mesh_interpolate_worker(
         Chunk size for windowing over the raster.
     method : {'spline', 'linear', 'nearest'}, default='spline'
         Method of interpolation.
+    filter_by_shape : bool
+        Flag for node filtering based on raster bbox or shape
 
     Returns
     -------
@@ -2050,13 +2059,19 @@ def _mesh_interpolate_worker(
         # Use masked array to ignore missing values from DEM
         zi = raster.get_values(window=window, masked=True)
 
-        _idxs = np.logical_and(
-            np.logical_and(
-                np.min(xi) <= coords[:, 0],
-                np.max(xi) >= coords[:, 0]),
-            np.logical_and(
-                np.min(yi) <= coords[:, 1],
-                np.max(yi) >= coords[:, 1]))
+        if not filter_by_shape:
+            _idxs = np.logical_and(
+                np.logical_and(
+                    np.min(xi) <= coords[:, 0],
+                    np.max(xi) >= coords[:, 0]),
+                np.logical_and(
+                    np.min(yi) <= coords[:, 1],
+                    np.max(yi) >= coords[:, 1]))
+        else:
+            shape = raster.get_multipolygon()
+            gs_pt = gpd.points_from_xy(coords[:, 0], coords[:, 1])
+            _idxs = gs_pt.intersects(shape)
+
 
         interp_mask = None
 
