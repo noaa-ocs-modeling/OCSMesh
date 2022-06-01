@@ -2,13 +2,14 @@
 fail-on=E
 fail-under=9.85
 py-version=3.9.7
+# As a temporary workaround for https://github.com/PyCQA/pylint/issues/4577
+init-hook = "import astroid; astroid.context.InferenceContext.max_inferred = 250"
 
 [MESSAGES CONTROL]
 disable=fixme,
         invalid-name,
         unused-variable,
         unused-argument,
-        no-self-use,
         too-many-arguments,
         too-many-locals,
         too-many-lines,
@@ -26,10 +27,10 @@ disable=fixme,
 
 [TYPECHECK]
 ignored-modules=matplotlib, matplotlib.cm
-generated-members=ocsmesh.driver.JigsawDriver.hfun
-                  ocsmesh.driver.JigsawDriver.geom
-                  ocsmesh.driver.JigsawDriver.opts
-                  ocsmesh.hfun.hfun.Hfun.*
-                  ocsmesh.mesh.base.BaseMesh._msh_t
-                  ocsmesh.mesh.mesh.EuclideanMesh._boundaries
+generated-members=ocsmesh.driver.JigsawDriver.hfun,
+                  ocsmesh.driver.JigsawDriver.geom,
+                  ocsmesh.driver.JigsawDriver.opts,
+                  ocsmesh.hfun.hfun.Hfun.*,
+                  ocsmesh.mesh.base.BaseMesh._msh_t,
+                  ocsmesh.mesh.mesh.EuclideanMesh._boundaries,
                   ocsmesh.mesh.mesh.Mesh.*

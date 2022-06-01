@@ -129,7 +129,7 @@ setuptools.setup(
         ]
     },
     extras_require={
-        'testing': ['pylint>=2.11.1'],
+        'testing': ['pylint>=2.14'],
         'documentation': [
             'sphinx',
             'sphinx-rtd-theme',

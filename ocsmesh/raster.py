@@ -31,7 +31,7 @@ from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import numpy.typing as npt
-import numpy.ma as ma
+from numpy import ma
 from pyproj import CRS, Transformer
 import rasterio
 import rasterio.mask
@@ -45,7 +45,7 @@ from scipy import LowLevelCallable
 from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LineString, MultiLineString, box)
-from numba import cfunc, carray, njit
+from numba import cfunc, carray
 from numba.types import intc, intp, float64, voidptr
 from numba.types import CPointer
 
