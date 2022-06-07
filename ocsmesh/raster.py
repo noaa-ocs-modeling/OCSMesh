@@ -16,7 +16,8 @@ import warnings
 from time import time
 from contextlib import contextmanager, ExitStack
 from typing import (
-        Union, Generator, Any, Optional, Dict, List, Tuple, Iterable)
+        Union, Generator, Any, Optional, Dict, List, Tuple, Iterable,
+        Callable)
 try:
     from typing import Literal
 except ImportError:
@@ -30,6 +31,7 @@ from matplotlib.axes import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 import numpy.typing as npt
+from numpy import ma
 from pyproj import CRS, Transformer
 import rasterio
 import rasterio.mask
@@ -38,10 +40,14 @@ from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 from rasterio.transform import array_bounds
 from rasterio import windows
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, generic_filter
+from scipy import LowLevelCallable
 from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LineString, MultiLineString, box)
+from numba import cfunc, carray
+from numba.types import intc, intp, float64, voidptr
+from numba.types import CPointer
 
 from ocsmesh import figures
 from ocsmesh import utils
@@ -51,6 +57,24 @@ _logger = logging.getLogger(__name__)
 
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
+
+
+# From https://ilovesymposia.com/2017/03/12/scipys-new-lowlevelcallable-is-a-game-changer/
+@cfunc(intc(CPointer(float64), intp,
+            CPointer(float64), voidptr))
+def nbmean(values_ptr, len_values, result, data):
+    values = carray(values_ptr, (len_values,), dtype=float64)
+    result[0] = 0
+    n_vals = 0
+    for v in values:
+        if not np.isnan(v):
+            result[0] = result[0] + v
+            n_vals = n_vals + 1
+    # NOTE: Divide by number of used values, NOT the whole foot area
+    if n_vals > 1:
+        result[0] = result[0] / n_vals
+
+    return 1
 
 
 class RasterPath:
@@ -246,6 +270,10 @@ class Raster:
         Fill no-data points in the raster dataset.
     gaussian_filter(**kwargs)
         Apply Gaussian filter on the raster data.
+    average_filter(size, drop_above, drop_below)
+        Apply average filter on the raster data.
+    generic_filter(function, **kwargs)
+        Apply generic filter on the raster data.
     mask(shapes, i=None, **kwargs)
         Mask raster data by shape.
     read_masks(i=None)
@@ -258,7 +286,7 @@ class Raster:
         Save-as raster data to the provided path.
     clip(geom)
         Clip raster data by provided shape.
-    adjust(geom, inside_min=0.5, outside_max=-0.5)
+    adjust(geom=None, inside_min=-np.inf, outside_max=np.inf, cond=None)
         Modify raster values based on constraints and shape.
     get_contour(level, window)
         Calculate contour of specified level on raster data.
@@ -362,6 +390,9 @@ class Raster:
                 new_meta = self.src.meta.copy()
                 new_meta.update(**kwargs)
             with rasterio.open(tmpfile.name, 'w', **new_meta) as dst:
+                if use_src_meta:
+                    for i, desc in enumerate(self.src.descriptions):
+                        dst.set_band_description(i+1, desc)
                 yield dst
 
             no_except = True
@@ -871,12 +902,108 @@ class Raster:
         # modifying the raster (e.g. hfun add_contour is affected)
         with self.modifying_raster() as dst:
             for i in range(1, self.src.count + 1):
-                outband = self.src.read(i)
+                outband = self.src.read(i, masked=True)
 #                # Write orignal band
 #                dst.write_band(i + n_bands_new // 2, outband)
                 # Write filtered band
                 outband = gaussian_filter(outband, **kwargs)
                 dst.write_band(i, outband)
+
+    def average_filter(
+            self,
+            size: Union[int, npt.NDArray[int]],
+            drop_above: Optional[float] = None,
+            drop_below: Optional[float] = None,
+            apply_on_bands: Optional[List[int]] = None
+            ) -> None:
+        """Apply average(mean) filter on the raster
+
+        Parameters
+        ----------
+        size: int, npt.NDArray[int]
+            size of the footprint
+        drop_above: float or None
+            elevation above which the cells are ignored for averaging
+        drop_below: float or None
+            elevation below which the cells are ignored for averaging
+
+        Returns
+        -------
+        None
+        """
+
+        # TODO: Don't overwrite; add additoinal bands for filtered values
+
+        # NOTE: Adding new bands in this function can result in issues
+        # in other parts of the code. Thorough testing is needed for
+        # modifying the raster (e.g. hfun add_contour is affected)
+
+        bands = apply_on_bands
+        if bands is None:
+            bands = range(1, self.src.count + 1)
+        with self.modifying_raster() as dst:
+            for i in bands:
+                bnd_idx = i - 1
+                outband = self.src.read(i, masked=True)
+                mask = outband.mask.copy()
+
+#                # Write orignal band
+#                dst.write_band(i + n_bands_new // 2, outband)
+
+                # Make the values out of range of interest to be nan
+                # so that they are ignored in filtering
+                if drop_above is not None:
+                    mask_above = ma.getdata(outband) > drop_above
+                    outband[mask_above] = np.nan
+                if drop_below is not None:
+                    mask_below = ma.getdata(outband) < drop_below
+                    outband[mask_below] = np.nan
+
+                outband_new = generic_filter(
+                    outband, LowLevelCallable(nbmean.ctypes), size=size)
+
+                # Mask raster based on result of filter?
+                if drop_above is not None:
+                    mask_above = ma.getdata(outband) > drop_above
+                    mask = np.logical_or(mask, mask_above)
+                if drop_below is not None:
+                    mask_below = ma.getdata(outband) < drop_below
+                    mask = np.logical_or(mask, mask_below)
+
+                outband_new[mask] = dst.nodatavals[bnd_idx]
+                outband_ma = ma.masked_array(outband_new, mask=mask)
+                dst.write_band(i, outband_ma)
+
+
+    def generic_filter(self, function, **kwargs: Any) -> None:
+        """Apply Gaussian filter to the raster data in-place
+
+        Parameters
+        ----------
+        function: callable, LowLevelCallable
+            Function to be used on the footprint array
+        **kwargs : dict, optional
+            Keyword arguments passed to SciPy `generic_filter` function
+
+        Returns
+        -------
+        None
+        """
+
+        # TODO: Don't overwrite; add additoinal bands for filtered values
+
+        # NOTE: Adding new bands in this function can result in issues
+        # in other parts of the code. Thorough testing is needed for
+        # modifying the raster (e.g. hfun add_contour is affected)
+        with self.modifying_raster() as dst:
+            for i in range(1, self.src.count + 1):
+                outband = self.src.read(i, masked=True)
+#                # Write orignal band
+#                dst.write_band(i + n_bands_new // 2, outband)
+                # Write filtered band
+                outband = generic_filter(outband, function, **kwargs)
+                dst.write_band(i, outband)
+
 
     def mask(self,
              shapes: Iterable,
@@ -1081,9 +1208,10 @@ class Raster:
 
     def adjust(
             self,
-            geom: Union[Polygon, MultiPolygon],
-            inside_min: float = 0.5,
-            outside_max: float = -0.5
+            geom: Union[None, Polygon, MultiPolygon] = None,
+            inside_min: float = -np.inf,
+            outside_max: float = np.inf,
+            cond: Optional[Callable[[npt.NDArray[float]], npt.NDArray[bool]]] = None
             ) -> None:
         """Adjust raster data in-place based on specified shape.
 
@@ -1092,7 +1220,7 @@ class Raster:
 
         Parameters
         ----------
-        geom : Polygon or MultiPolygon
+        geom : None or Polygon or MultiPolygon
             Filled shape to determine which points are considered
             inside or outside (usually land-mass polygon)
         inside_min : float
@@ -1121,41 +1249,54 @@ class Raster:
                 # as the hfun (we don't calculate distances in this
                 # method)
 
-                _logger.info('Creating mask from shape ...')
                 start = time()
-                values = self.get_values(window=window).copy()
+                values = self.get_values(window=window, masked=True).copy()
                 mask = np.zeros_like(values)
-                try:
-                    mask, _, _ = rasterio.mask.raster_geometry_mask(
-                        self.src, geom.geoms,
-                        all_touched=True, invert=True)
-                    mask = mask[rasterio.windows.window_index(window)]
+                if geom is not None:
+                    _logger.info('Creating mask from shape ...')
+                    try:
+                        mask, _, _ = rasterio.mask.raster_geometry_mask(
+                            self.src, geom.geoms,
+                            all_touched=True, invert=True)
+                        mask = mask[rasterio.windows.window_index(window)]
 
-                except ValueError:
-                    # If there's no overlap between the raster and
-                    # shapes then it throws ValueError, instead of
-                    # checking for intersection, if there's a value
-                    # error we assume there's no overlap
-                    _logger.debug(
-                        'Polygons don\'t intersect with the raster')
+                    except ValueError:
+                        # If there's no overlap between the raster and
+                        # shapes then it throws ValueError, instead of
+                        # checking for intersection, if there's a value
+                        # error we assume there's no overlap
+                        _logger.debug(
+                            'Polygons don\'t intersect with the raster')
 
-                _logger.info(
-                    f'Creating mask from shape took {time()-start}.')
+                    _logger.info(
+                        f'Creating mask from shape took {time()-start}.')
+
+                if cond:
+                    if geom is None:
+                        mask = cond(values)
+                    else:
+                        mask = np.logical_and(mask, cond(values))
+
+                if cond is None and geom is None:
+                    raise ValueError(
+                        "Neither shape nor condition are provided for adjustment!")
 
                 if mask.any():
+                    in_mask = values.mask.copy()
                     values[np.where(np.logical_and(
                             values < inside_min, mask)
                             )] = inside_min
-
                     values[np.where(np.logical_and(
                             values > outside_max, np.logical_not(mask))
                             )] = outside_max
+                    values[in_mask] = dst.nodata
                 else:
                     values[values > outside_max] = outside_max
 
                 _logger.info('Write array to file...')
                 start = time()
                 dst.write_band(1, values, window=window)
+
                 _logger.info(f'Write array to file took {time()-start}.')
 
 

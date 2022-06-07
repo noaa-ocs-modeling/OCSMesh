@@ -18,6 +18,7 @@ try:
 except ImportError:
     from typing_extensions import Literal
 
+import pandas as pd
 import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
 from matplotlib.path import Path
@@ -336,7 +337,9 @@ class EuclideanMesh2D(EuclideanMesh):
             self,
             raster: Union[Raster, List[Raster]],
             method: Literal['spline', 'linear', 'nearest'] = 'spline',
-            nprocs: Optional[int] = None
+            nprocs: Optional[int] = None,
+            info_out_path: Union[pathlib.Path, str, None] = None,
+            filter_by_shape: bool = False
             ) -> None:
         """Interplate values from raster inputs to the mesh nodes.
 
@@ -349,6 +352,10 @@ class EuclideanMesh2D(EuclideanMesh):
             Method of interpolation.
         nprocs : int or None, default=None
             Number of workers to use when interpolating data.
+        info_out_path : pathlike or str or None
+            Path for the output node interpolation information file
+        filter_by_shape : bool
+            Flag for node filtering based on raster bbox or shape
 
         Returns
         -------
@@ -369,20 +376,70 @@ class EuclideanMesh2D(EuclideanMesh):
                 res = pool.starmap(
                     _mesh_interpolate_worker,
                     [(self.vert2['coord'], self.crs,
-                        _raster.tmpfile, _raster.chunk_size, method)
+                        _raster.tmpfile, _raster.chunk_size,
+                        method, filter_by_shape)
                      for _raster in raster]
                     )
             pool.join()
         else:
             res = [_mesh_interpolate_worker(
                         self.vert2['coord'], self.crs,
-                        _raster.tmpfile, _raster.chunk_size, method)
+                        _raster.tmpfile, _raster.chunk_size,
+                        method, filter_by_shape)
                    for _raster in raster]
 
         values = self.msh_t.value.flatten()
 
-        for idxs, _values in res:
-            values[idxs] = _values
+        interp_info_map = {}
+        for (mask, _values), rast in zip(res, raster):
+            values[mask] = _values
+
+            if info_out_path is not None:
+                vert_cs = None
+                rast_crs = rast.crs
+                if rast_crs.is_vertical:
+                    if rast_crs.sub_crs_list is not None:
+                        for sub_crs in rast_crs.sub_crs_list:
+                            if sub_crs.is_vertical:
+                                # TODO: What if sub CRS is compound, etc.?
+                                vert_cs = sub_crs
+                    elif rast_crs.source_crs is not None:
+                        if rast_crs.source_crs.is_vertical:
+                            # TODO: What if source CRS is compound, etc.?
+                            vert_cs = rast_crs.source_crs
+
+
+                vert_cs_name = vert_cs.name
+                idxs = np.argwhere(mask).ravel()
+                interp_info_map.update({
+                    idx: (rast.path, vert_cs_name)
+                    for idx in idxs})
+
+        if info_out_path is not None:
+            coords = self.msh_t.vert2['coord'].copy()
+            geo_coords = coords.copy()
+            if not self.crs.is_geographic:
+                transformer = Transformer.from_crs(
+                    self.crs, CRS.from_epsg(4326), always_xy=True)
+                # pylint: disable=E0633
+                geo_coords[:, 0], geo_coords[:, 1] = transformer.transform(
+                    coords[:, 0], coords[:, 1])
+            vd_idxs=np.array(list(interp_info_map.keys()))
+            df_interp_info = pd.DataFrame(
+                index=vd_idxs,
+                data={
+                    'x': coords[vd_idxs, 0],
+                    'y': coords[vd_idxs, 1],
+                    'lat': geo_coords[vd_idxs, 0],
+                    'lon': geo_coords[vd_idxs, 1],
+                    'elev': values[vd_idxs],
+                    'crs': [i[1] for i in interp_info_map.values()],
+                    'source': [i[0] for i in interp_info_map.values()]
+                }
+            )
+            df_interp_info.sort_index().to_csv(
+                info_out_path, header=False, index=True)
+
 
         self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
                                     dtype=jigsaw_msh_t.REALS_t)
@@ -1952,7 +2009,8 @@ def _mesh_interpolate_worker(
         coords_crs: CRS,
         raster_path: Union[str, Path],
         chunk_size: Optional[int],
-        method: Literal['spline', 'linear', 'nearest']):
+        method: Literal['spline', 'linear', 'nearest'] = "spline",
+        filter_by_shape: bool = False):
     """Interpolator worker function to be used in parallel calls
 
     Parameters
@@ -1967,6 +2025,8 @@ def _mesh_interpolate_worker(
         Chunk size for windowing over the raster.
     method : {'spline', 'linear', 'nearest'}, default='spline'
         Method of interpolation.
+    filter_by_shape : bool
+        Flag for node filtering based on raster bbox or shape
 
     Returns
     -------
@@ -1999,24 +2059,21 @@ def _mesh_interpolate_worker(
         # Use masked array to ignore missing values from DEM
         zi = raster.get_values(window=window, masked=True)
 
-        _idxs = np.logical_and(
-            np.logical_and(
-                np.min(xi) <= coords[:, 0],
-                np.max(xi) >= coords[:, 0]),
-            np.logical_and(
-                np.min(yi) <= coords[:, 1],
-                np.max(yi) >= coords[:, 1]))
+        if not filter_by_shape:
+            _idxs = np.logical_and(
+                np.logical_and(
+                    np.min(xi) <= coords[:, 0],
+                    np.max(xi) >= coords[:, 0]),
+                np.logical_and(
+                    np.min(yi) <= coords[:, 1],
+                    np.max(yi) >= coords[:, 1]))
+        else:
+            shape = raster.get_multipolygon()
+            gs_pt = gpd.points_from_xy(coords[:, 0], coords[:, 1])
+            _idxs = gs_pt.intersects(shape)
 
-        # Inspired by StackOverflow 35807321
+
         interp_mask = None
-        if np.any(zi.mask):
-            m_interp = RegularGridInterpolator(
-                (xi, np.flip(yi)),
-                np.flipud(zi.mask).T.astype(bool),
-                method=method
-            )
-            # Pick nodes NOT "contaminated" by masked values
-            interp_mask = m_interp(coords[_idxs]) > 0
 
         if method == 'spline':
             f = RectBivariateSpline(
@@ -2029,6 +2086,16 @@ def _mesh_interpolate_worker(
             _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
 
         elif method in ['nearest', 'linear']:
+            # Inspired by StackOverflow 35807321
+            if np.any(zi.mask):
+                m_interp = RegularGridInterpolator(
+                    (xi, np.flip(yi)),
+                    np.flipud(zi.mask).T.astype(bool),
+                    method=method
+                )
+                # Pick nodes NOT "contaminated" by masked values
+                interp_mask = m_interp(coords[_idxs]) > 0
+
             f = RegularGridInterpolator(
                 (xi, np.flip(yi)),
                 np.flipud(zi).T,

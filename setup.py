@@ -109,6 +109,7 @@ setuptools.setup(
                       "jigsawpy",
                       "matplotlib",
                       "netCDF4",
+                      "numba",
                       "numpy>=1.21", # introduce npt.NDArray
                       "pyarrow",
                       "pygeos",
@@ -128,7 +129,7 @@ setuptools.setup(
         ]
     },
     extras_require={
-        'testing': ['pylint>=2.11.1'],
+        'testing': ['pylint>=2.14'],
         'documentation': [
             'sphinx',
             'sphinx-rtd-theme',

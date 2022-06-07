@@ -633,13 +633,14 @@ def get_multipolygon_from_pathplot(ax):
                         LinearRing(linear_ring))
     if len(linear_ring_collection) > 1:
         # reorder linear rings from above
-        areas = [Polygon(linear_ring).area
-                 for linear_ring in linear_ring_collection]
-        idx = np.where(areas == np.max(areas))[0][0]
         polygon_collection = []
-        outer_ring = linear_ring_collection.pop(idx)
-        path = Path(np.asarray(outer_ring.coords), closed=True)
         while len(linear_ring_collection) > 0:
+            areas = [Polygon(linear_ring).area
+                     for linear_ring in linear_ring_collection]
+            idx = np.where(areas == np.max(areas))[0][0]
+            outer_ring = linear_ring_collection.pop(idx)
+            path = Path(np.asarray(outer_ring.coords), closed=True)
+
             inner_rings = []
             for i, linear_ring in reversed(
                     list(enumerate(linear_ring_collection))):
@@ -647,12 +648,7 @@ def get_multipolygon_from_pathplot(ax):
                 if path.contains_point(xy):
                     inner_rings.append(linear_ring_collection.pop(i))
             polygon_collection.append(Polygon(outer_ring, inner_rings))
-            if len(linear_ring_collection) > 0:
-                areas = [Polygon(linear_ring).area
-                         for linear_ring in linear_ring_collection]
-                idx = np.where(areas == np.max(areas))[0][0]
-                outer_ring = linear_ring_collection.pop(idx)
-                path = Path(np.asarray(outer_ring.coords), closed=True)
+
         multipolygon = MultiPolygon(polygon_collection)
     else:
         multipolygon = MultiPolygon(
