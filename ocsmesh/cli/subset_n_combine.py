@@ -107,11 +107,13 @@ class SubsetAndCombine:
         upstream_size_max = args.adv_upstream_area_max
         rel_island_area_min = args.adv_rel_island_area_min
 
+        out_all = args.outall
+
         self._main(
             pathlist_raster, path_fine, path_coarse, roi,
             cutoff_elev, upstream_size_max,
             wind_speed, num_buffer_layers, rel_island_area_min,
-            out_dir, crs)
+            out_dir, crs, out_all)
 
 
     def _remove_holes(self, poly):
@@ -467,6 +469,7 @@ class SubsetAndCombine:
     def _write_outputs(
             self,
             out_dir,
+            out_all,
             crs,
             poly_clip_hires,
             poly_clip_lowres,
@@ -481,26 +484,27 @@ class SubsetAndCombine:
             buffer_shrd_idx
             ):
 
-        _logger.info("Writing shapes...")
-        start = time()
-        self._write_polygon(poly_clip_hires, crs, out_dir/"hires")
-        self._write_polygon(poly_clip_lowres, crs, out_dir/"lowres")
-        self._write_polygon(poly_seam, crs, out_dir/"seam")
-        self._write_polygon(poly_clipper, crs, out_dir/"clip")
-        _logger.info(f"Done in {time() - start} sec")
+        if out_all:
+            _logger.info("Writing shapes...")
+            start = time()
+            self._write_polygon(poly_clip_hires, crs, out_dir/"hires")
+            self._write_polygon(poly_clip_lowres, crs, out_dir/"lowres")
+            self._write_polygon(poly_seam, crs, out_dir/"seam")
+            self._write_polygon(poly_clipper, crs, out_dir/"clip")
+            _logger.info(f"Done in {time() - start} sec")
 
-        _logger.info("Writing input mesh (copy)...")
-        start = time()
-        mesh_fine.write(str(out_dir / "fine.2dm"), format="2dm", overwrite=True)
-        mesh_coarse.write(str(out_dir / "coarse.2dm"), format="2dm", overwrite=True)
-        _logger.info(f"Done in {time() - start} sec")
+            _logger.info("Writing input mesh (copy)...")
+            start = time()
+            mesh_fine.write(str(out_dir / "fine.2dm"), format="2dm", overwrite=True)
+            mesh_coarse.write(str(out_dir / "coarse.2dm"), format="2dm", overwrite=True)
+            _logger.info(f"Done in {time() - start} sec")
 
-        _logger.info("Writing mesh...")
-        start = time()
-        self._write_jigsaw(jig_buffer_mesh, out_dir/"seam_mesh.2dm")
-        self._write_jigsaw(jig_clip_hires, out_dir/"hires_mesh.2dm")
-        self._write_jigsaw(jig_clip_lowres, out_dir/"lowres_mesh.2dm")
-        _logger.info(f"Done in {time() - start} sec")
+            _logger.info("Writing mesh...")
+            start = time()
+            self._write_jigsaw(jig_buffer_mesh, out_dir/"seam_mesh.2dm")
+            self._write_jigsaw(jig_clip_hires, out_dir/"hires_mesh.2dm")
+            self._write_jigsaw(jig_clip_lowres, out_dir/"lowres_mesh.2dm")
+            _logger.info(f"Done in {time() - start} sec")
 
         _logger.info("Writing mesh...")
         start = time()
@@ -534,7 +538,7 @@ class SubsetAndCombine:
             pathlist_raster, path_fine, path_coarse, track_file,
             cutoff_elev, upstream_size_max,
             wind_speed, num_buffer_layers, rel_island_area_min,
-            out_dir, crs):
+            out_dir, crs, out_all):
 
         _logger.info("Reading meshes...")
         start = time()
@@ -649,6 +653,7 @@ class SubsetAndCombine:
 
         self._write_outputs(
             out_dir,
+            out_all,
             crs,
             poly_clip_hires,
             poly_clip_lowres,

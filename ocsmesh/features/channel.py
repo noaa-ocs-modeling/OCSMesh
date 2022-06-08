@@ -1,6 +1,9 @@
 class Channel:
 
-    def __init__(self, level=0, width=1000, tolerance=50, sources=[]):
+    def __init__(self, level=0, width=1000, tolerance=50, sources=None):
+
+        if sources is None:
+            sources = []
 
         # Even a tolerance of 1 for simplifying polygon for channel
         # calculations is much faster than no simplification. 50

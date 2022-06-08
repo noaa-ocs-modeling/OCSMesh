@@ -344,10 +344,12 @@ class GeomCombine:
             temp_dir: Union[str, os.PathLike],
             priorities: Sequence[int],
             dem_files: Sequence[Union[str, os.PathLike]],
-            z_info: dict = {},
+            z_info: dict = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
 
+        if z_info is None:
+            z_info = {}
 
         _logger.info("Getting DEM info")
         poly_coll = []
@@ -471,9 +473,12 @@ class GeomCombine:
             temp_dir: Union[str, os.PathLike],
             priority: int,
             dem_file: Union[str, os.PathLike],
-            z_info: dict = {},
+            z_info: dict = None,
             chunk_size: Union[int, None] = None,
             overlap: Union[int, None] = None):
+
+        if z_info is None:
+            z_info = {}
 
         poly_coll_files = self._serial_get_polygon(
             base_mesh_path, temp_dir, [priority], [dem_file],

@@ -1720,8 +1720,10 @@ def drop_extra_vertex_from_line(lstr: LineString) -> LineString:
 
     vecs = coords[1:] - coords[:-1]
 
-    is_zero = lambda i: np.isclose(i, 0)
-    isnt_zero = lambda i: np.logical_not(np.isclose(i, 0))
+    def is_zero(i):
+        return np.isclose(i, 0)
+    def isnt_zero(i):
+        return np.logical_not(np.isclose(i, 0))
 
     vec_sizes = np.sqrt(vecs[:, 0] ** 2 + vecs[:, 1] ** 2)
     uvecs = vecs / vec_sizes.reshape(-1, 1)

@@ -1833,7 +1833,7 @@ class Boundaries:
             ocean_boundaries = []
             if len(ocean_boundary) != 0:
                 #pylint: disable=not-an-iterable
-                ocean_segs = linemerge(coords[np.array(ocean_boundary)])
+                ocean_segs = linemerge(coords[np.array(ocean_boundary)].tolist())
                 ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
                 ocean_boundaries = [
                         [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
@@ -1842,7 +1842,7 @@ class Boundaries:
             land_boundaries = []
             if len(land_boundary) != 0:
                 #pylint: disable=not-an-iterable
-                land_segs = linemerge(coords[np.array(land_boundary)])
+                land_segs = linemerge(coords[np.array(land_boundary)].tolist())
                 land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
                 land_boundaries = [
                         [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])

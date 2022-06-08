@@ -3,7 +3,9 @@ from abc import ABC, abstractmethod
 
 class ContourBase(ABC):
 
-    def __init__(self, sources=[], shapefile=None):
+    def __init__(self, sources=None, shapefile=None):
+        if sources is None:
+            sources = []
         if sources and shapefile:
             raise ValueError(
                 "Both sources and shapefile cannot be specified at the same time!")
@@ -64,7 +66,10 @@ class ContourBase(ABC):
 
 class Contour(ContourBase):
 
-    def __init__(self, level=None, sources=[], shapefile=None):
+    def __init__(self, level=None, sources=None, shapefile=None):
+
+        if sources is None:
+            sources = []
 
         super().__init__(sources, shapefile)
         self._level = level
@@ -92,9 +97,12 @@ class FilledContour(ContourBase):
     def __init__(self,
                  level0=None,
                  level1=None,
-                 sources=[],
+                 sources=None,
                  max_contour_defn : Contour = None,
                  shapefile=None):
+
+        if sources is None:
+            sources = []
 
         super().__init__(sources, shapefile)
         if max_contour_defn:
