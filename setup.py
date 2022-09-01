@@ -11,6 +11,8 @@ from pathlib import Path
 import sys
 import os
 
+from dunamai import Version
+
 PARENT = Path(__file__).parent.absolute()
 PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
 SYSLIB = {
@@ -88,7 +90,7 @@ conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
 meta = conf['metadata']
 setuptools.setup(
     name=meta['name'],
-    version=meta['version'],
+    version=Version.from_any_vcs().serialize(),
     author=meta['author'],
     author_email=meta['author_email'],
     description=meta['description'],
