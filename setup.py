@@ -1,15 +1,20 @@
 #! /usr/bin/env python
 import setuptools
 import subprocess
-import setuptools.command.build_py
 import distutils.cmd
-import distutils.util
 import shutil
 import platform
 from multiprocessing import cpu_count
 from pathlib import Path
 import sys
 import os
+
+version = "0.0.0"
+try:
+    from dunamai import Version
+    version = Version.from_any_vcs().serialize(),
+except ImportError:
+    print("Dunamai not found!")
 
 PARENT = Path(__file__).parent.absolute()
 PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
@@ -84,62 +89,9 @@ class InstallJigsawCommand(distutils.cmd.Command):
         return shutil.which("gcc"), cpp
 
 
-conf = setuptools.config.read_configuration(PARENT / 'setup.cfg')
-meta = conf['metadata']
 setuptools.setup(
-    name=meta['name'],
-    version=meta['version'],
-    author=meta['author'],
-    author_email=meta['author_email'],
-    description=meta['description'],
-    long_description=meta['long_description'],
-    long_description_content_type="text/markdown",
-    url=meta['url'],
-    packages=setuptools.find_packages(),
+    version=version,
     cmdclass={
         'install_jigsaw': InstallJigsawCommand,
         },
-    python_requires='>=3.7, <3.10',
-    setup_requires=['wheel', 'numpy'],
-    install_requires=[
-                      "colored-traceback",
-                      "fiona",
-                      "geoalchemy2",
-                      "geopandas",
-                      "jigsawpy",
-                      "matplotlib",
-                      "netCDF4",
-                      "numba",
-                      "numpy>=1.21", # introduce npt.NDArray
-                      "pyarrow",
-                      "pygeos",
-                      "pyproj>=3.0",
-                      "rasterio",
-                      "requests",
-                      "scipy<1.8",   # dropping python 3.7
-                      "shapely>=1.8",
-                      "tqdm",
-                      "typing_extensions",
-                      "utm",
-                      ],
-    entry_points={
-        'console_scripts': [
-            "ocsmesh=ocsmesh.__main__:main",
-            "interp=ocsmesh.interp:main"
-        ]
-    },
-    extras_require={
-        'testing': ['pylint>=2.14'],
-        'documentation': [
-            'sphinx',
-            'sphinx-rtd-theme',
-            'sphinx-argparse',
-            'dunamai',
-            'mistune==0.8.4',
-            'm2r2',
-            'numpydoc'
-        ]
-    },
-    tests_require=['nose'],
-    test_suite='nose.collector',
 )

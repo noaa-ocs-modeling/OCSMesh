@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        python-version: [ '3.7', '3.8', '3.9' ]
+        python-version: [ '3.8', '3.9' ]
 
     steps:
     - name: Checkout 
@@ -39,17 +39,6 @@ jobs:
       run: |
         wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O fullsize_dem.tif
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite fullsize_dem.tif test_dem.tif
-
-    - name: Export Conda environment
-      shell: bash -l {0}
-      run: conda list > environment_py${{ matrix.python-version }}.yml
-
-    - name: 'Upload conda environment'
-      uses: actions/upload-artifact@v2
-      with:
-        name: conda-environment-${{ matrix.python-version }}
-        path: environment_py${{ matrix.python-version }}.yml
-        retention-days: 7
 
 
     - name: 'Upload test dem'

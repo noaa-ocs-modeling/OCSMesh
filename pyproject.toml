@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=45", "dunamai", "wheel", "numpy"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ocsmesh"
+version = "0.0.0"
+authors = [
+    {name = "Jaime R Calzada", email = "jreniel@gmail.com"},
+    {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
+]
+maintainers = [
+    {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
+]
+description = "Package to generate computational unstructured meshes from planetary modeling."
+license = {file = "CC0"}
+dynamic = ["readme"]
+requires-python = '>=3.7, <3.10'
+dependencies = [
+    "colored-traceback", "fiona", "geoalchemy2", "geopandas",
+    "jigsawpy", "matplotlib", "netCDF4", "numba",
+    "numpy>=1.21", # introduce npt.NDArray
+    "pyarrow", "pygeos", "pyproj>=3.0", "rasterio", "requests",
+    "scipy<1.8",   # dropping python 3.7
+    "shapely>=1.8", "tqdm", "typing_extensions", "utm",
+    ]
+
+[tool.setuptools.packages]
+find = {}
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"]}
+
+[project.scripts]
+ocsmesh = "ocsmesh.__main__:main"
+interp = "ocsmesh.interp:main"
+
+[project.optional-dependencies]
+testing = ['pylint>=2.14']
+documentation = [
+    'sphinx', 'sphinx-rtd-theme', 'sphinx-argparse', 'dunamai',
+    'mistune==0.8.4', 'm2r2', 'numpydoc'
+]
