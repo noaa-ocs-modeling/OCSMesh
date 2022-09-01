@@ -4,6 +4,7 @@ from copy import deepcopy
 import logging
 import sys
 
+from fiona.drvsupport import supported_drivers
 import geopandas as gpd
 import numpy as np
 from shapely.geometry import MultiPolygon, Polygon
@@ -25,7 +26,9 @@ logging.basicConfig(
 _logger = logging.getLogger(__name__)
 
 # Enable KML driver
-gpd.io.file.fiona.drvsupport.supported_drivers['KML'] = 'rw'
+#from https://stackoverflow.com/questions/72960340/attributeerror-nonetype-object-has-no-attribute-drvsupport-when-using-fiona
+supported_drivers['KML'] = 'rw'
+supported_drivers['LIBKML'] = 'rw'
 
 class RemeshByShape:
 
