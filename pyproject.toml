@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 find = {}
 
 [tool.setuptools.dynamic]
-readme = {file = "README.md"}
+readme = "README.md"
 
 [project]
 name = "ocsmesh"
@@ -43,6 +43,6 @@ interp = "ocsmesh.interp:main"
 [project.optional-dependencies]
 testing = ['pylint>=2.14']
 documentation = [
-    'sphinx', 'sphinx-rtd-theme', 'sphinx-argparse', 'dunamai',
+    'sphinx', 'sphinx-rtd-theme', 'sphinx-argparse',
     'mistune==0.8.4', 'm2r2', 'numpydoc'
 ]
