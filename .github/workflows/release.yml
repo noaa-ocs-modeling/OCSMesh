@@ -52,7 +52,8 @@ jobs:
           name: build
           path: ./dist/*.tar.gz
   upload_test_pypi:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+
     name: upload to test PyPI repository
     needs: [ build_wheels, build_sdist ]
     runs-on: ubuntu-latest
