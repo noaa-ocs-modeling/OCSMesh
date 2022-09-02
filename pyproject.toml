@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=45", "dunamai", "wheel", "numpy"]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
 
 [tool.setuptools.packages]
 find = {}
 
 [tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
+readme = {file = "README.md"}
 
 [project]
 name = "ocsmesh"
