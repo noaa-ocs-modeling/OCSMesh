@@ -2,6 +2,12 @@
 requires = ["setuptools>=45", "dunamai", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages]
+find = {}
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"]}
+
 [project]
 name = "ocsmesh"
 version = "0.0.0"
@@ -24,13 +30,10 @@ dependencies = [
     "scipy<1.8",   # dropping python 3.7
     "shapely>=1.8", "tqdm", "typing_extensions", "utm",
     ]
-url = "https://noaa-ocs-modeling.github.io/OCSMesh/"
 
-[tool.setuptools.packages]
-find = {}
-
-[tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
+[project.urls]
+Documentation = "https://noaa-ocs-modeling.github.io/OCSMesh/"
+Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
 
 [project.scripts]
 ocsmesh = "ocsmesh.__main__:main"
