@@ -22,7 +22,7 @@ channel.
 
 First you need to download the `environment.yml` file.
 
-```bash
+```
 wget https://raw.githubusercontent.com/noaa-ocs-modeling/OCSMesh/main/environment.yml
 
 conda env create -f environment.yml -n your-env-name
@@ -39,7 +39,7 @@ the script provided in OCSMesh repo by calling:
 `./setup.py install_jigsaw` in the OCSMesh root directory.
 Then OCSMesh can be installed. 
 
-```bash
+```
 git clone https://github.com/noaa-ocs-modeling/ocsmesh
 cd ocsmesh
 python ./setup.py install_jigsaw # To install latest Jigsaw from GitHub
