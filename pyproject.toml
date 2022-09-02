@@ -2,9 +2,14 @@
 requires = ["setuptools>=45", "dunamai", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages]
+find = {}
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"]}
+
 [project]
 name = "ocsmesh"
-version = "0.0.0"
 authors = [
     {name = "Jaime R Calzada", email = "jreniel@gmail.com"},
     {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
@@ -14,7 +19,7 @@ maintainers = [
 ]
 description = "Package to generate computational unstructured meshes from planetary modeling."
 license = {file = "CC0"}
-dynamic = ["readme"]
+dynamic = ["version", "readme"]
 requires-python = '>=3.7, <3.10'
 dependencies = [
     "colored-traceback", "fiona", "geoalchemy2", "geopandas",
@@ -25,11 +30,9 @@ dependencies = [
     "shapely>=1.8", "tqdm", "typing_extensions", "utm",
     ]
 
-[tool.setuptools.packages]
-find = {}
-
-[tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
+[project.urls]
+Documentation = "https://noaa-ocs-modeling.github.io/OCSMesh/"
+Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
 
 [project.scripts]
 ocsmesh = "ocsmesh.__main__:main"

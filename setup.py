@@ -12,7 +12,7 @@ import os
 version = "0.0.0"
 try:
     from dunamai import Version
-    version = Version.from_any_vcs().serialize(),
+    version = Version.from_any_vcs().serialize()
 except ImportError:
     print("Dunamai not found!")
 
