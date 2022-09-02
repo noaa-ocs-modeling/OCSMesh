@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel", "numpy"]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=7", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools_scm]
@@ -17,7 +17,7 @@ maintainers = [
     {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
 ]
 description = "Package to generate computational unstructured meshes from planetary modeling."
-license = {file = "CC0"}
+license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = '>=3.7, <3.10'
 dependencies = [
