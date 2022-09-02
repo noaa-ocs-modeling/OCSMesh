@@ -13,6 +13,7 @@ import os
 from os import PathLike
 from pathlib import Path
 import sys
+import importlib.metadata
 
 from dunamai import Version
 from setuptools import config
@@ -34,10 +35,10 @@ def repository_root(path: PathLike = None) -> Path:
 sys.path.insert(0, str(repository_root()))
 
 # -- Project information -----------------------------------------------------
-metadata = config.read_configuration('../../setup.cfg')['metadata']
+metadata = importlib.metadata.metadata('ocsmesh')
 
-project = metadata['name']
-author = metadata['author']
+project = metadata['Name']
+author = metadata['Author-email']
 copyright = f'2021, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA)'
 
 # The full version, including alpha/beta/rc tags
