@@ -53,6 +53,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
     - name: Download documentation for deployment
       uses: actions/download-artifact@v3
       with:
