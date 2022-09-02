@@ -1,7 +1,6 @@
 name: Release to PyPI
 
 on:
-  push:
   release:
     types:
       - published
