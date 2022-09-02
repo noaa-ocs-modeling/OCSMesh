@@ -7,7 +7,7 @@ on:
       - published
 
 jobs:
-  build_wheels:
+  build_packages:
     name: build wheel
     runs-on: ${{ matrix.os }}
     strategy:
@@ -39,7 +39,7 @@ jobs:
   upload_pypi:
     if: github.event_name == 'release'
     name: publish to PyPI
-    needs: [ build_wheels, build_sdist ]
+    needs: [ build_packages ]
     runs-on: ubuntu-latest
     steps:
       - name: retrieve wheel(s) and source
