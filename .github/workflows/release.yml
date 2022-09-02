@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_packages:
-    name: build wheel
+    name: build wheel & source distribtions
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
