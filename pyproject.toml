@@ -24,6 +24,7 @@ dependencies = [
     "scipy<1.8",   # dropping python 3.7
     "shapely>=1.8", "tqdm", "typing_extensions", "utm",
     ]
+url = "https://noaa-ocs-modeling.github.io/OCSMesh/"
 
 [tool.setuptools.packages]
 find = {}
