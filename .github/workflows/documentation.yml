@@ -10,6 +10,7 @@ on:
 jobs:
   create-documentation:
 
+    name: create
     runs-on: ubuntu-latest
 
     steps:
@@ -44,9 +45,13 @@ jobs:
         path: docs/build/html
 
   deploy-documentation:
+
+    name: deploy
     runs-on: ubuntu-latest
-    needs: [ create-documentation ]
+    needs: [ create ]
     if: github.ref == 'refs/heads/main'
+
+    steps:
     - name: Download documentation for deployment
       uses: actions/download-artifact@v3
       with:
