@@ -10,7 +10,6 @@ on:
 jobs:
   create-documentation:
 
-    name: create
     runs-on: ubuntu-latest
 
     steps:
@@ -46,9 +45,8 @@ jobs:
 
   deploy-documentation:
 
-    name: deploy
     runs-on: ubuntu-latest
-    needs: [ create ]
+    needs: [ create-documentation ]
     if: github.ref == 'refs/heads/main'
 
     steps:
