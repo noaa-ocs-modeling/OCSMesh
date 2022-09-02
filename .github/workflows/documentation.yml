@@ -57,6 +57,7 @@ jobs:
       uses: actions/download-artifact@v3
       with:
         name: documentation_built
+        path: docs/build/html
     - name: Deploy to GitHub Pages
       uses: JamesIves/github-pages-deploy-action@4.1.5
       with:
