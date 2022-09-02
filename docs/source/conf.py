@@ -14,6 +14,7 @@ from os import PathLike
 from pathlib import Path
 import sys
 import importlib.metadata
+from datetime import datetime
 
 from dunamai import Version
 from setuptools import config
@@ -39,7 +40,7 @@ metadata = importlib.metadata.metadata('ocsmesh')
 
 project = metadata['Name']
 author = metadata['Author-email']
-copyright = f'2021, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA)'
+copyright = f'{datetime.now().year}, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA)'
 
 # The full version, including alpha/beta/rc tags
 try:
