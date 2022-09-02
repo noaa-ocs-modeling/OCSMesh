@@ -27,48 +27,15 @@ jobs:
         with:
           path: ${{ env.pythonLocation }}
           key: build-${{ runner.os }}-${{ env.pythonLocation }}-${{ hashFiles('pyproject.toml', 'setup.*') }}
-      - name: build wheel
-        run: pip wheel . -w dist --no-deps
-      - name: save wheel
+      - name: install build package
+        run: pip install build
+      - name: build package
+        run: python -m build
+      - name: save builds
         uses: actions/upload-artifact@v2
         with:
           name: build
-          path: ./dist/*.whl
-  build_sdist:
-    name: package source
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout repository
-        uses: actions/checkout@v2
-      - name: install Python
-        uses: actions/setup-python@v2
-      - name: install dependencies
-        run: pip install dunamai
-      - name: package source
-        run: python setup.py sdist
-      - name: save source package
-        uses: actions/upload-artifact@v2
-        with:
-          name: build
-          path: ./dist/*.tar.gz
-  upload_test_pypi:
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-
-    name: upload to test PyPI repository
-    needs: [ build_wheels, build_sdist ]
-    runs-on: ubuntu-latest
-    steps:
-      - name: retrieve wheel(s) and source
-        uses: actions/download-artifact@v2
-        with:
-          name: build
-          path: dist
-      - name: upload wheel(s) and source
-        uses: pypa/gh-action-pypi-publish@v1.5.0
-        with:
-          repository_url: https://test.pypi.org/legacy/
-          user: __token__
-          password: ${{ secrets.TEST_PYPI_TOKEN }}
+          path: ./dist
   upload_pypi:
     if: github.event_name == 'release'
     name: publish to PyPI
