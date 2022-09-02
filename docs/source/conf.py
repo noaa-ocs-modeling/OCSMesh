@@ -16,7 +16,6 @@ import sys
 import importlib.metadata
 from datetime import datetime
 
-from dunamai import Version
 from setuptools import config
 
 
@@ -40,13 +39,12 @@ metadata = importlib.metadata.metadata('ocsmesh')
 
 project = metadata['Name']
 author = metadata['Author-email']
+release = metadata['Version']
+print(list(metadata))
+for i in metadata:
+    print(i, metadata[i])
 copyright = f'{datetime.now().year}, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA)'
 
-# The full version, including alpha/beta/rc tags
-try:
-    release = Version.from_any_vcs().serialize()
-except RuntimeError:
-    release = os.environ.get('VERSION')
 
 # -- General configuration ---------------------------------------------------
 

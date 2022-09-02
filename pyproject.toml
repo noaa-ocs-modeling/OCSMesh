@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools>=45", "dunamai", "wheel", "numpy"]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2", "wheel", "numpy"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
 
 [tool.setuptools.packages]
 find = {}
-
-[tool.setuptools.dynamic]
-readme = {file = ["README.md"]}
 
 [project]
 name = "ocsmesh"
@@ -19,7 +18,7 @@ maintainers = [
 ]
 description = "Package to generate computational unstructured meshes from planetary modeling."
 license = {file = "CC0"}
-dynamic = ["version", "readme"]
+readme = "README.md"
 requires-python = '>=3.7, <3.10'
 dependencies = [
     "colored-traceback", "fiona", "geoalchemy2", "geopandas",
@@ -29,6 +28,7 @@ dependencies = [
     "scipy<1.8",   # dropping python 3.7
     "shapely>=1.8", "tqdm", "typing_extensions", "utm",
     ]
+dynamic = ["version"]
 
 [project.urls]
 Documentation = "https://noaa-ocs-modeling.github.io/OCSMesh/"
@@ -41,6 +41,6 @@ interp = "ocsmesh.interp:main"
 [project.optional-dependencies]
 testing = ['pylint>=2.14']
 documentation = [
-    'sphinx', 'sphinx-rtd-theme', 'sphinx-argparse', 'dunamai',
+    'sphinx', 'sphinx-rtd-theme', 'sphinx-argparse',
     'mistune==0.8.4', 'm2r2', 'numpydoc'
 ]

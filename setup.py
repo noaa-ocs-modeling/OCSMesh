@@ -9,13 +9,6 @@ from pathlib import Path
 import sys
 import os
 
-version = "0.0.0"
-try:
-    from dunamai import Version
-    version = Version.from_any_vcs().serialize()
-except ImportError:
-    print("Dunamai not found!")
-
 PARENT = Path(__file__).parent.absolute()
 PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
 SYSLIB = {
@@ -90,7 +83,6 @@ class InstallJigsawCommand(distutils.cmd.Command):
 
 
 setuptools.setup(
-    version=version,
     cmdclass={
         'install_jigsaw': InstallJigsawCommand,
         },
