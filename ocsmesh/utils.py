@@ -11,10 +11,11 @@ from matplotlib.path import Path  # type: ignore[import]
 import matplotlib.pyplot as plt  # type: ignore[import]
 from matplotlib.tri import Triangulation  # type: ignore[import]
 import numpy as np  # type: ignore[import]
+import numpy.typing as npt
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
-from scipy import sparse
+from scipy import sparse, constants
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
@@ -1755,3 +1756,163 @@ def drop_extra_vertex_from_polygon(
         poly_seam_list.append(Polygon(extr, inters))
 
     return MultiPolygon(poly_seam_list)
+
+def get_element_size_courant(
+    characteristic_velocity_magnitude: Union[float, npt.NDArray[float]],
+    timestep: float,
+    target_courant: float = 1
+) -> Union[float, npt.NDArray[float]]:
+
+    '''Calculate the element size based on the specified Courant number.
+
+    Calculate the element size based on the specified Courant number
+    and input value for timestep and characteristic velocity
+
+    Parameters
+    ----------
+    target_courant : float
+        The Courant number to be achieved by the calculated element size
+    characteristic_velocity_magnitude : float or array of floats
+        Magnitude of total velocity used for element size calculation (:math:`\\frac{m}{sec}`)
+    timestep : float
+        Timestep size (:math:`seconds`) to
+
+    Returns
+    -------
+    float or array of floats
+        The calculated element size(s) to achieve the given Courant #
+    '''
+
+    return characteristic_velocity_magnitude * timestep / target_courant
+
+
+def can_velocity_be_approximated_by_linear_wave_theory(
+    depth: Union[float, npt.NDArray[float]],
+    wave_amplitude: float = 2
+) -> Union[bool, npt.NDArray[bool]]:
+    '''Checks whether the particle velocity can be appoximated.
+
+    Based on the input depth, checks whether or not the velocity can
+    be approximated from the linear wave theory
+
+    Parameters
+    ----------
+    depth : float or array of float
+        Depth of the point for which the approximation validation is checked
+    wave_amplitude : float, default=2
+        Free surface elevation (:math:`meters`) from the reference (i.e. wave height)
+
+    Returns
+    -------
+    bool or array of bool
+        Whether or not the value at given input depth can be approximated
+
+    Notes
+    -----
+    Linear wave theory approximation breaks down when :math:`\\nu \\sim h`
+    overland. So this method just returns whether depth is below or over
+    depth of `wave_amplitude` magnitude.
+
+    References
+    ----------
+    Based on OceanMesh2D approximation method https://doi.org/10.13140/RG.2.2.21840.61446/2.
+    '''
+
+    return depth <= -abs(wave_amplitude)
+
+
+def estimate_particle_velocity_from_depth(
+    depth: Union[float, npt.NDArray[float]],
+    wave_amplitude: float = 2
+) -> Union[float, npt.NDArray[float]]:
+
+    '''Approximate particle velocity magnitude based on depth of water
+
+    Estimate the value of particle velocity magnitude based on the
+    linear wave theory as :math:`\\left|u\\right| = \\nu \\sqrt{\\frac{g}{h}}`
+    for ocean and :math:`\\left|u\\right| = \\sqrt{gH}` for overland region
+    where :math:`\\nu \\sim h` so instead of linear wave theory we take
+    :math:`H \\approx \\nu`
+
+    Parameters
+    ----------
+    depth : float or array of floats
+        The depth of still water (e.g. from DEM)
+    wave_amplitude : float
+        Wave amplitude for approximation as defined by linear wave theory
+
+    Returns
+    -------
+    float or array of floats
+        Estimated water particle velocity
+
+    References
+    ----------
+    Based on OceanMesh2D approximation method https://doi.org/10.13140/RG.2.2.21840.61446/2.
+    '''
+
+    if not isinstance(depth, np.ndarray):
+        depth = np.array(depth)
+    dep_shape = depth.shape
+    depth = depth.ravel()
+
+    depth_mask = can_velocity_be_approximated_by_linear_wave_theory(
+        depth, wave_amplitude)
+
+    velocity = np.zeros_like(depth)
+    velocity[depth_mask] = wave_amplitude * np.sqrt(constants.g / np.abs(depth[depth_mask]))
+    velocity[~depth_mask] = np.sqrt(constants.g * wave_amplitude)
+
+    return velocity.reshape(dep_shape)
+
+
+def approximate_courant_number_for_depth(
+    depth: Union[float, npt.NDArray[float]],
+    timestep: float,
+    element_size: Union[float, npt.NDArray[float]],
+    wave_amplitude: float = 2
+) -> Union[float, npt.NDArray[float]]:
+    '''Approximate the Courant number for given depths
+
+    Approximate the value of Courant number for the input depth,
+    timestep and element size. The velocity is approximated based on
+    the input depth.
+
+    Parameters
+    ----------
+    depth : float or array of floats
+    timestep : float
+        Timestep size (:math:`seconds`) to
+    element_size : float or array of floats
+        Element size(s) to use for Courant number calculation. Must 
+        be scalar otherwise match the dimension of depth
+    wave_amplitude : float, default=2
+        Free surface elevation (:math:`meters`) from the reference (i.e. wave height)
+
+    Returns
+    -------
+    float or array of floats
+        The approximated Courant number for each input depth
+    '''
+
+    if not isinstance(depth, np.ndarray):
+        depth = np.array(depth)
+    if not isinstance(element_size, np.ndarray):
+        element_size = np.array(element_size)
+
+    if np.any(element_size == 0):
+        raise ValueError("Element size(s) for Courant number approximation include zero!")
+
+    if depth.shape != element_size.shape:
+        raise ValueError("Shapes of depths and sizes arrays don't match!")
+
+    depth_mask = can_velocity_be_approximated_by_linear_wave_theory(
+        depth, wave_amplitude)
+
+    particle_velocity = estimate_particle_velocity_from_depth(depth, wave_amplitude)
+    characteristic_velocity_magnitude = (
+        particle_velocity + np.sqrt(constants.g * np.abs(depth))
+    )
+    # For overland where h < nu the characteristic velocity is 2 * sqrt(g*h)
+    characteristic_velocity_magnitude[~depth_mask] = 2 * particle_velocity[~depth_mask]
+    return characteristic_velocity_magnitude * timestep / element_size
