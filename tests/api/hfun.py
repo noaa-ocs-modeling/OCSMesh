@@ -348,7 +348,13 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
         courant_hi = 0.90
         courant_lo = 0.2
 
-        for method in ['exact', 'fast']:
+        # Fast method is much less accurate!
+        method_tolerance = {
+            'exact': 0.03,
+            'fast': 0.1
+        }
+
+        for method, tol in method_tolerance.items():
 
             # Creating adjacent rasters from the test raster
             rast1 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
@@ -385,11 +391,11 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
             valid_courant = np.logical_and(
                 np.logical_or(
                     C_apprx_mesh > courant_lo,
-                    np.isclose(C_apprx_mesh, courant_lo, atol=0.04)
+                    np.isclose(C_apprx_mesh, courant_lo, atol=tol)
                 ),
                 np.logical_or(
                     C_apprx_mesh < courant_hi,
-                    np.isclose(C_apprx_mesh, courant_hi, atol=0.04)
+                    np.isclose(C_apprx_mesh, courant_hi, atol=tol)
                 )
             )
             # Note using higher tolerance for closeness since sizes and 
