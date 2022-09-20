@@ -957,7 +957,7 @@ class HfunRaster(BaseHfun, Raster):
             elif isinstance(_contours, LineString):
                 contours.append(_contours)
             elif isinstance(_contours, MultiLineString):
-                for _cont in _contours:
+                for _cont in _contours.geoms:
                     contours.append(_cont)
 
         if len(contours) == 0:
@@ -1120,7 +1120,7 @@ class HfunRaster(BaseHfun, Raster):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = list(feature)
+            feature = list(feature.geoms)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size

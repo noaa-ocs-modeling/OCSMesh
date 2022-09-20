@@ -389,11 +389,11 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
                     np.logical_and(
                         np.logical_or(
                             C_apprx_mesh > courant_lo,
-                            np.isclose(C_apprx_mesh, courant_lo, atol=0.03)
+                            np.isclose(C_apprx_mesh, courant_lo, atol=0.04)
                         ),
                         np.logical_or(
                             C_apprx_mesh < courant_hi,
-                            np.isclose(C_apprx_mesh, courant_hi, atol=0.03)
+                            np.isclose(C_apprx_mesh, courant_hi, atol=0.04)
                         )
                     )
                 ),
