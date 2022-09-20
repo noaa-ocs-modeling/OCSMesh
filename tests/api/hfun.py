@@ -382,22 +382,22 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
                 mesh.msh_t.value, dt, hfun_jig.value, nu
             )
 
+            valid_courant = np.logical_and(
+                np.logical_or(
+                    C_apprx_mesh > courant_lo,
+                    np.isclose(C_apprx_mesh, courant_lo, atol=0.04)
+                ),
+                np.logical_or(
+                    C_apprx_mesh < courant_hi,
+                    np.isclose(C_apprx_mesh, courant_hi, atol=0.04)
+                )
+            )
             # Note using higher tolerance for closeness since sizes and 
             # depths are interpolated. Is this ideal? No!
             self.assertTrue(
-                np.all(
-                    np.logical_and(
-                        np.logical_or(
-                            C_apprx_mesh > courant_lo,
-                            np.isclose(C_apprx_mesh, courant_lo, atol=0.04)
-                        ),
-                        np.logical_or(
-                            C_apprx_mesh < courant_hi,
-                            np.isclose(C_apprx_mesh, courant_hi, atol=0.04)
-                        )
-                    )
-                ),
+                np.all(valid_courant),
                 msg=f"Courant constraint failed for '{method}' method!"
+                    + f"\n{C_apprx_mesh[~valid_courant]}"
             )
 
 
