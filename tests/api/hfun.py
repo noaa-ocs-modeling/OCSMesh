@@ -9,7 +9,7 @@ import ocsmesh
 class SizeFromMesh(unittest.TestCase):
 
     def setUp(self):
-        rast = ocsmesh.raster.Raster('test_dem.tif')
+        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
 
         hfun_orig = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=1500)
         hfun_orig.add_contour(level=0, expansion_rate=0.001, target_size=100)
