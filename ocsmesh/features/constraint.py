@@ -258,6 +258,8 @@ class CourantNumConstraint(Constraint):
         self,
         ref_values,
         old_values,
+        *args,
+        **kwargs
         ):
         '''Calculate the new values of size function based on input reference
 
@@ -267,6 +269,12 @@ class CourantNumConstraint(Constraint):
             Depth values to be used for Courant number approximations
         old_values : array of floats
             Values of mesh size function before applying the constraint
+        \*args : list
+            List of arguments not handled by this apply method (
+            used in other constraints)
+        \*\*kwargs : dict
+            Dictionary of arguments not handled by this apply method (
+            used in other constraints)
             
         Returns
         -------

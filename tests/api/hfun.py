@@ -1,9 +1,15 @@
 #! python
 import unittest
 from copy import deepcopy
+from pathlib import Path
+
+import requests
 import numpy as np
+from pyproj import CRS
+from shapely import geometry
 
 import ocsmesh
+import jigsawpy
 
 
 class SizeFromMesh(unittest.TestCase):
@@ -256,6 +262,143 @@ class CourantNumConstraint(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(C_apprx, 0.1)))
 
 
+class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
+
+    # NOTE: Since mesh size function doesn't have built-in depth
+    # information, just like other constraints Courant number constraint
+    # is not implemented for it either!
+
+    def test_hfun_raster_cfl_constraint_support(self):
+        dt = 100
+        nu = 2
+        courant_hi = 0.8
+        courant_lo = 0.2
+
+        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+
+        hfun_raster = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=5000)
+        hfun_raster.add_courant_num_constraint(
+            upper_bound=courant_hi,
+            lower_bound=courant_lo,
+            timestep=dt,
+            wave_amplitude=nu
+        )
+
+        C_apprx = ocsmesh.utils.approximate_courant_number_for_depth(
+            rast.values, dt, hfun_raster.values, nu
+        )
+
+        self.assertTrue(
+            np.all(
+                np.logical_and(
+                    np.logical_or(
+                        C_apprx > courant_lo,
+                        np.isclose(C_apprx, courant_lo)
+                    ),
+                    np.logical_or(
+                        C_apprx < courant_hi,
+                        np.isclose(C_apprx, courant_hi)
+                    )
+                )
+            )
+        )
+
+        hfun_jig = hfun_raster.msh_t()
+        mesh_jig = deepcopy(hfun_jig)
+        mesh = ocsmesh.mesh.mesh.Mesh(mesh_jig)
+        mesh.interpolate(rast, nprocs=1)
+
+        C_apprx_mesh = ocsmesh.utils.approximate_courant_number_for_depth(
+            mesh.msh_t.value, dt, hfun_jig.value, nu
+        )
+
+        # Note using higher tolerance for closeness since sizes and 
+        # depths are interpolated. Is this ideal? No!
+        self.assertTrue(
+            np.all(
+                np.logical_and(
+                    np.logical_or(
+                        C_apprx_mesh > courant_lo,
+                        np.isclose(C_apprx_mesh, courant_lo, atol=0.03)
+                    ),
+                    np.logical_or(
+                        C_apprx_mesh < courant_hi,
+                        np.isclose(C_apprx_mesh, courant_hi, atol=0.03)
+                    )
+                )
+            )
+        )
+
+    def test_hfun_raster_cfl_constraint_io(self):
+        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+        hfun_raster = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=5000)
+        self.assertRaises(
+            ValueError,
+            hfun_raster.add_courant_num_constraint,
+            upper_bound=None,
+            lower_bound=None,
+            timestep=100,
+            wave_amplitude=2
+        )
+
+
+    def test_hfun_coll_cfl_constraint(self):
+        dt = 100
+        nu = 2
+        courant_hi = 0.90
+        courant_lo = 0.2
+
+        for method in ['exact', 'fast']:
+
+            # Creating adjacent rasters from the test raster
+            rast1 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+            rast2 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+            bounds = rast1.bbox.bounds
+            bbox1 = geometry.box(
+                bounds[0], bounds[1], (bounds[0] + bounds[2]) / 2, bounds[3]
+            )
+            bbox2 = geometry.box(
+                (bounds[0] + bounds[2]) / 2, bounds[1], bounds[2], bounds[3]
+            )
+            rast1.clip(bbox1)
+            rast2.clip(bbox2)
+
+            hfun_coll = ocsmesh.hfun.hfun.Hfun(
+                [rast1, rast2], hmin=100, hmax=5000, method=method
+            )
+            hfun_coll.add_courant_num_constraint(
+                upper_bound=courant_hi,
+                lower_bound=courant_lo,
+                timestep=dt,
+                wave_amplitude=nu
+            )
+
+            hfun_jig = hfun_coll.msh_t()
+            mesh_jig = deepcopy(hfun_jig)
+            mesh = ocsmesh.mesh.mesh.Mesh(mesh_jig)
+            mesh.interpolate([rast1, rast2], method='nearest', nprocs=1)
+
+            C_apprx_mesh = ocsmesh.utils.approximate_courant_number_for_depth(
+                mesh.msh_t.value, dt, hfun_jig.value, nu
+            )
+
+            # Note using higher tolerance for closeness since sizes and 
+            # depths are interpolated. Is this ideal? No!
+            self.assertTrue(
+                np.all(
+                    np.logical_and(
+                        np.logical_or(
+                            C_apprx_mesh > courant_lo,
+                            np.isclose(C_apprx_mesh, courant_lo, atol=0.03)
+                        ),
+                        np.logical_or(
+                            C_apprx_mesh < courant_hi,
+                            np.isclose(C_apprx_mesh, courant_hi, atol=0.03)
+                        )
+                    )
+                ),
+                msg=f"Courant constraint failed for '{method}' method!"
+            )
 
 
 if __name__ == '__main__':
