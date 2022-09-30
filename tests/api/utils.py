@@ -153,7 +153,7 @@ class RemovePolygonHoles(unittest.TestCase):
         self.assertEqual(
             len(
                utils.remove_holes_by_relative_size(
-                    self._poly, 0.2
+                    self._poly, 0.15
                ).interiors
             ),
             1
