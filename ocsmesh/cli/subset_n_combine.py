@@ -118,7 +118,7 @@ class SubsetAndCombine:
 
     def _remove_holes(self, poly):
         if isinstance(poly, MultiPolygon):
-            return MultiPolygon([self._remove_holes(p) for p in poly.geoms])
+            return unary_union([self._remove_holes(p) for p in poly.geoms])
 
         if poly.interiors:
             return Polygon(poly.exterior)
@@ -128,7 +128,7 @@ class SubsetAndCombine:
 
     def _remove_holes_by_relative_size(self, poly, rel_size):
         if isinstance(poly, MultiPolygon):
-            return MultiPolygon([
+            return unary_union([
                 self._remove_holes_by_relative_size(p, rel_size) for p in poly.geoms])
 
         if poly.interiors:
