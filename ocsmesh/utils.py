@@ -1847,7 +1847,7 @@ def remove_holes_by_relative_size(
     elif not isinstance(poly, Polygon):
         raise ValueError(
             "The input must be either a `Polygon` or `MultiPolygon`:"
-            + f"\t{type(poly)=}"
+            + f"\tType: {type(poly)}"
         )
 
     if poly.interiors:
