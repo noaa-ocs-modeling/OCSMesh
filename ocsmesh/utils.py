@@ -19,7 +19,7 @@ from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
         LineString, LinearRing)
-from shapely.ops import polygonize, linemerge
+from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
 import utm
 
@@ -1755,3 +1755,106 @@ def drop_extra_vertex_from_polygon(
         poly_seam_list.append(Polygon(extr, inters))
 
     return MultiPolygon(poly_seam_list)
+
+
+def remove_holes(
+    poly: Union[Polygon, MultiPolygon]
+) -> Union[Polygon, MultiPolygon]:
+    '''Remove holes from the input polygon(s)
+
+    Given input `Polygon` or `MultiPolygon`, remove all the geometric
+    holes and return a new shape object.
+
+    Parameters
+    ----------
+    poly : Polygon or MultiPolygon
+        The input shape from which the holes are removed
+
+    Returns
+    -------
+    Polygon or MultiPolygon
+        The resulting (multi)polygon after removing the holes
+
+    See Also
+    --------
+    remove_holes_by_relative_size :
+        Remove all the whole smaller than given size from the input shape
+
+    Notes
+    -----
+    For a `Polygon` with no holes, this function returns the original
+    object. For `MultiPolygon` with no holes, the return value is a
+    `unary_union` of all the underlying `Polygon`s.
+    '''
+
+    if isinstance(poly, MultiPolygon):
+        return unary_union([remove_holes(p) for p in poly.geoms])
+
+    elif not isinstance(poly, Polygon):
+        raise ValueError(
+            "The input must be either a `Polygon` or `MultiPolygon`:"
+            + f"\tType: {type(poly)}"
+        )
+
+    if poly.interiors:
+        return Polygon(poly.exterior)
+
+    return poly
+
+
+def remove_holes_by_relative_size(
+    poly: Union[Polygon, MultiPolygon],
+    rel_size:float = 0.1
+) -> Union[Polygon, MultiPolygon]:
+    '''Remove holes from the input polygon(s)
+
+    Given input `Polygon` or `MultiPolygon`, remove all the geometric
+    holes that are smaller than the input relative size `rel_size`
+    and return a new shape object.
+
+    Parameters
+    ----------
+    poly : Polygon or MultiPolygon
+        The input shape from which the holes are removed
+    rel_size : float, default=0.1
+        Maximum ratio of a hole area to the area of polygon
+
+    Returns
+    -------
+    Polygon or MultiPolygon
+        The resulting (multi)polygon after removing the holes
+
+    See Also
+    --------
+    remove_holes :
+        Remove all the whole from the input shape
+        
+    Notes
+    -----
+    For a `Polygon` with no holes, this function returns the original
+    object. For `MultiPolygon` with no holes, the return value is a
+    `unary_union` of all the underlying `Polygon`s.
+
+    If `rel_size=1` is specified the result is the same as 
+    `remove_holes` function, except for the additional cost of 
+    calculating the areas.
+    '''
+
+    if isinstance(poly, MultiPolygon):
+        return unary_union([
+            remove_holes_by_relative_size(p, rel_size) for p in poly.geoms])
+
+    elif not isinstance(poly, Polygon):
+        raise ValueError(
+            "The input must be either a `Polygon` or `MultiPolygon`:"
+            + f"\tType: {type(poly)}"
+        )
+
+    if poly.interiors:
+        ref_area = poly.area
+        new_interiors = [
+                intr for intr in poly.interiors
+                if Polygon(intr).area / ref_area > rel_size]
+        return Polygon(poly.exterior, new_interiors)
+
+    return poly

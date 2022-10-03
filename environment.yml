@@ -17,7 +17,7 @@ dependencies:
   - utm
   - scipy<1.8
   - numba
-  - numpy>=1.21
+  - numpy>=1.21,<1.23 # numpy.typing, scipy 1.7.x support
   - matplotlib
   - requests
   - tqdm
