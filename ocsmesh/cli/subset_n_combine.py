@@ -115,31 +115,6 @@ class SubsetAndCombine:
             wind_speed, num_buffer_layers, rel_island_area_min,
             out_dir, crs, out_all)
 
-
-    def _remove_holes(self, poly):
-        if isinstance(poly, MultiPolygon):
-            return MultiPolygon([self._remove_holes(p) for p in poly.geoms])
-
-        if poly.interiors:
-            return Polygon(poly.exterior)
-
-        return poly
-
-
-    def _remove_holes_by_relative_size(self, poly, rel_size):
-        if isinstance(poly, MultiPolygon):
-            return MultiPolygon([
-                self._remove_holes_by_relative_size(p, rel_size) for p in poly.geoms])
-
-        if poly.interiors:
-            ref_area = poly.area
-            new_interiors = [
-                    intr for intr in poly.interiors
-                    if Polygon(intr).area / ref_area > rel_size]
-            return Polygon(poly.exterior, new_interiors)
-
-        return poly
-
     def _get_largest_polygon(self, mpoly):
         if isinstance(mpoly, Polygon):
             return mpoly
@@ -199,7 +174,7 @@ class SubsetAndCombine:
                         upstream_size_max))
 
         # Islands are not of intereset when clipping high and low-res meshes
-        clip_poly = self._remove_holes(unary_union([
+        clip_poly = utils.remove_holes(unary_union([
             clip_poly_draft, *poly_upstreams]))
 
         return clip_poly
@@ -583,7 +558,7 @@ class SubsetAndCombine:
 
         _logger.info("Calculate clipped polygons...")
         start = time()
-        poly_clip_hires_0 = self._remove_holes(
+        poly_clip_hires_0 = utils.remove_holes(
                 utils.get_mesh_polygons(jig_clip_hires_0))
         poly_clip_lowres_0 = utils.get_mesh_polygons(jig_clip_lowres_0)
         _logger.info(f"Done in {time() - start} sec")
@@ -614,7 +589,7 @@ class SubsetAndCombine:
         poly_seam_5, jig_clip_lowres = self._add_overlap_to_polygon(jig_clip_lowres_0, poly_seam_4)
 
         # Cleanup buffer shape
-        poly_seam_6 = self._remove_holes_by_relative_size(
+        poly_seam_6 = utils.remove_holes_by_relative_size(
                 poly_seam_5, rel_island_area_min)
 
         poly_seam_7 = utils.drop_extra_vertex_from_polygon(poly_seam_6)
@@ -623,7 +598,7 @@ class SubsetAndCombine:
 
         _logger.info("Calculate reclipped polygons...")
         start = time()
-        poly_clip_hires = self._remove_holes(
+        poly_clip_hires = utils.remove_holes(
                 utils.get_mesh_polygons(jig_clip_hires))
         poly_clip_lowres = utils.get_mesh_polygons(jig_clip_lowres)
         _logger.info(f"Done in {time() - start} sec")
