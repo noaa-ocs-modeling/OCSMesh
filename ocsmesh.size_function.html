@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+ge32facf documentation</title>
+  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
   
 
   
@@ -37,6 +37,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -91,7 +92,102 @@
             
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Mesh size definition</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Mesh size definition</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.hfun.Hfun"><code class="docutils literal notranslate"><span class="pre">Hfun</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.Hfun.is_valid_type"><code class="docutils literal notranslate"><span class="pre">Hfun.is_valid_type()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster"><code class="docutils literal notranslate"><span class="pre">HfunRaster</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunRaster.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.apply_added_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_added_constraints()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.apply_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_constraints()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_xy_memcache"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_xy_memcache()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.raster"><code class="docutils literal notranslate"><span class="pre">HfunRaster.raster</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.hmin"><code class="docutils literal notranslate"><span class="pre">HfunRaster.hmin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.hmax"><code class="docutils literal notranslate"><span class="pre">HfunRaster.hmax</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.verbosity"><code class="docutils literal notranslate"><span class="pre">HfunRaster.verbosity</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.add_band"><code class="docutils literal notranslate"><span class="pre">HfunRaster.add_band()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.adjust"><code class="docutils literal notranslate"><span class="pre">HfunRaster.adjust()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.average_filter"><code class="docutils literal notranslate"><span class="pre">HfunRaster.average_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.bbox"><code class="docutils literal notranslate"><span class="pre">HfunRaster.bbox</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.chunk_size"><code class="docutils literal notranslate"><span class="pre">HfunRaster.chunk_size</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.clip"><code class="docutils literal notranslate"><span class="pre">HfunRaster.clip()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.close"><code class="docutils literal notranslate"><span class="pre">HfunRaster.close()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.contourf"><code class="docutils literal notranslate"><span class="pre">HfunRaster.contourf()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.count"><code class="docutils literal notranslate"><span class="pre">HfunRaster.count</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.crs"><code class="docutils literal notranslate"><span class="pre">HfunRaster.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.dtype"><code class="docutils literal notranslate"><span class="pre">HfunRaster.dtype()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.dtypes"><code class="docutils literal notranslate"><span class="pre">HfunRaster.dtypes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.dx"><code class="docutils literal notranslate"><span class="pre">HfunRaster.dx</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.dy"><code class="docutils literal notranslate"><span class="pre">HfunRaster.dy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.fill_nodata"><code class="docutils literal notranslate"><span class="pre">HfunRaster.fill_nodata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.gaussian_filter"><code class="docutils literal notranslate"><span class="pre">HfunRaster.gaussian_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.generic_filter"><code class="docutils literal notranslate"><span class="pre">HfunRaster.generic_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_bbox"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_bbox()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_channels"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_channels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_contour"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_contour()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_values"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_window_bounds"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_window_bounds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_window_data"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_window_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_window_transform"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_window_transform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_x"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_x()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_xy"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_xy()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_xyz"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_xyz()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.get_y"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_y()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.height"><code class="docutils literal notranslate"><span class="pre">HfunRaster.height</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.is_masked"><code class="docutils literal notranslate"><span class="pre">HfunRaster.is_masked</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.iter_windows"><code class="docutils literal notranslate"><span class="pre">HfunRaster.iter_windows()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.mask"><code class="docutils literal notranslate"><span class="pre">HfunRaster.mask()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.md5"><code class="docutils literal notranslate"><span class="pre">HfunRaster.md5</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.modifying_raster"><code class="docutils literal notranslate"><span class="pre">HfunRaster.modifying_raster()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.nodataval"><code class="docutils literal notranslate"><span class="pre">HfunRaster.nodataval()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.overlap"><code class="docutils literal notranslate"><span class="pre">HfunRaster.overlap</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.path"><code class="docutils literal notranslate"><span class="pre">HfunRaster.path</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.read"><code class="docutils literal notranslate"><span class="pre">HfunRaster.read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.read_masks"><code class="docutils literal notranslate"><span class="pre">HfunRaster.read_masks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.resample"><code class="docutils literal notranslate"><span class="pre">HfunRaster.resample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.resampling_method"><code class="docutils literal notranslate"><span class="pre">HfunRaster.resampling_method</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.sample"><code class="docutils literal notranslate"><span class="pre">HfunRaster.sample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.save"><code class="docutils literal notranslate"><span class="pre">HfunRaster.save()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.shape"><code class="docutils literal notranslate"><span class="pre">HfunRaster.shape</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.src"><code class="docutils literal notranslate"><span class="pre">HfunRaster.src</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.tags"><code class="docutils literal notranslate"><span class="pre">HfunRaster.tags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.tmpfile"><code class="docutils literal notranslate"><span class="pre">HfunRaster.tmpfile</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.transform"><code class="docutils literal notranslate"><span class="pre">HfunRaster.transform</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.values"><code class="docutils literal notranslate"><span class="pre">HfunRaster.values</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.warp"><code class="docutils literal notranslate"><span class="pre">HfunRaster.warp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.width"><code class="docutils literal notranslate"><span class="pre">HfunRaster.width</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.x"><code class="docutils literal notranslate"><span class="pre">HfunRaster.x</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.xres"><code class="docutils literal notranslate"><span class="pre">HfunRaster.xres</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.y"><code class="docutils literal notranslate"><span class="pre">HfunRaster.y</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.yres"><code class="docutils literal notranslate"><span class="pre">HfunRaster.yres</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunMesh.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.size_from_mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.size_from_mesh()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.add_patch"><code class="docutils literal notranslate"><span class="pre">HfunMesh.add_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.hmin"><code class="docutils literal notranslate"><span class="pre">HfunMesh.hmin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.hmax"><code class="docutils literal notranslate"><span class="pre">HfunMesh.hmax</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.mesh</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.crs"><code class="docutils literal notranslate"><span class="pre">HfunMesh.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.get_bbox"><code class="docutils literal notranslate"><span class="pre">HfunMesh.get_bbox()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector"><code class="docutils literal notranslate"><span class="pre">HfunCollector</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunCollector.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_bound_constraint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_func_constraint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_contour"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_contour()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_channel"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_channel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_subtidal_flow_limiter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_constant_value"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_constant_value()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_patch()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>

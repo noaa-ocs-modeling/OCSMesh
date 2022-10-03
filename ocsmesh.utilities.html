@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Utility classes and functions &mdash; ocsmesh 0.1.dev1+ge32facf documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
   
 
   
@@ -37,6 +37,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -93,7 +94,127 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Utility classes and functions</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Utility classes and functions</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.raster.Raster"><code class="docutils literal notranslate"><span class="pre">Raster</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.modifying_raster"><code class="docutils literal notranslate"><span class="pre">Raster.modifying_raster()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_x"><code class="docutils literal notranslate"><span class="pre">Raster.get_x()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_y"><code class="docutils literal notranslate"><span class="pre">Raster.get_y()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_xy"><code class="docutils literal notranslate"><span class="pre">Raster.get_xy()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_values"><code class="docutils literal notranslate"><span class="pre">Raster.get_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_xyz"><code class="docutils literal notranslate"><span class="pre">Raster.get_xyz()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">Raster.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_bbox"><code class="docutils literal notranslate"><span class="pre">Raster.get_bbox()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.contourf"><code class="docutils literal notranslate"><span class="pre">Raster.contourf()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.tags"><code class="docutils literal notranslate"><span class="pre">Raster.tags()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.read"><code class="docutils literal notranslate"><span class="pre">Raster.read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.dtype"><code class="docutils literal notranslate"><span class="pre">Raster.dtype()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.nodataval"><code class="docutils literal notranslate"><span class="pre">Raster.nodataval()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.sample"><code class="docutils literal notranslate"><span class="pre">Raster.sample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.close"><code class="docutils literal notranslate"><span class="pre">Raster.close()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.add_band"><code class="docutils literal notranslate"><span class="pre">Raster.add_band()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.fill_nodata"><code class="docutils literal notranslate"><span class="pre">Raster.fill_nodata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.gaussian_filter"><code class="docutils literal notranslate"><span class="pre">Raster.gaussian_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.average_filter"><code class="docutils literal notranslate"><span class="pre">Raster.average_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.generic_filter"><code class="docutils literal notranslate"><span class="pre">Raster.generic_filter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.mask"><code class="docutils literal notranslate"><span class="pre">Raster.mask()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.read_masks"><code class="docutils literal notranslate"><span class="pre">Raster.read_masks()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.warp"><code class="docutils literal notranslate"><span class="pre">Raster.warp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.resample"><code class="docutils literal notranslate"><span class="pre">Raster.resample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.save"><code class="docutils literal notranslate"><span class="pre">Raster.save()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.clip"><code class="docutils literal notranslate"><span class="pre">Raster.clip()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.adjust"><code class="docutils literal notranslate"><span class="pre">Raster.adjust()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_contour"><code class="docutils literal notranslate"><span class="pre">Raster.get_contour()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_channels"><code class="docutils literal notranslate"><span class="pre">Raster.get_channels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.iter_windows"><code class="docutils literal notranslate"><span class="pre">Raster.iter_windows()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_window_data"><code class="docutils literal notranslate"><span class="pre">Raster.get_window_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_window_bounds"><code class="docutils literal notranslate"><span class="pre">Raster.get_window_bounds()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.get_window_transform"><code class="docutils literal notranslate"><span class="pre">Raster.get_window_transform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.x"><code class="docutils literal notranslate"><span class="pre">Raster.x</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.y"><code class="docutils literal notranslate"><span class="pre">Raster.y</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.values"><code class="docutils literal notranslate"><span class="pre">Raster.values</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.path"><code class="docutils literal notranslate"><span class="pre">Raster.path</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.tmpfile"><code class="docutils literal notranslate"><span class="pre">Raster.tmpfile</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.md5"><code class="docutils literal notranslate"><span class="pre">Raster.md5</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.count"><code class="docutils literal notranslate"><span class="pre">Raster.count</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.is_masked"><code class="docutils literal notranslate"><span class="pre">Raster.is_masked</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.shape"><code class="docutils literal notranslate"><span class="pre">Raster.shape</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.height"><code class="docutils literal notranslate"><span class="pre">Raster.height</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.bbox"><code class="docutils literal notranslate"><span class="pre">Raster.bbox</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.src"><code class="docutils literal notranslate"><span class="pre">Raster.src</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.width"><code class="docutils literal notranslate"><span class="pre">Raster.width</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.dx"><code class="docutils literal notranslate"><span class="pre">Raster.dx</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.dy"><code class="docutils literal notranslate"><span class="pre">Raster.dy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.crs"><code class="docutils literal notranslate"><span class="pre">Raster.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.transform"><code class="docutils literal notranslate"><span class="pre">Raster.transform</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.dtypes"><code class="docutils literal notranslate"><span class="pre">Raster.dtypes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.xres"><code class="docutils literal notranslate"><span class="pre">Raster.xres</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.yres"><code class="docutils literal notranslate"><span class="pre">Raster.yres</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.resampling_method"><code class="docutils literal notranslate"><span class="pre">Raster.resampling_method</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.chunk_size"><code class="docutils literal notranslate"><span class="pre">Raster.chunk_size</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.overlap"><code class="docutils literal notranslate"><span class="pre">Raster.overlap</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.must_be_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">must_be_euclidean_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.mesh_to_tri"><code class="docutils literal notranslate"><span class="pre">mesh_to_tri()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_isolates"><code class="docutils literal notranslate"><span class="pre">cleanup_isolates()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.put_edge2"><code class="docutils literal notranslate"><span class="pre">put_edge2()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.geom_to_multipolygon"><code class="docutils literal notranslate"><span class="pre">geom_to_multipolygon()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_boundary_segments"><code class="docutils literal notranslate"><span class="pre">get_boundary_segments()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_mesh_polygons"><code class="docutils literal notranslate"><span class="pre">get_mesh_polygons()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.repartition_features"><code class="docutils literal notranslate"><span class="pre">repartition_features()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.transform_linestring"><code class="docutils literal notranslate"><span class="pre">transform_linestring()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.needs_sieve"><code class="docutils literal notranslate"><span class="pre">needs_sieve()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.put_id_tags"><code class="docutils literal notranslate"><span class="pre">put_id_tags()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.finalize_mesh"><code class="docutils literal notranslate"><span class="pre">finalize_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remesh_small_elements"><code class="docutils literal notranslate"><span class="pre">remesh_small_elements()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.sieve"><code class="docutils literal notranslate"><span class="pre">sieve()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.sort_edges"><code class="docutils literal notranslate"><span class="pre">sort_edges()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.index_ring_collection"><code class="docutils literal notranslate"><span class="pre">index_ring_collection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.outer_ring_collection"><code class="docutils literal notranslate"><span class="pre">outer_ring_collection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.inner_ring_collection"><code class="docutils literal notranslate"><span class="pre">inner_ring_collection()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_multipolygon_from_pathplot"><code class="docutils literal notranslate"><span class="pre">get_multipolygon_from_pathplot()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.signed_polygon_area"><code class="docutils literal notranslate"><span class="pre">signed_polygon_area()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.vertices_around_vertex"><code class="docutils literal notranslate"><span class="pre">vertices_around_vertex()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_surrounding_elem_verts"><code class="docutils literal notranslate"><span class="pre">get_surrounding_elem_verts()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_lone_element_verts"><code class="docutils literal notranslate"><span class="pre">get_lone_element_verts()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_verts_in_shape"><code class="docutils literal notranslate"><span class="pre">get_verts_in_shape()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.select_adjacent"><code class="docutils literal notranslate"><span class="pre">select_adjacent()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_cross_edges"><code class="docutils literal notranslate"><span class="pre">get_cross_edges()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.clip_mesh_by_shape"><code class="docutils literal notranslate"><span class="pre">clip_mesh_by_shape()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remove_mesh_by_edge"><code class="docutils literal notranslate"><span class="pre">remove_mesh_by_edge()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.clip_mesh_by_vertex"><code class="docutils literal notranslate"><span class="pre">clip_mesh_by_vertex()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_mesh_edges"><code class="docutils literal notranslate"><span class="pre">get_mesh_edges()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.calculate_tria_areas"><code class="docutils literal notranslate"><span class="pre">calculate_tria_areas()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.calculate_edge_lengths"><code class="docutils literal notranslate"><span class="pre">calculate_edge_lengths()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.elements"><code class="docutils literal notranslate"><span class="pre">elements()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.faces_around_vertex"><code class="docutils literal notranslate"><span class="pre">faces_around_vertex()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_boundary_edges"><code class="docutils literal notranslate"><span class="pre">get_boundary_edges()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">get_pinched_nodes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.has_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">has_pinched_nodes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">cleanup_pinched_nodes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.interpolate"><code class="docutils literal notranslate"><span class="pre">interpolate()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.interpolate_euclidean_mesh_to_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">interpolate_euclidean_mesh_to_euclidean_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.interpolate_euclidean_grid_to_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">interpolate_euclidean_grid_to_euclidean_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.tricontourf"><code class="docutils literal notranslate"><span class="pre">tricontourf()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triplot"><code class="docutils literal notranslate"><span class="pre">triplot()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.reproject"><code class="docutils literal notranslate"><span class="pre">reproject()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.limgrad"><code class="docutils literal notranslate"><span class="pre">limgrad()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.msh_t_to_grd"><code class="docutils literal notranslate"><span class="pre">msh_t_to_grd()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.grd_to_msh_t"><code class="docutils literal notranslate"><span class="pre">grd_to_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.msh_t_to_2dm"><code class="docutils literal notranslate"><span class="pre">msh_t_to_2dm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.sms2dm_to_msh_t"><code class="docutils literal notranslate"><span class="pre">sms2dm_to_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.msh_t_to_utm"><code class="docutils literal notranslate"><span class="pre">msh_t_to_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_bounds_utm"><code class="docutils literal notranslate"><span class="pre">estimate_bounds_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_mesh_utm"><code class="docutils literal notranslate"><span class="pre">estimate_mesh_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_polygon_channels"><code class="docutils literal notranslate"><span class="pre">get_polygon_channels()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_msh_t"><code class="docutils literal notranslate"><span class="pre">merge_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.add_pool_args"><code class="docutils literal notranslate"><span class="pre">add_pool_args()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.drop_extra_vertex_from_line"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_line()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.drop_extra_vertex_from_polygon"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_polygon()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remove_holes"><code class="docutils literal notranslate"><span class="pre">remove_holes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remove_holes_by_relative_size"><code class="docutils literal notranslate"><span class="pre">remove_holes_by_relative_size()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
 </ul>
 
@@ -1687,6 +1808,78 @@ for original source code.</p>
 <dt class="sig sig-object py" id="ocsmesh.utils.drop_extra_vertex_from_polygon">
 <span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">drop_extra_vertex_from_polygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mpoly</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.utils.drop_extra_vertex_from_polygon" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.remove_holes">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">remove_holes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">poly</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.remove_holes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove holes from the input polygon(s)</p>
+<p>Given input <cite>Polygon</cite> or <cite>MultiPolygon</cite>, remove all the geometric
+holes and return a new shape object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>poly</strong><span class="classifier">Polygon or MultiPolygon</span></dt><dd><p>The input shape from which the holes are removed</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>Polygon or MultiPolygon</dt><dd><p>The resulting (multi)polygon after removing the holes</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.utils.remove_holes_by_relative_size" title="ocsmesh.utils.remove_holes_by_relative_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_holes_by_relative_size</span></code></a></dt><dd><p>Remove all the whole smaller than given size from the input shape</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>For a <cite>Polygon</cite> with no holes, this function returns the original
+object. For <cite>MultiPolygon</cite> with no holes, the return value is a
+<cite>unary_union</cite> of all the underlying <a href="#id1"><span class="problematic" id="id2">`</span></a>Polygon`s.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.remove_holes_by_relative_size">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">remove_holes_by_relative_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">poly</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">Polygon</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.remove_holes_by_relative_size" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remove holes from the input polygon(s)</p>
+<p>Given input <cite>Polygon</cite> or <cite>MultiPolygon</cite>, remove all the geometric
+holes that are smaller than the input relative size <cite>rel_size</cite>
+and return a new shape object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>poly</strong><span class="classifier">Polygon or MultiPolygon</span></dt><dd><p>The input shape from which the holes are removed</p>
+</dd>
+<dt><strong>rel_size</strong><span class="classifier">float, default=0.1</span></dt><dd><p>Maximum ratio of a hole area to the area of polygon</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>Polygon or MultiPolygon</dt><dd><p>The resulting (multi)polygon after removing the holes</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<dl class="simple">
+<dt><a class="reference internal" href="#ocsmesh.utils.remove_holes" title="ocsmesh.utils.remove_holes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_holes</span></code></a></dt><dd><p>Remove all the whole from the input shape</p>
+</dd>
+</dl>
+</div>
+<p class="rubric">Notes</p>
+<p>For a <cite>Polygon</cite> with no holes, this function returns the original
+object. For <cite>MultiPolygon</cite> with no holes, the return value is a
+<cite>unary_union</cite> of all the underlying <a href="#id3"><span class="problematic" id="id4">`</span></a>Polygon`s.</p>
+<p>If <cite>rel_size=1</cite> is specified the result is the same as 
+<cite>remove_holes</cite> function, except for the additional cost of 
+calculating the areas.</p>
+</dd></dl>
 
 </section>
 

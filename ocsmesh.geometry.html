@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Domain definition &mdash; ocsmesh 0.1.dev1+ge32facf documentation</title>
+  <title>Domain definition &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
   
 
   
@@ -37,6 +37,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -90,7 +91,57 @@
             
             
               <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Domain definition</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Domain definition</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.Geom"><code class="docutils literal notranslate"><span class="pre">Geom</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.Geom.is_valid_type"><code class="docutils literal notranslate"><span class="pre">Geom.is_valid_type()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.Geom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">Geom.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.Geom.crs"><code class="docutils literal notranslate"><span class="pre">Geom.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.Geom.msh_t"><code class="docutils literal notranslate"><span class="pre">Geom.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.Geom.multipolygon"><code class="docutils literal notranslate"><span class="pre">Geom.multipolygon</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.RasterGeom"><code class="docutils literal notranslate"><span class="pre">RasterGeom</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">RasterGeom.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.raster"><code class="docutils literal notranslate"><span class="pre">RasterGeom.raster</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.crs"><code class="docutils literal notranslate"><span class="pre">RasterGeom.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.make_plot"><code class="docutils literal notranslate"><span class="pre">RasterGeom.make_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">RasterGeom.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.RasterGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">RasterGeom.multipolygon</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.MeshGeom"><code class="docutils literal notranslate"><span class="pre">MeshGeom</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MeshGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">MeshGeom.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MeshGeom.mesh"><code class="docutils literal notranslate"><span class="pre">MeshGeom.mesh</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MeshGeom.crs"><code class="docutils literal notranslate"><span class="pre">MeshGeom.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MeshGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">MeshGeom.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MeshGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">MeshGeom.multipolygon</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom"><code class="docutils literal notranslate"><span class="pre">PolygonGeom</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.polygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.polygon</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.crs"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.PolygonGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.multipolygon</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.multipolygon</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.crs"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.MultiPolygonGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.msh_t()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.geom.GeomCollector"><code class="docutils literal notranslate"><span class="pre">GeomCollector</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.GeomCollector.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">GeomCollector.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.GeomCollector.add_patch"><code class="docutils literal notranslate"><span class="pre">GeomCollector.add_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.GeomCollector.crs"><code class="docutils literal notranslate"><span class="pre">GeomCollector.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.GeomCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">GeomCollector.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.geom.GeomCollector.multipolygon"><code class="docutils literal notranslate"><span class="pre">GeomCollector.multipolygon</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>

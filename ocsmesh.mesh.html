@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh representation &mdash; ocsmesh 0.1.dev1+ge32facf documentation</title>
+  <title>Mesh representation &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
   
 
   
@@ -37,6 +37,7 @@
         <script src="_static/underscore.js"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
+        <script src="_static/sphinx_highlight.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -92,7 +93,38 @@
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Mesh representation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Mesh representation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.mesh.Mesh"><code class="docutils literal notranslate"><span class="pre">Mesh</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.open"><code class="docutils literal notranslate"><span class="pre">Mesh.open()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord"><code class="docutils literal notranslate"><span class="pre">Mesh.coord</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t"><code class="docutils literal notranslate"><span class="pre">Mesh.msh_t</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_bbox"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.get_bbox()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.boundaries"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.boundaries</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tricontourf"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.tricontourf()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.interpolate"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.interpolate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_contour"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.get_contour()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.get_multipolygon()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.vert2"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.vert2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.value"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.value</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.bbox"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.bbox</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.coord"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.coord</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.crs"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.crs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.elements"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.elements</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.hull"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.hull</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.msh_t</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.nodes"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.nodes</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quad4"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quad4</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quads"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quads</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tria3"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.tria3</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.triangles"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.triangles</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.write"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.write()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
 </ul>
