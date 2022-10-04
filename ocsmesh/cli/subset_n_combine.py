@@ -236,7 +236,7 @@ class SubsetAndCombine:
         # Inverse of above
         clipped_mesh = utils.clip_mesh_by_shape(
                 mesh, polygon,
-                fit_inside=True,
+                fit_inside=False,
                 inverse=True,
                 check_cross_edges=True
                 )
