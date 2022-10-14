@@ -3,6 +3,9 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 from scipy.spatial import cKDTree
+from scipy import constants
+
+import ocsmesh.utils as utils
 
 ConstraintValueType = Enum("ConstraintValueType", "MIN MAX")
 
@@ -36,7 +39,7 @@ class Constraint(ABC):
 
         '''
         The function to compare a value with the constraint value
-        and evaluate wether it satisfies the constraint
+        and evaluate whether it satisfies the constraint
         function's needs to receive values to check as first argument
         '''
 
@@ -77,17 +80,17 @@ class Constraint(ABC):
         if not np.any(mask):
             return values # TODO: COPY?
 
-        new_values = values.copy().ravel()
+        return_values = values.copy().ravel()
         bound_values = ref_values.copy().ravel()
         coords = locations.reshape(-1, 2)
 
         if self._rate is None:
             return values # TODO: COPY?
 
-        if len(coords) != len(new_values):
+        if len(coords) != len(return_values):
             raise ValueError(
                 "Number of locations and values"
-                + f" don't match: {len(coords)} vs {len(new_values)}")
+                + f" don't match: {len(coords)} vs {len(return_values)}")
 
         mask_r = mask.copy().ravel()
         nomask_r = np.logical_not(mask_r)
@@ -97,19 +100,19 @@ class Constraint(ABC):
 
         tree = cKDTree(points)
         near_dists, neighbors = tree.query(xy)
-        temp_values = new_values[mask_r][neighbors] * (
+        temp_values = return_values[mask_r][neighbors] * (
                 1 + near_dists * self._rate * self.rate_sign)
 
         # NOTE: No bounds are applied for rate
         mask2 = np.logical_not(self.satisfies(
-                     new_values[nomask_r], temp_values))
-        # Double indexing copies, we want to modify "new_values"
-        temp_values_2 = new_values[nomask_r]
+                     return_values[nomask_r], temp_values))
+        # Double indexing copies, we want to modify "return_values"
+        temp_values_2 = return_values[nomask_r]
         temp_values_2[mask2] = temp_values[mask2]
-        new_values[nomask_r] = temp_values_2
+        return_values[nomask_r] = temp_values_2
 
-        new_values = new_values.reshape(values.shape)
-        return  new_values
+        return_values = return_values.reshape(values.shape)
+        return  return_values
 
 
 # TODO:
@@ -158,16 +161,16 @@ class TopoConstConstraint(Constraint):
 
         lower_bound, upper_bound = self.topo_bounds
 
-        new_values = old_values.copy()
+        return_values = old_values.copy()
 
         mask = ((ref_values > lower_bound) &
                 (ref_values < upper_bound) &
-                (np.logical_not(self.satisfies(new_values, self.value))))
-        new_values[mask] = self.value
+                (np.logical_not(self.satisfies(return_values, self.value))))
+        return_values[mask] = self.value
 
-        new_values = self._apply_rate(ref_values, new_values, locations, mask)
+        return_values = self._apply_rate(ref_values, return_values, locations, mask)
 
-        return new_values
+        return return_values
 
 
 
@@ -201,14 +204,108 @@ class TopoFuncConstraint(Constraint):
 
         lower_bound, upper_bound = self.topo_bounds
 
-        new_values = old_values.copy()
+        return_values = old_values.copy()
         temp_values = self._func(ref_values)
 
         mask = ((ref_values > lower_bound) &
                 (ref_values < upper_bound) &
-                (np.logical_not(self.satisfies(new_values, temp_values))))
-        new_values[mask] = temp_values[mask]
+                (np.logical_not(self.satisfies(return_values, temp_values))))
+        return_values[mask] = temp_values[mask]
 
-        new_values = self._apply_rate(ref_values, new_values, locations, mask)
+        return_values = self._apply_rate(ref_values, return_values, locations, mask)
 
-        return new_values
+        return return_values
+
+
+class CourantNumConstraint(Constraint):
+    '''Class for defining mesh size constraint based on Courant number
+
+    Methods
+    -------
+    apply
+        Calculate and return he new size function at input reference points
+    '''
+
+    def __init__(
+            self,
+            value: float,
+            timestep: float = 150,
+            wave_amplitude: float = 2.0,
+            value_type: str = 'max',
+            ):
+        '''Constaint for enforcing bound on Courant number
+
+        Parameters
+        ----------
+        value : float
+            The value of Courant number to enforce
+        timestep : float, default=150
+            The timestep (in seconds) used to calculate Courant number
+        wave_amplitude : float, default=2.0
+            Amplitude of wave for linear wave theory approximation
+        value_type : {'min', 'max'}, default='min'
+            Indicate whether to enforce the input value as min or max of Courant #
+        '''
+
+        super().__init__(value_type, rate=None)
+
+        self._value = value
+        self._dt = timestep
+        self._nu = wave_amplitude
+
+
+    def apply(
+        self,
+        ref_values,
+        old_values,
+        *args,
+        **kwargs
+        ):
+        '''Calculate the new values of size function based on input reference
+
+        Parameters
+        ----------
+        ref_values : array of floats
+            Depth values to be used for Courant number approximations
+        old_values : array of floats
+            Values of mesh size function before applying the constraint
+        \*args : list
+            List of arguments not handled by this apply method (
+            used in other constraints)
+        \*\*kwargs : dict
+            Dictionary of arguments not handled by this apply method (
+            used in other constraints)
+            
+        Returns
+        -------
+        array of floats
+            New values of size function after application of the constraint
+        '''
+
+        if ref_values.shape != old_values.shape:
+            raise ValueError("Shapes of depths and sizes arrays don't match")
+
+        return_values = old_values.copy()
+
+        u_mag = utils.estimate_particle_velocity_from_depth(
+            ref_values, self._nu
+        )
+        depth_mask = utils.can_velocity_be_approximated_by_linear_wave_theory(
+            ref_values, self._nu
+        )
+        char_vel = u_mag + np.sqrt(constants.g * np.abs(ref_values))
+        # For overland where h < nu the characteristic velocity is 2 * sqrt(g*h)
+        char_vel[~depth_mask] = 2 * u_mag[~depth_mask]
+        
+        temp_values = utils.get_element_size_courant(
+            char_vel, self._dt, self._value
+        )
+        old_C_apprx = utils.approximate_courant_number_for_depth(
+            ref_values, self._dt, old_values, self._nu
+        )
+
+        # NOTE: Condition is evaluated on Courant # NOT the element size
+        value_mask = np.logical_not(self.satisfies(old_C_apprx, self._value))
+        return_values[value_mask] = temp_values[value_mask]
+
+        return return_values

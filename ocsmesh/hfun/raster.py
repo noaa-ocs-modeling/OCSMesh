@@ -34,7 +34,11 @@ from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.geom.shapely import PolygonGeom
 from ocsmesh.features.constraint import (
-        Constraint, TopoConstConstraint, TopoFuncConstraint)
+    Constraint,
+    TopoConstConstraint,
+    TopoFuncConstraint,
+    CourantNumConstraint
+)
 from ocsmesh import utils
 
 # supress feather warning
@@ -633,6 +637,8 @@ class HfunRaster(BaseHfun, Raster):
         --------
         add_topo_func_constraint :
             Addint constraint based on function of topography
+        add_courant_num_constraint :
+            Add constraint based on approximated Courant number
         """
 
         # TODO: Validate conflicting constraints, right now last one wins
@@ -686,12 +692,71 @@ class HfunRaster(BaseHfun, Raster):
         --------
         add_topo_bound_constraint :
             Add fixed-value or fixed-matrix constraint.
+        add_courant_num_constraint :
+            Add constraint based on approximated Courant number
         """
 
         # TODO: Validate conflicting constraints, right now last one wins
         self._constraints.append(TopoFuncConstraint(
             func, upper_bound, lower_bound, value_type, rate))
 
+    @_apply_constraints
+    def add_courant_num_constraint(
+            self,
+            upper_bound: float = 0.9,
+            lower_bound: Optional[float] = None,
+            timestep: float = 150,
+            wave_amplitude: float = 2
+            ) -> None:
+        """Add constraint based on approximated Courant number bounds
+
+
+        Parameters
+        ----------
+        upper_bound : float, default=0.9
+            Maximum Courant number to allow on this mesh size function
+        lower_bound : float or None, default=None
+            Minimum Courant number to allow on this mesh size function
+        timestep : float
+            Timestep size (:math:`seconds`) to
+        wave_amplitude : float, default=2
+            Free surface elevation (:math:`meters`) from the reference
+            (i.e. wave height)
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_topo_bound_constraint :
+            Add fixed-value or fixed-matrix constraint.
+        add_topo_func_constraint :
+            Add constraint based on a function of the topography.
+        """
+
+        # TODO: Validate conflicting constraints, right now last one wins
+        if upper_bound is None and lower_bound is None:
+            raise ValueError("Both upper and lower Courant bounds can NOT be None!")
+
+        if upper_bound is not None:
+            self._constraints.append(
+                CourantNumConstraint(
+                    value=upper_bound,
+                    timestep=timestep,
+                    wave_amplitude=wave_amplitude,
+                    value_type='max'
+                )
+            )
+        if lower_bound is not None:
+            self._constraints.append(
+                CourantNumConstraint(
+                    value=lower_bound,
+                    timestep=timestep,
+                    wave_amplitude=wave_amplitude,
+                    value_type='min'
+                )
+            )
 
 
     @_apply_constraints
@@ -892,7 +957,7 @@ class HfunRaster(BaseHfun, Raster):
             elif isinstance(_contours, LineString):
                 contours.append(_contours)
             elif isinstance(_contours, MultiLineString):
-                for _cont in _contours:
+                for _cont in _contours.geoms:
                     contours.append(_cont)
 
         if len(contours) == 0:
@@ -1055,7 +1120,7 @@ class HfunRaster(BaseHfun, Raster):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = list(feature)
+            feature = list(feature.geoms)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size

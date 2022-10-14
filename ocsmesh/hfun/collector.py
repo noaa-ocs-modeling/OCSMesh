@@ -48,7 +48,8 @@ from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
 from ocsmesh.features.channel import Channel
 from ocsmesh.features.constraint import (
-    TopoConstConstraint, TopoFuncConstraint)
+    TopoConstConstraint, TopoFuncConstraint, CourantNumConstraint
+)
 
 CanCreateSingleHfun = Union[Raster, EuclideanMesh2D]
 CanCreateMultipleHfun = Iterable[Union[CanCreateSingleHfun, str]]
@@ -539,8 +540,7 @@ class HfunCollector(BaseHfun):
         rate `rate` specified. This refinement is only applied on
         rasters with specified indices. The index is w.r.t the
         full input list for collector object creation.
-    add_topo_func_constraint(...)
-                             upper_bound=np.inf, lower_bound=-np.inf,
+    add_topo_func_constraint(upper_bound=np.inf, lower_bound=-np.inf,
                              value_type='min', rate=0.01)
         Add size value constraint based on function of depth/elevation
         to the area bounded by specified bounds with the expansion or
@@ -909,6 +909,70 @@ class HfunCollector(BaseHfun):
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._constraint_info_coll.add(source_index, constraint_defn)
+
+
+    def add_courant_num_constraint(
+            self,
+            upper_bound: float = 0.9,
+            lower_bound: Optional[float] = None,
+            timestep: float = 150,
+            wave_amplitude: float = 2,
+            source_index: Union[List[int], int, None] = None
+            ) -> None:
+        """Add constraint based on approximated Courant number bounds
+
+
+        Parameters
+        ----------
+        upper_bound : float, default=0.9
+            Maximum Courant number to allow on this mesh size function
+        lower_bound : float or None, default=None
+            Minimum Courant number to allow on this mesh size function
+        timestep : float
+            Timestep size (:math:`seconds`) to
+        wave_amplitude : float, default=2
+            Free surface elevation (:math:`meters`) from the reference
+            (i.e. wave height)
+        source_index : int or list of ints or None, default=None
+            The index of raster entries from the input list argument
+            of the constructor of collector size function. If `None`
+            all input rasters are used.
+
+        Returns
+        -------
+        None
+        """
+
+        self._applied = False
+
+        # TODO: Validate conflicting constraints, right now last one wins
+        if upper_bound is None and lower_bound is None:
+            raise ValueError("Both upper and lower Courant bounds can NOT be None!")
+
+        if source_index is not None and not isinstance(source_index, (tuple, list)):
+            source_index = [source_index]
+
+        if upper_bound is not None:
+            self._constraint_info_coll.add(
+                source_index,
+                CourantNumConstraint(
+                    value=upper_bound,
+                    timestep=timestep,
+                    wave_amplitude=wave_amplitude,
+                    value_type='min'
+                )
+            )
+        if lower_bound is not None:
+            self._constraint_info_coll.add(
+                source_index,
+                CourantNumConstraint(
+                    value=lower_bound,
+                    timestep=timestep,
+                    wave_amplitude=wave_amplitude,
+                    value_type='min'
+                )
+            )
+
 
 
     def add_contour(
