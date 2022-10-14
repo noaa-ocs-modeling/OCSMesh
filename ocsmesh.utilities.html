@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Utility classes and functions &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 0.1.dev1+g6fcdd18 documentation</title>
   
 
   
@@ -38,6 +38,7 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -213,6 +214,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.drop_extra_vertex_from_polygon"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_polygon()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remove_holes"><code class="docutils literal notranslate"><span class="pre">remove_holes()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remove_holes_by_relative_size"><code class="docutils literal notranslate"><span class="pre">remove_holes_by_relative_size()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_element_size_courant"><code class="docutils literal notranslate"><span class="pre">get_element_size_courant()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory"><code class="docutils literal notranslate"><span class="pre">can_velocity_be_approximated_by_linear_wave_theory()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_particle_velocity_from_depth"><code class="docutils literal notranslate"><span class="pre">estimate_particle_velocity_from_depth()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.approximate_courant_number_for_depth"><code class="docutils literal notranslate"><span class="pre">approximate_courant_number_for_depth()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -1879,6 +1884,120 @@ object. For <cite>MultiPolygon</cite> with no holes, the return value is a
 <p>If <cite>rel_size=1</cite> is specified the result is the same as 
 <cite>remove_holes</cite> function, except for the additional cost of 
 calculating the areas.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.get_element_size_courant">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">get_element_size_courant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">characteristic_velocity_magnitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timestep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_courant</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.get_element_size_courant" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate the element size based on the specified Courant number.</p>
+<p>Calculate the element size based on the specified Courant number
+and input value for timestep and characteristic velocity</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>target_courant</strong><span class="classifier">float</span></dt><dd><p>The Courant number to be achieved by the calculated element size</p>
+</dd>
+<dt><strong>characteristic_velocity_magnitude</strong><span class="classifier">float or array of floats</span></dt><dd><p>Magnitude of total velocity used for element size calculation (<span class="math notranslate nohighlight">\(\frac{m}{sec}\)</span>)</p>
+</dd>
+<dt><strong>timestep</strong><span class="classifier">float</span></dt><dd><p>Timestep size (<span class="math notranslate nohighlight">\(seconds\)</span>) to</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>float or array of floats</dt><dd><p>The calculated element size(s) to achieve the given Courant #</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">can_velocity_be_approximated_by_linear_wave_theory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave_amplitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks whether the particle velocity can be appoximated.</p>
+<p>Based on the input depth, checks whether or not the velocity can
+be approximated from the linear wave theory</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>depth</strong><span class="classifier">float or array of float</span></dt><dd><p>Depth of the point for which the approximation validation is checked</p>
+</dd>
+<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference (i.e. wave height)</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>bool or array of bool</dt><dd><p>Whether or not the value at given input depth can be approximated</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Linear wave theory approximation breaks down when <span class="math notranslate nohighlight">\(\nu \sim h\)</span>
+overland. So this method just returns whether depth is below or over
+depth of <cite>wave_amplitude</cite> magnitude.</p>
+<p class="rubric">References</p>
+<p>Based on OceanMesh2D approximation method <a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.estimate_particle_velocity_from_depth">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">estimate_particle_velocity_from_depth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave_amplitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.estimate_particle_velocity_from_depth" title="Permalink to this definition">¶</a></dt>
+<dd><p>Approximate particle velocity magnitude based on depth of water</p>
+<p>Estimate the value of particle velocity magnitude based on the
+linear wave theory as <span class="math notranslate nohighlight">\(\left|u\right| = \nu \sqrt{\frac{g}{h}}\)</span>
+for ocean and <span class="math notranslate nohighlight">\(\left|u\right| = \sqrt{gH}\)</span> for overland region
+where <span class="math notranslate nohighlight">\(\nu \sim h\)</span> so instead of linear wave theory we take
+<span class="math notranslate nohighlight">\(H \approx \nu\)</span></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>depth</strong><span class="classifier">float or array of floats</span></dt><dd><p>The depth of still water (e.g. from DEM)</p>
+</dd>
+<dt><strong>wave_amplitude</strong><span class="classifier">float</span></dt><dd><p>Wave amplitude for approximation as defined by linear wave theory</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>float or array of floats</dt><dd><p>Estimated water particle velocity</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">References</p>
+<p>Based on OceanMesh2D approximation method <a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.approximate_courant_number_for_depth">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">approximate_courant_number_for_depth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timestep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">element_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave_amplitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.utils.approximate_courant_number_for_depth" title="Permalink to this definition">¶</a></dt>
+<dd><p>Approximate the Courant number for given depths</p>
+<p>Approximate the value of Courant number for the input depth,
+timestep and element size. The velocity is approximated based on
+the input depth.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>depth</strong><span class="classifier">float or array of floats</span></dt><dd></dd>
+<dt><strong>timestep</strong><span class="classifier">float</span></dt><dd><p>Timestep size (<span class="math notranslate nohighlight">\(seconds\)</span>) to</p>
+</dd>
+<dt><strong>element_size</strong><span class="classifier">float or array of floats</span></dt><dd><p>Element size(s) to use for Courant number calculation. Must 
+be scalar otherwise match the dimension of depth</p>
+</dd>
+<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference (i.e. wave height)</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>float or array of floats</dt><dd><p>The approximated Courant number for each input depth</p>
+</dd>
+</dl>
+</dd>
+</dl>
 </dd></dl>
 
 </section>

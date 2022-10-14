@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+g5bc6bc5 documentation</title>
+  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+g6fcdd18 documentation</title>
   
 
   
@@ -38,6 +38,7 @@
         <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
         <script src="_static/sphinx_highlight.js"></script>
+        <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     
     <script type="text/javascript" src="_static/js/theme.js"></script>
 
@@ -179,6 +180,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunCollector.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_bound_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_func_constraint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_courant_num_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_courant_num_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_contour"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_contour()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_channel"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_channel()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_subtidal_flow_limiter()</span></code></a></li>
@@ -620,19 +622,22 @@ even if provided, are not applied in during initialization.</p>
 <tr class="row-odd"><td><p><strong>add_contour</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_feature</strong></p></td>
+<tr class="row-even"><td><p><strong>add_courant_num_constraint</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_patch</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_feature</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_subtidal_flow_limiter</strong></p></td>
+<tr class="row-even"><td><p><strong>add_patch</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_topo_bound_constraint</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_subtidal_flow_limiter</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_topo_func_constraint</strong></p></td>
+<tr class="row-even"><td><p><strong>add_topo_bound_constraint</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_topo_func_constraint</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1953,8 +1958,8 @@ resolution large raster that covers all the input rasters.</p>
 <tr class="row-even"><td><p><strong>add_topo_bound_constraint(…)</strong></p></td>
 <td><p>Add size fixed-per-point value constraint to the area bounded by specified bounds with expansion/contraction rate <cite>rate</cite> specified. This refinement is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_topo_func_constraint(…)</strong></p></td>
-<td><p>upper_bound=np.inf, lower_bound=-np.inf, value_type=’min’, rate=0.01) Add size value constraint based on function of depth/elevation to the area bounded by specified bounds with the expansion or contraction rate <cite>rate</cite> specified. This constraint is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
+<tr class="row-odd"><td><p><strong>add_topo_func_constraint(upper_bound=np.inf, lower_bound=-np.inf,</strong></p></td>
+<td><p>value_type=’min’, rate=0.01) Add size value constraint based on function of depth/elevation to the area bounded by specified bounds with the expansion or contraction rate <cite>rate</cite> specified. This constraint is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
 </tr>
 <tr class="row-even"><td><p><strong>add_patch(…)</strong></p></td>
 <td><p>Add a region of fixed size refinement with optional expansion rate for points outside the region to achieve smooth size transition.</p></td>
@@ -2002,19 +2007,22 @@ resolution large raster that covers all the input rasters.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_contour" title="ocsmesh.hfun.HfunCollector.add_contour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_contour</span></code></a>([level, expansion_rate, ...])</p></td>
 <td><p>Add refinement for auto extracted contours</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch" title="ocsmesh.hfun.HfunCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, patch_defn, shapefile, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_courant_num_constraint" title="ocsmesh.hfun.HfunCollector.add_courant_num_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_courant_num_constraint</span></code></a>([upper_bound, ...])</p></td>
+<td><p>Add constraint based on approximated Courant number bounds</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch" title="ocsmesh.hfun.HfunCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, patch_defn, shapefile, ...])</p></td>
 <td><p>Add refinement as a region of fixed size with an optional rate</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
 <td><p>Add mesh refinement based on topography.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
 <td><p>Add a fixed-value or fixed-matrix constraint.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
 <td><p>Add constraint based on a function of the topography</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
 <td><p>Interpolates mesh size functions on an unstructred mesh</p></td>
 </tr>
 </tbody>
@@ -2120,6 +2128,36 @@ specified <cite>func</cite> at each point.</p>
 </dd>
 <dt><strong>rate</strong><span class="classifier">float, default=0.01</span></dt><dd><p>Rate of relaxation of constraint outside the region defined
 by <cite>lower_bound</cite> and <cite>upper_bound</cite>.</p>
+</dd>
+<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of raster entries from the input list argument
+of the constructor of collector size function. If <cite>None</cite>
+all input rasters are used.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.hfun.HfunCollector.add_courant_num_constraint">
+<span class="sig-name descname"><span class="pre">add_courant_num_constraint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">upper_bound</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower_bound</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timestep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">150</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave_amplitude</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunCollector.add_courant_num_constraint" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add constraint based on approximated Courant number bounds</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>upper_bound</strong><span class="classifier">float, default=0.9</span></dt><dd><p>Maximum Courant number to allow on this mesh size function</p>
+</dd>
+<dt><strong>lower_bound</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Minimum Courant number to allow on this mesh size function</p>
+</dd>
+<dt><strong>timestep</strong><span class="classifier">float</span></dt><dd><p>Timestep size (<span class="math notranslate nohighlight">\(seconds\)</span>) to</p>
+</dd>
+<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference
+(i.e. wave height)</p>
 </dd>
 <dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of raster entries from the input list argument
 of the constructor of collector size function. If <cite>None</cite>
