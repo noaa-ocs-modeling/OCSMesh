@@ -1791,7 +1791,7 @@ def remove_holes(
     if isinstance(poly, MultiPolygon):
         return unary_union([remove_holes(p) for p in poly.geoms])
 
-    elif not isinstance(poly, Polygon):
+    if not isinstance(poly, Polygon):
         raise ValueError(
             "The input must be either a `Polygon` or `MultiPolygon`:"
             + f"\tType: {type(poly)}"
@@ -1829,15 +1829,15 @@ def remove_holes_by_relative_size(
     --------
     remove_holes :
         Remove all the whole from the input shape
-        
+
     Notes
     -----
     For a `Polygon` with no holes, this function returns the original
     object. For `MultiPolygon` with no holes, the return value is a
     `unary_union` of all the underlying `Polygon`s.
 
-    If `rel_size=1` is specified the result is the same as 
-    `remove_holes` function, except for the additional cost of 
+    If `rel_size=1` is specified the result is the same as
+    `remove_holes` function, except for the additional cost of
     calculating the areas.
     '''
 
@@ -1845,7 +1845,7 @@ def remove_holes_by_relative_size(
         return unary_union([
             remove_holes_by_relative_size(p, rel_size) for p in poly.geoms])
 
-    elif not isinstance(poly, Polygon):
+    if not isinstance(poly, Polygon):
         raise ValueError(
             "The input must be either a `Polygon` or `MultiPolygon`:"
             + f"\tType: {type(poly)}"
@@ -1859,7 +1859,7 @@ def remove_holes_by_relative_size(
         return Polygon(poly.exterior, new_interiors)
 
     return poly
-    
+
 
 def get_element_size_courant(
     characteristic_velocity_magnitude: Union[float, npt.NDArray[float]],
@@ -1988,7 +1988,7 @@ def approximate_courant_number_for_depth(
     timestep : float
         Timestep size (:math:`seconds`) to
     element_size : float or array of floats
-        Element size(s) to use for Courant number calculation. Must 
+        Element size(s) to use for Courant number calculation. Must
         be scalar otherwise match the dimension of depth
     wave_amplitude : float, default=2
         Free surface elevation (:math:`meters`) from the reference (i.e. wave height)
