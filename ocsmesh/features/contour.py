@@ -3,24 +3,15 @@ from abc import ABC, abstractmethod
 
 class ContourBase(ABC):
 
-    def __init__(self, sources=None, shapefile=None):
+    def __init__(self, sources=None):
         if sources is None:
             sources = []
-        if sources and shapefile:
-            raise ValueError(
-                "Both sources and shapefile cannot be specified at the same time!")
-
-        # Either based on shape or the source-level
-        if shapefile and Path(shapefile).is_file():
-            raise NotImplementedError(
-                "Contour based on shapefiles are not supported yet!")
 
         self._sources = []
         if not isinstance(sources, (list, tuple)):
             sources = [sources]
         for source in sources:
             self.add_source(source)
-        self._shapefile = shapefile
 
     @property
     def has_source(self):
@@ -29,10 +20,6 @@ class ContourBase(ABC):
     @property
     def sources(self):
         return self._sources
-
-    @property
-    def shapefile(self):
-        return self._shapefile
 
     def add_source(self, source_object):
         src_class = type(source_object).__name__
@@ -43,8 +30,6 @@ class ContourBase(ABC):
         self._sources.append(source_object)
 
     def iter_contours(self):
-        if self._shapefile:
-            yield self._get_contour_from_shapefile(self._shapefile)
         for source in self._sources:
             yield self._get_contour_from_source(source)
 
@@ -52,11 +37,6 @@ class ContourBase(ABC):
     def _get_contour_from_source(self, source):
         pass
 
-#    @abstractmethod
-    def _get_contour_from_shapefile(self, shapefile):
-        # TODO: Support shapefile?
-        raise NotImplementedError(
-                "Contour based on shapefiles are not supported yet!")
 
     @property
     @abstractmethod
@@ -66,12 +46,12 @@ class ContourBase(ABC):
 
 class Contour(ContourBase):
 
-    def __init__(self, level=None, sources=None, shapefile=None):
+    def __init__(self, level=None, sources=None):
 
         if sources is None:
             sources = []
 
-        super().__init__(sources, shapefile)
+        super().__init__(sources)
         self._level = level
 
     def _get_contour_from_source(self, source):
@@ -99,18 +79,17 @@ class FilledContour(ContourBase):
                  level1=None,
                  sources=None,
                  max_contour_defn : Contour = None,
-                 shapefile=None):
+                 ):
 
         if sources is None:
             sources = []
 
-        super().__init__(sources, shapefile)
+        super().__init__(sources)
         if max_contour_defn:
             self._level0 = None
             self._level1 = max_contour_defn.level
-            # NOTE: Overriding the existing sources or shapefiles
+            # NOTE: Overriding the existing sources
             self._sources = max_contour_defn.sources
-            self._shapefile = max_contour_defn.shapefile
         else:
             self._level0 = level0
             self._level1 = level1
