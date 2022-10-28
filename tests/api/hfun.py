@@ -2,14 +2,73 @@
 import unittest
 from copy import deepcopy
 from pathlib import Path
+import shutil
+import tempfile
 
-import requests
+from jigsawpy import jigsaw_msh_t
+import geopandas as gpd
 import numpy as np
 from pyproj import CRS
+import rasterio as rio
+import requests
 from shapely import geometry
 
 import ocsmesh
-import jigsawpy
+
+
+# TODO: Move these helper functions to `utils`
+def _helper_raster_from_numpy(
+    filename,
+    data,
+    mgrid,
+    crs=CRS.from_epsg(4326)
+):
+    x = mgrid[0][:, 0]
+    y = mgrid[1][0, :]
+    res_x = (x[-1] - x[0]) / data.shape[1]
+    res_y = (y[-1] - y[0]) / data.shape[0]
+    transform = rio.transform.Affine.translation(
+        x[0], y[0]
+    ) * rio.transform.Affine.scale(res_x, res_y)
+    if not isinstance(crs, CRS):
+        crs = CRS.from_user_input(crs)
+
+    with rio.open(
+        filename,
+        'w',
+        driver='GTiff',
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        dst.write(data, 1)
+
+
+def _helper_msh_t_from_numpy(
+    coordinates,
+    triangles,
+    crs=CRS.from_epsg(4326)
+):
+    if not isinstance(crs, CRS):
+        crs = CRS.from_user_input(crs)
+    mesh = jigsaw_msh_t()
+    mesh.mshID = 'euclidean-mesh'
+    mesh.ndims = +2
+    mesh.crs = crs
+    mesh.vert2 = np.array(
+        [(coord, 0) for coord in coordinates],
+        dtype=jigsaw_msh_t.VERT2_t
+        )
+    mesh.tria3 = np.array(
+        [(index, 0) for index in triangles],
+        dtype=jigsaw_msh_t.TRIA3_t
+        )
+
+    return mesh
+
 
 
 class SizeFromMesh(unittest.TestCase):
@@ -355,6 +414,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
         }
 
         for method, tol in method_tolerance.items():
+            # TODO: Add subTest
 
             # Creating adjacent rasters from the test raster
             rast1 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
@@ -405,6 +465,108 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
                 msg=f"Courant constraint failed for '{method}' method!"
                     + f"\n{C_apprx_mesh[~valid_courant]}"
             )
+
+
+class SizeFunctionCollectorAddFeature(unittest.TestCase):
+
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+
+        rast_xy_1 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
+        rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
+        rast_z_1 = np.ones_like(rast_xy_1[0])
+
+        _helper_raster_from_numpy(
+            self.tdir/'rast_1.tif', rast_z_1, rast_xy_1, 4326
+        )
+        _helper_raster_from_numpy(
+            self.tdir/'rast_2.tif', rast_z_1, rast_xy_2, 4326
+        )
+
+        crd = np.array([
+            [-1, 0],
+            [-0.1, 0],
+            [-0.5, 0.2],
+            [0.1, 0],
+            [1, 0],
+            [0.5, 0.2],
+            [-1, 0.4],
+            [1, 0.4],
+        ])
+        tria = np.array([
+            [0, 1, 2],
+            [3, 4, 5],
+            [2, 1, 3],
+            [2, 3, 5],
+            [2, 6, 7],
+            [2, 7, 5],
+            [0, 2, 6],
+            [5, 4, 7],
+        ])
+        msh_t = _helper_msh_t_from_numpy(crd, tria, 4326)
+        mesh = ocsmesh.Mesh(msh_t)
+        mesh.write(str(self.tdir/'mesh_1.gr3'), format='grd', overwrite=False)
+
+        self.feature_shape = geometry.LineString([
+            [-1, 0], [1, 0]
+        ])
+
+        gdf_feature = gpd.GeoDataFrame(geometry=[self.feature_shape], crs=4326)
+        gdf_feature.to_file(self.tdir/'feature_1')
+
+
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
+
+
+    def test_by_shape(self):
+
+        rast1 = ocsmesh.Raster(self.tdir/'rast_1.tif')
+        rast2 = ocsmesh.Raster(self.tdir/'rast_2.tif')
+
+        hfun_mesh_1 = ocsmesh.Hfun(ocsmesh.Mesh.open(self.tdir/'mesh_1.gr3', crs=4326))
+        hfun_mesh_1.size_from_mesh()
+
+        hmin = 500
+        hmax = 10000
+
+        hfun = ocsmesh.Hfun(
+            [rast1, rast2, hfun_mesh_1],
+            hmin=hmin,
+            hmax=hmax,
+            method='exact')
+        hfun.add_feature(
+            shape=self.feature_shape,
+            expansion_rate=0.002,
+            target_size=hmin,
+            crs=4326
+        )
+        hfun_msh_t = hfun.msh_t()
+
+        # Nodes close to the feature line must be small
+        gdf_feature = gpd.GeoDataFrame(
+            geometry=[self.feature_shape], crs=4326
+        )
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(hmin)
+        refine_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
+            mesh=hfun_msh_t,
+            shape=gdf_clip.unary_union,
+            fit_inside=True,
+            inverse=False
+        )))
+        refine_msh_t.size_from_mesh()
+        refine_avg = np.mean(refine_msh_t.msh_t().value)
+        rest_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
+            mesh=hfun_msh_t,
+            shape=gdf_clip.unary_union,
+            fit_inside=False,
+            inverse=True
+        )))
+        rest_msh_t.size_from_mesh()
+        rest_avg = np.mean(rest_msh_t.msh_t().value)
+
+        self.assertTrue(np.isclose(refine_avg, hmin, rtol=1e-1))
+        self.assertTrue(rest_avg > hmin * 10)
 
 
 if __name__ == '__main__':

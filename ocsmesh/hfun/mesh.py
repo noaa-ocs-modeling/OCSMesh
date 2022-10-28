@@ -364,7 +364,7 @@ class HfunMesh(BaseHfun):
             feature = [feature]
 
         elif isinstance(feature, MultiLineString):
-            feature = list(feature)
+            feature = list(feature.geoms)
 
         # check target size
         target_size = self.hmin if target_size is None else target_size
