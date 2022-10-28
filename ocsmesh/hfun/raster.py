@@ -1178,7 +1178,7 @@ class HfunRaster(BaseHfun, Raster):
                     if isinstance(geom, LineString):
                         points.extend(geom.coords)
                     elif isinstance(geom, MultiLineString):
-                        for linestring in geom:
+                        for linestring in geom.geoms:
                             points.extend(linestring.coords)
                 _logger.info(f'Point concatenation took {time()-start}.')
 
