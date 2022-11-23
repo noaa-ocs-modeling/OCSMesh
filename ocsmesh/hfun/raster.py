@@ -143,6 +143,8 @@ class HfunRaster(BaseHfun, Raster):
         Add size value constraint based on function of depth/elevation
         to the area bounded by specified bounds with the expansion or
         contraction rate `rate` specified.
+    add_courant_num_constraint(...)
+        Add constraint based on approximated Courant number
     add_patch(...)
         Add a region of fixed size refinement with optional expansion
         rate for points outside the region to achieve smooth size
