@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+ga105e9a documentation</title>
+  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+g1db9fd8 documentation</title>
   
 
   
@@ -186,6 +186,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_subtidal_flow_limiter()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_constant_value"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_constant_value()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_feature"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_feature()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -384,25 +385,28 @@ else.</p>
 <tr class="row-odd"><td><p><strong>add_topo_func_constraint(…)</strong></p></td>
 <td><p>Add size value constraint based on function of depth/elevation to the area bounded by specified bounds with the expansion or contraction rate <cite>rate</cite> specified.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_patch(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_courant_num_constraint(…)</strong></p></td>
+<td><p>Add constraint based on approximated Courant number</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_patch(…)</strong></p></td>
 <td><p>Add a region of fixed size refinement with optional expansion rate for points outside the region to achieve smooth size transition.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_contour(level expansion_rate target_size=None, nprocs=None)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_contour(level expansion_rate target_size=None, nprocs=None)</strong></p></td>
 <td><p>Add refinement based on contour lines auto-extrcted from the underlying raster data. The size is calculated based on the specified <cite>rate</cite>, <cite>target_size</cite> and the distance from the extracted feature line.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_channel(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_channel(…)</strong></p></td>
 <td><p>Add refinement for auto-detected narrow domain regions. Optionally use an expansion rate for points outside detected narrow regions for smooth size transition.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_feature(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_feature(…)</strong></p></td>
 <td><p>Decorated method to add size refinement based on the specified <cite>expansion_rate</cite>, <cite>target_size</cite>, and distance from the input feature lines <cite>feature</cite>.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>get_xy_memcache(window, dst_crs)</strong></p></td>
+<tr class="row-odd"><td><p><strong>get_xy_memcache(window, dst_crs)</strong></p></td>
 <td><p>Get XY grid cached onto disk. Useful for when XY needs to be projected to UTM so as to avoid reprojecting on every call.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
 <td><p>Add mesh size refinement based on the value as well as gradient of the topography within the region between specified by lower and upper bound on topography.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_constant_value(value, lower_bound=None, upper_bound=None)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_constant_value(value, lower_bound=None, upper_bound=None)</strong></p></td>
 <td><p>Add fixed size mesh refinement in the region specified by upper and lower bounds on topography.</p></td>
 </tr>
 </tbody>
@@ -2010,19 +2014,22 @@ resolution large raster that covers all the input rasters.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_courant_num_constraint" title="ocsmesh.hfun.HfunCollector.add_courant_num_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_courant_num_constraint</span></code></a>([upper_bound, ...])</p></td>
 <td><p>Add constraint based on approximated Courant number bounds</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch" title="ocsmesh.hfun.HfunCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, patch_defn, shapefile, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_feature" title="ocsmesh.hfun.HfunCollector.add_feature"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_feature</span></code></a>([shape, line_defn, shapefile, ...])</p></td>
 <td><p>Add refinement as a region of fixed size with an optional rate</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch" title="ocsmesh.hfun.HfunCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, patch_defn, shapefile, ...])</p></td>
+<td><p>Add refinement as a region of fixed size with an optional rate</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
 <td><p>Add mesh refinement based on topography.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
 <td><p>Add a fixed-value or fixed-matrix constraint.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
 <td><p>Add constraint based on a function of the topography</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
 <td><p>Interpolates mesh size functions on an unstructred mesh</p></td>
 </tr>
 </tbody>
@@ -2344,6 +2351,46 @@ the specified shape in <cite>multipolygon</cite>.</p>
 </dd>
 <dt><strong>target_size</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Fixed target size of mesh to use for refinement in
 <cite>multipolygon</cite></p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.hfun.HfunCollector.add_feature">
+<span class="sig-name descname"><span class="pre">add_feature</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">MultiLineString</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">LineString</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_defn</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">LineString</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shapefile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Path</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expansion_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">CRS</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4326</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunCollector.add_feature" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add refinement as a region of fixed size with an optional rate</p>
+<p>Add a refinement based on lines specified by <cite>shape</cite>,
+<cite>line_defn</cite> or <cite>shapefile</cite>.  The fixed <cite>target_size</cite>
+refinement is expanded by the <cite>expansion_rate</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>shape</strong><span class="classifier">MultiLineString or LineString or None, default=None</span></dt><dd><p>Shape of the region to use specified <cite>target_size</cite> for
+refinement. Only one of <cite>shape</cite>, <cite>line_defn</cite> or <cite>shapefile</cite>
+must be specified.</p>
+</dd>
+<dt><strong>line_defn</strong><span class="classifier">LineFeature or None, default=None</span></dt><dd><p>Shape of the region to use specified <cite>target_size</cite> for
+refinement. Only one of <cite>shape</cite>, <cite>line_defn</cite> or <cite>shapefile</cite>
+must be specified.</p>
+</dd>
+<dt><strong>shapefile</strong><span class="classifier">None or str or Path, default=None</span></dt><dd><p>Shape of the region to use specified <cite>target_size</cite> for
+refinement. Only one of <cite>shape</cite>, <cite>line_defn</cite> or <cite>shapefile</cite>
+must be specified.</p>
+</dd>
+<dt><strong>expansion_rate</strong><span class="classifier">float, default=0.01</span></dt><dd><p>Rate to use for expanding refinement away from
+the specified shape</p>
+</dd>
+<dt><strong>target_size</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Fixed target size of mesh to use for refinement in
+<cite>multipolygon</cite></p>
+</dd>
+<dt><strong>crs</strong><span class="classifier">CRS, default 4326</span></dt><dd><p>The CRS of the input <cite>shape</cite></p>
 </dd>
 </dl>
 </dd>
