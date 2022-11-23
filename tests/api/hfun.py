@@ -371,7 +371,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
             mesh.msh_t.value, dt, hfun_jig.value, nu
         )
 
-        # Note using higher tolerance for closeness since sizes and 
+        # Note using higher tolerance for closeness since sizes and
         # depths are interpolated. Is this ideal? No!
         self.assertTrue(
             np.all(
@@ -458,7 +458,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
                     np.isclose(C_apprx_mesh, courant_hi, atol=tol)
                 )
             )
-            # Note using higher tolerance for closeness since sizes and 
+            # Note using higher tolerance for closeness since sizes and
             # depths are interpolated. Is this ideal? No!
             self.assertTrue(
                 np.all(valid_courant),
@@ -472,15 +472,21 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
     def setUp(self):
         self.tdir = Path(tempfile.mkdtemp())
 
+        self.rast1 = self.tdir / 'rast_1.tif'
+        self.rast2 = self.tdir / 'rast_2.tif'
+        self.mesh1 = self.tdir / 'mesh_1.gr3'
+        self.feat1 = self.tdir / 'feature_1'
+        self.feat2 = self.tdir / 'feature_2'
+
         rast_xy_1 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
         rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z_1 = np.ones_like(rast_xy_1[0])
 
         _helper_raster_from_numpy(
-            self.tdir/'rast_1.tif', rast_z_1, rast_xy_1, 4326
+            self.rast1, rast_z_1, rast_xy_1, 4326
         )
         _helper_raster_from_numpy(
-            self.tdir/'rast_2.tif', rast_z_1, rast_xy_2, 4326
+            self.rast2, rast_z_1, rast_xy_2, 4326
         )
 
         crd = np.array([
@@ -505,68 +511,171 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         ])
         msh_t = _helper_msh_t_from_numpy(crd, tria, 4326)
         mesh = ocsmesh.Mesh(msh_t)
-        mesh.write(str(self.tdir/'mesh_1.gr3'), format='grd', overwrite=False)
+        mesh.write(str(self.mesh1), format='grd', overwrite=False)
 
-        self.feature_shape = geometry.LineString([
+        self.shape1 = geometry.LineString([
             [-1, 0], [1, 0]
         ])
 
-        gdf_feature = gpd.GeoDataFrame(geometry=[self.feature_shape], crs=4326)
-        gdf_feature.to_file(self.tdir/'feature_1')
+        self.shape2 = geometry.LineString([
+            [0, -1], [0, 1]
+        ])
 
+        gdf_feature = gpd.GeoDataFrame(geometry=[self.shape1], crs=4326)
+        gdf_feature.to_file(self.feat1)
+
+        gdf_feature = gpd.GeoDataFrame(geometry=[self.shape2], crs=4326)
+        gdf_feature.to_file(self.feat2)
 
     def tearDown(self):
         shutil.rmtree(self.tdir)
 
+    def _create_hfun(self, hmin, hmax):
 
-    def test_by_shape(self):
+        rast1 = ocsmesh.Raster(self.rast1)
+        rast2 = ocsmesh.Raster(self.rast2)
 
-        rast1 = ocsmesh.Raster(self.tdir/'rast_1.tif')
-        rast2 = ocsmesh.Raster(self.tdir/'rast_2.tif')
-
-        hfun_mesh_1 = ocsmesh.Hfun(ocsmesh.Mesh.open(self.tdir/'mesh_1.gr3', crs=4326))
+        hfun_mesh_1 = ocsmesh.Hfun(ocsmesh.Mesh.open(self.mesh1, crs=4326))
         hfun_mesh_1.size_from_mesh()
-
-        hmin = 500
-        hmax = 10000
 
         hfun = ocsmesh.Hfun(
             [rast1, rast2, hfun_mesh_1],
             hmin=hmin,
             hmax=hmax,
             method='exact')
-        hfun.add_feature(
-            shape=self.feature_shape,
-            expansion_rate=0.002,
-            target_size=hmin,
-            crs=4326
-        )
-        hfun_msh_t = hfun.msh_t()
 
-        # Nodes close to the feature line must be small
-        gdf_feature = gpd.GeoDataFrame(
-            geometry=[self.feature_shape], crs=4326
-        )
-        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(hmin)
+        return hfun
+
+    def _check_applied_refinement(self, msh_t, refine_gdf, target_size):
+
         refine_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
-            mesh=hfun_msh_t,
-            shape=gdf_clip.unary_union,
+            mesh=msh_t,
+            shape=refine_gdf.unary_union,
             fit_inside=True,
             inverse=False
         )))
         refine_msh_t.size_from_mesh()
         refine_avg = np.mean(refine_msh_t.msh_t().value)
         rest_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
-            mesh=hfun_msh_t,
-            shape=gdf_clip.unary_union,
+            mesh=msh_t,
+            shape=refine_gdf.unary_union,
             fit_inside=False,
             inverse=True
         )))
         rest_msh_t.size_from_mesh()
         rest_avg = np.mean(rest_msh_t.msh_t().value)
 
-        self.assertTrue(np.isclose(refine_avg, hmin, rtol=1e-1))
-        self.assertTrue(rest_avg > hmin * 10)
+        self.assertTrue(np.isclose(refine_avg, target_size, rtol=1e-1))
+        self.assertTrue(rest_avg > target_size * 10)
+
+    def _is_refined_by_shape1(self, hfun, target_size):
+
+        hfun_msh_t = hfun.msh_t()
+
+        # Nodes close to the feature line must be small
+        gdf_feature = gpd.GeoDataFrame(
+            geometry=[self.shape1], crs=4326
+        )
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size)
+        self._check_applied_refinement(hfun_msh_t, gdf_clip, target_size)
+
+
+    def _is_refined_by_feat1(self, hfun, target_size):
+
+        hfun_msh_t = hfun.msh_t()
+
+        # Nodes close to the feature line must be small
+        gdf_feature = gpd.read_file(self.feat1)
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size)
+        self._check_applied_refinement(hfun_msh_t, gdf_clip, target_size)
+
+    def _is_refined_by_feat2(self, hfun, target_size):
+
+        hfun_msh_t = hfun.msh_t()
+
+        # Nodes close to the feature line must be small
+        gdf_feature = gpd.read_file(self.feat2)
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size)
+        self._check_applied_refinement(hfun_msh_t, gdf_clip, target_size)
+
+
+
+    def test_by_shape(self):
+
+        hmin = 500
+        hmax = 10000
+
+        hfun = self._create_hfun(hmin, hmax)
+
+        hfun.add_feature(
+            shape=self.shape1,
+            expansion_rate=0.002,
+            target_size=hmin,
+            crs=4326
+        )
+        self._is_refined_by_shape1(hfun, hmin)
+
+
+    def test_by_shapefile(self):
+
+        hmin = 500
+        hmax = 10000
+
+        hfun = self._create_hfun(hmin, hmax)
+
+        hfun.add_feature(
+            shapefile=self.feat1,
+            expansion_rate=0.002,
+            target_size=hmin,
+        )
+
+        self._is_refined_by_feat1(hfun, hmin)
+
+
+    def test_by_linedefn(self):
+
+        hmin = 500
+        hmax = 10000
+
+        hfun = self._create_hfun(hmin, hmax)
+
+        hfun.add_feature(
+            line_defn=ocsmesh.features.linefeature.LineFeature(shapefile=self.feat1),
+            expansion_rate=0.002,
+            target_size=hmin,
+        )
+
+        self._is_refined_by_feat1(hfun, hmin)
+
+
+    def test_optional_arg_priority(self):
+
+        hmin = 500
+        hmax = 10000
+
+        # First priority is `line_defn`
+        hfun1 = self._create_hfun(hmin, hmax)
+        hfun1.add_feature(
+            line_defn=ocsmesh.features.linefeature.LineFeature(shapefile=self.feat1),
+            shape=self.shape2,
+            crs=4326,
+            shapefile=self.feat2,
+            expansion_rate=0.002,
+            target_size=hmin,
+        )
+        self._is_refined_by_feat1(hfun1, hmin)
+
+
+        # Second priority is `shape` + `crs`
+        hfun2 = self._create_hfun(hmin, hmax)
+        hfun2.add_feature(
+            shape=self.shape1,
+            crs=4326,
+            shapefile=self.feat2,
+            expansion_rate=0.002,
+            target_size=hmin,
+        )
+        self._is_refined_by_feat1(hfun2, hmin)
 
 
 if __name__ == '__main__':
