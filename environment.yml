@@ -15,9 +15,9 @@ dependencies:
   - pygeos
   - geopandas
   - utm
-  - scipy<1.8
+  - scipy
   - numba
-  - numpy>=1.21,<1.23 # numpy.typing, scipy 1.7.x support
+  - numpy>=1.21 # numpy.typing
   - matplotlib
   - requests
   - tqdm
