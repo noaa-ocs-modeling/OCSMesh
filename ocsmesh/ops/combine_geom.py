@@ -7,6 +7,7 @@ import tempfile
 import warnings
 from typing import Union, Sequence, Tuple, List
 
+import pandas as pd
 import geopandas as gpd
 import numpy as np
 from pyproj import CRS, Transformer
@@ -223,14 +224,16 @@ class GeomCombine:
                     crs=self._calc_crs
                 )
             for feather_f in poly_files_coll:
-                rasters_gdf = rasters_gdf.append(
-                    gpd.GeoDataFrame(
-                        {'geometry': self._read_multipolygon(
-                                                feather_f)
-                        },
-                        crs=self._calc_crs
+                rasters_gdf = pd.concat(
+                    [
+                        rasters_gdf,
+                        gpd.GeoDataFrame(
+                            {'geometry': self._read_multipolygon(feather_f)},
+                            crs=self._calc_crs
                         ),
-                    ignore_index=True)
+                    ],
+                    ignore_index=True
+                )
 
 
             # The assumption is this returns polygon or multipolygon
