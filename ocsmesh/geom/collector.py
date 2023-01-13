@@ -19,6 +19,7 @@ from pathlib import Path
 from multiprocessing import cpu_count
 from typing import Union, Tuple, Optional, Iterable, List, Any
 
+import pandas as pd
 import geopandas as gpd
 from pyproj import CRS, Transformer
 from shapely.geometry import MultiPolygon, Polygon
@@ -314,7 +315,9 @@ class GeomCollector(BaseGeom):
 
             gdf = gpd.GeoDataFrame(columns=['geometry'], crs=epsg4326)
             for f in feather_files:
-                gdf = gdf.append(gpd.read_feather(f))
+                gdf = pd.concat(
+                    [gdf, gpd.read_feather(f).to_crs(gdf.crs)]
+                )
 
             mp = gdf.unary_union
             if isinstance(mp, Polygon):
