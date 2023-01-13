@@ -19,7 +19,7 @@ maintainers = [
 description = "Package to generate computational unstructured meshes from planetary modeling."
 license = {file = "LICENSE"}
 readme = "README.md"
-requires-python = '>=3.8, <4'
+requires-python = '>=3.8, <3.11' # 3.11 no supported by numba
 dependencies = [
     "colored-traceback", "fiona", "geoalchemy2", "geopandas",
     "jigsawpy", "matplotlib", "netCDF4", "numba",
