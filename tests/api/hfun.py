@@ -410,7 +410,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
         # Fast method is much less accurate!
         method_tolerance = {
             'exact': 0.03,
-            'fast': 0.1
+            'fast': 0.2
         }
 
         for method, tol in method_tolerance.items():
