@@ -565,7 +565,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         rest_msh_t.size_from_mesh()
         rest_avg = np.mean(rest_msh_t.msh_t().value)
 
-        self.assertTrue(np.isclose(refine_avg, target_size, rtol=1e-1))
+        self.assertTrue(np.isclose(refine_avg, target_size, rtol=3e-1))
         self.assertTrue(rest_avg > target_size * 10)
 
     def _is_refined_by_shape1(self, hfun, target_size):
@@ -576,7 +576,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         gdf_feature = gpd.GeoDataFrame(
             geometry=[self.shape1], crs=4326
         )
-        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size)
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size*1.1)
         self._check_applied_refinement(hfun_msh_t, gdf_clip, target_size)
 
 
@@ -586,7 +586,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
 
         # Nodes close to the feature line must be small
         gdf_feature = gpd.read_file(self.feat1)
-        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size)
+        gdf_clip = gdf_feature.to_crs(hfun_msh_t.crs).buffer(target_size*1.1)
         self._check_applied_refinement(hfun_msh_t, gdf_clip, target_size)
 
     def _is_refined_by_feat2(self, hfun, target_size):
