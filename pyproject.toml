@@ -24,7 +24,7 @@ dependencies = [
     "colored-traceback", "fiona", "geoalchemy2", "geopandas",
     "jigsawpy", "matplotlib", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
-    "packagin", # required by jigsawpy
+    "packaging", # required by jigsawpy
     "pyarrow", "pygeos", "pyproj>=3.0", "rasterio", "requests", "scipy",
     "shapely>=1.8, <2", "tqdm", "typing_extensions", "utm",
     ]
