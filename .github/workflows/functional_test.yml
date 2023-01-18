@@ -12,7 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest ]
-        python-version: [ '3.7', '3.8', '3.9' ]
+        python-version: [ '3.8', '3.9', '3.10' ]
 
     steps:
     - uses: actions/checkout@v2
@@ -28,6 +28,7 @@ jobs:
     - name: Install other dependencies
       shell: bash -l {0}
       run: |
+        pip install packaging # jigsaw dependency in its setup.py
         python ./setup.py install_jigsaw
         pip install .
 

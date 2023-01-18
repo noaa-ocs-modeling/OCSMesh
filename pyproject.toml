@@ -19,13 +19,12 @@ maintainers = [
 description = "Package to generate computational unstructured meshes from planetary modeling."
 license = {file = "LICENSE"}
 readme = "README.md"
-requires-python = '>=3.7, <3.10'
+requires-python = '>=3.8, <3.11' # 3.11 no supported by numba
 dependencies = [
     "colored-traceback", "fiona", "geoalchemy2", "geopandas",
     "jigsawpy", "matplotlib", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
-    "pyarrow", "pygeos", "pyproj>=3.0", "rasterio", "requests",
-    "scipy<1.8",   # dropping python 3.7
+    "pyarrow", "pygeos", "pyproj>=3.0", "rasterio", "requests", "scipy",
     "shapely>=1.8, <2", "tqdm", "typing_extensions", "utm",
     ]
 dynamic = ["version"]

@@ -2078,7 +2078,7 @@ def _mesh_interpolate_worker(
         if method == 'spline':
             f = RectBivariateSpline(
                 xi,
-                np.flip(yi),
+                np.ascontiguousarray(np.flip(yi)),
                 np.flipud(zi).T,
                 kx=3, ky=3, s=0,
                 # bbox=[min(x), max(x), min(y), max(y)]  # ??
@@ -2089,7 +2089,7 @@ def _mesh_interpolate_worker(
             # Inspired by StackOverflow 35807321
             if np.any(zi.mask):
                 m_interp = RegularGridInterpolator(
-                    (xi, np.flip(yi)),
+                    (xi, np.ascontiguousarray(np.flip(yi))),
                     np.flipud(zi.mask).T.astype(bool),
                     method=method
                 )
@@ -2097,7 +2097,7 @@ def _mesh_interpolate_worker(
                 interp_mask = m_interp(coords[_idxs]) > 0
 
             f = RegularGridInterpolator(
-                (xi, np.flip(yi)),
+                (xi, np.ascontiguousarray(np.flip(yi))),
                 np.flipud(zi).T,
                 method=method
             )
