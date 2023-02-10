@@ -1584,7 +1584,7 @@ class HfunCollector(BaseHfun):
                     hmin = self._size_info['hmin']
                 if hmax is None:
                     hmax = self._size_info['hmax']
-                hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+                hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
 
 
     def _apply_const_val(self):
@@ -2080,7 +2080,7 @@ class HfunCollector(BaseHfun):
             else:
                 zmin = max(zmin, -99990)
 
-            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
 
     def _apply_const_val_fast(self, big_hfun):
         """Internal: apply specified constant value refinements.
