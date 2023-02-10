@@ -1362,6 +1362,14 @@ class HfunRaster(BaseHfun, Raster):
                 hfun_values = np.abs((1./3.)*(topobathy/dh))
                 # values = values.filled(np.max(values))
 
+                if hmin is not None:
+                    hfun_values[np.where(hfun_values < hmin)] = hmin
+
+                if hmax is not None:
+                    hfun_values[np.where(hfun_values > hmax)] = hmax
+
+                # Don't consider the applied values in the region
+                # outside the provided bounds
                 if upper_bound is not None:
                     idxs = np.where(topobathy > upper_bound)
                     hfun_values[idxs] = self.get_values(
@@ -1371,12 +1379,8 @@ class HfunRaster(BaseHfun, Raster):
                     hfun_values[idxs] = self.get_values(
                         band=1, window=window)[idxs]
 
-                if hmin is not None:
-                    hfun_values[np.where(hfun_values < hmin)] = hmin
 
-                if hmax is not None:
-                    hfun_values[np.where(hfun_values > hmax)] = hmax
-
+                # Apply global hmin and hmax
                 if self._hmin is not None:
                     hfun_values[np.where(hfun_values < self._hmin)] = self._hmin
                 if self._hmax is not None:
