@@ -35,19 +35,20 @@ class HfunCombine:
 
         self._base_exterior = None
 
-        self._operation_info = dict(
-            dem_files=dem_files,
-            out_file=out_file,
-            out_format=out_format,
-            mesh_file=mesh_file,
-            hmin=hmin,
-            hmax=hmax,
-            contours=contours,
-            constants=constants,
-            chunk_size=chunk_size,
-            overlap=overlap,
-            method=method,
-            nprocs=nprocs)
+        self._operation_info = {
+                'dem_files': dem_files,
+                'out_file': out_file,
+                'out_format': out_format,
+                'mesh_file': mesh_file,
+                'hmin': hmin,
+                'hmax': hmax,
+                'contours': contours,
+                'constants': constants,
+                'chunk_size': chunk_size,
+                'overlap': overlap,
+                'method': method,
+                'nprocs': nprocs
+        }
 
     def run(self):
 

@@ -159,7 +159,7 @@ class GeomCollector(BaseGeom):
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
 
-        self._elev_info = dict(zmin=zmin, zmax=zmax)
+        self._elev_info = {'zmin':zmin, 'zmax': zmax}
         self._nprocs = nprocs
         self._chunk_size = chunk_size
         self._overlap = overlap

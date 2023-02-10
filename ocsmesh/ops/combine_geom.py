@@ -48,20 +48,21 @@ class GeomCombine:
         nprocs = cpu_count() if nprocs == -1 else nprocs
         dem_files = [] if dem_files is None else dem_files
 
-        self._operation_info = dict(
-            dem_files=dem_files,
-            out_file=out_file,
-            out_format=out_format,
-            mesh_file=mesh_file,
-            mesh_mp_in=mesh_multipolygon,
-            ignore_mesh=ignore_mesh_final_boundary,
-            zmin=zmin,
-            zmax=zmax,
-            chunk_size=chunk_size,
-            overlap=overlap,
-            nprocs=nprocs,
-            out_crs=out_crs,
-            base_crs=base_crs)
+        self._operation_info = {
+                'dem_files': dem_files,
+                'out_file': out_file,
+                'out_format': out_format,
+                'mesh_file': mesh_file,
+                'mesh_mp_in': mesh_multipolygon,
+                'ignore_mesh': ignore_mesh_final_boundary,
+                'zmin': zmin,
+                'zmax': zmax,
+                'chunk_size': chunk_size,
+                'overlap': overlap,
+                'nprocs': nprocs,
+                'out_crs': out_crs,
+                'base_crs': base_crs
+        }
 
     def run(self):
 

@@ -26,7 +26,7 @@ logging.basicConfig(
 _logger = logging.getLogger(__name__)
 
 # Enable KML driver
-#from https://stackoverflow.com/questions/72960340/attributeerror-nonetype-object-has-no-attribute-drvsupport-when-using-fiona
+#from stackoverflow issue 72960340
 supported_drivers['KML'] = 'rw'
 supported_drivers['LIBKML'] = 'rw'
 

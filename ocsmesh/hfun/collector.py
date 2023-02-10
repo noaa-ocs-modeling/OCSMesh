@@ -648,7 +648,7 @@ class HfunCollector(BaseHfun):
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
         self._applied = False
-        self._size_info = dict(hmin=hmin, hmax=hmax)
+        self._size_info = {'hmin': hmin, 'hmax': hmax}
         self._nprocs = nprocs
         self._hfun_list = []
         self._method = method

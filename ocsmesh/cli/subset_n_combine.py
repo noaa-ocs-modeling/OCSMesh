@@ -185,8 +185,7 @@ class SubsetAndCombine:
 
         if not isinstance(shape, GeometryCollection):
             raise ValueError(
-                "Expected a GeometryCollection, received {}".format(
-                    type(shape)))
+                f"Expected a GeometryCollection, received {type(shape)}")
 
         polygon_list = []
         for g in shape.geoms:
