@@ -1,12 +1,13 @@
 [MASTER]
 fail-on=E
-fail-under=9.84
+fail-under=9.90
 py-version=3.9.7
 # As a temporary workaround for https://github.com/PyCQA/pylint/issues/4577
 init-hook = "import astroid; astroid.context.InferenceContext.max_inferred = 250"
 
 [MESSAGES CONTROL]
-disable=fixme,
+disable=arguments-differ,
+        fixme,
         invalid-name,
         unused-variable,
         unused-argument,
@@ -23,6 +24,7 @@ disable=fixme,
         missing-module-docstring,
         missing-class-docstring,
         missing-function-docstring,
+        super-init-not-called,
         unspecified-encoding
 
 [TYPECHECK]
@@ -34,3 +36,5 @@ generated-members=ocsmesh.driver.JigsawDriver.hfun,
                   ocsmesh.mesh.base.BaseMesh._msh_t,
                   ocsmesh.mesh.mesh.EuclideanMesh._boundaries,
                   ocsmesh.mesh.mesh.Mesh.*
+ignore-patterns=interp.py,
+                cmd.py

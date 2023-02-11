@@ -5,7 +5,7 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy import constants
 
-import ocsmesh.utils as utils
+from ocsmesh import utils
 
 ConstraintValueType = Enum("ConstraintValueType", "MIN MAX")
 
@@ -269,13 +269,13 @@ class CourantNumConstraint(Constraint):
             Depth values to be used for Courant number approximations
         old_values : array of floats
             Values of mesh size function before applying the constraint
-        \*args : list
+        *args : list
             List of arguments not handled by this apply method (
             used in other constraints)
-        \*\*kwargs : dict
+        **kwargs : dict
             Dictionary of arguments not handled by this apply method (
             used in other constraints)
-            
+
         Returns
         -------
         array of floats
@@ -296,7 +296,7 @@ class CourantNumConstraint(Constraint):
         char_vel = u_mag + np.sqrt(constants.g * np.abs(ref_values))
         # For overland where h < nu the characteristic velocity is 2 * sqrt(g*h)
         char_vel[~depth_mask] = 2 * u_mag[~depth_mask]
-        
+
         temp_values = utils.get_element_size_courant(
             char_vel, self._dt, self._value
         )

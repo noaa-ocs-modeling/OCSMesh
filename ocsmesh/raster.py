@@ -1824,7 +1824,7 @@ class Raster:
         """Set `resampling_method`"""
 
         if not isinstance(resampling_method, Resampling):
-            TypeError(
+            raise TypeError(
                 f'Argument resampling_method must be of type  {Resampling}, '
                 f'not type {type(resampling_method)}.')
         self._resampling_method = resampling_method

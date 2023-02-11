@@ -648,7 +648,7 @@ class HfunCollector(BaseHfun):
         nprocs = cpu_count() if nprocs == -1 else nprocs
 
         self._applied = False
-        self._size_info = dict(hmin=hmin, hmax=hmax)
+        self._size_info = {'hmin': hmin, 'hmax': hmax}
         self._nprocs = nprocs
         self._hfun_list = []
         self._method = method
@@ -1584,7 +1584,7 @@ class HfunCollector(BaseHfun):
                     hmin = self._size_info['hmin']
                 if hmax is None:
                     hmax = self._size_info['hmax']
-                hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+                hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
 
 
     def _apply_const_val(self):
@@ -2080,7 +2080,7 @@ class HfunCollector(BaseHfun):
             else:
                 zmin = max(zmin, -99990)
 
-            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmax, zmin)
+            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
 
     def _apply_const_val_fast(self, big_hfun):
         """Internal: apply specified constant value refinements.
