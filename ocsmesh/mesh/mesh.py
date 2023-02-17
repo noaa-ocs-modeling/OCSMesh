@@ -243,13 +243,15 @@ class EuclideanMesh2D(EuclideanMesh):
         Get multipolygon of the mesh hull.
     """
 
-    def __init__(self, mesh: jigsaw_msh_t) -> None:
+    def __init__(self, mesh: jigsaw_msh_t, boundaries=None) -> None:
         """Initialize Euclidean 2D mesh object.
 
         Parameters
         ----------
         mesh : jigsaw_msh_t
             The underlying jigsaw_msh_t object to hold onto mesh data.
+        boundaries : dict or None, default = None
+            Dictionary of boundaries assignment
 
         Raises
         ------
@@ -258,7 +260,7 @@ class EuclideanMesh2D(EuclideanMesh):
         """
 
         super().__init__(mesh)
-        self._boundaries = None
+        self._boundaries = boundaries
 
         if mesh.ndims != +2:
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
@@ -315,6 +317,8 @@ class EuclideanMesh2D(EuclideanMesh):
 
         if self._boundaries is None:
             self._boundaries = Boundaries(self)
+        elif isinstance(self._boundaries, dict):
+            self._boundaries = Boundaries(self, self._boundaries)
         return self._boundaries
 
     def tricontourf(self, **kwargs) -> Axes:
@@ -591,7 +595,7 @@ class Mesh(BaseMesh):
         Read mesh data from a file on disk.
     """
 
-    def __new__(cls, mesh: jigsaw_msh_t) -> MeshType:
+    def __new__(cls, mesh: jigsaw_msh_t, **kwargs) -> MeshType:
         """Construct a concrete mesh object.
 
         Parameters
@@ -618,7 +622,7 @@ class Mesh(BaseMesh):
 
         if mesh.mshID == 'euclidean-mesh':
             if mesh.ndims == 2:
-                return EuclideanMesh2D(mesh)
+                return EuclideanMesh2D(mesh, **kwargs)
 
             raise NotImplementedError(
                 f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
@@ -655,9 +659,12 @@ class Mesh(BaseMesh):
         """
 
         try:
-            msh_t = utils.grd_to_msh_t(grd.read(path, crs=crs))
+            grd_info = grd.read(path, crs=crs, boundaries=True)
+            msh_t = utils.grd_to_msh_t(grd_info)
             msh_t.value = np.negative(msh_t.value)
-            return Mesh(msh_t)
+            bdry = grd_info.get('boundaries')
+            bdry = None if bdry is not None and bdry.empty() else bdry
+            return Mesh(msh_t, boundaries=bdry)
         except Exception as e: #pylint: disable=W0703
             if 'not a valid grd file' in str(e):
                 pass
@@ -1550,13 +1557,15 @@ class Boundaries:
         input land indicator `threshold`
     """
 
-    def __init__(self, mesh: EuclideanMesh) -> None:
+    def __init__(self, mesh: EuclideanMesh, data: defaultdict = defaultdict(defaultdict)) -> None:
         """Initialize boundary helper object
 
         Parameters
         ----------
         mesh : EuclideanMesh
             Input mesh for which this object calculates boundaries.
+        data : dict or None, default = None
+            Boundary assignment
         """
 
         # TODO: Add a way to manually initialize
@@ -1564,7 +1573,8 @@ class Boundaries:
         self._ocean = gpd.GeoDataFrame()
         self._land = gpd.GeoDataFrame()
         self._interior = gpd.GeoDataFrame()
-        self._data = defaultdict(defaultdict)
+        self._data = data
+
 
     @lru_cache(maxsize=1)
     def _init_dataframes(self) -> None:

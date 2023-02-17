@@ -957,7 +957,7 @@ def remove_mesh_by_edge(
 
     for etype in ELEM_2D_TYPES:
         elems = getattr(mesh, etype)['index']
-        # If a given element contains to vertices from
+        # If a given element contains two vertices from
         # a crossing edge, it is selected
         test = np.sum(np.isin(elems, edge_verts), axis=1)
         elems = elems[test < 2]
