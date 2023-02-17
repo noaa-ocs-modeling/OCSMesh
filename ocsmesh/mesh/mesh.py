@@ -5,13 +5,14 @@ size function factory class. It also defines concrete mesh types.
 Currently two concrete mesh types are defined for generic Eucledian
 mesh and specific 2D Eucledian mesh.
 """
-from functools import lru_cache
 import logging
-from multiprocessing import Pool, cpu_count
 import os
 import pathlib
-from collections import defaultdict
 import warnings
+from functools import lru_cache
+from multiprocessing import Pool, cpu_count
+from collections import defaultdict
+from copy import deepcopy
 from typing import Union, List, Tuple, Dict, Any, Optional
 try:
     from typing import Literal
@@ -1529,6 +1530,8 @@ class Elements:
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
 
+# TODO: Rewrite Boundaries for more efficient storage for manual assigment
+# TODO: Cleanup index vs id (do we need id at all?)
 class Boundaries:
     """Helper class for mesh boundary condition calculation
 
@@ -1552,12 +1555,14 @@ class Boundaries:
     interior()
         Retrieves a dataframe containing shapes and type info of island
         boundaries
-    auto_generate(threshold=0., land_ibtype=0, interior_ibtype=1)
+    auto_generate(threshold=0., land_ibtype=0, interior_ibtype=1, values=None)
         Automatically generate boundary information based on the
         input land indicator `threshold`
+    set_land(region)
+    set_open(region)
     """
 
-    def __init__(self, mesh: EuclideanMesh, data: defaultdict = defaultdict(defaultdict)) -> None:
+    def __init__(self, mesh: EuclideanMesh, data: defaultdict = None) -> None:
         """Initialize boundary helper object
 
         Parameters
@@ -1568,11 +1573,12 @@ class Boundaries:
             Boundary assignment
         """
 
-        # TODO: Add a way to manually initialize
         self.mesh = mesh
         self._ocean = gpd.GeoDataFrame()
         self._land = gpd.GeoDataFrame()
         self._interior = gpd.GeoDataFrame()
+        if data is None:
+            data = defaultdict(defaultdict)
         self._data = data
 
 
@@ -1650,6 +1656,14 @@ class Boundaries:
         self._ocean = gpd.GeoDataFrame(ocean_boundaries)
         self._land = gpd.GeoDataFrame(land_boundaries)
         self._interior = gpd.GeoDataFrame(interior_boundaries)
+
+
+    def _refresh_boundaries(self, data):
+        self._data = data
+        self._init_dataframes.cache_clear()
+        self.__call__.cache_clear()
+        self._init_dataframes()
+
 
     def ocean(self) -> gpd.GeoDataFrame:
         """Retrieve the ocean boundary information dataframe
@@ -1838,77 +1852,139 @@ class Boundaries:
                     land_boundary.append(tuple(ext_ring[i, :]))
                 elif np.any(np.asarray((e0, e1)) == -1):
                     ocean_boundary.append(tuple(ext_ring[i, :]))
-#            ocean_boundaries = utils.sort_edges(ocean_boundary)
-#            land_boundaries = utils.sort_edges(land_boundary)
-            ocean_boundaries = []
-            if len(ocean_boundary) != 0:
-                #pylint: disable=not-an-iterable
-                ocean_segs = linemerge(coords[np.array(ocean_boundary)].tolist())
-                ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
-                ocean_boundaries = [
-                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                         for e, coo in enumerate(seg.coords[:-1])]
-                        for seg in ocean_segs]
-            land_boundaries = []
-            if len(land_boundary) != 0:
-                #pylint: disable=not-an-iterable
-                land_segs = linemerge(coords[np.array(land_boundary)].tolist())
-                land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
-                land_boundaries = [
-                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                         for e, coo in enumerate(seg.coords[:-1])]
-                        for seg in land_segs]
 
-            _bnd_id = len(boundaries[None])
-            for bnd in ocean_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = [get_id(vert) for vert in e0]
-                data = e0 + [get_id(e1[-1])]
-                boundaries[None][_bnd_id] = bdry_type(
-                        indexes=data, properties={})
-                _bnd_id += 1
-
-            # add land boundaries
-            _bnd_id = len(boundaries[land_ibtype])
-            for bnd in land_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = [get_id(vert) for vert in e0]
-                data = e0 + [get_id(e1[-1])]
-                boundaries[land_ibtype][_bnd_id] = bdry_type(
-                        indexes=data, properties={})
-
-                _bnd_id += 1
-
+            boundaries[None] = self._assign_boundary_condition_to_edges(ocean_boundary)
+            boundaries[land_ibtype] = self._assign_boundary_condition_to_edges(land_boundary)
         # generate interior boundaries
-        _bnd_id = 0
-        interior_boundaries = defaultdict()
         for poly in polys:
             interiors = poly.interiors
+
             for interior in interiors:
+                if not interior.is_ccw:
+                    interior = interior.reverse()
                 int_ring_coo = interior.coords
                 int_ring = [
                         (coo_to_idx[int_ring_coo[e]],
                          coo_to_idx[int_ring_coo[e + 1]])
                         for e, coo in enumerate(int_ring_coo[:-1])]
 
-                # TODO: Do we still need these?
-                e0, e1 = [list(t) for t in zip(*int_ring)]
-                if utils.signed_polygon_area(self.mesh.coord[e0, :]) < 0:
-                    e0 = e0[::-1]
-                    e1 = e1[::-1]
-                e0 = [get_id(vert) for vert in e0]
-                e0.append(e0[0])
-                interior_boundaries[_bnd_id] = e0
-                _bnd_id += 1
+                boundaries[interior_ibtype] = self._assign_boundary_condition_to_edges(
+                    int_ring,
+                    no_segment=True,
+                    init=boundaries[interior_ibtype],
+                )
 
-        for bnd_id, data in interior_boundaries.items():
-            boundaries[interior_ibtype][bnd_id] = bdry_type(
-                        indexes=data, properties={})
+        self._refresh_boundaries(boundaries)
 
-        self._data = boundaries
-        self._init_dataframes.cache_clear()
-        self.__call__.cache_clear()
-        self._init_dataframes()
+
+
+    def set_open(self, region: Union[Polygon, MultiPolygon]):
+        self._set_region(region, None)
+
+
+    def set_land(self, region: Union[Polygon, MultiPolygon], land_ibtype=0):
+        self._set_region(region, land_ibtype)
+
+
+    def _set_region(self, region: Union[Polygon, MultiPolygon], type_id):
+        boundaries = deepcopy(self._data)
+        bdry_edges = utils.get_boundary_edges(self.mesh.msh_t)
+        in_verts = utils.get_verts_in_shape(self.mesh.msh_t, region)
+        in_edges = utils.get_incident_edges(self.mesh.msh_t, in_verts)
+        edge_list = [
+            tuple(edge) for edge in np.intersect1d(in_edges, bdry_edges)
+        ]
+
+        boundaries = self._resovle_assignment_conflict(edge_list, boundaries)
+
+        boundaries[type_id] = self._assign_boundary_condition_to_edges(
+            edge_list,
+            init=boundaries[type_id]
+        )
+
+        self._refresh_boundaries(boundaries)
+
+
+
+    def _resovle_assignment_conflict(self, edge_list, boundaries):
+
+        # Gather information about what boundary condition each edge has
+        edge_bdry_info = {}
+        for boundary_type, boundary_data in boundaries.items():
+            for boundary_id, boundary_node_ids in boundary_data['indexs']:
+                b_edges = [tuple(sorted((boundary_node_ids[i], boundary_node_ids[i + 1])))
+                           for i in range(len(boundary_node_ids) - 1)]
+                edge_bdry_info.update(
+                    **{ed: (boundary_type, boundary_id, en) for en, ed in enumerate(b_edges)}
+                )
+        # Find where each boundary needs to be split
+        splits_idx = {}
+        for edge in edge_list:
+            tp_id, bd_id, ed_idx = edge_bdry_info[edge]
+            splits_idx = splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
+
+        # Apply splits to the boundary dictionary
+        for (tp_id, bd_id), idxs in splits_idx.items():
+            lst = boundaries[tp_id][bd_id]
+            subs = []
+            prev_idx = 0
+            for idx in idxs:
+                sub = lst[prev:idx + 1]
+                if len(sub) > 1:
+                    subs.append(sub)
+                prev = idx + 1
+            subs.append(lst[prev:])
+
+            if len(subs) > 0:
+                boundaries[tp_id][bd_id] = subs[0]
+                next_bnd_id = max(boundaries[tp_id].keys()) + 1
+                for sub in subs[1:]:
+                    boundaries[tp_id][next_bnd_id] = sub
+                    next_bnd_id = next_bnd_id + 1
+
+
+        return boundaries
+
+
+    def _assign_boundary_condition_to_edges(self, edge_list, no_segment=False, init=None):
+
+        assignment = defaultdict()
+        if isinstance(init, defaultdict):
+            assignment = deepcopy(init)
+        get_id = self.mesh.nodes.get_id_by_index
+
+        if no_segment:
+            # Don't segment the input, useful for linerings (interior)
+            new_bnds = edge_list
+        else:
+            # Assign connected segments together
+            coords = self.mesh.msh_t.vert2['coord']
+            coo_to_idx = {
+                tuple(coo): idx
+                for idx, coo in enumerate(coords)}
+
+            if len(edge_list) != 0:
+                #pylint: disable=not-an-iterable
+                bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
+                bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs
+                new_bnds = [
+                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                         for e, coo in enumerate(seg.coords[:-1])]
+                        for seg in bnd_segs]
+
+        for bnd in new_bnds:
+            assigned_ids = assignment.keys()
+            bnd_id = max(assigned_ids) + 1 if len(assigned_ids) > 0 else 0
+            e0, e1 = [list(t) for t in zip(*bnd)]
+            e0 = [get_id(vert) for vert in e0]
+            data = e0 + [get_id(e1[-1])]
+            assignment[bnd_id] = {'indexes': data, 'properties': {}}
+
+        return assignment
+
+
+
+
 
 SortedRingType = Dict[int,
                       Dict[Literal['exterior', 'interiors'],

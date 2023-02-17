@@ -185,7 +185,7 @@ def get_mesh_polygons(mesh):
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pnts = MultiPoint([*pnts.geoms[:idx], *pnts.geoms[idx + 1:]])
+                pnts = MultiPoint([*(pnts.geoms[:idx]), *(pnts.geoms[idx + 1:])])
                 if pnts.is_empty:
                     break
 
@@ -832,6 +832,17 @@ def select_adjacent(mesh, in_indices, num_layers):
     msg = (f"Not implemented for"
            f" mshID={mesh.mshID} and dim={mesh.ndims}")
     raise NotImplementedError(msg)
+
+
+@must_be_euclidean_mesh
+def get_incident_edges(
+        mesh: jigsaw_msh_t,
+        vert_idx_list: Sequence[int],
+        ) -> Sequence[Tuple[int, int]]:
+
+    edges = get_mesh_edges(mesh, unique=True)
+    test = np.isin(edges, vert_idx_list).any(axis=1)
+    return edges[test]
 
 
 @must_be_euclidean_mesh
