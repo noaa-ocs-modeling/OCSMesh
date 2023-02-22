@@ -664,7 +664,7 @@ class Mesh(BaseMesh):
             msh_t = utils.grd_to_msh_t(grd_info)
             msh_t.value = np.negative(msh_t.value)
             bdry = grd_info.get('boundaries')
-            bdry = None if bdry is not None and bdry.empty() else bdry
+            bdry = None if bdry is not None and len(bdry) == 0 else bdry
             return Mesh(msh_t, boundaries=bdry)
         except Exception as e: #pylint: disable=W0703
             if 'not a valid grd file' in str(e):
@@ -1607,8 +1607,9 @@ class Boundaries:
             for ibtype, bnds in boundaries.items():
                 if ibtype is None:
                     for bnd_id, data in bnds.items():
-                        indexes = list(map(self.mesh.nodes.get_index_by_id,
-                                       data['indexes']))
+                        indexes = list(
+                            map(self.mesh.nodes.get_index_by_id, data['indexes'])
+                        )
                         ocean_boundaries.append({
                             'id': bnd_id,
                             "index_id": data['indexes'],
@@ -1823,9 +1824,7 @@ class Boundaries:
         # TODO: Split using shapely to get bdry segments
 
         boundaries = defaultdict(defaultdict)
-        bdry_type = dict
 
-        get_id = self.mesh.nodes.get_id_by_index
         # generate exterior boundaries
         for poly in polys:
             ext_ring_coo = poly.exterior.coords
@@ -1948,29 +1947,30 @@ class Boundaries:
 
     def _assign_boundary_condition_to_edges(self, edge_list, no_segment=False, init=None):
 
+
         assignment = defaultdict()
+        if len(edge_list) == 0:
+            return assignment
+
         if isinstance(init, defaultdict):
             assignment = deepcopy(init)
         get_id = self.mesh.nodes.get_id_by_index
 
-        if no_segment:
-            # Don't segment the input, useful for linerings (interior)
-            new_bnds = edge_list
-        else:
+        new_bnds = [edge_list]
+        if not no_segment:
             # Assign connected segments together
             coords = self.mesh.msh_t.vert2['coord']
             coo_to_idx = {
                 tuple(coo): idx
                 for idx, coo in enumerate(coords)}
 
-            if len(edge_list) != 0:
-                #pylint: disable=not-an-iterable
-                bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
-                bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs
-                new_bnds = [
-                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                         for e, coo in enumerate(seg.coords[:-1])]
-                        for seg in bnd_segs]
+            #pylint: disable=not-an-iterable
+            bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
+            bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs
+            new_bnds = [
+                    [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                     for e, coo in enumerate(seg.coords[:-1])]
+                    for seg in bnd_segs]
 
         for bnd in new_bnds:
             assigned_ids = assignment.keys()
