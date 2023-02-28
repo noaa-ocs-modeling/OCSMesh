@@ -1826,7 +1826,7 @@ class Boundaries:
         boundaries = defaultdict(defaultdict)
 
         # generate exterior boundaries
-        for poly in polys:
+        for poly in polys.geoms:
             ext_ring_coo = poly.exterior.coords
             ext_ring = np.array([
                     (coo_to_idx[ext_ring_coo[e]],
@@ -1852,10 +1852,15 @@ class Boundaries:
                 elif np.any(np.asarray((e0, e1)) == -1):
                     ocean_boundary.append(tuple(ext_ring[i, :]))
 
-            boundaries[None] = self._assign_boundary_condition_to_edges(ocean_boundary)
-            boundaries[land_ibtype] = self._assign_boundary_condition_to_edges(land_boundary)
+            boundaries[None] = self._assign_boundary_condition_to_edges(
+                ocean_boundary, init=boundaries[None]
+            )
+            boundaries[land_ibtype] = self._assign_boundary_condition_to_edges(
+                land_boundary, init=boundaries[land_ibtype]
+            )
+
         # generate interior boundaries
-        for poly in polys:
+        for poly in polys.geoms:
             interiors = poly.interiors
 
             for interior in interiors:
@@ -1966,7 +1971,7 @@ class Boundaries:
 
             #pylint: disable=not-an-iterable
             bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
-            bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs
+            bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs.geoms
             new_bnds = [
                     [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
                      for e, coo in enumerate(seg.coords[:-1])]
