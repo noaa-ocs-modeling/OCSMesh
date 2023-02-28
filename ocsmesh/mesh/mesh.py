@@ -1952,13 +1952,13 @@ class Boundaries:
 
     def _assign_boundary_condition_to_edges(self, edge_list, no_segment=False, init=None):
 
-
         assignment = defaultdict()
+        if isinstance(init, defaultdict):
+            assignment = deepcopy(init)
+
         if len(edge_list) == 0:
             return assignment
 
-        if isinstance(init, defaultdict):
-            assignment = deepcopy(init)
         get_id = self.mesh.nodes.get_id_by_index
 
         new_bnds = [edge_list]
