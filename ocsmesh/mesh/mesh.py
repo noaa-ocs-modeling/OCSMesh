@@ -1977,13 +1977,14 @@ class Boundaries:
                      for e, coo in enumerate(seg.coords[:-1])]
                     for seg in bnd_segs]
 
+        assigned_ids = assignment.keys()
+        bnd_id = max(assigned_ids) + 1 if len(assigned_ids) > 0 else 0
         for bnd in new_bnds:
-            assigned_ids = assignment.keys()
-            bnd_id = max(assigned_ids) + 1 if len(assigned_ids) > 0 else 0
             e0, e1 = [list(t) for t in zip(*bnd)]
             e0 = [get_id(vert) for vert in e0]
             data = e0 + [get_id(e1[-1])]
             assignment[bnd_id] = {'indexes': data, 'properties': {}}
+            bnd_id += 1
 
         return assignment
 
