@@ -1428,7 +1428,7 @@ def limgrad(mesh, dfdx, imax=100):
                         aset[active_idx] = _iter
     if not _iter < imax:
         msg = f'limgrad() did not converge within {imax} iterations.'
-        raise Exception(msg)
+        raise RuntimeError(msg)
     return ffun
 
 

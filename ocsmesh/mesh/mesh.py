@@ -1969,7 +1969,7 @@ class Boundaries:
                 tuple(coo): idx
                 for idx, coo in enumerate(coords)}
 
-            #pylint: disable=not-an-iterable
+            #pylint: disable=not-an-iterable, E1101
             bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
             bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs.geoms
             new_bnds = [
