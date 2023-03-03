@@ -785,8 +785,11 @@ def get_verts_in_shape(
         mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
     shp_series = gpd.GeoSeries(shape)
 
+    # We need point indices in the shapes, not the shape indices
+    # query bulk returns all combination of intersections in case
+    # input shape results in multi-row series
     in_shp_idx = pt_series.sindex.query_bulk(
-            shp_series, predicate="intersects")
+            shp_series, predicate="intersects")[1]
 
     in_shp_idx = select_adjacent(mesh, in_shp_idx, num_layers=num_adjacent)
 
