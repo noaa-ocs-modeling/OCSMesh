@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 from jigsawpy import jigsaw_msh_t
+from shapely import geometry
 
 from ocsmesh.mesh.mesh import Mesh
 
@@ -11,21 +12,27 @@ class BoundaryExtraction(unittest.TestCase):
 
     def setUp(self):
         """
-        index(id):
+        Note:
+            x = x-index
+            y = y-index
 
-          0(1)               4(5)
-            *---*---*---*---*
-            | / | / | / | / |
-            *---*---*---*---*
-            | / | / | / | / |
-            *---*---*---*---*
-            | / |   | / | / |
-            *---*---*---*---*
-            | / | / | / | / |
-            *---*---*---*---*
-            | / | / | / | / |
-            *---*---*---*---*
-          20(21)             29(30)
+            node-index(node-id)
+
+              25(26)             29(30)
+          5     *---*---*---*---*
+                | \ | \ | \ | \ |
+          4     *---*---*---*---*
+                | \ | \ | \ | \ |
+          3     *---*---*---*---*
+                | \ |   | \ | \ |
+          2     *---*---*---*---*
+                | \ | \ | \ | \ |
+          1     *---*---*---*---*
+                | \ | \ | \ | \ |
+          0     *---*---*---*---*
+              0(1)               4(5)
+
+                0   1   2   3   4
         """
 
         # Create a basic grid with a hole
@@ -78,7 +85,7 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry[0]), 1)
         self.assertEqual(len(bdry[1]), 1)
 
-        # Counter-clockwise boundaries node ID list
+        # Boundaries node ID list
         self.assertEqual(bdry[None][0]['indexes'], [30, 25, 20, 15, 10, 5])
         self.assertEqual(
             bdry[0][0]['indexes'],
@@ -101,9 +108,36 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry[0]), 2)
         self.assertEqual(len(bdry[1]), 1)
 
-        # Counter-clockwise boundaries node ID list
+        # Boundaries node ID list
         self.assertEqual(bdry[None][0]['indexes'], [1, 6, 11, 16, 21, 26])
         self.assertEqual(bdry[None][1]['indexes'], [30, 25, 20, 15, 10, 5])
         self.assertEqual(bdry[0][0]['indexes'], [5, 4, 3, 2, 1])
         self.assertEqual(bdry[0][1]['indexes'], [26, 27, 28, 29, 30])
+        self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
+
+
+    def test_manual_boundary_specification_correctness(self):
+        # Shape for wrapping bottom boundary
+        shape1 = geometry.box(0.5, -0.5, 3.5, 0.5)
+        shape2 = geometry.box(1.5, -0.5, 2.5, 0.5)
+
+        self.mesh.boundaries.auto_generate()
+        self.mesh.boundaries.set_open(region=shape1)
+        self.mesh.boundaries.set_land(region=shape2)
+
+        bdry = self.mesh.boundaries.data
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry[None]), 2)
+        self.assertEqual(len(bdry[0]), 2)
+        self.assertEqual(len(bdry[1]), 1)
+
+        # Boundaries node ID list
+        self.assertEqual(bdry[None][0]['indexes'], [1, 2])
+        self.assertEqual(bdry[None][1]['indexes'], [4, 5])
+        self.assertEqual(
+            bdry[0][0]['indexes'],
+            [1, 6, 11, 16, 21, 26, 27, 28, 29, 30, 25, 20, 15, 10, 5]
+        )
+        self.assertEqual(bdry[0][1]['indexes'], [2, 3, 4])
         self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])

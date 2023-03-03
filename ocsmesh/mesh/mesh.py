@@ -1893,16 +1893,18 @@ class Boundaries:
     def _set_region(self, region: Union[Polygon, MultiPolygon], type_id):
         boundaries = deepcopy(self._data)
         bdry_edges = utils.get_boundary_edges(self.mesh.msh_t)
+        is_bdry = {tuple(edge): True for edge in bdry_edges}
         in_verts = utils.get_verts_in_shape(self.mesh.msh_t, region)
         in_edges = utils.get_incident_edges(self.mesh.msh_t, in_verts)
-        edge_list = [
-            tuple(edge) for edge in np.intersect1d(in_edges, bdry_edges)
+
+        edge_list_idx = [
+            tuple(edge) for edge in in_edges if is_bdry.get(tuple(edge), False)
         ]
 
-        boundaries = self._resovle_assignment_conflict(edge_list, boundaries)
+        boundaries = self._resovle_assignment_conflict(edge_list_idx, boundaries)
 
         boundaries[type_id] = self._assign_boundary_condition_to_edges(
-            edge_list,
+            edge_list_idx,
             init=boundaries[type_id]
         )
 
@@ -1910,58 +1912,71 @@ class Boundaries:
 
 
 
-    def _resovle_assignment_conflict(self, edge_list, boundaries):
+    def _resovle_assignment_conflict(self, edge_list_idx, boundaries):
+
+        get_id = self.mesh.nodes.get_id_by_index
+        edge_list_ids = [
+            (get_id(edge[0]), get_id(edge[1])) for edge in edge_list_idx
+        ]
 
         # Gather information about what boundary condition each edge has
         edge_bdry_info = {}
         for boundary_type, boundary_data in boundaries.items():
-            for boundary_id, boundary_node_ids in boundary_data['indexs']:
+            if not boundary_data:
+                continue
+            for boundary_id, boundary_info in boundary_data.items():
+                boundary_node_ids = boundary_info['indexes']
                 b_edges = [tuple(sorted((boundary_node_ids[i], boundary_node_ids[i + 1])))
                            for i in range(len(boundary_node_ids) - 1)]
                 edge_bdry_info.update(
-                    **{ed: (boundary_type, boundary_id, en) for en, ed in enumerate(b_edges)}
+                    **{str(ed): (boundary_type, boundary_id, en)
+                        for en, ed in enumerate(b_edges)}
                 )
         # Find where each boundary needs to be split
         splits_idx = {}
-        for edge in edge_list:
-            tp_id, bd_id, ed_idx = edge_bdry_info[edge]
-            splits_idx = splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
+        for edge in edge_list_ids:
+            tp_id, bd_id, ed_idx = edge_bdry_info[str(edge)]
+            splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
 
         # Apply splits to the boundary dictionary
         for (tp_id, bd_id), idxs in splits_idx.items():
-            lst = boundaries[tp_id][bd_id]
+            prop = boundaries[tp_id][bd_id]['properties']
+            lst = boundaries[tp_id][bd_id]['indexes']
             subs = []
-            prev_idx = 0
-            for idx in idxs:
+            prev = 0
+            for idx in sorted(idxs):
                 sub = lst[prev:idx + 1]
                 if len(sub) > 1:
                     subs.append(sub)
                 prev = idx + 1
-            subs.append(lst[prev:])
+            if prev < len(lst) - 1:
+                subs.append(lst[prev:])
 
             if len(subs) > 0:
-                boundaries[tp_id][bd_id] = subs[0]
+                boundaries[tp_id][bd_id] = {'indexes': subs[0], 'properties': prop}
                 next_bnd_id = max(boundaries[tp_id].keys()) + 1
                 for sub in subs[1:]:
-                    boundaries[tp_id][next_bnd_id] = sub
+                    boundaries[tp_id][next_bnd_id] = {
+                        'indexes': sub, 'properties': prop
+                    }
                     next_bnd_id = next_bnd_id + 1
 
 
         return boundaries
 
 
-    def _assign_boundary_condition_to_edges(self, edge_list, no_segment=False, init=None):
+    def _assign_boundary_condition_to_edges(self, edge_list_idx, no_segment=False, init=None):
 
         assignment = defaultdict()
         if isinstance(init, defaultdict):
             assignment = deepcopy(init)
 
-        if len(edge_list) == 0:
+        if len(edge_list_idx) == 0:
             return assignment
 
         get_id = self.mesh.nodes.get_id_by_index
 
-        new_bnds = [edge_list]
+        new_bnds = [edge_list_idx]
         if not no_segment:
             # Assign connected segments together
             coords = self.mesh.msh_t.vert2['coord']
@@ -1970,7 +1985,7 @@ class Boundaries:
                 for idx, coo in enumerate(coords)}
 
             #pylint: disable=not-an-iterable, E1101
-            bnd_segs = linemerge(coords[np.array(edge_list)].tolist())
+            bnd_segs = linemerge(coords[np.array(edge_list_idx)].tolist())
             bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs.geoms
             new_bnds = [
                     [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
