@@ -54,7 +54,7 @@ def buffer_to_dict(buf: TextIO):
         boundaries[None][_bnd_id]['indexes'] = []
         while _cnt < NETA:
             boundaries[None][_bnd_id]['indexes'].append(
-                buf.readline().split()[0].strip())
+                int(buf.readline().split()[0].strip()))
             _cnt += 1
         _bnd_id += 1
     NBOU = int(buf.readline().split()[0])
@@ -72,13 +72,13 @@ def buffer_to_dict(buf: TextIO):
         while _pnt_cnt < npts:
             line = buf.readline().split()
             if len(line) == 1:
-                boundaries[ibtype][_bnd_id]['indexes'].append(line[0])
+                boundaries[ibtype][_bnd_id]['indexes'].append(int(line[0]))
             else:
                 index_construct = []
                 for val in line:
                     if '.' in val:
                         continue
-                    index_construct.append(val)
+                    index_construct.append(int(val))
                 boundaries[ibtype][_bnd_id]['indexes'].append(index_construct)
             _pnt_cnt += 1
         _nbnd_cnt += 1
