@@ -72,8 +72,8 @@ class BoundaryExtraction(unittest.TestCase):
             self.mesh.boundaries.auto_generate()
         
 
-    def test_auto_boundary_1ocean_correctness(self):
-        # Set right boundary to be ocean
+    def test_auto_boundary_1open_correctness(self):
+        # Set right boundary to be open
         self.mesh.msh_t.value[self.mesh.msh_t.vert2['coord'][:, 0] > 3] = -10
 
         self.mesh.boundaries.auto_generate()
@@ -94,8 +94,8 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
 
 
-    def test_auto_boundary_2oceans_correctness(self):
-        # Set left and right boundary to be ocean
+    def test_auto_boundary_2open_correctness(self):
+        # Set left and right boundary to be open
         self.mesh.msh_t.value[self.mesh.msh_t.vert2['coord'][:, 0] > 3] = -10
         self.mesh.msh_t.value[self.mesh.msh_t.vert2['coord'][:, 0] < 1] = -10
 

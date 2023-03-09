@@ -120,21 +120,21 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
     # ocean boundaries
     if boundaries is not None:
         out.append(f"{len(boundaries[None]):d} "
-                   "! total number of ocean boundaries")
+                   "! total number of open boundaries")
         # count total number of ocean boundaries
         _sum = 0
         for bnd in boundaries[None].values():
             _sum += len(bnd['indexes'])
-        out.append(f"{int(_sum):d} ! total number of ocean boundary nodes")
+        out.append(f"{int(_sum):d} ! total number of open boundary nodes")
         # write ocean boundary indexes
         for i, boundary in boundaries[None].items():
             out.append(f"{len(boundary['indexes']):d}"
-                       f" ! number of nodes for ocean_boundary_{i}")
+                       f" ! number of nodes for open_boundary_{i}")
             for idx in boundary['indexes']:
                 out.append(f"{idx}")
     else:
-        out.append("0 ! total number of ocean boundaries")
-        out.append("0 ! total number of ocean boundary nodes")
+        out.append("0 ! total number of open boundaries")
+        out.append("0 ! total number of open boundary nodes")
     # remaining boundaries
     boundaries = {} if boundaries is None else boundaries
     _cnt = 0
@@ -142,14 +142,14 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
         if key is not None:
             for bnd in boundaries[key]:
                 _cnt += 1
-    out.append(f"{_cnt:d}  ! total number of non-ocean boundaries")
+    out.append(f"{_cnt:d}  ! total number of land boundaries")
     # count remaining boundary nodes
     _cnt = 0
     for ibtype in boundaries:
         if ibtype is not None:
             for bnd in boundaries[ibtype].values():
                 _cnt += np.asarray(bnd['indexes']).size
-    out.append(f"{_cnt:d} ! Total number of non-ocean boundary nodes")
+    out.append(f"{_cnt:d} ! Total number of land boundary nodes")
     # all additional boundaries
     for ibtype, bndrys in boundaries.items():
         if ibtype is None:

@@ -1547,7 +1547,10 @@ class Boundaries:
     __len__()
         Gets the number of calculated boundary segments.
     ocean()
-        Retrieves a dataframe containing shapes and type info of ocean
+        Retrieves a dataframe containing shapes and type info of open
+        boundaries
+    open()
+        Retrieves a dataframe containing shapes and type info of open
         boundaries
     land()
         Retrieves a dataframe containing shapes and type info of land
@@ -1574,7 +1577,7 @@ class Boundaries:
         """
 
         self.mesh = mesh
-        self._ocean = gpd.GeoDataFrame()
+        self._open = gpd.GeoDataFrame()
         self._land = gpd.GeoDataFrame()
         self._interior = gpd.GeoDataFrame()
         if data is None:
@@ -1600,7 +1603,7 @@ class Boundaries:
         """
 
         boundaries = self._data
-        ocean_boundaries = []
+        open_boundaries = []
         land_boundaries = []
         interior_boundaries = []
         if boundaries is not None:
@@ -1610,7 +1613,7 @@ class Boundaries:
                         indexes = list(
                             map(self.mesh.nodes.get_index_by_id, data['indexes'])
                         )
-                        ocean_boundaries.append({
+                        open_boundaries.append({
                             'id': bnd_id,
                             "index_id": data['indexes'],
                             "indexes": indexes,
@@ -1654,7 +1657,7 @@ class Boundaries:
                             'geometry': LineString(self.mesh.coord[indexes])
                             })
 
-        self._ocean = gpd.GeoDataFrame(ocean_boundaries)
+        self._open = gpd.GeoDataFrame(open_boundaries)
         self._land = gpd.GeoDataFrame(land_boundaries)
         self._interior = gpd.GeoDataFrame(interior_boundaries)
 
@@ -1666,8 +1669,8 @@ class Boundaries:
         self._init_dataframes()
 
 
-    def ocean(self) -> gpd.GeoDataFrame:
-        """Retrieve the ocean boundary information dataframe
+    def open(self) -> gpd.GeoDataFrame:
+        """Retrieve the open boundary information dataframe
 
         Parameters
         ----------
@@ -1676,11 +1679,24 @@ class Boundaries:
         -------
         gpd.GeoDataFrame
             Dataframe containing the geometry and information of
-            ocean open boundary.
+            open boundary.
         """
 
         self._init_dataframes()
-        return self._ocean
+        return self._open
+
+
+    def ocean(self) -> gpd.GeoDataFrame:
+
+        message = (
+            'This is the old API and will be deprecated in the future release!'
+            + 'use `open()` instead'
+        )
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+
+
+        return self.open()
+        
 
     def land(self):
         """Retrieve the land boundary information dataframe
@@ -1742,7 +1758,7 @@ class Boundaries:
 
         self._init_dataframes()
         data = []
-        for bnd in self.ocean().itertuples():
+        for bnd in self.open().itertuples():
             data.append({
                 'id': bnd.id,
                 'ibtype': None,
@@ -1785,7 +1801,7 @@ class Boundaries:
         ----------
         threshold : float, default=0
             Threshold above which nodes are considered dry nodes
-            for ocean vs land boundary detection
+            for open vs land boundary detection
         land_ibtype : int, default=0
             Value to assign to land boundary type
         interior_ibtype : int, default=1
@@ -1844,16 +1860,16 @@ class Boundaries:
             edge_tag[
                 np.where(values[ext_ring[:, 1]] >= threshold)[0], 1] = 1
             # sort boundary edges
-            ocean_boundary = []
+            open_boundary = []
             land_boundary = []
             for i, (e0, e1) in enumerate(edge_tag):
                 if np.any(np.asarray((e0, e1)) == 1):
                     land_boundary.append(tuple(ext_ring[i, :]))
                 elif np.any(np.asarray((e0, e1)) == -1):
-                    ocean_boundary.append(tuple(ext_ring[i, :]))
+                    open_boundary.append(tuple(ext_ring[i, :]))
 
             boundaries[None] = self._assign_boundary_condition_to_edges(
-                ocean_boundary, init=boundaries[None]
+                open_boundary, init=boundaries[None]
             )
             boundaries[land_ibtype] = self._assign_boundary_condition_to_edges(
                 land_boundary, init=boundaries[land_ibtype]
