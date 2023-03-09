@@ -1690,7 +1690,7 @@ class Boundaries:
 
         message = (
             'This is the old API and will be deprecated in the future release!'
-            + 'use `open()` instead'
+            + ' Use `open()` instead'
         )
         warnings.warn(message, DeprecationWarning, stacklevel=2)
 
