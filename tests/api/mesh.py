@@ -141,3 +141,26 @@ class BoundaryExtraction(unittest.TestCase):
         )
         self.assertEqual(bdry[0][1]['indexes'], [2, 3, 4])
         self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
+
+
+    def test_specified_boundary_order(self):
+        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
+
+        self.mesh.boundaries.auto_generate()
+        self.mesh.boundaries.set_open(region=edge_at(1, 0))
+        self.mesh.boundaries.set_open(region=edge_at(4, 1))
+        self.mesh.boundaries.set_open(region=edge_at(0, 5))
+        self.mesh.boundaries.set_open(region=edge_at(4, 5))
+
+        bdry = self.mesh.boundaries.data
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry[None]), 4)
+        self.assertEqual(len(bdry[0]), 4)
+        self.assertEqual(len(bdry[1]), 1)
+
+        self.assertEqual(bdry[None][0]['indexes'], [1, 2, 3])
+        self.assertEqual(bdry[None][1]['indexes'], [5, 10, 15])
+        self.assertEqual(bdry[None][2]['indexes'], [21, 26, 27])
+        self.assertEqual(bdry[None][3]['indexes'], [29, 30, 25])
+
