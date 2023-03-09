@@ -49,6 +49,7 @@ class BoundaryExtraction(unittest.TestCase):
                 cells.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
         vals = np.ones((len(verts), 1)) * 10
 
+        # TODO: Replace with "make_mesh" util function
         mesh_msht = jigsaw_msh_t()
         mesh_msht.ndims = +2
         mesh_msht.mshID = 'euclidean-mesh'
@@ -78,20 +79,20 @@ class BoundaryExtraction(unittest.TestCase):
 
         self.mesh.boundaries.auto_generate()
 
-        bdry = self.mesh.boundaries.data
+        bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
-        self.assertEqual(len(bdry[None]), 1)
-        self.assertEqual(len(bdry[0]), 1)
-        self.assertEqual(len(bdry[1]), 1)
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
 
         # Boundaries node ID list
-        self.assertEqual(bdry[None][0]['indexes'], [30, 25, 20, 15, 10, 5])
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [30, 25, 20, 15, 10, 5])
         self.assertEqual(
-            bdry[0][0]['indexes'],
+            bdry.land().iloc[0]['index_id'],
             [5, 4, 3, 2, 1, 6, 11, 16, 21, 26, 27, 28, 29, 30]
         )
-        self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
+        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_auto_boundary_2open_correctness(self):
@@ -101,19 +102,19 @@ class BoundaryExtraction(unittest.TestCase):
 
         self.mesh.boundaries.auto_generate()
 
-        bdry = self.mesh.boundaries.data
+        bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
-        self.assertEqual(len(bdry[None]), 2)
-        self.assertEqual(len(bdry[0]), 2)
-        self.assertEqual(len(bdry[1]), 1)
+        self.assertEqual(len(bdry.open()), 2)
+        self.assertEqual(len(bdry.land()), 2)
+        self.assertEqual(len(bdry.interior()), 1)
 
         # Boundaries node ID list
-        self.assertEqual(bdry[None][0]['indexes'], [1, 6, 11, 16, 21, 26])
-        self.assertEqual(bdry[None][1]['indexes'], [30, 25, 20, 15, 10, 5])
-        self.assertEqual(bdry[0][0]['indexes'], [5, 4, 3, 2, 1])
-        self.assertEqual(bdry[0][1]['indexes'], [26, 27, 28, 29, 30])
-        self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 6, 11, 16, 21, 26])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [30, 25, 20, 15, 10, 5])
+        self.assertEqual(bdry.land().iloc[0]['index_id'], [5, 4, 3, 2, 1])
+        self.assertEqual(bdry.land().iloc[1]['index_id'], [26, 27, 28, 29, 30])
+        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_manual_boundary_specification_correctness(self):
@@ -125,22 +126,23 @@ class BoundaryExtraction(unittest.TestCase):
         self.mesh.boundaries.set_open(region=shape1)
         self.mesh.boundaries.set_land(region=shape2)
 
-        bdry = self.mesh.boundaries.data
+        bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
-        self.assertEqual(len(bdry[None]), 2)
-        self.assertEqual(len(bdry[0]), 2)
-        self.assertEqual(len(bdry[1]), 1)
+        self.assertEqual(len(bdry.open()), 2)
+        self.assertEqual(len(bdry.land()), 2)
+        self.assertEqual(len(bdry.interior()), 1)
 
         # Boundaries node ID list
-        self.assertEqual(bdry[None][0]['indexes'], [1, 2])
-        self.assertEqual(bdry[None][1]['indexes'], [4, 5])
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [4, 5])
         self.assertEqual(
-            bdry[0][0]['indexes'],
+            bdry.land().iloc[0]['index_id'],
             [1, 6, 11, 16, 21, 26, 27, 28, 29, 30, 25, 20, 15, 10, 5]
         )
-        self.assertEqual(bdry[0][1]['indexes'], [2, 3, 4])
-        self.assertEqual(bdry[1][0]['indexes'], [12, 13, 18, 17, 12])
+        self.assertEqual(bdry.land().iloc[1]['index_id'], [2, 3, 4])
+        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+
 
 
     def test_specified_boundary_order(self):
@@ -152,15 +154,15 @@ class BoundaryExtraction(unittest.TestCase):
         self.mesh.boundaries.set_open(region=edge_at(0, 5))
         self.mesh.boundaries.set_open(region=edge_at(4, 5))
 
-        bdry = self.mesh.boundaries.data
+        bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
-        self.assertEqual(len(bdry[None]), 4)
-        self.assertEqual(len(bdry[0]), 4)
-        self.assertEqual(len(bdry[1]), 1)
+        self.assertEqual(len(bdry.open()), 4)
+        self.assertEqual(len(bdry.land()), 4)
+        self.assertEqual(len(bdry.interior()), 1)
 
-        self.assertEqual(bdry[None][0]['indexes'], [1, 2, 3])
-        self.assertEqual(bdry[None][1]['indexes'], [5, 10, 15])
-        self.assertEqual(bdry[None][2]['indexes'], [21, 26, 27])
-        self.assertEqual(bdry[None][3]['indexes'], [29, 30, 25])
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [5, 10, 15])
+        self.assertEqual(bdry.open().iloc[2]['index_id'], [21, 26, 27])
+        self.assertEqual(bdry.open().iloc[3]['index_id'], [29, 30, 25])
 
