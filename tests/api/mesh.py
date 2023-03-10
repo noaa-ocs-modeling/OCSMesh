@@ -144,6 +144,19 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
+    def test_manual_boundary_notaffect_interior(self):
+        self.mesh.boundaries.auto_generate()
+
+        self.mesh.boundaries.set_open(region=geometry.box(0.5, 1.5, 2.5, 3.5))
+
+        bdry = self.mesh.boundaries
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry.open()), 0)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
+
+
 
     def test_specified_boundary_order(self):
         edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)

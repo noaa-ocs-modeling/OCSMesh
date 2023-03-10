@@ -744,7 +744,7 @@ class Rings:
 
         data = []
         bnd_id = 0
-        for poly in polys:
+        for poly in polys.geoms:
             data.append({
                     "geometry": poly.exterior,
                     "bnd_id": bnd_id,
@@ -1585,6 +1585,41 @@ class Boundaries:
         self._data = data
 
 
+    @property
+    @lru_cache(maxsize=1)
+    def nodeidxlist(self):
+        # NOTE: It returns lists of node indices, NOT IDs
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+
+        ext_bdry_nodes = []
+        for ring in self.mesh.hull.rings.exterior().itertuples():
+            ext_ring_coo = ring.geometry.coords
+            ext_ring = np.array([
+                    (coo_to_idx[ext_ring_coo[e]],
+                     coo_to_idx[ext_ring_coo[e + 1]])
+                    for e, coo in enumerate(ext_ring_coo[:-1])])
+
+            ext_bdry_nodes.append(ext_ring)
+
+
+        int_bdry_nodes = []
+        for ring in self.mesh.hull.rings.interior().itertuples():
+            if not ring.geometry.is_ccw:
+                ring.geometry = ring.geometry.reverse()
+            int_ring_coo = ring.geometry.coords
+            int_ring = [
+                    (coo_to_idx[int_ring_coo[e]],
+                     coo_to_idx[int_ring_coo[e + 1]])
+                    for e, coo in enumerate(int_ring_coo[:-1])]
+            int_bdry_nodes.append(int_ring)
+
+        return {'exterior': ext_bdry_nodes, 'interior': int_bdry_nodes}
+
+
+
     @lru_cache(maxsize=1)
     def _init_dataframes(self) -> None:
         """Internal: Creates boundary dataframes based on boundary data
@@ -1830,25 +1865,11 @@ class Boundaries:
                 "boundaries.")
 
 
-        coords = self.mesh.msh_t.vert2['coord']
-        coo_to_idx = {
-            tuple(coo): idx
-            for idx, coo in enumerate(coords)}
-
-        polys = utils.get_mesh_polygons(self.mesh.msh_t)
-
         # TODO: Split using shapely to get bdry segments
 
         boundaries = defaultdict(defaultdict)
 
-        # generate exterior boundaries
-        for poly in polys.geoms:
-            ext_ring_coo = poly.exterior.coords
-            ext_ring = np.array([
-                    (coo_to_idx[ext_ring_coo[e]],
-                     coo_to_idx[ext_ring_coo[e + 1]])
-                    for e, coo in enumerate(ext_ring_coo[:-1])])
-
+        for ext_ring in self.nodeidxlist['exterior']:
             # find boundary edges
             edge_tag = np.full(ext_ring.shape, 0)
             edge_tag[
@@ -1876,23 +1897,12 @@ class Boundaries:
             )
 
         # generate interior boundaries
-        for poly in polys.geoms:
-            interiors = poly.interiors
-
-            for interior in interiors:
-                if not interior.is_ccw:
-                    interior = interior.reverse()
-                int_ring_coo = interior.coords
-                int_ring = [
-                        (coo_to_idx[int_ring_coo[e]],
-                         coo_to_idx[int_ring_coo[e + 1]])
-                        for e, coo in enumerate(int_ring_coo[:-1])]
-
-                boundaries[interior_ibtype] = self._assign_boundary_condition_to_edges(
-                    int_ring,
-                    no_segment=True,
-                    init=boundaries[interior_ibtype],
-                )
+        for int_ring in self.nodeidxlist['interior']:
+            boundaries[interior_ibtype] = self._assign_boundary_condition_to_edges(
+                int_ring,
+                no_segment=True,
+                init=boundaries[interior_ibtype],
+            )
 
         self._refresh_boundaries(boundaries)
 
@@ -1908,15 +1918,27 @@ class Boundaries:
 
     def _set_region(self, region: Union[Polygon, MultiPolygon], type_id):
         boundaries = deepcopy(self._data)
-        bdry_edges = utils.get_boundary_edges(self.mesh.msh_t)
-        is_bdry = {tuple(edge): True for edge in bdry_edges}
-        in_verts = utils.get_verts_in_shape(self.mesh.msh_t, region)
-        in_edges = utils.get_incident_edges(self.mesh.msh_t, in_verts)
 
-        edge_list_idx = [
-            tuple(edge) for edge in in_edges if is_bdry.get(tuple(edge), False)
-        ]
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
 
+        # Note interior boundaries are untouched, since they can only
+        # be of "interior" type
+        ext_edges = self.mesh.hull.edges.exterior()
+        select_edges = ext_edges[ext_edges.intersects(region)]
+
+        edge_list_idx = []
+        for edge in select_edges.itertuples():
+            if edge.geometry.is_empty: 
+                continue
+            e_coo = list(edge.geometry.coords)
+            assert len(e_coo) == 2
+            edge_list_idx.append(sorted((coo_to_idx[e_coo[0]], coo_to_idx[e_coo[1]])))
+
+        if len(edge_list_idx) == 0:
+            return
         boundaries = self._resovle_assignment_conflict(edge_list_idx, boundaries)
 
         boundaries[type_id] = self._assign_boundary_condition_to_edges(
