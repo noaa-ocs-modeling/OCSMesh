@@ -1908,15 +1908,15 @@ class Boundaries:
 
 
 
-    def set_open(self, region: Union[Polygon, MultiPolygon]):
-        self._set_region(region, None)
+    def set_open(self, region: Union[Polygon, MultiPolygon], merge=False):
+        self._set_region(region, None, merge)
 
 
-    def set_land(self, region: Union[Polygon, MultiPolygon], land_ibtype=0):
-        self._set_region(region, land_ibtype)
+    def set_land(self, region: Union[Polygon, MultiPolygon], land_ibtype=0, merge=False):
+        self._set_region(region, land_ibtype, merge)
 
 
-    def _set_region(self, region: Union[Polygon, MultiPolygon], type_id):
+    def _set_region(self, region: Union[Polygon, MultiPolygon], type_id, merge):
         boundaries = deepcopy(self._data)
 
         coords = self.mesh.msh_t.vert2['coord']
@@ -1939,11 +1939,30 @@ class Boundaries:
 
         if len(edge_list_idx) == 0:
             return
+
         boundaries = self._resolve_assignment_conflict(edge_list_idx, boundaries)
 
+        init = boundaries[type_id]
+        if merge:
+            get_idx = self.mesh.nodes.get_index_by_id
+
+            # NOTE: There's NO guarantee for preserving order, even
+            # if we pass the boundary list in the order we want to
+            # preserve.
+            #
+            # `linemerge` reorders first based on X and then Y of points
+            # in result lines
+            old_edge_list_idx = []
+            for bnd in boundaries[type_id].values():
+                bnd_idxs = list(map(get_idx, bnd['indexes']))
+                old_edge_list_idx.extend(zip(bnd_idxs[:-1], bnd_idxs[1:]))
+
+            old_edge_list_idx.extend(edge_list_idx)
+            edge_list_idx = old_edge_list_idx
+            init = None
+
         boundaries[type_id] = self._assign_boundary_condition_to_edges(
-            edge_list_idx,
-            init=boundaries[type_id]
+            edge_list_idx, init=init
         )
 
         self._refresh_boundaries(boundaries)

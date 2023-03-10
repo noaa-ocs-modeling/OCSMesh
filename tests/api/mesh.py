@@ -105,7 +105,6 @@ class BoundaryExtraction(unittest.TestCase):
 
         bdry = self.mesh.boundaries
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
         self.assertEqual(len(bdry.interior()), 1)
@@ -129,7 +128,6 @@ class BoundaryExtraction(unittest.TestCase):
 
         bdry = self.mesh.boundaries
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
         self.assertEqual(len(bdry.interior()), 1)
@@ -152,7 +150,6 @@ class BoundaryExtraction(unittest.TestCase):
 
         bdry = self.mesh.boundaries
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 0)
         self.assertEqual(len(bdry.land()), 1)
         self.assertEqual(len(bdry.interior()), 1)
@@ -174,7 +171,6 @@ class BoundaryExtraction(unittest.TestCase):
 
         bdry = self.mesh.boundaries
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
         self.assertEqual(len(bdry.interior()), 1)
@@ -188,7 +184,7 @@ class BoundaryExtraction(unittest.TestCase):
         )
 
 
-    def test_specified_boundary_order(self):
+    def test_specified_boundary_order_nomerge(self):
         edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
 
         self.mesh.boundaries.auto_generate()
@@ -199,7 +195,6 @@ class BoundaryExtraction(unittest.TestCase):
 
         bdry = self.mesh.boundaries
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 4)
         self.assertEqual(len(bdry.land()), 4)
         self.assertEqual(len(bdry.interior()), 1)
@@ -222,3 +217,49 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.open()), 1)
         self.assertEqual(len(bdry.land()), 1)
         self.assertEqual(len(bdry.interior()), 1)
+
+
+    def test_manual_boundary_merge_sametype(self):
+        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
+
+        self.mesh.boundaries.auto_generate()
+        self.mesh.boundaries.set_land(region=edge_at(1, 0), merge=True)
+        self.mesh.boundaries.set_open(region=edge_at(4, 3), merge=True)
+        self.mesh.boundaries.set_open(region=edge_at(4, 4), merge=True)
+
+        bdry = self.mesh.boundaries
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
+
+
+    def test_specified_boundary_order_withmerge(self):
+        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
+
+        # No merge -> order of specifying
+        self.mesh.boundaries.auto_generate()
+        self.mesh.boundaries.set_open(region=edge_at(3, 0))
+        self.mesh.boundaries.set_open(region=edge_at(0, 5))
+
+        bdry = self.mesh.boundaries
+
+        self.assertEqual(len(bdry.open()), 2)
+        self.assertEqual(len(bdry.land()), 2)
+        self.assertEqual(len(bdry.interior()), 1)
+
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [3, 4, 5])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [21, 26, 27])
+
+
+        # With merge -> reorder based on X then Y of line coords
+        self.mesh.boundaries.set_open(region=edge_at(0, 2), merge=True)
+
+        self.assertEqual(len(bdry.open()), 3)
+        self.assertEqual(len(bdry.land()), 3)
+        self.assertEqual(len(bdry.interior()), 1)
+
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [6, 11, 16])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [21, 26, 27])
+        self.assertEqual(bdry.open().iloc[2]['index_id'], [3, 4, 5])
