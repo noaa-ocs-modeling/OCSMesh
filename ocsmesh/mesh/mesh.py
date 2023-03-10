@@ -1939,7 +1939,7 @@ class Boundaries:
 
         if len(edge_list_idx) == 0:
             return
-        boundaries = self._resovle_assignment_conflict(edge_list_idx, boundaries)
+        boundaries = self._resolve_assignment_conflict(edge_list_idx, boundaries)
 
         boundaries[type_id] = self._assign_boundary_condition_to_edges(
             edge_list_idx,
@@ -1950,7 +1950,7 @@ class Boundaries:
 
 
 
-    def _resovle_assignment_conflict(self, edge_list_idx, boundaries):
+    def _resolve_assignment_conflict(self, edge_list_idx, boundaries):
 
         get_id = self.mesh.nodes.get_id_by_index
         edge_list_ids = [

@@ -157,6 +157,35 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 1)
 
 
+    def test_manual_boundary_convex_region(self):
+        self.mesh.boundaries.auto_generate()
+
+        self.mesh.boundaries.set_open(region=geometry.Polygon([
+            (-1, 4.5),
+            (0.5, 4.5),
+            (0.5, 3.5),
+            (-0.5, 3.5),
+            (-0.5, 1.5),
+            (0.5, 1.5),
+            (0.5, 0.5),
+            (-1, 0.5),
+        ]))
+
+        bdry = self.mesh.boundaries
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry.open()), 2)
+        self.assertEqual(len(bdry.land()), 2)
+        self.assertEqual(len(bdry.interior()), 1)
+
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 6, 11])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [16, 21, 26])
+        self.assertEqual(bdry.land().iloc[0]['index_id'], [11, 16])
+        self.assertEqual(
+            bdry.land().iloc[1]['index_id'],
+            [26, 27, 28, 29, 30, 25, 20, 15, 10, 5, 4, 3, 2, 1]
+        )
+
 
     def test_specified_boundary_order(self):
         edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
