@@ -1731,7 +1731,7 @@ class Boundaries:
 
 
         return self.open()
-        
+
 
     def land(self):
         """Retrieve the land boundary information dataframe
@@ -1931,7 +1931,7 @@ class Boundaries:
 
         edge_list_idx = []
         for edge in select_edges.itertuples():
-            if edge.geometry.is_empty: 
+            if edge.geometry.is_empty:
                 continue
             e_coo = list(edge.geometry.coords)
             assert len(e_coo) == 2
@@ -1956,6 +1956,12 @@ class Boundaries:
             for bnd in boundaries[type_id].values():
                 bnd_idxs = list(map(get_idx, bnd['indexes']))
                 old_edge_list_idx.extend(zip(bnd_idxs[:-1], bnd_idxs[1:]))
+            old_order_list_id = [
+                nd_id for bnd in boundaries[type_id].values() for nd_id in bnd['indexes']
+            ]
+            old_order_dict = {
+                nd_id: order for order, nd_id in enumerate(old_order_list_id)
+            }
 
             old_edge_list_idx.extend(edge_list_idx)
             edge_list_idx = old_edge_list_idx
@@ -1964,6 +1970,20 @@ class Boundaries:
         boundaries[type_id] = self._assign_boundary_condition_to_edges(
             edge_list_idx, init=init
         )
+
+        if merge:
+            # NOTE: Force order like before merge
+            new_order_dict = {
+                b_id: min(old_order_dict.get(nd_id, np.inf) for nd_id in bnd['indexes'])
+                    for b_id, bnd in boundaries[type_id].items()
+            }
+
+            # Assuming dict comprehension order is preserved (?)
+            boundaries[type_id] = dict(sorted(
+                boundaries[type_id].items(),
+                key=lambda i: new_order_dict[i[0]]
+            ))
+
 
         self._refresh_boundaries(boundaries)
 

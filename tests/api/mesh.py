@@ -69,14 +69,14 @@ class BoundaryExtraction(unittest.TestCase):
         )
 
         self.mesh = Mesh(mesh_msht)
-                
+
 
     def test_auto_boundary_fails_if_na_elev(self):
         # Set one node to nan value
         self.mesh.msh_t.value[-1] = np.nan
         with self.assertRaises(ValueError):
             self.mesh.boundaries.auto_generate()
-        
+
 
     def test_auto_boundary_1open_correctness(self):
         # Set right boundary to be open
@@ -262,25 +262,23 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        # No merge -> order of specifying
-        self.mesh.boundaries.set_open(region=edge_at(3, 0))
+        self.mesh.boundaries.set_open(region=edge_at(1, 0))
+        self.mesh.boundaries.set_open(region=edge_at(4, 1))
         self.mesh.boundaries.set_open(region=edge_at(0, 5))
+        self.mesh.boundaries.set_open(region=edge_at(4, 5))
+        self.mesh.boundaries.set_open(region=edge_at(4, 4))
+        self.mesh.boundaries.set_open(region=edge_at(0, 0), merge=True)
+        self.mesh.boundaries.set_open(region=edge_at(0, 4), merge=True)
 
-        self.assertEqual(len(bdry.open()), 2)
-        self.assertEqual(len(bdry.land()), 2)
+        bdry = self.mesh.boundaries
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry.open()), 4)
+        self.assertEqual(len(bdry.land()), 4)
         self.assertEqual(len(bdry.interior()), 1)
 
-        self.assertEqual(bdry.open().iloc[0]['index_id'], [3, 4, 5])
-        self.assertEqual(bdry.open().iloc[1]['index_id'], [21, 26, 27])
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [6, 1, 2, 3])
+        self.assertEqual(bdry.open().iloc[1]['index_id'], [5, 10, 15])
+        self.assertEqual(bdry.open().iloc[2]['index_id'], [16, 21, 26, 27])
+        self.assertEqual(bdry.open().iloc[3]['index_id'], [20, 25, 30, 29])
 
-
-        # With merge -> reorder based on X then Y of line coords
-        self.mesh.boundaries.set_open(region=edge_at(0, 2), merge=True)
-
-        self.assertEqual(len(bdry.open()), 3)
-        self.assertEqual(len(bdry.land()), 3)
-        self.assertEqual(len(bdry.interior()), 1)
-
-        self.assertEqual(bdry.open().iloc[0]['index_id'], [6, 11, 16])
-        self.assertEqual(bdry.open().iloc[1]['index_id'], [21, 26, 27])
-        self.assertEqual(bdry.open().iloc[2]['index_id'], [3, 4, 5])
