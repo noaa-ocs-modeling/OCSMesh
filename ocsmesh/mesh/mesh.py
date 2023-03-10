@@ -2022,6 +2022,8 @@ class Boundaries:
                         'indexes': sub, 'properties': prop
                     }
                     next_bnd_id = next_bnd_id + 1
+            else:
+                boundaries[tp_id].pop(bd_id)
 
 
         return boundaries
