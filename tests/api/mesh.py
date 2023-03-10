@@ -8,6 +8,10 @@ from shapely import geometry
 
 from ocsmesh.mesh.mesh import Mesh
 
+
+def edge_at (x, y):
+    return geometry.Point(x, y).buffer(0.05)
+
 class BoundaryExtraction(unittest.TestCase):
 
     def setUp(self):
@@ -79,7 +83,7 @@ class BoundaryExtraction(unittest.TestCase):
         self.mesh.msh_t.value[self.mesh.msh_t.vert2['coord'][:, 0] > 3] = -10
 
         self.mesh.boundaries.auto_generate()
-
+        # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
@@ -102,7 +106,7 @@ class BoundaryExtraction(unittest.TestCase):
         self.mesh.msh_t.value[self.mesh.msh_t.vert2['coord'][:, 0] < 1] = -10
 
         self.mesh.boundaries.auto_generate()
-
+        # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 2)
@@ -123,10 +127,11 @@ class BoundaryExtraction(unittest.TestCase):
         shape2 = geometry.box(1.5, -0.5, 2.5, 0.5)
 
         self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
+
         self.mesh.boundaries.set_open(region=shape1)
         self.mesh.boundaries.set_land(region=shape2)
-
-        bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
@@ -145,10 +150,10 @@ class BoundaryExtraction(unittest.TestCase):
 
     def test_manual_boundary_notaffect_interior(self):
         self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
 
         self.mesh.boundaries.set_open(region=geometry.box(0.5, 1.5, 2.5, 3.5))
-
-        bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 0)
         self.assertEqual(len(bdry.land()), 1)
@@ -157,6 +162,8 @@ class BoundaryExtraction(unittest.TestCase):
 
     def test_manual_boundary_convex_region(self):
         self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
 
         self.mesh.boundaries.set_open(region=geometry.Polygon([
             (-1, 4.5),
@@ -168,8 +175,6 @@ class BoundaryExtraction(unittest.TestCase):
             (0.5, 0.5),
             (-1, 0.5),
         ]))
-
-        bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
@@ -185,15 +190,14 @@ class BoundaryExtraction(unittest.TestCase):
 
 
     def test_specified_boundary_order_nomerge(self):
-        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
-
         self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
+
         self.mesh.boundaries.set_open(region=edge_at(1, 0))
         self.mesh.boundaries.set_open(region=edge_at(4, 1))
         self.mesh.boundaries.set_open(region=edge_at(0, 5))
         self.mesh.boundaries.set_open(region=edge_at(4, 5))
-
-        bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 4)
         self.assertEqual(len(bdry.land()), 4)
@@ -206,12 +210,11 @@ class BoundaryExtraction(unittest.TestCase):
 
 
     def test_manual_boundary_brokenring_stillconnected(self):
-        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
-
         self.mesh.boundaries.auto_generate()
-        self.mesh.boundaries.set_open(region=edge_at(4, 5))
-
+        # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
+
+        self.mesh.boundaries.set_open(region=edge_at(4, 5))
 
         # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 1)
@@ -220,14 +223,14 @@ class BoundaryExtraction(unittest.TestCase):
 
 
     def test_manual_boundary_merge_sametype(self):
-        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
-
         self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
+
         self.mesh.boundaries.set_land(region=edge_at(1, 0), merge=True)
         self.mesh.boundaries.set_open(region=edge_at(4, 3), merge=True)
         self.mesh.boundaries.set_open(region=edge_at(4, 4), merge=True)
 
-        bdry = self.mesh.boundaries
 
         # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 1)
@@ -235,15 +238,33 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 1)
 
 
+    def test_manual_boundary_connect_two_separate_segments(self):
+        self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
+
+        self.mesh.boundaries.set_open(region=edge_at(0, 0), merge=True)
+        self.mesh.boundaries.set_open(region=edge_at(4, 0), merge=True)
+
+        self.assertEqual(len(bdry.open()), 2)
+        self.assertEqual(len(bdry.land()), 2)
+        self.assertEqual(len(bdry.interior()), 1)
+
+        self.mesh.boundaries.set_open(region=edge_at(2, 0), merge=True)
+
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
+
+
     def test_specified_boundary_order_withmerge(self):
-        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
+        self.mesh.boundaries.auto_generate()
+        # bdry is referring to mesh object and can be mutated
+        bdry = self.mesh.boundaries
 
         # No merge -> order of specifying
-        self.mesh.boundaries.auto_generate()
         self.mesh.boundaries.set_open(region=edge_at(3, 0))
         self.mesh.boundaries.set_open(region=edge_at(0, 5))
-
-        bdry = self.mesh.boundaries
 
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
