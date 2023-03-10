@@ -1990,6 +1990,11 @@ class Boundaries:
             if prev < len(lst) - 1:
                 subs.append(lst[prev:])
 
+            if len(subs) == 2 and subs[0][0] == subs[1][-1]:
+                # Reconnect loops that are broken in the middle
+                subs = [[*subs[1][:-1], *subs[0]]]
+
+
             if len(subs) > 0:
                 boundaries[tp_id][bd_id] = {'indexes': subs[0], 'properties': prop}
                 next_bnd_id = max(boundaries[tp_id].keys()) + 1

@@ -47,6 +47,7 @@ class BoundaryExtraction(unittest.TestCase):
                     continue
                 cells.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
                 cells.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
+        # NOTE: Everywhere is above 0 (auto: land) unless modified later
         vals = np.ones((len(verts), 1)) * 10
 
         # TODO: Replace with "make_mesh" util function
@@ -208,3 +209,16 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.open().iloc[2]['index_id'], [21, 26, 27])
         self.assertEqual(bdry.open().iloc[3]['index_id'], [29, 30, 25])
 
+
+    def test_manual_boundary_brokenring_stillconnected(self):
+        edge_at = lambda x, y: geometry.Point(x, y).buffer(0.05)
+
+        self.mesh.boundaries.auto_generate()
+        self.mesh.boundaries.set_open(region=edge_at(4, 5))
+
+        bdry = self.mesh.boundaries
+
+        # Mesh has one segment of each boundary type
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
