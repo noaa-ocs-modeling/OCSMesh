@@ -1907,16 +1907,28 @@ class Boundaries:
             )
 
         # generate interior boundaries
-        for int_ring in self.nodeidxlist['interior']:
-            boundaries[interior_ibtype] = self._assign_boundary_condition_to_edges(
-                int_ring,
-                no_segment=True,
-                init=boundaries[interior_ibtype],
-            )
+        boundaries[interior_ibtype] = self._find_islands()
+
+        # refresh all boundaries
+        self._refresh_boundaries(boundaries)
+
+
+    def find_islands(self, interior_ibtype: int = 1):
+        boundaries = deepcopy(self._data)
+        boundaries[interior_ibtype] = self._find_islands()
 
         self._refresh_boundaries(boundaries)
 
 
+    def _find_islands(self):
+        islands = defaultdict()
+        for int_ring in self.nodeidxlist['interior']:
+            islands = self._assign_boundary_condition_to_edges(
+                int_ring,
+                no_segment=True,
+                init=islands,
+            )
+        return islands
 
     def set_open(self, region: Union[Polygon, MultiPolygon], merge=False):
         self._set_region(region, None, merge)

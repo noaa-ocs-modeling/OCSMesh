@@ -297,3 +297,14 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 1)
 
         self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
+
+
+    def test_auto_find_islands_only(self):
+        bdry = self.mesh.boundaries
+
+        self.assertEqual(len(bdry.interior()), 0)
+
+        bdry.find_islands()
+
+        self.assertEqual(len(bdry.interior()), 1)
+        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
