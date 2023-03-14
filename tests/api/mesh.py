@@ -313,3 +313,17 @@ class BoundaryExtraction(unittest.TestCase):
 
         self.assertEqual(len(bdry.interior()), 1)
         self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+
+
+    def test_specify_boundary_on_mesh_with_no_boundary(self):
+        bdry = self.mesh.boundaries
+
+        with self.assertWarns(UserWarning) as w:
+            bdry.set_open(region=edge_at(1, 0))
+        self.assertTrue('didn\'t have prior boundary' in str(w.warning))
+
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 0)
+        self.assertEqual(len(bdry.interior()), 0)
+
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])

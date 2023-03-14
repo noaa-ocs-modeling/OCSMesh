@@ -2013,6 +2013,8 @@ class Boundaries:
 
     def _resolve_assignment_conflict(self, edge_list_idx, boundaries):
 
+        # NOTE: This method assumes that only exterior boundaries are passed
+
         get_id = self.mesh.nodes.get_id_by_index
         edge_list_ids = [
             (get_id(edge[0]), get_id(edge[1])) for edge in edge_list_idx
@@ -2025,6 +2027,7 @@ class Boundaries:
                 continue
             for boundary_id, boundary_info in boundary_data.items():
                 boundary_node_ids = boundary_info['indexes']
+                # Order edges (assuming `edge_list_idx` input is also ordered)
                 b_edges = [tuple(sorted((boundary_node_ids[i], boundary_node_ids[i + 1])))
                            for i in range(len(boundary_node_ids) - 1)]
                 edge_bdry_info.update(
@@ -2034,7 +2037,12 @@ class Boundaries:
         # Find where each boundary needs to be split
         splits_idx = {}
         for edge in edge_list_ids:
-            tp_id, bd_id, ed_idx = edge_bdry_info[str(edge)]
+            this_edge_info = edge_bdry_info.get(str(edge), None)
+            if this_edge_info is None:
+                warnings.warn(f"Edge {edge} didn't have prior boundary set!")
+                continue
+            else:
+                tp_id, bd_id, ed_idx = this_edge_info
             splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
 
         # Apply splits to the boundary dictionary
