@@ -1,6 +1,7 @@
 #! python
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -69,8 +70,12 @@ class BoundaryExtraction(unittest.TestCase):
             vals, dtype=jigsaw_msh_t.REALS_t
         )
 
-        self.mesh = Mesh(mesh_msht)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning, message='Input mesh has no CRS information'
+            )
 
+            self.mesh = Mesh(mesh_msht)
 
     def test_auto_boundary_fails_if_na_elev(self):
         # Set one node to nan value
