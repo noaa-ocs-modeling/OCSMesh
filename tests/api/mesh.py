@@ -130,8 +130,8 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=shape1)
-        self.mesh.boundaries.set_land(region=shape2)
+        bdry.set_open(region=shape1)
+        bdry.set_land(region=shape2)
 
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
@@ -153,7 +153,7 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=geometry.box(0.5, 1.5, 2.5, 3.5))
+        bdry.set_open(region=geometry.box(0.5, 1.5, 2.5, 3.5))
 
         self.assertEqual(len(bdry.open()), 0)
         self.assertEqual(len(bdry.land()), 1)
@@ -165,7 +165,7 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=geometry.Polygon([
+        bdry.set_open(region=geometry.Polygon([
             (-1, 4.5),
             (0.5, 4.5),
             (0.5, 3.5),
@@ -194,10 +194,10 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=edge_at(1, 0))
-        self.mesh.boundaries.set_open(region=edge_at(4, 1))
-        self.mesh.boundaries.set_open(region=edge_at(0, 5))
-        self.mesh.boundaries.set_open(region=edge_at(4, 5))
+        bdry.set_open(region=edge_at(1, 0))
+        bdry.set_open(region=edge_at(4, 1))
+        bdry.set_open(region=edge_at(0, 5))
+        bdry.set_open(region=edge_at(4, 5))
 
         self.assertEqual(len(bdry.open()), 4)
         self.assertEqual(len(bdry.land()), 4)
@@ -214,7 +214,7 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=edge_at(4, 5))
+        bdry.set_open(region=edge_at(4, 5))
 
         # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 1)
@@ -227,9 +227,9 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_land(region=edge_at(1, 0), merge=True)
-        self.mesh.boundaries.set_open(region=edge_at(4, 3), merge=True)
-        self.mesh.boundaries.set_open(region=edge_at(4, 4), merge=True)
+        bdry.set_land(region=edge_at(1, 0), merge=True)
+        bdry.set_open(region=edge_at(4, 3), merge=True)
+        bdry.set_open(region=edge_at(4, 4), merge=True)
 
 
         # Mesh has one segment of each boundary type
@@ -243,8 +243,8 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=edge_at(0, 0), merge=True)
-        self.mesh.boundaries.set_open(region=edge_at(4, 0), merge=True)
+        bdry.set_open(region=edge_at(0, 0), merge=True)
+        bdry.set_open(region=edge_at(4, 0), merge=True)
 
         self.assertEqual(len(bdry.open()), 2)
         self.assertEqual(len(bdry.land()), 2)
@@ -262,15 +262,13 @@ class BoundaryExtraction(unittest.TestCase):
         # bdry is referring to mesh object and can be mutated
         bdry = self.mesh.boundaries
 
-        self.mesh.boundaries.set_open(region=edge_at(1, 0))
-        self.mesh.boundaries.set_open(region=edge_at(4, 1))
-        self.mesh.boundaries.set_open(region=edge_at(0, 5))
-        self.mesh.boundaries.set_open(region=edge_at(4, 5))
-        self.mesh.boundaries.set_open(region=edge_at(4, 4))
-        self.mesh.boundaries.set_open(region=edge_at(0, 0), merge=True)
-        self.mesh.boundaries.set_open(region=edge_at(0, 4), merge=True)
-
-        bdry = self.mesh.boundaries
+        bdry.set_open(region=edge_at(1, 0))
+        bdry.set_open(region=edge_at(4, 1))
+        bdry.set_open(region=edge_at(0, 5))
+        bdry.set_open(region=edge_at(4, 5))
+        bdry.set_open(region=edge_at(4, 4))
+        bdry.set_open(region=edge_at(0, 0), merge=True)
+        bdry.set_open(region=edge_at(0, 4), merge=True)
 
         # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 4)
@@ -281,4 +279,3 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.open().iloc[1]['index_id'], [5, 10, 15])
         self.assertEqual(bdry.open().iloc[2]['index_id'], [16, 21, 26, 27])
         self.assertEqual(bdry.open().iloc[3]['index_id'], [20, 25, 30, 29])
-

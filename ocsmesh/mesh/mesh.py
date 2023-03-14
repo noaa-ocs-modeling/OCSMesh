@@ -1692,9 +1692,16 @@ class Boundaries:
                             'geometry': LineString(self.mesh.coord[indexes])
                             })
 
+        crs = self.mesh.crs
         self._open = gpd.GeoDataFrame(open_boundaries)
+        if not self._open.empty and crs is not None:
+            self._open.set_crs(crs)
         self._land = gpd.GeoDataFrame(land_boundaries)
+        if not self._land.empty and crs is not None:
+            self._land.set_crs(crs)
         self._interior = gpd.GeoDataFrame(interior_boundaries)
+        if not self._interior.empty and crs is not None:
+            self._interior.set_crs(crs)
 
 
     def _refresh_boundaries(self, data):
@@ -1817,7 +1824,10 @@ class Boundaries:
                 "indexes": bnd.indexes,
                 'geometry': bnd.geometry})
 
-        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
+        total_boundaries = gpd.GeoDataFrame(data)
+        if not total_boundaries.empty and self.mesh.crs is not None:
+            total_boundaries = total_boundaries.set_crs(self.mesh.crs)
+        return total_boundaries
 
     def __len__(self) -> int:
         """Returns the number of boundary segments"""
