@@ -1,4 +1,5 @@
 #! python
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -270,7 +271,6 @@ class BoundaryExtraction(unittest.TestCase):
         bdry.set_open(region=edge_at(0, 0), merge=True)
         bdry.set_open(region=edge_at(0, 4), merge=True)
 
-        # Mesh has one segment of each boundary type
         self.assertEqual(len(bdry.open()), 4)
         self.assertEqual(len(bdry.land()), 4)
         self.assertEqual(len(bdry.interior()), 1)
@@ -279,3 +279,21 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.open().iloc[1]['index_id'], [5, 10, 15])
         self.assertEqual(bdry.open().iloc[2]['index_id'], [16, 21, 26, 27])
         self.assertEqual(bdry.open().iloc[3]['index_id'], [20, 25, 30, 29])
+
+
+    def test_specify_boundary_on_imported_mesh_with_boundary(self):
+        self.mesh.boundaries.auto_generate()
+
+        with tempfile.NamedTemporaryFile(suffix='.grd') as fo:
+            self.mesh.write(fo.name, format='grd', overwrite=True)
+            imported_mesh = Mesh.open(fo.name)
+
+        bdry = imported_mesh.boundaries
+
+        bdry.set_open(region=edge_at(1, 0))
+
+        self.assertEqual(len(bdry.open()), 1)
+        self.assertEqual(len(bdry.land()), 1)
+        self.assertEqual(len(bdry.interior()), 1)
+
+        self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])

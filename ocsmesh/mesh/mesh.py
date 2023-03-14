@@ -2027,7 +2027,7 @@ class Boundaries:
 
         # Apply splits to the boundary dictionary
         for (tp_id, bd_id), idxs in splits_idx.items():
-            prop = boundaries[tp_id][bd_id]['properties']
+            prop = boundaries[tp_id][bd_id].get('properties', {})
             lst = boundaries[tp_id][bd_id]['indexes']
             subs = []
             prev = 0
