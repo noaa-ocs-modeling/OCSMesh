@@ -33,7 +33,7 @@ from pyproj import CRS, Transformer
 from scipy.interpolate import (
         RectBivariateSpline, RegularGridInterpolator)
 from shapely.geometry import (
-        LineString, box, Polygon, MultiPolygon)
+        LineString, box, Polygon, MultiPolygon, LinearRing)
 from shapely.ops import polygonize, linemerge
 
 
@@ -1607,7 +1607,7 @@ class Boundaries:
 
         int_bdry_nodes = []
         for ring in self.mesh.hull.rings.interior().itertuples():
-            if not ring.geometry.is_ccw:
+            if not LinearRing(ring.geometry).is_ccw:
                 ring.geometry = ring.geometry.reverse()
             int_ring_coo = ring.geometry.coords
             int_ring = [
@@ -2039,7 +2039,7 @@ class Boundaries:
         for edge in edge_list_ids:
             this_edge_info = edge_bdry_info.get(str(edge), None)
             if this_edge_info is None:
-                warnings.warn(f"Edge {edge} didn't have prior boundary set!")
+                warnings.warn(f"Edge boundary {edge} didn't have prior boundary set!")
                 continue
             else:
                 tp_id, bd_id, ed_idx = this_edge_info
