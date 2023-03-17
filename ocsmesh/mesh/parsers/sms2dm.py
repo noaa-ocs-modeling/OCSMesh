@@ -81,8 +81,8 @@ def geom_string(geom_type, sms2dm):
             f'{geom_type}',
             f'{elm_id}',
         ]
-        for j, _ in enumerate(geom):
-            line.append(f"{geom[j]}")
+        for g in geom:
+            line.append(f"{g}")
         f.append(' '.join(line))
     if len(f) > 0:
         return '\n'.join(f)

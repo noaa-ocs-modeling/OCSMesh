@@ -22,19 +22,20 @@ class OCSMesh:
             nprocs = -1 if nprocs is None else nprocs
 
             if self._args.geom_cmd == "build":
-                arg_dict = dict(
-                    dem_files=self._args.dem,
-                    out_file=self._args.output,
-                    out_format=self._args.output_format,
-                    mesh_file=self._args.mesh,
-                    ignore_mesh_final_boundary=self._args.ignore_mesh_boundary,
-                    zmin=self._args.zmin,
-                    zmax=self._args.zmax,
-                    chunk_size=self._args.chunk_size,
-                    overlap=self._args.overlap,
-                    nprocs=nprocs,
-                    out_crs=self._args.output_crs,
-                    base_crs=self._args.mesh_crs)
+                arg_dict = {
+                    "dem_files": self._args.dem,
+                    "out_file": self._args.output,
+                    "out_format": self._args.output_format,
+                    "mesh_file": self._args.mesh,
+                    "ignore_mesh_final_boundary": self._args.ignore_mesh_boundary,
+                    "zmin": self._args.zmin,
+                    "zmax": self._args.zmax,
+                    "chunk_size": self._args.chunk_size,
+                    "overlap": self._args.overlap,
+                    "nprocs": nprocs,
+                    "out_crs": self._args.output_crs,
+                    "base_crs": self._args.mesh_crs
+                }
                 combine_geometry(**arg_dict)
 
         elif self._args.command == 'hfun':
@@ -45,19 +46,20 @@ class OCSMesh:
             nprocs = -1 if nprocs is None else nprocs
 
             if self._args.hfun_cmd == "build":
-                arg_dict = dict(
-                    dem_files=self._args.dem,
-                    out_file=self._args.output,
-                    out_format=self._args.output_format,
-                    mesh_file=self._args.mesh,
-                    hmin=self._args.hmin,
-                    hmax=self._args.hmax,
-                    contours=self._args.contour,
-                    constants=self._args.constants,
-                    chunk_size=self._args.chunk_size,
-                    overlap=self._args.overlap,
-                    method=self._args.method,
-                    nprocs=nprocs)
+                arg_dict = {
+                    "dem_files": self._args.dem,
+                    "out_file": self._args.output,
+                    "out_format": self._args.output_format,
+                    "mesh_file": self._args.mesh,
+                    "hmin": self._args.hmin,
+                    "hmax": self._args.hmax,
+                    "contours": self._args.contour,
+                    "constants": self._args.constants,
+                    "chunk_size": self._args.chunk_size,
+                    "overlap": self._args.overlap,
+                    "method": self._args.method,
+                    "nprocs": nprocs
+                }
                 combine_hfun(**arg_dict)
 
         elif self._args.command == 'scripts':

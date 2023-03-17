@@ -5,13 +5,14 @@ size function factory class. It also defines concrete mesh types.
 Currently two concrete mesh types are defined for generic Eucledian
 mesh and specific 2D Eucledian mesh.
 """
-from functools import lru_cache
 import logging
-from multiprocessing import Pool, cpu_count
 import os
 import pathlib
-from collections import defaultdict
 import warnings
+from functools import lru_cache
+from multiprocessing import Pool, cpu_count
+from collections import defaultdict
+from copy import deepcopy
 from typing import Union, List, Tuple, Dict, Any, Optional
 try:
     from typing import Literal
@@ -32,7 +33,7 @@ from pyproj import CRS, Transformer
 from scipy.interpolate import (
         RectBivariateSpline, RegularGridInterpolator)
 from shapely.geometry import (
-        LineString, box, Polygon, MultiPolygon)
+        LineString, box, Polygon, MultiPolygon, LinearRing)
 from shapely.ops import polygonize, linemerge
 
 
@@ -243,13 +244,15 @@ class EuclideanMesh2D(EuclideanMesh):
         Get multipolygon of the mesh hull.
     """
 
-    def __init__(self, mesh: jigsaw_msh_t) -> None:
+    def __init__(self, mesh: jigsaw_msh_t, boundaries=None) -> None:
         """Initialize Euclidean 2D mesh object.
 
         Parameters
         ----------
         mesh : jigsaw_msh_t
             The underlying jigsaw_msh_t object to hold onto mesh data.
+        boundaries : dict or None, default = None
+            Dictionary of boundaries assignment
 
         Raises
         ------
@@ -258,7 +261,7 @@ class EuclideanMesh2D(EuclideanMesh):
         """
 
         super().__init__(mesh)
-        self._boundaries = None
+        self._boundaries = boundaries
 
         if mesh.ndims != +2:
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
@@ -315,6 +318,8 @@ class EuclideanMesh2D(EuclideanMesh):
 
         if self._boundaries is None:
             self._boundaries = Boundaries(self)
+        elif isinstance(self._boundaries, dict):
+            self._boundaries = Boundaries(self, self._boundaries)
         return self._boundaries
 
     def tricontourf(self, **kwargs) -> Axes:
@@ -591,7 +596,7 @@ class Mesh(BaseMesh):
         Read mesh data from a file on disk.
     """
 
-    def __new__(cls, mesh: jigsaw_msh_t) -> MeshType:
+    def __new__(cls, mesh: jigsaw_msh_t, **kwargs) -> MeshType:
         """Construct a concrete mesh object.
 
         Parameters
@@ -618,7 +623,7 @@ class Mesh(BaseMesh):
 
         if mesh.mshID == 'euclidean-mesh':
             if mesh.ndims == 2:
-                return EuclideanMesh2D(mesh)
+                return EuclideanMesh2D(mesh, **kwargs)
 
             raise NotImplementedError(
                 f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
@@ -655,9 +660,12 @@ class Mesh(BaseMesh):
         """
 
         try:
-            msh_t = utils.grd_to_msh_t(grd.read(path, crs=crs))
+            grd_info = grd.read(path, crs=crs, boundaries=True)
+            msh_t = utils.grd_to_msh_t(grd_info)
             msh_t.value = np.negative(msh_t.value)
-            return Mesh(msh_t)
+            bdry = grd_info.get('boundaries')
+            bdry = None if bdry is not None and len(bdry) == 0 else bdry
+            return Mesh(msh_t, boundaries=bdry)
         except Exception as e: #pylint: disable=W0703
             if 'not a valid grd file' in str(e):
                 pass
@@ -736,7 +744,7 @@ class Rings:
 
         data = []
         bnd_id = 0
-        for poly in polys:
+        for poly in polys.geoms:
             data.append({
                     "geometry": poly.exterior,
                     "bnd_id": bnd_id,
@@ -1522,6 +1530,8 @@ class Elements:
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
 
 
+# TODO: Rewrite Boundaries for more efficient storage for manual assigment
+# TODO: Cleanup index vs id (do we need id at all?)
 class Boundaries:
     """Helper class for mesh boundary condition calculation
 
@@ -1537,7 +1547,10 @@ class Boundaries:
     __len__()
         Gets the number of calculated boundary segments.
     ocean()
-        Retrieves a dataframe containing shapes and type info of ocean
+        Retrieves a dataframe containing shapes and type info of open
+        boundaries
+    open()
+        Retrieves a dataframe containing shapes and type info of open
         boundaries
     land()
         Retrieves a dataframe containing shapes and type info of land
@@ -1545,26 +1558,67 @@ class Boundaries:
     interior()
         Retrieves a dataframe containing shapes and type info of island
         boundaries
-    auto_generate(threshold=0., land_ibtype=0, interior_ibtype=1)
+    auto_generate(threshold=0., land_ibtype=0, interior_ibtype=1, values=None)
         Automatically generate boundary information based on the
         input land indicator `threshold`
+    set_land(region)
+    set_open(region)
     """
 
-    def __init__(self, mesh: EuclideanMesh) -> None:
+    def __init__(self, mesh: EuclideanMesh, data: defaultdict = None) -> None:
         """Initialize boundary helper object
 
         Parameters
         ----------
         mesh : EuclideanMesh
             Input mesh for which this object calculates boundaries.
+        data : dict or None, default = None
+            Boundary assignment
         """
 
-        # TODO: Add a way to manually initialize
         self.mesh = mesh
-        self._ocean = gpd.GeoDataFrame()
+        self._open = gpd.GeoDataFrame()
         self._land = gpd.GeoDataFrame()
         self._interior = gpd.GeoDataFrame()
-        self._data = defaultdict(defaultdict)
+        if data is None:
+            data = defaultdict(defaultdict)
+        self._data = data
+
+
+    @property
+    @lru_cache(maxsize=1)
+    def nodeidxlist(self):
+        # NOTE: It returns lists of node indices, NOT IDs
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+
+        ext_bdry_nodes = []
+        for ring in self.mesh.hull.rings.exterior().itertuples():
+            ext_ring_coo = ring.geometry.coords
+            ext_ring = np.array([
+                    (coo_to_idx[ext_ring_coo[e]],
+                     coo_to_idx[ext_ring_coo[e + 1]])
+                    for e, coo in enumerate(ext_ring_coo[:-1])])
+
+            ext_bdry_nodes.append(ext_ring)
+
+
+        int_bdry_nodes = []
+        for ring in self.mesh.hull.rings.interior().itertuples():
+            if not LinearRing(ring.geometry).is_ccw:
+                ring.geometry = ring.geometry.reverse()
+            int_ring_coo = ring.geometry.coords
+            int_ring = [
+                    (coo_to_idx[int_ring_coo[e]],
+                     coo_to_idx[int_ring_coo[e + 1]])
+                    for e, coo in enumerate(int_ring_coo[:-1])]
+            int_bdry_nodes.append(int_ring)
+
+        return {'exterior': ext_bdry_nodes, 'interior': int_bdry_nodes}
+
+
 
     @lru_cache(maxsize=1)
     def _init_dataframes(self) -> None:
@@ -1584,16 +1638,17 @@ class Boundaries:
         """
 
         boundaries = self._data
-        ocean_boundaries = []
+        open_boundaries = []
         land_boundaries = []
         interior_boundaries = []
         if boundaries is not None:
             for ibtype, bnds in boundaries.items():
                 if ibtype is None:
                     for bnd_id, data in bnds.items():
-                        indexes = list(map(self.mesh.nodes.get_index_by_id,
-                                       data['indexes']))
-                        ocean_boundaries.append({
+                        indexes = list(
+                            map(self.mesh.nodes.get_index_by_id, data['indexes'])
+                        )
+                        open_boundaries.append({
                             'id': bnd_id,
                             "index_id": data['indexes'],
                             "indexes": indexes,
@@ -1637,12 +1692,27 @@ class Boundaries:
                             'geometry': LineString(self.mesh.coord[indexes])
                             })
 
-        self._ocean = gpd.GeoDataFrame(ocean_boundaries)
+        crs = self.mesh.crs
+        self._open = gpd.GeoDataFrame(open_boundaries)
+        if not self._open.empty and crs is not None:
+            self._open.set_crs(crs)
         self._land = gpd.GeoDataFrame(land_boundaries)
+        if not self._land.empty and crs is not None:
+            self._land.set_crs(crs)
         self._interior = gpd.GeoDataFrame(interior_boundaries)
+        if not self._interior.empty and crs is not None:
+            self._interior.set_crs(crs)
 
-    def ocean(self) -> gpd.GeoDataFrame:
-        """Retrieve the ocean boundary information dataframe
+
+    def _refresh_boundaries(self, data):
+        self._data = data
+        self._init_dataframes.cache_clear()
+        self.__call__.cache_clear()
+        self._init_dataframes()
+
+
+    def open(self) -> gpd.GeoDataFrame:
+        """Retrieve the open boundary information dataframe
 
         Parameters
         ----------
@@ -1651,11 +1721,24 @@ class Boundaries:
         -------
         gpd.GeoDataFrame
             Dataframe containing the geometry and information of
-            ocean open boundary.
+            open boundary.
         """
 
         self._init_dataframes()
-        return self._ocean
+        return self._open
+
+
+    def ocean(self) -> gpd.GeoDataFrame:
+
+        message = (
+            'This is the old API and will be deprecated in the future release!'
+            + ' Use `open()` instead'
+        )
+        warnings.warn(message, DeprecationWarning, stacklevel=2)
+
+
+        return self.open()
+
 
     def land(self):
         """Retrieve the land boundary information dataframe
@@ -1717,7 +1800,7 @@ class Boundaries:
 
         self._init_dataframes()
         data = []
-        for bnd in self.ocean().itertuples():
+        for bnd in self.open().itertuples():
             data.append({
                 'id': bnd.id,
                 'ibtype': None,
@@ -1741,7 +1824,10 @@ class Boundaries:
                 "indexes": bnd.indexes,
                 'geometry': bnd.geometry})
 
-        return gpd.GeoDataFrame(data, crs=self.mesh.crs)
+        total_boundaries = gpd.GeoDataFrame(data)
+        if not total_boundaries.empty and self.mesh.crs is not None:
+            total_boundaries = total_boundaries.set_crs(self.mesh.crs)
+        return total_boundaries
 
     def __len__(self) -> int:
         """Returns the number of boundary segments"""
@@ -1760,7 +1846,7 @@ class Boundaries:
         ----------
         threshold : float, default=0
             Threshold above which nodes are considered dry nodes
-            for ocean vs land boundary detection
+            for open vs land boundary detection
         land_ibtype : int, default=0
             Value to assign to land boundary type
         interior_ibtype : int, default=1
@@ -1789,27 +1875,11 @@ class Boundaries:
                 "boundaries.")
 
 
-        coords = self.mesh.msh_t.vert2['coord']
-        coo_to_idx = {
-            tuple(coo): idx
-            for idx, coo in enumerate(coords)}
-
-        polys = utils.get_mesh_polygons(self.mesh.msh_t)
-
         # TODO: Split using shapely to get bdry segments
 
         boundaries = defaultdict(defaultdict)
-        bdry_type = dict
 
-        get_id = self.mesh.nodes.get_id_by_index
-        # generate exterior boundaries
-        for poly in polys:
-            ext_ring_coo = poly.exterior.coords
-            ext_ring = np.array([
-                    (coo_to_idx[ext_ring_coo[e]],
-                     coo_to_idx[ext_ring_coo[e + 1]])
-                    for e, coo in enumerate(ext_ring_coo[:-1])])
-
+        for ext_ring in self.nodeidxlist['exterior']:
             # find boundary edges
             edge_tag = np.full(ext_ring.shape, 0)
             edge_tag[
@@ -1821,84 +1891,235 @@ class Boundaries:
             edge_tag[
                 np.where(values[ext_ring[:, 1]] >= threshold)[0], 1] = 1
             # sort boundary edges
-            ocean_boundary = []
+            open_boundary = []
             land_boundary = []
             for i, (e0, e1) in enumerate(edge_tag):
                 if np.any(np.asarray((e0, e1)) == 1):
                     land_boundary.append(tuple(ext_ring[i, :]))
                 elif np.any(np.asarray((e0, e1)) == -1):
-                    ocean_boundary.append(tuple(ext_ring[i, :]))
-#            ocean_boundaries = utils.sort_edges(ocean_boundary)
-#            land_boundaries = utils.sort_edges(land_boundary)
-            ocean_boundaries = []
-            if len(ocean_boundary) != 0:
-                #pylint: disable=not-an-iterable
-                ocean_segs = linemerge(coords[np.array(ocean_boundary)].tolist())
-                ocean_segs = [ocean_segs] if isinstance(ocean_segs, LineString) else ocean_segs
-                ocean_boundaries = [
-                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                         for e, coo in enumerate(seg.coords[:-1])]
-                        for seg in ocean_segs]
-            land_boundaries = []
-            if len(land_boundary) != 0:
-                #pylint: disable=not-an-iterable
-                land_segs = linemerge(coords[np.array(land_boundary)].tolist())
-                land_segs = [land_segs] if isinstance(land_segs, LineString) else land_segs
-                land_boundaries = [
-                        [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
-                         for e, coo in enumerate(seg.coords[:-1])]
-                        for seg in land_segs]
+                    open_boundary.append(tuple(ext_ring[i, :]))
 
-            _bnd_id = len(boundaries[None])
-            for bnd in ocean_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = [get_id(vert) for vert in e0]
-                data = e0 + [get_id(e1[-1])]
-                boundaries[None][_bnd_id] = bdry_type(
-                        indexes=data, properties={})
-                _bnd_id += 1
-
-            # add land boundaries
-            _bnd_id = len(boundaries[land_ibtype])
-            for bnd in land_boundaries:
-                e0, e1 = [list(t) for t in zip(*bnd)]
-                e0 = [get_id(vert) for vert in e0]
-                data = e0 + [get_id(e1[-1])]
-                boundaries[land_ibtype][_bnd_id] = bdry_type(
-                        indexes=data, properties={})
-
-                _bnd_id += 1
+            boundaries[None] = self._assign_boundary_condition_to_edges(
+                open_boundary, init=boundaries[None]
+            )
+            boundaries[land_ibtype] = self._assign_boundary_condition_to_edges(
+                land_boundary, init=boundaries[land_ibtype]
+            )
 
         # generate interior boundaries
-        _bnd_id = 0
-        interior_boundaries = defaultdict()
-        for poly in polys:
-            interiors = poly.interiors
-            for interior in interiors:
-                int_ring_coo = interior.coords
-                int_ring = [
-                        (coo_to_idx[int_ring_coo[e]],
-                         coo_to_idx[int_ring_coo[e + 1]])
-                        for e, coo in enumerate(int_ring_coo[:-1])]
+        boundaries[interior_ibtype] = self._find_islands()
 
-                # TODO: Do we still need these?
-                e0, e1 = [list(t) for t in zip(*int_ring)]
-                if utils.signed_polygon_area(self.mesh.coord[e0, :]) < 0:
-                    e0 = e0[::-1]
-                    e1 = e1[::-1]
-                e0 = [get_id(vert) for vert in e0]
-                e0.append(e0[0])
-                interior_boundaries[_bnd_id] = e0
-                _bnd_id += 1
+        # refresh all boundaries
+        self._refresh_boundaries(boundaries)
 
-        for bnd_id, data in interior_boundaries.items():
-            boundaries[interior_ibtype][bnd_id] = bdry_type(
-                        indexes=data, properties={})
 
-        self._data = boundaries
-        self._init_dataframes.cache_clear()
-        self.__call__.cache_clear()
-        self._init_dataframes()
+    def find_islands(self, interior_ibtype: int = 1):
+        boundaries = deepcopy(self._data)
+        boundaries[interior_ibtype] = self._find_islands()
+
+        self._refresh_boundaries(boundaries)
+
+
+    def _find_islands(self):
+        islands = defaultdict()
+        for int_ring in self.nodeidxlist['interior']:
+            islands = self._assign_boundary_condition_to_edges(
+                int_ring,
+                no_segment=True,
+                init=islands,
+            )
+        return islands
+
+    def set_open(self, region: Union[Polygon, MultiPolygon], merge=False):
+        self._set_region(region, None, merge)
+
+
+    def set_land(self, region: Union[Polygon, MultiPolygon], land_ibtype=0, merge=False):
+        self._set_region(region, land_ibtype, merge)
+
+
+    def _set_region(self, region: Union[Polygon, MultiPolygon], type_id, merge):
+        boundaries = deepcopy(self._data)
+
+        coords = self.mesh.msh_t.vert2['coord']
+        coo_to_idx = {
+            tuple(coo): idx
+            for idx, coo in enumerate(coords)}
+
+        # Note interior boundaries are untouched, since they can only
+        # be of "interior" type
+        ext_edges = self.mesh.hull.edges.exterior()
+        select_edges = ext_edges[ext_edges.intersects(region)]
+
+        edge_list_idx = []
+        for edge in select_edges.itertuples():
+            if edge.geometry.is_empty:
+                continue
+            e_coo = list(edge.geometry.coords)
+            assert len(e_coo) == 2
+            edge_list_idx.append(sorted((coo_to_idx[e_coo[0]], coo_to_idx[e_coo[1]])))
+
+        if len(edge_list_idx) == 0:
+            return
+
+        boundaries = self._resolve_assignment_conflict(edge_list_idx, boundaries)
+
+        init = boundaries[type_id]
+        if merge:
+            get_idx = self.mesh.nodes.get_index_by_id
+
+            # NOTE: There's NO guarantee for preserving order, even
+            # if we pass the boundary list in the order we want to
+            # preserve.
+            #
+            # `linemerge` reorders first based on X and then Y of points
+            # in result lines
+            old_edge_list_idx = []
+            for bnd in boundaries[type_id].values():
+                bnd_idxs = list(map(get_idx, bnd['indexes']))
+                old_edge_list_idx.extend(zip(bnd_idxs[:-1], bnd_idxs[1:]))
+            old_order_list_id = [
+                nd_id for bnd in boundaries[type_id].values() for nd_id in bnd['indexes']
+            ]
+            old_order_dict = {
+                nd_id: order for order, nd_id in enumerate(old_order_list_id)
+            }
+
+            old_edge_list_idx.extend(edge_list_idx)
+            edge_list_idx = old_edge_list_idx
+            init = None
+
+        boundaries[type_id] = self._assign_boundary_condition_to_edges(
+            edge_list_idx, init=init
+        )
+
+        if merge:
+            # NOTE: Force order like before merge
+            new_order_dict = {
+                b_id: min(old_order_dict.get(nd_id, np.inf) for nd_id in bnd['indexes'])
+                    for b_id, bnd in boundaries[type_id].items()
+            }
+
+            # Assuming dict comprehension order is preserved (?)
+            boundaries[type_id] = dict(sorted(
+                boundaries[type_id].items(),
+                key=lambda i: new_order_dict[i[0]]
+            ))
+
+
+        self._refresh_boundaries(boundaries)
+
+
+
+    def _resolve_assignment_conflict(self, edge_list_idx, boundaries):
+
+        # NOTE: This method assumes that only exterior boundaries are passed
+
+        get_id = self.mesh.nodes.get_id_by_index
+        edge_list_ids = [
+            (get_id(edge[0]), get_id(edge[1])) for edge in edge_list_idx
+        ]
+
+        # Gather information about what boundary condition each edge has
+        edge_bdry_info = {}
+        for boundary_type, boundary_data in boundaries.items():
+            if not boundary_data:
+                continue
+            for boundary_id, boundary_info in boundary_data.items():
+                boundary_node_ids = boundary_info['indexes']
+                # Order edges (assuming `edge_list_idx` input is also ordered)
+                b_edges = [tuple(sorted((boundary_node_ids[i], boundary_node_ids[i + 1])))
+                           for i in range(len(boundary_node_ids) - 1)]
+                edge_bdry_info.update(
+                    **{str(ed): (boundary_type, boundary_id, en)
+                        for en, ed in enumerate(b_edges)}
+                )
+        # Find where each boundary needs to be split
+        splits_idx = {}
+        for edge in edge_list_ids:
+            this_edge_info = edge_bdry_info.get(str(edge), None)
+            if this_edge_info is None:
+                warnings.warn(f"Edge boundary {edge} didn't have prior boundary set!")
+                continue
+            else:
+                tp_id, bd_id, ed_idx = this_edge_info
+            splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
+
+        # Apply splits to the boundary dictionary
+        for (tp_id, bd_id), idxs in splits_idx.items():
+            prop = boundaries[tp_id][bd_id].get('properties', {})
+            lst = boundaries[tp_id][bd_id]['indexes']
+            subs = []
+            prev = 0
+            for idx in sorted(idxs):
+                sub = lst[prev:idx + 1]
+                if len(sub) > 1:
+                    subs.append(sub)
+                prev = idx + 1
+            if prev < len(lst) - 1:
+                subs.append(lst[prev:])
+
+            if len(subs) == 2 and subs[0][0] == subs[1][-1]:
+                # Reconnect loops that are broken in the middle
+                subs = [[*subs[1][:-1], *subs[0]]]
+
+
+            if len(subs) > 0:
+                boundaries[tp_id][bd_id] = {'indexes': subs[0], 'properties': prop}
+                next_bnd_id = max(boundaries[tp_id].keys()) + 1
+                for sub in subs[1:]:
+                    boundaries[tp_id][next_bnd_id] = {
+                        'indexes': sub, 'properties': prop
+                    }
+                    next_bnd_id = next_bnd_id + 1
+            else:
+                boundaries[tp_id].pop(bd_id)
+
+
+        return boundaries
+
+
+    def _assign_boundary_condition_to_edges(self, edge_list_idx, no_segment=False, init=None):
+
+        assignment = defaultdict()
+        if isinstance(init, defaultdict):
+            assignment = deepcopy(init)
+
+        if len(edge_list_idx) == 0:
+            return assignment
+
+        get_id = self.mesh.nodes.get_id_by_index
+
+        new_bnds = [edge_list_idx]
+        if not no_segment:
+            # Assign connected segments together
+            coords = self.mesh.msh_t.vert2['coord']
+            coo_to_idx = {
+                tuple(coo): idx
+                for idx, coo in enumerate(coords)}
+
+            #pylint: disable=not-an-iterable, E1101
+            bnd_segs = linemerge(coords[np.array(edge_list_idx)].tolist())
+            bnd_segs = [bnd_segs] if isinstance(bnd_segs, LineString) else bnd_segs.geoms
+            new_bnds = [
+                    [(coo_to_idx[seg.coords[e]], coo_to_idx[seg.coords[e + 1]])
+                     for e, coo in enumerate(seg.coords[:-1])]
+                    for seg in bnd_segs]
+
+        assigned_ids = assignment.keys()
+        bnd_id = max(assigned_ids) + 1 if len(assigned_ids) > 0 else 0
+        for bnd in new_bnds:
+            e0, e1 = [list(t) for t in zip(*bnd)]
+            e0 = [get_id(vert) for vert in e0]
+            data = e0 + [get_id(e1[-1])]
+            assignment[bnd_id] = {'indexes': data, 'properties': {}}
+            bnd_id += 1
+
+        return assignment
+
+
+
+
 
 SortedRingType = Dict[int,
                       Dict[Literal['exterior', 'interiors'],

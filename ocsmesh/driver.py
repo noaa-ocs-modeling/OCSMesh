@@ -110,7 +110,7 @@ class JigsawDriver:
         if output_mesh.tria3['index'].shape[0] == 0:
             _err = 'ERROR: Jigsaw returned empty mesh.'
             _logger.error(_err)
-            raise Exception(_err)
+            raise RuntimeError(_err)
 
         if self._crs is not None:
             utils.reproject(output_mesh, self._crs)

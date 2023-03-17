@@ -54,7 +54,7 @@ def buffer_to_dict(buf: TextIO):
         boundaries[None][_bnd_id]['indexes'] = []
         while _cnt < NETA:
             boundaries[None][_bnd_id]['indexes'].append(
-                buf.readline().split()[0].strip())
+                int(buf.readline().split()[0].strip()))
             _cnt += 1
         _bnd_id += 1
     NBOU = int(buf.readline().split()[0])
@@ -72,13 +72,13 @@ def buffer_to_dict(buf: TextIO):
         while _pnt_cnt < npts:
             line = buf.readline().split()
             if len(line) == 1:
-                boundaries[ibtype][_bnd_id]['indexes'].append(line[0])
+                boundaries[ibtype][_bnd_id]['indexes'].append(int(line[0]))
             else:
                 index_construct = []
                 for val in line:
                     if '.' in val:
                         continue
-                    index_construct.append(val)
+                    index_construct.append(int(val))
                 boundaries[ibtype][_bnd_id]['indexes'].append(index_construct)
             _pnt_cnt += 1
         _nbnd_cnt += 1
@@ -120,21 +120,21 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
     # ocean boundaries
     if boundaries is not None:
         out.append(f"{len(boundaries[None]):d} "
-                   "! total number of ocean boundaries")
+                   "! total number of open boundaries")
         # count total number of ocean boundaries
         _sum = 0
         for bnd in boundaries[None].values():
             _sum += len(bnd['indexes'])
-        out.append(f"{int(_sum):d} ! total number of ocean boundary nodes")
+        out.append(f"{int(_sum):d} ! total number of open boundary nodes")
         # write ocean boundary indexes
         for i, boundary in boundaries[None].items():
             out.append(f"{len(boundary['indexes']):d}"
-                       f" ! number of nodes for ocean_boundary_{i}")
+                       f" ! number of nodes for open_boundary_{i}")
             for idx in boundary['indexes']:
                 out.append(f"{idx}")
     else:
-        out.append("0 ! total number of ocean boundaries")
-        out.append("0 ! total number of ocean boundary nodes")
+        out.append("0 ! total number of open boundaries")
+        out.append("0 ! total number of open boundary nodes")
     # remaining boundaries
     boundaries = {} if boundaries is None else boundaries
     _cnt = 0
@@ -142,14 +142,14 @@ def to_string(description, nodes, elements, boundaries=None, crs=None):
         if key is not None:
             for bnd in boundaries[key]:
                 _cnt += 1
-    out.append(f"{_cnt:d}  ! total number of non-ocean boundaries")
+    out.append(f"{_cnt:d}  ! total number of land boundaries")
     # count remaining boundary nodes
     _cnt = 0
     for ibtype in boundaries:
         if ibtype is not None:
             for bnd in boundaries[ibtype].values():
                 _cnt += np.asarray(bnd['indexes']).size
-    out.append(f"{_cnt:d} ! Total number of non-ocean boundary nodes")
+    out.append(f"{_cnt:d} ! Total number of land boundary nodes")
     # all additional boundaries
     for ibtype, bndrys in boundaries.items():
         if ibtype is None:

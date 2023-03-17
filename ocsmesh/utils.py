@@ -185,7 +185,7 @@ def get_mesh_polygons(mesh):
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
                 # How is this possible?!
-                pnts = MultiPoint([*pnts.geoms[:idx], *pnts.geoms[idx + 1:]])
+                pnts = MultiPoint([*(pnts.geoms[:idx]), *(pnts.geoms[idx + 1:])])
                 if pnts.is_empty:
                     break
 
@@ -785,8 +785,11 @@ def get_verts_in_shape(
         mesh.vert2['coord'][:,0], mesh.vert2['coord'][:,1]))
     shp_series = gpd.GeoSeries(shape)
 
+    # We need point indices in the shapes, not the shape indices
+    # query bulk returns all combination of intersections in case
+    # input shape results in multi-row series
     in_shp_idx = pt_series.sindex.query_bulk(
-            shp_series, predicate="intersects")
+            shp_series, predicate="intersects")[1]
 
     in_shp_idx = select_adjacent(mesh, in_shp_idx, num_layers=num_adjacent)
 
@@ -832,6 +835,17 @@ def select_adjacent(mesh, in_indices, num_layers):
     msg = (f"Not implemented for"
            f" mshID={mesh.mshID} and dim={mesh.ndims}")
     raise NotImplementedError(msg)
+
+
+@must_be_euclidean_mesh
+def get_incident_edges(
+        mesh: jigsaw_msh_t,
+        vert_idx_list: Sequence[int],
+        ) -> Sequence[Tuple[int, int]]:
+
+    edges = get_mesh_edges(mesh, unique=True)
+    test = np.isin(edges, vert_idx_list).any(axis=1)
+    return edges[test]
 
 
 @must_be_euclidean_mesh
@@ -957,7 +971,7 @@ def remove_mesh_by_edge(
 
     for etype in ELEM_2D_TYPES:
         elems = getattr(mesh, etype)['index']
-        # If a given element contains to vertices from
+        # If a given element contains two vertices from
         # a crossing edge, it is selected
         test = np.sum(np.isin(elems, edge_verts), axis=1)
         elems = elems[test < 2]
@@ -1417,7 +1431,7 @@ def limgrad(mesh, dfdx, imax=100):
                         aset[active_idx] = _iter
     if not _iter < imax:
         msg = f'limgrad() did not converge within {imax} iterations.'
-        raise Exception(msg)
+        raise RuntimeError(msg)
     return ffun
 
 
