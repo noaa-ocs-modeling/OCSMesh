@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh representation &mdash; ocsmesh 0.1.dev1+gf5cfae2 documentation</title>
+  <title>Mesh representation &mdash; ocsmesh 0.1.dev1+g16e4e00 documentation</title>
   
 
   
@@ -195,7 +195,7 @@
 <span id="mesh-representation"></span><h1>Mesh representation<a class="headerlink" href="#module-ocsmesh.mesh" title="Permalink to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="ocsmesh.mesh.Mesh">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">Mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.Mesh" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">Mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.Mesh" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseMesh</span></code></p>
 <p>Mesh object factory</p>
 <p>Factory class that creates and returns concrete mesh object
@@ -320,7 +320,7 @@ object, it will affect the mesh.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">EuclideanMesh2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">EuclideanMesh2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundaries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">EuclideanMesh</span></code></p>
 <p>2D Euclidean mesh definition</p>
 <dl class="field-list simple">
@@ -362,6 +362,8 @@ object, it will affect the mesh.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
 <dt><strong>mesh</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>The underlying jigsaw_msh_t object to hold onto mesh data.</p>
+</dd>
+<dt><strong>boundaries</strong><span class="classifier">dict or None, default = None</span></dt><dd><p>Dictionary of boundaries assignment</p>
 </dd>
 </dl>
 </dd>
