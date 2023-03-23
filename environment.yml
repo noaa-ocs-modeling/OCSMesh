@@ -2,17 +2,16 @@ name: ocsmesh
 channels:
   - conda-forge
 dependencies:
-  - python>=3.8, <3.11 # 3.11 not supported by numba
+  - python>=3.8, <3.11 # for numba
   - gdal
   - geos
   - proj
   - netcdf4
   - udunits2
   - pyproj
-  - shapely>=1.8, <2
+  - shapely>2
   - rasterio
   - fiona
-  - pygeos
   - geopandas
   - utm
   - scipy

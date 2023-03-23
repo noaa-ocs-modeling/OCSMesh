@@ -184,8 +184,9 @@ def get_mesh_polygons(mesh):
 
             res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
             if len(res_gdf) == 0:
-                # How is this possible?!
-                pnts = MultiPoint([*(pnts.geoms[:idx]), *(pnts.geoms[idx + 1:])])
+                # How is this possible for the remaining points not to
+                # intersect with the remaining polys?!
+                pnts = MultiPoint([pt for i, pt in enumerate(pnts.geoms) if i != idx])
                 if pnts.is_empty:
                     break
 
