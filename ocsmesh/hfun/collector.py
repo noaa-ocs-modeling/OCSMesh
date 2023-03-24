@@ -50,6 +50,7 @@ from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
+from ocsmesh.mesh.base import BaseMesh
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.features.contour import Contour
 from ocsmesh.features.patch import Patch
@@ -722,7 +723,8 @@ class HfunCollector(BaseHfun):
             elif isinstance(in_item, EuclideanMesh2D):
                 hfun = HfunMesh(in_item)
 
-            elif isinstance(in_item, str):
+            elif isinstance(in_item, (str, Path)):
+                in_item = str(in_item)
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
                     if self._base_shape:
@@ -1359,7 +1361,7 @@ class HfunCollector(BaseHfun):
             If the any of the inputs are not supported
         """
 
-        valid_types = (str, Raster, Mesh, HfunRaster, HfunMesh)
+        valid_types = (str, Path, Raster, BaseMesh, HfunRaster, HfunMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
                 f'Input list items must be of type'
