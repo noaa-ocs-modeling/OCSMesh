@@ -16,7 +16,7 @@ from shapely import geometry
 
 import ocsmesh
 
-from .common import raster_from_numpy, msht_from_numpy, create_rectangle_mesh
+from tests.api.common import raster_from_numpy, msht_from_numpy, create_rectangle_mesh
 
 
 class SizeFunctionType(unittest.TestCase):

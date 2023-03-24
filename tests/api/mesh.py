@@ -10,7 +10,7 @@ from shapely import geometry
 
 from ocsmesh.mesh.mesh import Mesh
 
-from .common import create_rectangle_mesh
+from tests.api.common import create_rectangle_mesh
 
 
 def edge_at (x, y):
