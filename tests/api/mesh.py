@@ -10,6 +10,8 @@ from shapely import geometry
 
 from ocsmesh.mesh.mesh import Mesh
 
+from tests.api.common import create_rectangle_mesh
+
 
 def edge_at (x, y):
     return geometry.Point(x, y).buffer(0.05)
@@ -41,34 +43,8 @@ class BoundaryExtraction(unittest.TestCase):
                 0   1   2   3   4
         """
 
-        # Create a basic grid with a hole
-        nx, ny = 5, 6
-        hole_square = 10
-        X, Y = np.meshgrid(range(nx), range(ny))
-        verts = np.array(list(zip(X.ravel(), Y.ravel())))
-        cells = []
-        for j in range(ny - 1):
-            for i in range(nx - 1):
-                if (i + 1) + ((nx-1) * j) == hole_square:
-                    continue
-                cells.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
-                cells.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
-        # NOTE: Everywhere is above 0 (auto: land) unless modified later
-        vals = np.ones((len(verts), 1)) * 10
-
-        # TODO: Replace with "make_mesh" util function
-        mesh_msht = jigsaw_msh_t()
-        mesh_msht.ndims = +2
-        mesh_msht.mshID = 'euclidean-mesh'
-        mesh_msht.tria3 = np.array(
-            [(c, 0) for c in cells], dtype=jigsaw_msh_t.TRIA3_t
-        )
-        mesh_msht.vert2 = np.array(
-            [(v, 0) for v in verts], dtype=jigsaw_msh_t.VERT2_t
-        )
-        mesh_msht.value = np.array(
-            vals, dtype=jigsaw_msh_t.REALS_t
-        )
+        # x and y coords are the same as index (in value)
+        mesh_msht = create_rectangle_mesh(nx=5, ny=6, holes=[10])
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
