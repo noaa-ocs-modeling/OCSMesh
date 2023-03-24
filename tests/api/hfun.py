@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import shutil
 import tempfile
+import warnings
 
 from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
@@ -15,59 +16,139 @@ from shapely import geometry
 
 import ocsmesh
 
-
-# TODO: Move these helper functions to `utils`
-def _helper_raster_from_numpy(
-    filename,
-    data,
-    mgrid,
-    crs=CRS.from_epsg(4326)
-):
-    x = mgrid[0][:, 0]
-    y = mgrid[1][0, :]
-    res_x = (x[-1] - x[0]) / data.shape[1]
-    res_y = (y[-1] - y[0]) / data.shape[0]
-    transform = rio.transform.Affine.translation(
-        x[0], y[0]
-    ) * rio.transform.Affine.scale(res_x, res_y)
-    if not isinstance(crs, CRS):
-        crs = CRS.from_user_input(crs)
-
-    with rio.open(
-        filename,
-        'w',
-        driver='GTiff',
-        height=data.shape[0],
-        width=data.shape[1],
-        count=1,
-        dtype=data.dtype,
-        crs=crs,
-        transform=transform,
-    ) as dst:
-        dst.write(data, 1)
+from .common import raster_from_numpy, msht_from_numpy, create_rectangle_mesh
 
 
-def _helper_msh_t_from_numpy(
-    coordinates,
-    triangles,
-    crs=CRS.from_epsg(4326)
-):
-    if not isinstance(crs, CRS):
-        crs = CRS.from_user_input(crs)
-    mesh = jigsaw_msh_t()
-    mesh.mshID = 'euclidean-mesh'
-    mesh.ndims = +2
-    mesh.crs = crs
-    mesh.vert2 = np.array(
-        [(coord, 0) for coord in coordinates],
-        dtype=jigsaw_msh_t.VERT2_t
-        )
-    mesh.tria3 = np.array(
-        [(index, 0) for index in triangles],
-        dtype=jigsaw_msh_t.TRIA3_t
+class SizeFunctionType(unittest.TestCase):
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+
+        self.rast = self.tdir / 'rast_1.tif'
+        self.mesh = self.tdir / 'mesh_1.gr3'
+
+        rast_xy = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
+        rast_xy = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
+        rast_z = np.ones_like(rast_xy[0])
+
+        raster_from_numpy(
+            self.rast, rast_z, rast_xy, 4326
         )
 
-    return mesh
+        msh_t = create_rectangle_mesh(
+            nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning, message='Input mesh has no CRS information'
+            )
+            mesh = ocsmesh.Mesh(msh_t)
+            mesh.write(str(self.mesh), format='grd', overwrite=False)
+
+
+    def test_create_raster_hfun(self):
+        hfun = ocsmesh.Hfun(
+            ocsmesh.Raster(self.rast),
+            hmin=500,
+            hmax=10000
+        )
+        self.assertTrue(isinstance(hfun, ocsmesh.hfun.raster.HfunRaster))
+
+    def test_mesh_raster_hfun(self):
+        hfun = ocsmesh.Hfun(
+            ocsmesh.Mesh.open(self.mesh, crs=4326),
+        )
+        self.assertTrue(isinstance(hfun, ocsmesh.hfun.mesh.HfunMesh))
+
+    def test_collector_raster_hfun(self):
+        hfun = ocsmesh.Hfun(
+            [self.rast],
+            hmin=500,
+            hmax=10000
+        )
+        self.assertTrue(isinstance(hfun, ocsmesh.hfun.collector.HfunCollector))
+
+
+class SizeFunctionCollector(unittest.TestCase):
+
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+
+        self.rast1 = self.tdir / 'rast_1.tif'
+        self.rast2 = self.tdir / 'rast_2.tif'
+        self.mesh1 = self.tdir / 'mesh_1.gr3'
+
+        rast_xy_1 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
+        rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
+        rast_z_1 = np.ones_like(rast_xy_1[0])
+
+        raster_from_numpy(
+            self.rast1, rast_z_1, rast_xy_1, 4326
+        )
+        raster_from_numpy(
+            self.rast2, rast_z_1, rast_xy_2, 4326
+        )
+
+        msh_t = create_rectangle_mesh(
+            nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning, message='Input mesh has no CRS information'
+            )
+            mesh = ocsmesh.Mesh(msh_t)
+            mesh.write(str(self.mesh1), format='grd', overwrite=False)
+
+
+    def test_multi_path_input(self):
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=10000
+        )
+        hfun_msht = hfun_coll.msh_t()
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_multi_str_input(self):
+        hfun_coll = ocsmesh.Hfun(
+            [str(i) for i in [self.rast1, self.rast2, self.mesh1]],
+            hmin=500,
+            hmax=10000
+        )
+        hfun_msht = hfun_coll.msh_t()
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_multi_raster_input(self):
+
+        rast1 = ocsmesh.Raster(self.rast1)
+        rast2 = ocsmesh.Raster(self.rast2)
+        hfun_coll = ocsmesh.Hfun(
+            [rast1, rast2],
+            hmin=500,
+            hmax=10000
+        )
+        hfun_msht = hfun_coll.msh_t()
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_multi_mix_input(self):
+        rast1 = ocsmesh.Raster(self.rast1)
+        mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        hfun_coll = ocsmesh.Hfun(
+            [rast1, self.rast2, mesh1],
+            hmin=500,
+            hmax=10000
+        )
+        hfun_msht = hfun_coll.msh_t()
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_mesh_input(self):
+        mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        hfun_coll = ocsmesh.Hfun(
+            [mesh1],
+            hmin=500,
+            hmax=10000
+        )
+        hfun_msht = hfun_coll.msh_t()
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
 
 
 
@@ -482,10 +563,10 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z_1 = np.ones_like(rast_xy_1[0])
 
-        _helper_raster_from_numpy(
+        raster_from_numpy(
             self.rast1, rast_z_1, rast_xy_1, 4326
         )
-        _helper_raster_from_numpy(
+        raster_from_numpy(
             self.rast2, rast_z_1, rast_xy_2, 4326
         )
 
@@ -509,7 +590,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
             [0, 2, 6],
             [5, 4, 7],
         ])
-        msh_t = _helper_msh_t_from_numpy(crd, tria, 4326)
+        msh_t = msht_from_numpy(crd, tria, 4326)
         mesh = ocsmesh.Mesh(msh_t)
         mesh.write(str(self.mesh1), format='grd', overwrite=False)
 
