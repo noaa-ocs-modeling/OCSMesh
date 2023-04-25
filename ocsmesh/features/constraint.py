@@ -1,9 +1,14 @@
+import warnings
 from enum import Enum
 from abc import ABC, abstractmethod
+from typing import Union
 
+import geopandas as gpd
 import numpy as np
 from scipy.spatial import cKDTree
 from scipy import constants
+from shapely.geometry import Polygon, MultiPolygon
+from pyproj import CRS
 
 from ocsmesh import utils
 
@@ -77,11 +82,12 @@ class Constraint(ABC):
 
     def _apply_rate(self, ref_values, values, locations, mask):
 
+        # TODO: Use crs info here?
+
         if not np.any(mask):
             return values # TODO: COPY?
 
         return_values = values.copy().ravel()
-        bound_values = ref_values.copy().ravel()
         coords = locations.reshape(-1, 2)
 
         if self._rate is None:
@@ -157,7 +163,7 @@ class TopoConstConstraint(Constraint):
         return self._lb, self._ub
 
 
-    def apply(self, ref_values, old_values, locations=None):
+    def apply(self, ref_values, old_values, locations=None, crs=None):
 
         lower_bound, upper_bound = self.topo_bounds
 
@@ -200,7 +206,7 @@ class TopoFuncConstraint(Constraint):
         return self._lb, self._ub
 
 
-    def apply(self, ref_values, old_values, locations=None):
+    def apply(self, ref_values, old_values, locations=None, crs=None):
 
         lower_bound, upper_bound = self.topo_bounds
 
@@ -307,5 +313,67 @@ class CourantNumConstraint(Constraint):
         # NOTE: Condition is evaluated on Courant # NOT the element size
         value_mask = np.logical_not(self.satisfies(old_C_apprx, self._value))
         return_values[value_mask] = temp_values[value_mask]
+
+        return return_values
+
+
+
+class RegionConstraint(Constraint):
+
+    def __init__(
+            self,
+            value: float,
+            shape: Union[Polygon, MultiPolygon],
+            crs: Union[CRS, str, None] = None,
+            value_type: str = 'max',
+            rate: float = 0.1
+            ):
+        '''
+        '''
+
+        super().__init__(value_type, rate)
+
+        if not isinstance(shape, (Polygon, MultiPolygon)):
+            raise ValueError("Invalid input shape type for region constraint: <type(shape)>")
+
+        self._val = value
+        self._region = shape
+
+        if crs is None:
+            warnings.warn(
+                "No CRS is provided for the contraint shape."
+                + " CRS is assumed to be epsg:4326",
+                category=UserWarning
+            )
+            crs = '4326'
+        self._crs = crs
+
+
+    @property
+    def value(self):
+        return self._val
+
+
+
+    def apply(self, ref_values, old_values, locations=None, crs=None):
+        '''
+        '''
+
+        if len(locations) != len(old_values.ravel()):
+            raise ValueError("Length of locations and sizes arrays don't match")
+
+        if crs is None:
+            crs = self._crs
+        gdf_pts = gpd.points_from_xy(locations[:, 0], locations[:, 1], crs=crs).to_crs(self._crs)
+
+        return_values = old_values.copy()
+        
+        mask = (
+            gdf_pts.within(self._region).reshape(return_values.shape)
+            & np.logical_not(self.satisfies(return_values, self.value))
+        )
+        return_values[mask] = self.value
+
+        return_values = self._apply_rate(ref_values, return_values, locations, mask)
 
         return return_values

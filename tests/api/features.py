@@ -1,15 +1,18 @@
 #! python
 import unittest
 import tempfile
+import warnings
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 from pyproj import CRS
 from shapely import geometry
 import numpy as np
 
 import ocsmesh
 from ocsmesh.features.linefeature import LineFeature
+from ocsmesh.features.constraint import RegionConstraint
 
 class LineFeatureCapabilities(unittest.TestCase):
 
@@ -320,6 +323,139 @@ class CourantNumConstraint(unittest.TestCase):
 
 
 
+
+class RegionConstraintCapabilities(unittest.TestCase):
+
+    def setUp(self):
+        self._locations_1 = np.array([
+            (i, j) for j in range(10) for i in range(20) 
+        ])
+        self._curr_vals_1 = np.array([
+            0 if i < 7 else 10 if i < 14 else 20
+            for i, j in self._locations_1
+        ]).reshape(10, 20)
+        self._reg_1 = geometry.box(2.5, 2.5, 7.5, 7.5)
+        self._reg_2 = geometry.MultiPolygon(
+            [
+                geometry.box(12.5, 0.5, 17.5, 4.5),
+                geometry.box(12.5, 6.5, 17.5, 9.5)
+            ]
+        )
+
+
+    def test_create_by_polygon(self):
+        reg_constr = RegionConstraint(
+            value=5,
+            shape=self._reg_1,
+            crs='4326',
+            value_type='max',
+            rate=0.1
+        )
+
+        self.assertEqual(reg_constr.value, 5)
+
+
+    def test_create_by_multipolygon(self):
+        reg_constr = RegionConstraint(
+            value=6,
+            shape=self._reg_2,
+            crs='4326',
+            value_type='min',
+        )
+
+        self.assertEqual(reg_constr.value, 6)
+
+
+    def test_error_on_non_polygon(self):
+        with self.assertRaises(ValueError) as cm:
+            reg_constr = RegionConstraint(
+                value=6,
+                shape=self._reg_1.boundary,
+                crs='4326',
+                value_type='min',
+            )
+        self.assertTrue(
+            "Invalid input shape type for region constraint:" in str(cm.exception)
+        )
+
+
+    def test_crs_warn(self):
+        with self.assertWarns(UserWarning) as wrn:
+            reg_constr = RegionConstraint(
+                value=6,
+                shape=self._reg_1,
+                crs=None,
+                value_type='min',
+            )
+            
+
+
+    def test_apply_no_rate_1(self):
+        reg_constr = RegionConstraint(
+            value=5,
+            shape=self._reg_1,
+            crs='4326',
+            value_type='min',
+            rate=None
+        )
+        new_values = reg_constr.apply(
+            ref_values=None,
+            old_values=self._curr_vals_1,
+            locations=self._locations_1,
+            crs='4326'
+            )
+        check_values = self._curr_vals_1.copy()
+        # 3:8 comes from predefined shape and location intersection
+        check_values[3:8, 3:8] = np.maximum(check_values[3:8, 3:8], 5)
+            
+        self.assertTrue((new_values == check_values).all())
+
+
+    def test_apply_no_rate_2(self):
+        reg_constr = RegionConstraint(
+            value=15,
+            shape=self._reg_2,
+            crs='4326',
+            value_type='max',
+            rate=None
+        )
+        new_values = reg_constr.apply(
+            ref_values=None,
+            old_values=self._curr_vals_1,
+            locations=self._locations_1,
+            crs='4326'
+            )
+        check_values = self._curr_vals_1.copy()
+        # slices come from predefined shape and location intersection
+        check_values[1:5, 13:18] = np.minimum(check_values[1:5, 13:18], 15)
+        check_values[7:10, 13:18] = np.minimum(check_values[7:10, 13:18], 15)
+            
+        self.assertTrue((new_values == check_values).all())
+
+
+    def test_apply_w_rate(self):
+        reg_constr = RegionConstraint(
+            value=5,
+            shape=geometry.box(2.5, -1, 3.5, 1),
+            crs='4326',
+            value_type='min',
+            rate=0.199
+        )
+        old_values = np.array([0, 0, 0, 0, 10, 10, 10, 10, 20, 20, 20, 20])
+        new_values = reg_constr.apply(
+            ref_values=None,
+            old_values=old_values,
+            locations=np.array([(i, 0) for i in range(len(old_values))]),
+            crs='4326'
+        )
+        check_values = old_values.copy()
+        # 3:8 comes from predefined shape and location intersection
+        check_values[:4] = [2, 3, 4, 5]
+            
+        self.assertTrue((new_values == check_values).all())
+
+
+# TODO: Move CourantNumConstraint to this file!
 
 if __name__ == '__main__':
     unittest.main()
