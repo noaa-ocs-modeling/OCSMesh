@@ -1,7 +1,7 @@
 import warnings
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Union, Callable, Any
 
 import geopandas as gpd
 import numpy as np
@@ -377,3 +377,32 @@ class RegionConstraint(Constraint):
         return_values = self._apply_rate(ref_values, return_values, locations, mask)
 
         return return_values
+
+
+def apply_constraints_wrap(method: Callable[..., Any]) -> Callable[..., Any]:
+    """Decorator for (re)applying constraint after updating hfun spec
+
+    This function is a deocrator that takes in a callable and assumes
+    the callable is a method whose first argument is an object. In the
+    wrapper function, after the wrapped method is called the
+    `apply_added_constraints` method is called on the object and
+    then the return value of the wrapped method is returned to the
+    caller.
+
+    Parameters
+    ----------
+    method : callable
+        Method to be wrapped so that the constraints are automatically
+        re-applied after method is executed.
+
+    Returns
+    -------
+    callable
+        The wrapped method
+    """
+
+    def wrapped(obj, *args, **kwargs):
+        rv = method(obj, *args, **kwargs)
+        obj.apply_added_constraints()
+        return rv
+    return wrapped

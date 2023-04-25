@@ -18,6 +18,7 @@ except ImportError:
     # pylint: disable=C0412
     from typing_extensions import Literal
 
+import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
 import numpy as np
@@ -37,7 +38,9 @@ from ocsmesh.features.constraint import (
     Constraint,
     TopoConstConstraint,
     TopoFuncConstraint,
-    CourantNumConstraint
+    CourantNumConstraint,
+    RegionConstraint,
+    apply_constraints_wrap
 )
 from ocsmesh import utils
 
@@ -46,35 +49,6 @@ warnings.filterwarnings(
     'ignore', message='.*initial implementation of Parquet.*')
 
 _logger = logging.getLogger(__name__)
-
-
-def _apply_constraints(method: Callable[..., Any]) -> Callable[..., Any]:
-    """Decorator for (re)applying constraint after updating hfun spec
-
-    This function is a deocrator that takes in a callable and assumes
-    the callable is a method whose first argument is an object. In the
-    wrapper function, after the wrapped method is called the
-    `apply_added_constraints` method is called on the object and
-    then the return value of the wrapped method is returned to the
-    caller.
-
-    Parameters
-    ----------
-    method : callable
-        Method to be wrapped so that the constraints are automatically
-        re-applied after method is executed.
-
-    Returns
-    -------
-    callable
-        The wrapped method
-    """
-
-    def wrapped(obj, *args, **kwargs):
-        rv = method(obj, *args, **kwargs)
-        obj.apply_added_constraints()
-        return rv
-    return wrapped
 
 
 class HfunInputRaster:
@@ -581,7 +555,7 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
                 for constraint in constraint_list:
                     hfun_values = constraint.apply(
-                            rast_values, hfun_values, locations=xy)
+                            rast_values, hfun_values, locations=xy, crs=utm_crs)
 
                 # Apply global constraints
                 if self.hmin is not None:
@@ -594,7 +568,7 @@ class HfunRaster(BaseHfun, Raster):
                 gc.collect()
 
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_topo_bound_constraint(
             self,
             value: Union[float, npt.NDArray[np.float32]],
@@ -648,7 +622,7 @@ class HfunRaster(BaseHfun, Raster):
             value, upper_bound, lower_bound, value_type, rate))
 
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_topo_func_constraint(
             self,
             func: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]]
@@ -702,7 +676,7 @@ class HfunRaster(BaseHfun, Raster):
         self._constraints.append(TopoFuncConstraint(
             func, upper_bound, lower_bound, value_type, rate))
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_courant_num_constraint(
             self,
             upper_bound: float = 0.9,
@@ -761,7 +735,71 @@ class HfunRaster(BaseHfun, Raster):
             )
 
 
-    @_apply_constraints
+    @apply_constraints_wrap
+    def add_region_constraint(
+            self,
+            value: Union[float, npt.NDArray[np.float32]],
+            shape: Union[Polygon, MultiPolygon],
+            crs: Union[CRS, str] = None,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01
+            ) -> None:
+        """Add a value contraint for the points in specified region
+
+        Add a fixed-value constraint to the region of the size function
+        specified by the input shape.  Optionally a `rate` can be
+        specified to relax the constraint gradually outside the bounds.
+
+        Parameters
+        ----------
+        value : float or array-like
+            A single fixed value to be used for
+            mesh size if condition is not met based on `value_type`.
+        shape: MultiPolygon or Polygon
+            Region of specified constraint
+        crs: CRS or None, default=None
+            The CRS of the input shape
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the specified `value` at each
+            point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the specified region
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_topo_bound_constraint :
+            Add fixed-value or fixed-matrix constraint.
+        add_topo_func_constraint :
+            Addint constraint based on function of topography
+        add_courant_num_constraint :
+            Add constraint based on approximated Courant number
+        """
+
+        if crs is None:
+            warnings.warn(
+                "No CRS is provided for the contraint shape."
+                + " Assuming CRS is the same as size function's raster",
+                category=UserWarning
+            )
+            crs = self.crs
+
+        self._constraints.append(
+            RegionConstraint(
+                value=value,
+                shape=shape,
+                crs=crs,
+                value_type=value_type,
+                rate=rate
+            )
+        )
+
+
+    @apply_constraints_wrap
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
@@ -894,7 +932,7 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.info(f'Write array to file took {time()-start}.')
 
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_contour(
             self,
             level: Union[List[float], float],
@@ -974,7 +1012,7 @@ class HfunRaster(BaseHfun, Raster):
                 contours, expansion_rate, target_size,
                 nprocs=nprocs)
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_channel(
             self,
             level: float = 0,
@@ -1042,7 +1080,7 @@ class HfunRaster(BaseHfun, Raster):
 
 
 
-    @_apply_constraints
+    @apply_constraints_wrap
     @utils.add_pool_args
     def add_feature(
             self,
@@ -1269,7 +1307,7 @@ class HfunRaster(BaseHfun, Raster):
         return np.memmap(tmpfile, dtype='float32', mode='r',
                          shape=((window.width*window.height), 2))[:]
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_subtidal_flow_limiter(
             self,
             hmin: Optional[float] = None,
@@ -1392,7 +1430,7 @@ class HfunRaster(BaseHfun, Raster):
                     self.dtype(1))
                 dst.write_band(1, hfun_values, window=window)
 
-    @_apply_constraints
+    @apply_constraints_wrap
     def add_constant_value(
             self,
             value: float,
