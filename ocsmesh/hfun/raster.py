@@ -119,6 +119,8 @@ class HfunRaster(BaseHfun, Raster):
         contraction rate `rate` specified.
     add_courant_num_constraint(...)
         Add constraint based on approximated Courant number
+    add_region_constraint(...)
+        Add a constraint on size based on a specified region
     add_patch(...)
         Add a region of fixed size refinement with optional expansion
         rate for points outside the region to achieve smooth size

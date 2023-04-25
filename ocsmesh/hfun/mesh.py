@@ -8,12 +8,14 @@ from collections import defaultdict
 from typing import Union, Optional
 from multiprocessing import cpu_count, Pool
 from time import time
+from typing import Iterable, Literal
 
 from matplotlib.transforms import Bbox
 from scipy.spatial import cKDTree
 from jigsawpy import jigsaw_msh_t
 import numpy as np
-from pyproj import Transformer
+import numpy.typing as npt
+from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, Polygon, MultiPolygon)
@@ -22,7 +24,11 @@ from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import Mesh
 from ocsmesh import utils
-
+from ocsmesh.features.constraint import (
+    Constraint,
+    RegionConstraint,
+    apply_constraints_wrap
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -58,13 +64,19 @@ class HfunMesh(BaseHfun):
         Decorated method to add size refinement based on the specified
         `expansion_rate`, `target_size`, and distance from the input
         feature lines `feature`.
+    apply_added_constraints()
+        Re-apply the existing constraint. Mostly used internally.
+    apply_constraints(constraint_list)
+        Apply constraint objects in the `constraint_list`.
+    add_region_constraint(...)
+        Add a constraint on size based on a specified region.
     get_bbox(**kwargs)
         Return  the bounding box of the underlying mesh.
 
     Notes
     -----
     Unlike raster size function, mesh based size function doesn't
-    support constraint at this point.
+    support topo-based constraint at this point.
     """
 
     _crs = CRSDescriptor()
@@ -98,6 +110,7 @@ class HfunMesh(BaseHfun):
 
         self._mesh = mesh
         self._crs = mesh.crs
+        self._constraints = []
 
     def msh_t(self) -> jigsaw_msh_t:
         """Return the size function specified on the underlying mesh
@@ -196,6 +209,7 @@ class HfunMesh(BaseHfun):
         hfun_msh.value = vert_value.reshape(len(vert_value), 1)
 
 
+    @apply_constraints_wrap
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
@@ -297,6 +311,7 @@ class HfunMesh(BaseHfun):
 
         self.mesh.msh_t.value = values
 
+    @apply_constraints_wrap
     @utils.add_pool_args
     def add_feature(
             self,
@@ -455,6 +470,129 @@ class HfunMesh(BaseHfun):
         values = values.reshape(self.mesh.msh_t.value.shape)
 
         self.mesh.msh_t.value = values
+        
+
+    def apply_added_constraints(self) -> None:
+        """Apply all the added constraints
+
+        This method is implemented for internal use. It's public
+        because it needs to be called from outside the class through
+        a decorator.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+        """
+
+        self.apply_constraints(self._constraints)
+
+
+    def apply_constraints(
+            self,
+            constraint_list: Iterable[Constraint]
+            ) -> None:
+        """Applies constraints specified by the list of contraint objects.
+
+        Applies constraints from the provided list `constraint_list`,
+        but doesn't not store them in the internal size function
+        constraint list. This is mostly for internal use.
+
+        Parameters
+        ----------
+        constraint_list : iterable of Constraint
+            List of constraint objects to be applied to (not stored in)
+            the size function.
+
+        Returns
+        -------
+        None
+        """
+        # TODO:
+
+        hfun_values = self.mesh.msh_t.value.copy()
+        xy = self.mesh.msh_t.vert2['coord'].copy()
+
+        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        if utm_crs is not None:
+            transformer = Transformer.from_crs(
+                self.crs, utm_crs, always_xy=True)
+            xy = np.vstack(transformer.transform(xy[:, 0], xy[:, 1])).T
+        else:
+            utm_crs = self.crs
+
+        for constraint in constraint_list:
+            hfun_values = constraint.apply(
+                    None, hfun_values, locations=xy, crs=utm_crs)
+
+        self.mesh.msh_t.value = hfun_values
+
+
+    @apply_constraints_wrap
+    def add_region_constraint(
+            self,
+            value: Union[float, npt.NDArray[np.float32]],
+            shape: Union[Polygon, MultiPolygon],
+            crs: Union[CRS, str] = None,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01
+            ) -> None:
+        """Add a value contraint for the points in specified region
+
+        Add a fixed-value constraint to the region of the size function
+        specified by the input shape.  Optionally a `rate` can be
+        specified to relax the constraint gradually outside the bounds.
+
+        Parameters
+        ----------
+        value : float or array-like
+            A single fixed value to be used for
+            mesh size if condition is not met based on `value_type`.
+        shape: MultiPolygon or Polygon
+            Region of specified constraint
+        crs: CRS or None, default=None
+            The CRS of the input shape
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the specified `value` at each
+            point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the specified region
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        add_topo_bound_constraint :
+            Add fixed-value or fixed-matrix constraint.
+        add_topo_func_constraint :
+            Addint constraint based on function of topography
+        add_courant_num_constraint :
+            Add constraint based on approximated Courant number
+        """
+
+        if crs is None:
+            warnings.warn(
+                "No CRS is provided for the contraint shape."
+                + " Assuming CRS is the same as size function",
+                category=UserWarning
+            )
+            crs = self.crs
+
+        self._constraints.append(
+            RegionConstraint(
+                value=value,
+                shape=shape,
+                crs=crs,
+                value_type=value_type,
+                rate=rate
+            )
+        )
+
 
     @property
     def hmin(self):

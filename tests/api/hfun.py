@@ -884,15 +884,47 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         # outside the box and viceversa
 
         n_in_is1000 = np.sum(clipped_hfun.value == 1000)
-        n_in_is200 = np.sum(clipped_hfun.value == 500)
+        n_in_is500 = np.sum(clipped_hfun.value == 500)
         n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
-        n_out_is200 = np.sum(inv_clipped_hfun.value == 500)
+        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
 
-        self.assertTrue(n_in_is200 / n_in_is1000 < 0.05)
-        self.assertTrue(n_out_is1000 / n_out_is200 < 0.05)
+        self.assertTrue(n_in_is500 / n_in_is1000 < 0.05)
+        self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
 
         self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.025))
         self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+
+
+    def test_hfun_mesh(self):
+        mesh = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        bx = geometry.box(-0.75, 0.21, 0.75, 0.79)
+
+        hfun_mesh = ocsmesh.hfun.hfun.Hfun(mesh)
+        hfun_mesh.mesh.msh_t.value[:] = 200
+        hfun_mesh.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_mesh.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, 4326)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is200 = np.sum(clipped_hfun.value == 200)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is200 = np.sum(inv_clipped_hfun.value == 200)
+
+        self.assertTrue(np.all(clipped_hfun.value == 1000))
+        self.assertTrue(np.all(inv_clipped_hfun.value == 200))
 
 
 if __name__ == '__main__':
