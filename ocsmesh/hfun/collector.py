@@ -57,7 +57,10 @@ from ocsmesh.features.patch import Patch
 from ocsmesh.features.linefeature import LineFeature
 from ocsmesh.features.channel import Channel
 from ocsmesh.features.constraint import (
-    TopoConstConstraint, TopoFuncConstraint, CourantNumConstraint
+    TopoConstConstraint,
+    TopoFuncConstraint,
+    CourantNumConstraint,
+    RegionConstraint,
 )
 
 CanCreateSingleHfun = Union[Raster, EuclideanMesh2D]
@@ -65,6 +68,12 @@ CanCreateMultipleHfun = Iterable[Union[CanCreateSingleHfun, str]]
 CanCreateHfun = Union[CanCreateSingleHfun, CanCreateMultipleHfun]
 
 SizeFuncList = Sequence[Union[HfunRaster, HfunMesh]]
+
+RASTER_CONSTR = (
+    TopoConstConstraint,
+    TopoFuncConstraint,
+    CourantNumConstraint,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -534,6 +543,22 @@ class _ConstraintInfoCollector:
             yield defn
 
 
+    def apply(self, hfun_list, per_hfun=True):
+        for in_idx, hfun in enumerate(hfun_list):
+            is_raster = isinstance(hfun, HfunRaster)
+            constraint_list = []
+            for src_idx, constraint_defn in self:
+                if per_hfun and src_idx is not None and in_idx not in src_idx:
+                    continue
+
+                if isinstance(constraint_defn, RASTER_CONSTR) and not is_raster:
+                    continue
+
+                constraint_list.append(constraint_defn)
+
+            if constraint_list:
+                hfun.apply_constraints(constraint_list)
+
 
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
@@ -559,6 +584,8 @@ class HfunCollector(BaseHfun):
         contraction rate `rate` specified. This constraint is only
         applied on rasters with specified indices. The index is w.r.t
         the full input list for collector object creation.
+    add_region_constraint(...)
+        Add a constraint on size based on a specified region
     add_patch(...)
         Add a region of fixed size refinement with optional expansion
         rate for points outside the region to achieve smooth size
@@ -849,7 +876,7 @@ class HfunCollector(BaseHfun):
             Rate of relaxation of constraint outside the region defined
             by `lower_bound` and `upper_bound`.
         source_index : int or list of ints or None, default=None
-            The index of raster entries from the input list argument
+            The index of entries from the input list argument
             of the constructor of collector size function. If `None`
             all input rasters are used.
 
@@ -906,7 +933,7 @@ class HfunCollector(BaseHfun):
             Rate of relaxation of constraint outside the region defined
             by `lower_bound` and `upper_bound`.
         source_index : int or list of ints or None, default=None
-            The index of raster entries from the input list argument
+            The index of entries from the input list argument
             of the constructor of collector size function. If `None`
             all input rasters are used.
 
@@ -948,7 +975,7 @@ class HfunCollector(BaseHfun):
             Free surface elevation (:math:`meters`) from the reference
             (i.e. wave height)
         source_index : int or list of ints or None, default=None
-            The index of raster entries from the input list argument
+            The index of entries from the input list argument
             of the constructor of collector size function. If `None`
             all input rasters are used.
 
@@ -987,6 +1014,56 @@ class HfunCollector(BaseHfun):
                 )
             )
 
+
+    def add_region_constraint(
+            self,
+            value: Union[float, npt.NDArray[np.float32]],
+            shape: Union[Polygon, MultiPolygon],
+            crs: Union[CRS, str] = None,
+            value_type: Literal['min', 'max'] = 'min',
+            rate: float = 0.01,
+            source_index: Union[List[int], int, None] = None
+            ) -> None:
+
+        """Add a value contraint for the points in specified region
+
+        Add a fixed-value constraint to the region of the size function
+        specified by the input shape.  Optionally a `rate` can be
+        specified to relax the constraint gradually outside the bounds.
+
+        Parameters
+        ----------
+        value : float or array-like
+            A single fixed value to be used for
+            mesh size if condition is not met based on `value_type`.
+        shape: MultiPolygon or Polygon
+            Region of specified constraint
+        crs: CRS or None, default=None
+            The CRS of the input shape
+        value_type : {'min', 'max'}, default='min'
+            Type of contraint. If 'min', it means the mesh size
+            should not be smaller than the specified `value` at each
+            point.
+        rate : float, default=0.01
+            Rate of relaxation of constraint outside the specified region
+        source_index: int or list of ints or None, default=None
+            The index of input hfun source. If `None` all inputs
+            are used.
+
+        Returns
+        -------
+        None
+        """
+        self._constraint_info_coll.add(
+            source_index,
+            RegionConstraint(
+                value=value,
+                shape=shape,
+                crs=crs,
+                value_type=value_type,
+                rate=rate
+            )
+        )
 
 
     def add_contour(
@@ -1419,19 +1496,7 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
-
-        for in_idx, hfun in enumerate(raster_hfun_list):
-            constraint_list = []
-            for src_idx, constraint_defn in self._constraint_info_coll:
-                if src_idx is not None and in_idx not in src_idx:
-                    continue
-
-                constraint_list.append(constraint_defn)
-
-            if constraint_list:
-                hfun.apply_constraints(constraint_list)
+        self._constraint_info_coll.apply(self._hfun_list)
 
 
     def _apply_contours(self, apply_to: Optional[SizeFuncList] = None) -> None:
@@ -2126,13 +2191,8 @@ class HfunCollector(BaseHfun):
         _apply_constraints
         """
 
-        constraint_list = []
-        for src_idx, constraint_defn in self._constraint_info_coll:
-            # TODO: Account for source index
-            constraint_list.append(constraint_defn)
-
-        if constraint_list:
-            big_hfun.apply_constraints(constraint_list)
+        # TODO: Account for source index
+        self._constraint_info_coll.apply([big_hfun], per_hfun=False)
 
 
     def _get_hfun_composite_fast(self, big_hfun):
