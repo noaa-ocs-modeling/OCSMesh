@@ -356,8 +356,6 @@ class RegionConstraint(Constraint):
 
 
     def apply(self, ref_values, old_values, locations=None, crs=None):
-        '''
-        '''
 
         if len(locations) != len(old_values.ravel()):
             raise ValueError("Length of locations and sizes arrays don't match")
@@ -367,7 +365,7 @@ class RegionConstraint(Constraint):
         gdf_pts = gpd.points_from_xy(locations[:, 0], locations[:, 1], crs=crs).to_crs(self._crs)
 
         return_values = old_values.copy()
-        
+
         mask = (
             gdf_pts.within(self._region).reshape(return_values.shape)
             & np.logical_not(self.satisfies(return_values, self.value))

@@ -8,7 +8,7 @@ from multiprocessing import cpu_count, Pool
 import operator
 import tempfile
 from time import time
-from typing import Union, List, Callable, Any, Optional, Iterable, Tuple
+from typing import Union, List, Callable, Optional, Iterable, Tuple
 from contextlib import ExitStack
 import warnings
 try:
@@ -18,7 +18,6 @@ except ImportError:
     # pylint: disable=C0412
     from typing_extensions import Literal
 
-import geopandas as gpd
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
 import numpy as np

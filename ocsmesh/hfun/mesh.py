@@ -4,11 +4,11 @@
 import functools
 import logging
 import operator
+import warnings
 from collections import defaultdict
-from typing import Union, Optional
+from typing import Union, Optional, Iterable, Literal
 from multiprocessing import cpu_count, Pool
 from time import time
-from typing import Iterable, Literal
 
 from matplotlib.transforms import Bbox
 from scipy.spatial import cKDTree
@@ -470,7 +470,7 @@ class HfunMesh(BaseHfun):
         values = values.reshape(self.mesh.msh_t.value.shape)
 
         self.mesh.msh_t.value = values
-        
+
 
     def apply_added_constraints(self) -> None:
         """Apply all the added constraints
