@@ -1285,7 +1285,7 @@ class HfunCollector(BaseHfun):
     def add_feature(
             self,
             shape: Union[MultiLineString, LineString, None] = None,
-            line_defn: Optional[LineString] = None,
+            line_defn: Optional[LineFeature] = None,
             shapefile: Union[None, str, Path] = None,
             expansion_rate: float = 0.01,
             target_size: Optional[float] = None,
