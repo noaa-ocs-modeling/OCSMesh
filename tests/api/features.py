@@ -6,7 +6,9 @@ from pathlib import Path
 import geopandas as gpd
 from pyproj import CRS
 from shapely import geometry
+import numpy as np
 
+import ocsmesh
 from ocsmesh.features.linefeature import LineFeature
 
 class LineFeatureCapabilities(unittest.TestCase):
