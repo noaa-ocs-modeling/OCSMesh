@@ -455,7 +455,6 @@ class RegionConstraintCapabilities(unittest.TestCase):
         self.assertTrue((new_values == check_values).all())
 
 
-# TODO: Move CourantNumConstraint to this file!
 
 if __name__ == '__main__':
     unittest.main()
