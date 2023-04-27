@@ -578,9 +578,14 @@ class Raster:
 
         for win in iter_windows:
             x, y, z = self.get_window_data(win, band=band)
-            new_mask = np.full(z.mask.shape, 0)
-            new_mask[np.where(z.mask)] = -1
-            new_mask[np.where(~z.mask)] = 1
+            if z.mask.ndim == 2:
+                new_mask = np.full(z.mask.shape, 0)
+                new_mask[np.where(z.mask)] = -1
+                new_mask[np.where(~z.mask)] = 1
+            else:
+                # If not mask available
+                # NOTE: We want dtype to be int64, not float64
+                new_mask = np.full((len(y), len(x)), 1)
 
             if zmin is not None:
                 new_mask[np.where(z < zmin)] = -1
@@ -593,9 +598,10 @@ class Raster:
 
             fig, ax = plt.subplots()
             ax.contourf(x, y, new_mask, levels=[0, 1])
+            mpoly = utils.get_multipolygon_from_pathplot(ax)
+            if mpoly is not None:
+                polygon_collection.extend(mpoly.geoms)
             plt.close(fig)
-            polygon_collection.extend(
-                    utils.get_multipolygon_from_pathplot(ax).geoms)
 
         union_result = ops.unary_union(polygon_collection)
         if not isinstance(union_result, MultiPolygon):

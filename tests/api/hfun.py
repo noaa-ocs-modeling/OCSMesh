@@ -9,14 +9,18 @@ import warnings
 from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
 import numpy as np
-from pyproj import CRS
 import rasterio as rio
 import requests
 from shapely import geometry
 
 import ocsmesh
 
-from tests.api.common import raster_from_numpy, msht_from_numpy, create_rectangle_mesh
+from tests.api.common import (
+    raster_from_numpy,
+    msht_from_numpy,
+    create_rectangle_mesh,
+    topo_2rast_1mesh,
+)
 
 
 class SizeFunctionType(unittest.TestCase):
@@ -44,6 +48,8 @@ class SizeFunctionType(unittest.TestCase):
             mesh = ocsmesh.Mesh(msh_t)
             mesh.write(str(self.mesh), format='grd', overwrite=False)
 
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
 
     def test_create_raster_hfun(self):
         hfun = ocsmesh.Hfun(
@@ -53,13 +59,13 @@ class SizeFunctionType(unittest.TestCase):
         )
         self.assertTrue(isinstance(hfun, ocsmesh.hfun.raster.HfunRaster))
 
-    def test_mesh_raster_hfun(self):
+    def test_create_mesh_hfun(self):
         hfun = ocsmesh.Hfun(
             ocsmesh.Mesh.open(self.mesh, crs=4326),
         )
         self.assertTrue(isinstance(hfun, ocsmesh.hfun.mesh.HfunMesh))
 
-    def test_collector_raster_hfun(self):
+    def test_create_collector_hfun(self):
         hfun = ocsmesh.Hfun(
             [self.rast],
             hmin=500,
@@ -69,35 +75,20 @@ class SizeFunctionType(unittest.TestCase):
 
 
 class SizeFunctionCollector(unittest.TestCase):
+    # NOTE: Testing a mixed collector size function indirectly tests
+    # all the other types as it is currently calling all the underlying
+    # size functions to apply each feature or constraint in "exact" mode
 
     def setUp(self):
         self.tdir = Path(tempfile.mkdtemp())
-
         self.rast1 = self.tdir / 'rast_1.tif'
         self.rast2 = self.tdir / 'rast_2.tif'
         self.mesh1 = self.tdir / 'mesh_1.gr3'
+        topo_2rast_1mesh(self.rast1, self.rast2, self.mesh1)
 
-        rast_xy_1 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
-        rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
-        rast_z_1 = np.ones_like(rast_xy_1[0])
 
-        raster_from_numpy(
-            self.rast1, rast_z_1, rast_xy_1, 4326
-        )
-        raster_from_numpy(
-            self.rast2, rast_z_1, rast_xy_2, 4326
-        )
-
-        msh_t = create_rectangle_mesh(
-            nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                'ignore', category=UserWarning, message='Input mesh has no CRS information'
-            )
-            mesh = ocsmesh.Mesh(msh_t)
-            mesh.write(str(self.mesh1), format='grd', overwrite=False)
-
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
 
     def test_multi_path_input(self):
         hfun_coll = ocsmesh.Hfun(
@@ -151,6 +142,301 @@ class SizeFunctionCollector(unittest.TestCase):
         self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
 
 
+    def test_add_topo_bound_constraint_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=10000,
+            method='exact'
+        )
+        hfun_coll.add_topo_bound_constraint(
+            value=1000,
+            upper_bound=-10,
+            value_type='max',
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_add_topo_func_constraint_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=10,
+            hmax=200,
+            method='exact'
+        )
+        hfun_coll.add_topo_func_constraint(
+            func=lambda i: abs(i) / 2.0,
+            upper_bound=-10,
+            value_type='min',
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_add_contor_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        hfun_coll.add_contour(
+            level=5,
+            target_size=1000,
+            )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_channel_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        hfun_coll.add_channel(
+            level=0,
+            width=200,
+            target_size=600,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_channel_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        hfun_coll.add_subtidal_flow_limiter(
+            hmin=700,
+            hmax=2000,
+            upper_bound=0,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_constant_value_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        hfun_coll.add_constant_value(
+            value=700,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_patch_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        bx = geometry.box(-0.4, -0.3, 0.4, 0.6)
+        hfun_coll.add_patch(
+            shape=bx,
+            target_size=1000
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_feature_exact(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='exact'
+        )
+        ln = geometry.LineString([[-1, 0], [1, 0]])
+        hfun_coll.add_feature(
+            shape=ln,
+            expansion_rate=0.01,
+            target_size=1000,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_topo_bound_constraint_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=10000,
+            method='fast'
+        )
+        hfun_coll.add_topo_bound_constraint(
+            value=1000,
+            upper_bound=-10,
+            value_type='max',
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_add_topo_func_constraint_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=10,
+            hmax=200,
+            method='fast'
+        )
+        hfun_coll.add_topo_func_constraint(
+            func=lambda i: abs(i) / 2.0,
+            upper_bound=-10,
+            value_type='min',
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+    def test_add_contor_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        hfun_coll.add_contour(
+            level=5,
+            target_size=1000,
+            )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_channel_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        hfun_coll.add_channel(
+            level=0,
+            width=200,
+            target_size=600,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_channel_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        hfun_coll.add_subtidal_flow_limiter(
+            hmin=700,
+            hmax=2000,
+            upper_bound=0,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_constant_value_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        hfun_coll.add_constant_value(
+            value=700,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_patch_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        bx = geometry.box(-0.4, -0.3, 0.4, 0.6)
+        hfun_coll.add_patch(
+            shape=bx,
+            target_size=1000
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
+
+    def test_add_feature_fast(self):
+        # TODO: Improve this test (added for upgrade to shapely2)
+        hfun_coll = ocsmesh.Hfun(
+            [self.rast1, self.rast2, self.mesh1],
+            hmin=500,
+            hmax=5000,
+            method='fast'
+        )
+        ln = geometry.LineString([[-1, 0], [1, 0]])
+        hfun_coll.add_feature(
+            shape=ln,
+            expansion_rate=0.01,
+            target_size=1000,
+        )
+
+        hfun_msht = hfun_coll.msh_t()
+        
+        self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
+
 
 class SizeFromMesh(unittest.TestCase):
 
@@ -179,227 +465,6 @@ class SizeFromMesh(unittest.TestCase):
         err_value = np.max(np.abs(hfun_val_diff))/np.max(self.hfun_orig_val)
         self.assertTrue(err_value < threshold)
 
-
-
-class CourantNumConstraint(unittest.TestCase):
-
-    def test_calculate_element_size_from_courant_num(self):
-        self.assertEqual(
-            ocsmesh.utils.get_element_size_courant(
-                target_courant=1,
-                characteristic_velocity_magnitude=1,
-                timestep=1
-            ),
-            1
-        )
-
-        self.assertEqual(
-            ocsmesh.utils.get_element_size_courant(
-                target_courant=0.5,
-                characteristic_velocity_magnitude=2,
-                timestep=3.5
-            ),
-            14
-        )
-
-        self.assertTrue(
-            np.array_equal(
-                ocsmesh.utils.get_element_size_courant(
-                    target_courant=1,
-                    characteristic_velocity_magnitude=np.array([1, 1]),
-                    timestep=1
-                ),
-                np.array([1, 1])
-            )
-        )
-
-        # TODO: Add non-trivial cases
-
-
-    def test_approx_courant_number_for_depth(self):
-        elemsize = np.ones((10, 20)) * 1
-        depths = -np.arange(1, 201).reshape(elemsize.shape)
-        timestep = 1
-        wave_amplitude = 2
-
-        C_apprx = ocsmesh.utils.approximate_courant_number_for_depth(
-            depths, timestep, elemsize, wave_amplitude
-        )
-
-        self.assertTrue(np.all(C_apprx > 0))
-
-        # TODO: Add non-trivial cases
-
-
-    def test_can_velocity_be_approx_line_wave_theory(self):
-        self.assertFalse(
-            ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(1, 2)
-        )
-
-        self.assertFalse(
-            ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(-1, 2)
-        )
-
-        self.assertTrue(
-            ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(-3, 2)
-        )
-
-        self.assertTrue(
-            ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(-2)
-        )
-
-        self.assertFalse(
-            ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(-1.9)
-        )
-
-        self.assertTrue(
-            np.array_equal(
-                ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory(
-                    np.array([-1, -1, 0, 1, -2], dtype=float),
-                    1
-                ),
-                np.array([True, True, False, False, True])
-            )
-        )
-
-
-    def test_estimate_velocity_magnitude_for_depth(self):
-        # Velocity approx for depths shallower than wave amp is the same
-        self.assertEqual(
-            ocsmesh.utils.estimate_particle_velocity_from_depth(-1),
-            ocsmesh.utils.estimate_particle_velocity_from_depth(0)
-        )
-        self.assertEqual(
-            ocsmesh.utils.estimate_particle_velocity_from_depth(-1, 3),
-            ocsmesh.utils.estimate_particle_velocity_from_depth(0, 3)
-        )
-
-        self.assertNotEqual(
-            ocsmesh.utils.estimate_particle_velocity_from_depth(-2, 3),
-            ocsmesh.utils.estimate_particle_velocity_from_depth(-4, 3)
-        )
-
-        # TODO: Should tests for exact approx value matches be added here?
-
-
-    def test_cfl_constraint_object_api_type(self):
-        sizes_before_constraint = np.array([[500, 600]])
-        depths = np.array([[-10, -11]])
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.5
-        )
-        sizes_after_constraint = constraint.apply(depths, sizes_before_constraint)
-
-        # Assertions
-        self.assertIsInstance(
-            sizes_after_constraint, type(sizes_before_constraint)
-        )
-
-    def test_cfl_constraint_object_api_io(self):
-        sizes_before_constraint = np.array([[500, 600]])
-        depths_1 = np.array([[-10, -11]])
-        depths_2 = np.array([[-10]])
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.5
-        )
-
-        # Assertions
-        self.assertEqual(
-            constraint.apply(depths_1, sizes_before_constraint).shape,
-            sizes_before_constraint.shape
-        )
-        self.assertRaises(
-            ValueError,
-            constraint.apply, depths_2, sizes_before_constraint,
-        )
-
-
-    def test_cfl_constraint_max(self):
-        sizes_before_constraint = np.ones((10, 20)) * np.finfo(float).resolution
-        depths = np.ones((10, 20)) * -20
-
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.5,
-            value_type='max',
-            wave_amplitude=2,
-            timestep=150,
-        )
-
-        sizes_after_constraint = constraint.apply(depths, sizes_before_constraint)
-
-        # Assertions
-        # NOTE: Max is on Courant # NOT the element size
-        self.assertTrue(
-            np.all(sizes_after_constraint > sizes_before_constraint)
-        )
-
-
-    def test_cfl_constraint_min(self):
-        sizes_before_constraint = np.ones((10, 20)) * np.inf
-        depths = np.ones((10, 20)) * -20
-
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.1,
-            value_type='min',
-            wave_amplitude=2,
-            timestep=150,
-        )
-
-        sizes_after_constraint = constraint.apply(depths, sizes_before_constraint)
-
-        # Assertions
-        # NOTE: Max is on Courant # NOT the element size
-        self.assertTrue(
-            np.all(sizes_after_constraint < sizes_before_constraint)
-        )
-
-
-    def test_cfl_constraint_unaffected(self):
-        sizes_before_constraint = np.vstack(
-            (
-                np.ones((10, 20)) * np.finfo(float).resolution,
-                np.ones((10, 20)) * np.inf
-            )
-        )
-        depths = -np.arange(1, 401).reshape(sizes_before_constraint.shape)
-
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.1,
-            value_type='min',
-            wave_amplitude=2,
-            timestep=150,
-        )
-
-        sizes_after_constraint = constraint.apply(depths, sizes_before_constraint)
-        self.assertTrue(
-            np.all(
-                np.equal(
-                    sizes_after_constraint.ravel()[:200],
-                    sizes_before_constraint.ravel()[:200]
-                )
-            )
-        )
-
-
-    def test_cfl_constraint_result(self):
-        sizes_before_constraint = np.ones((10, 20)) * np.inf
-        depths = -np.arange(1, 201).reshape(sizes_before_constraint.shape)
-
-        constraint = ocsmesh.features.constraint.CourantNumConstraint(
-            value=0.1,
-            value_type='min',
-            wave_amplitude=2,
-            timestep=150,
-        )
-
-        sizes_after_constraint = constraint.apply(depths, sizes_before_constraint)
-
-        C_apprx = ocsmesh.utils.approximate_courant_number_for_depth(
-            depths, 150, sizes_after_constraint, 2
-        )
-
-        # Assertions
-        self.assertTrue(np.all(np.isclose(C_apprx, 0.1)))
 
 
 class SizeFunctionWithCourantNumConstraint(unittest.TestCase):

@@ -745,6 +745,7 @@ class Rings:
         data = []
         bnd_id = 0
         for poly in polys.geoms:
+            # TODO: Enforce CCW vs CW here
             data.append({
                     "geometry": poly.exterior,
                     "bnd_id": bnd_id,
@@ -1034,7 +1035,7 @@ class Hull:
 
         return gpd.GeoDataFrame(
             {"geometry": MultiPolygon([polygon.geometry for polygon
-                                       in self().itertuples()])},
+                                       in self().itertuples()]).geoms},
             crs=self.mesh.crs)
 
     def multipolygon(self) -> MultiPolygon:
@@ -1596,6 +1597,7 @@ class Boundaries:
 
         ext_bdry_nodes = []
         for ring in self.mesh.hull.rings.exterior().itertuples():
+            # TODO: Enforce external rings to be ccw as https://github.com/noaa-ocs-modeling/OCSMesh/issues/65
             ext_ring_coo = ring.geometry.coords
             ext_ring = np.array([
                     (coo_to_idx[ext_ring_coo[e]],
@@ -1607,6 +1609,7 @@ class Boundaries:
 
         int_bdry_nodes = []
         for ring in self.mesh.hull.rings.interior().itertuples():
+            # TODO: Internal rings should be cw?
             if not LinearRing(ring.geometry).is_ccw:
                 ring.geometry = ring.geometry.reverse()
             int_ring_coo = ring.geometry.coords

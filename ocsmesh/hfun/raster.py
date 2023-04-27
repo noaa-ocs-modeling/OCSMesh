@@ -836,9 +836,9 @@ class HfunRaster(BaseHfun, Raster):
 
         # For expansion_rate
         if expansion_rate is not None:
-            exteriors = [ply.exterior for ply in multipolygon]
+            exteriors = [ply.exterior for ply in multipolygon.geoms]
             interiors = [
-                inter for ply in multipolygon for inter in ply.interiors]
+                inter for ply in multipolygon.geoms for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
             # pylint: disable=E1123, E1125
@@ -862,7 +862,7 @@ class HfunRaster(BaseHfun, Raster):
                 start = time()
                 try:
                     mask, _, _ = rasterio.mask.raster_geometry_mask(
-                        self.src, multipolygon,
+                        self.src, multipolygon.geoms,
                         all_touched=True, invert=True)
                     mask = mask[rasterio.windows.window_index(window)]
 
