@@ -1035,7 +1035,7 @@ class Hull:
 
         return gpd.GeoDataFrame(
             {"geometry": MultiPolygon([polygon.geometry for polygon
-                                       in self().itertuples()])},
+                                       in self().itertuples()]).geoms},
             crs=self.mesh.crs)
 
     def multipolygon(self) -> MultiPolygon:

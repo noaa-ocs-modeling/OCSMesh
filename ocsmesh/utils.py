@@ -626,6 +626,7 @@ def inner_ring_collection(mesh):
 def get_multipolygon_from_pathplot(ax):
     # extract linear_rings from plot
     linear_ring_collection = []
+    multipolygon = None
     for path_collection in ax.collections:
         for path in path_collection.get_paths():
             polygons = path.to_polygons(closed_only=True)
@@ -652,7 +653,7 @@ def get_multipolygon_from_pathplot(ax):
             polygon_collection.append(Polygon(outer_ring, inner_rings))
 
         multipolygon = MultiPolygon(polygon_collection)
-    else:
+    elif len(linear_ring_collection) != 0:
         multipolygon = MultiPolygon(
             [Polygon(linear_ring_collection.pop())])
     return multipolygon

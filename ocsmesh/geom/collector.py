@@ -213,7 +213,8 @@ class GeomCollector(BaseGeom):
             elif isinstance(in_item, BaseMesh):
                 geom = MeshGeom(in_item)
 
-            elif isinstance(in_item, str):
+            elif isinstance(in_item, (Path, str)):
+                in_item = str(in_item)
                 if in_item.endswith('.tif'):
                     raster = Raster(in_item)
                     if self._base_shape:
@@ -306,8 +307,10 @@ class GeomCollector(BaseGeom):
                 # TODO: Make sure all calcs are in EPSG:4326
                 base_multipoly = self._base_mesh.hull.multipolygon()
 
-            feather_files.append(self._extract_global_boundary(
-                temp_path, base_multipoly))
+            raster_geom_path = self._extract_global_boundary(
+                temp_path, base_multipoly)
+            if raster_geom_path.is_file():
+                feather_files.append(raster_geom_path)
             feather_files.extend(self._extract_nonraster_boundary(
                 temp_path, base_multipoly))
             feather_files.extend(self._extract_features(
@@ -447,11 +450,12 @@ class GeomCollector(BaseGeom):
             If the any of the inputs are not supported
         """
 
-        valid_types = (str, Raster, BaseGeom, BaseMesh)
+        valid_types = (str, Path, Raster, BaseGeom, BaseMesh)
         if not all(isinstance(item, valid_types) for item in input_list):
             raise TypeError(
-                f'Input list items must be of type {", ".join(valid_types)}'
-                f', or a derived type.')
+                f'Input list items must be of type'
+                f' {", ".join(str(i) for i in valid_types)},'
+                f' or a derived type.')
 
     def _get_raster_sources(self) -> List[Union[RasterGeom, Raster]]:
         """Get the list rasters from inputs to the object constructor
