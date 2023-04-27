@@ -25,7 +25,7 @@ dependencies = [
     "jigsawpy", "matplotlib", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
     "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "requests", "scipy",
-    "shapely>=2", "tqdm", "typing_extensions", "utm",
+    "shapely", "tqdm", "typing_extensions", "utm",
     ]
 dynamic = ["version"]
 
