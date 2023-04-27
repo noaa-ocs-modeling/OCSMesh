@@ -229,7 +229,7 @@ class GeomCombine:
                     [
                         rasters_gdf,
                         gpd.GeoDataFrame(
-                            {'geometry': self._read_multipolygon(feather_f)},
+                            {'geometry': self._read_multipolygon(feather_f).geoms},
                             crs=self._calc_crs
                         ),
                     ],
@@ -289,7 +289,7 @@ class GeomCombine:
             # a multipolygon instead of polygon for dataframe creation
             multipolygon = MultiPolygon([multipolygon])
 
-        gpd.GeoDataFrame({'geometry': multipolygon}).to_feather(path)
+        gpd.GeoDataFrame({'geometry': multipolygon.geoms}).to_feather(path)
 
 
     def _read_multipolygon(
@@ -523,7 +523,7 @@ class GeomCombine:
         # TODO: Check for correct extension on out_file
         if out_format == "shapefile":
             gdf = gpd.GeoDataFrame(
-                    {'geometry': multi_polygon},
+                    {'geometry': multi_polygon.geoms},
                     crs=self._calc_crs
                     )
             if not crs.equals(self._calc_crs):
@@ -535,7 +535,7 @@ class GeomCombine:
 
         elif out_format == "feather":
             gdf = gpd.GeoDataFrame(
-                    {'geometry': multi_polygon},
+                    {'geometry': multi_polygon.geoms},
                     crs=self._calc_crs
                     )
             if not crs.equals(self._calc_crs):

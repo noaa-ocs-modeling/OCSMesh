@@ -633,7 +633,7 @@ class GeomCollector(BaseGeom):
             multipoly = self._get_valid_multipolygon(
                     geom.get_multipolygon())
             gdf_non_raster = gpd.GeoDataFrame(
-                    {'geometry': multipoly}, crs=crs)
+                    {'geometry': multipoly.geoms}, crs=crs)
             if crs != CRS.from_user_input("EPSG:4326"):
                 gdf_non_raster = gdf_non_raster.to_crs("EPSG:4326")
 
@@ -727,7 +727,7 @@ class GeomCollector(BaseGeom):
             if ptch_defn:
                 patch_mp, crs = ptch_defn.get_multipolygon()
                 gdf_patch = gpd.GeoDataFrame(
-                        {'geometry': patch_mp}, crs=crs)
+                        {'geometry': patch_mp.geoms}, crs=crs)
                 if crs != CRS.from_user_input("EPSG:4326"):
                     gdf_patch = gdf_patch.to_crs("EPSG:4326")
                 combine_poly = MultiPolygon(list(gdf_patch.geometry))
