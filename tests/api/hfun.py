@@ -928,7 +928,7 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         self.assertTrue(np.all(inv_clipped_hfun.value == 200))
 
 
-    def test_hfun_collector(self):
+    def test_hfun_collector_exact(self):
         rast1 = ocsmesh.Raster(self.rast1)
         mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
         mesh1.msh_t.value[:] = 500
@@ -966,6 +966,51 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
 
         self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.050))
         self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+
+
+    def test_hfun_collector_fast(self):
+        rast1 = ocsmesh.Raster(self.rast1)
+        mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        mesh1.msh_t.value[:] = 500
+
+        bx = geometry.box(-0.75, -0.4, 0.75, -0.1)
+
+        # TODO: Constraint application with Mesh input is NOT tested
+        # with "fast" method
+        hfun_coll = ocsmesh.Hfun(
+            [rast1, self.rast2],
+            hmin=100,
+            hmax=10000,
+            method='fast'
+        )
+        hfun_coll.add_constant_value(value=500)
+        hfun_coll.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_coll.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, 4326)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is500 = np.sum(clipped_hfun.value == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+
+        self.assertTrue(n_in_is500 / n_in_is1000 < 0.1)
+        self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
+
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.25))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.1))
 
 if __name__ == '__main__':
     unittest.main()

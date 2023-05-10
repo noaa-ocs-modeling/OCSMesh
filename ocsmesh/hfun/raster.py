@@ -549,6 +549,8 @@ class HfunRaster(BaseHfun, Raster):
                 if utm_crs is not None:
                     xy = self.get_xy_memcache(window, utm_crs)
                 else:
+                    # Technically it means that crs is not geographic!
+                    utm_crs = self.crs
                     xy = self.get_xy(window)
 
 
