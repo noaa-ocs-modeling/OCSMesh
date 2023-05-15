@@ -14,6 +14,33 @@ from shapely.geometry import (
 
 from ocsmesh import utils
 
+from tests.api.common import (
+    create_rectangle_mesh,
+    msht_from_numpy,
+)
+
+
+class FinalizeMesh(unittest.TestCase):
+
+    def setUp(self):
+        pass
+
+    def test_cleanup_mesh_and_generate_valid_mesh(self):
+        msh_t1 = create_rectangle_mesh(
+            nx=40, ny=40, holes=[40, 41], x_extent=(-2, 2), y_extent=(-2, 2))
+        msh_t2 = create_rectangle_mesh(
+            nx=20, ny=20, holes=[], x_extent=(-3.5, -3), y_extent=(0, 1))
+
+        verts = msh_t1.vert2['coord']
+        verts = np.vstack((verts, msh_t2.vert2['coord']))
+
+        trias = msh_t1.tria3['index']
+        trias = np.vstack((trias, msh_t2.tria3['index'] + len(msh_t1.vert2)))
+
+        msh_t = msht_from_numpy(verts, trias)
+
+        utils.finalize_mesh(msh_t)
+
 
 class RemovePolygonHoles(unittest.TestCase):
 
