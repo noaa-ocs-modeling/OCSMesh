@@ -51,6 +51,7 @@ class SizeFunctionType(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tdir)
 
+
     def test_create_raster_hfun(self):
         hfun = ocsmesh.Hfun(
             ocsmesh.Raster(self.rast),
@@ -823,6 +824,193 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         )
         self._is_refined_by_feat1(hfun2, hmin)
 
+
+class SizeFunctionWithRegionConstraint(unittest.TestCase):
+
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+
+        self.rast1 = self.tdir / 'rast_1.tif'
+        self.rast2 = self.tdir / 'rast_2.tif'
+        self.mesh1 = self.tdir / 'mesh_1.gr3'
+
+        rast_xy_1 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
+        rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
+        rast_z_1 = np.ones_like(rast_xy_1[0])
+
+        raster_from_numpy(
+            self.rast1, rast_z_1, rast_xy_1, 4326
+        )
+        raster_from_numpy(
+            self.rast2, rast_z_1, rast_xy_2, 4326
+        )
+
+        msh_t = create_rectangle_mesh(
+            nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning, message='Input mesh has no CRS information'
+            )
+            mesh = ocsmesh.Mesh(msh_t)
+            mesh.write(str(self.mesh1), format='grd', overwrite=False)
+            mesh.write('/tmp/ocsmesh/mytest2.2dm', format='2dm', overwrite=True)
+
+
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
+
+
+    def test_hfun_raster(self):
+        rast = ocsmesh.raster.Raster(self.rast1)
+        bx = geometry.box(-0.75, -0.6, -0.25, -0.4)
+
+        hfun_raster = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=5000)
+        hfun_raster.add_constant_value(value=500)
+        hfun_raster.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_raster.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, rast.crs)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is500 = np.sum(clipped_hfun.value == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+
+        self.assertTrue(n_in_is500 / n_in_is1000 < 0.05)
+        self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
+
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.025))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+
+
+    def test_hfun_mesh(self):
+        mesh = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        bx = geometry.box(-0.75, 0.21, 0.75, 0.79)
+
+        hfun_mesh = ocsmesh.hfun.hfun.Hfun(mesh)
+        hfun_mesh.mesh.msh_t.value[:] = 200
+        hfun_mesh.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_mesh.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, 4326)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is200 = np.sum(clipped_hfun.value == 200)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is200 = np.sum(inv_clipped_hfun.value == 200)
+
+        self.assertTrue(np.all(clipped_hfun.value == 1000))
+        self.assertTrue(np.all(inv_clipped_hfun.value == 200))
+
+
+    def test_hfun_collector_exact(self):
+        rast1 = ocsmesh.Raster(self.rast1)
+        mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        mesh1.msh_t.value[:] = 500
+
+        bx = geometry.box(-0.75, -0.4, 0.75, 0.6)
+
+        hfun_coll = ocsmesh.Hfun(
+            [rast1, self.rast2, mesh1],
+        )
+        hfun_coll.add_constant_value(value=500)
+        hfun_coll.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_coll.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, 4326)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is500 = np.sum(clipped_hfun.value == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+
+        self.assertTrue(n_in_is500 / n_in_is1000 < 0.1)
+        self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
+
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.050))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+
+
+    def test_hfun_collector_fast(self):
+        rast1 = ocsmesh.Raster(self.rast1)
+        mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
+        mesh1.msh_t.value[:] = 500
+
+        bx = geometry.box(-0.75, -0.4, 0.75, -0.1)
+
+        # TODO: Constraint application with Mesh input is NOT tested
+        # with "fast" method
+        hfun_coll = ocsmesh.Hfun(
+            [rast1, self.rast2],
+            hmin=100,
+            hmax=10000,
+            method='fast'
+        )
+        hfun_coll.add_constant_value(value=500)
+        hfun_coll.add_region_constraint(
+            value=1000,
+            value_type='min',
+            shape=bx,
+            crs='4326',
+            rate=None,
+            )
+        hfun_msht = hfun_coll.msh_t()
+        ocsmesh.utils.reproject(hfun_msht, 4326)
+        clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(hfun_msht, bx)
+        inv_clipped_hfun = ocsmesh.utils.clip_mesh_by_shape(
+            hfun_msht, bx, fit_inside=False, inverse=True
+        )
+
+        # Due to hfun msh_t zigzag, some nodes of size 1000 might fall
+        # outside the box and viceversa
+
+        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
+        n_in_is500 = np.sum(clipped_hfun.value == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+
+        self.assertTrue(n_in_is500 / n_in_is1000 < 0.1)
+        self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
+
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.25))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.1))
 
 if __name__ == '__main__':
     unittest.main()

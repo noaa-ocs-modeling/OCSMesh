@@ -38,7 +38,7 @@ def create_rectangle_mesh(nx, ny, holes, x_extent=None, y_extent=None):
     if y_extent is None:
         y_range = range(ny)
     else:
-        y_range = np.linspace(y_extent[0], y_extent[1], nx)
+        y_range = np.linspace(y_extent[0], y_extent[1], ny)
 
     X, Y = np.meshgrid(x_range, y_range)
     verts = np.array(list(zip(X.ravel(), Y.ravel())))
