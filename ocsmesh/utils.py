@@ -25,7 +25,13 @@ import geopandas as gpd
 import utm
 
 
+# TODO: Remove one of these two constants
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
+MESH_TYPES = {
+    'tria3': 'TRIA3_t',
+    'quad4': 'QUAD4_t',
+    'hexa8': 'HEXA8_t'
+}
 
 def must_be_euclidean_mesh(func):
     def decorator(mesh, *args, **kwargs):
@@ -768,13 +774,8 @@ def select_adjacent(mesh, in_indices, num_layers):
             coord = mesh.vert2['coord']
 
             # TODO: What about edge2
-            mesh_types = {
-                'tria3': 'TRIA3_t',
-                'quad4': 'QUAD4_t',
-                'hexa8': 'HEXA8_t'
-            }
             elm_dict = {
-                key: getattr(mesh, key)['index'] for key in mesh_types}
+                key: getattr(mesh, key)['index'] for key in MESH_TYPES}
 
             mark_func = np.any
 
@@ -958,13 +959,8 @@ def clip_mesh_by_vertex(
         coord = mesh.vert2['coord']
 
         # TODO: What about edge2 if in_place?
-        mesh_types = {
-            'tria3': 'TRIA3_t',
-            'quad4': 'QUAD4_t',
-            'hexa8': 'HEXA8_t'
-        }
         elm_dict = {
-            key: getattr(mesh, key)['index'] for key in mesh_types}
+            key: getattr(mesh, key)['index'] for key in MESH_TYPES}
 
         # Whether elements that include "in"-vertices can be created
         # using vertices other than "in"-vertices
@@ -1027,7 +1023,7 @@ def clip_mesh_by_vertex(
             [(coo, 0) for coo in new_coord],
             dtype=jigsaw_msh_t.VERT2_t)
 
-        for key, elem_type in mesh_types.items():
+        for key, elem_type in MESH_TYPES.items():
             setattr(
                 mesh_out,
                 key,
@@ -1604,14 +1600,8 @@ def merge_msh_t(
 
     dst_crs = CRS.from_user_input(out_crs)
 
-    mesh_types = {
-        'tria3': 'TRIA3_t',
-        'quad4': 'QUAD4_t',
-        'hexa8': 'HEXA8_t'
-    }
-
     coord = []
-    elems = {k: [] for k in mesh_types}
+    elems = {k: [] for k in MESH_TYPES}
     value = []
     offset = 0
 
@@ -1643,7 +1633,7 @@ def merge_msh_t(
         mesh_shape_list.append(mesh_shape)
 
 
-        for k in mesh_types:
+        for k in MESH_TYPES:
             cnn = getattr(mesh, k)
             elems[k].append(cnn['index'] + offset)
         coord.append(mesh.vert2['coord'])
@@ -1660,7 +1650,7 @@ def merge_msh_t(
     composite_mesh.value = np.array(
             np.vstack(value),
             dtype=jigsaw_msh_t.REALS_t)
-    for k, v in mesh_types.items():
+    for k, v in MESH_TYPES.items():
         setattr(composite_mesh, k, np.array(
             [(cnn, 0) for cnn in np.vstack(elems[k])],
             dtype=getattr(jigsaw_msh_t, v)))
