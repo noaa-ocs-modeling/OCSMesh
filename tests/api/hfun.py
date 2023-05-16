@@ -656,7 +656,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
             [0, 2, 6],
             [5, 4, 7],
         ])
-        msh_t = msht_from_numpy(crd, tria, 4326)
+        msh_t = msht_from_numpy(crd, tria, crs=4326)
         mesh = ocsmesh.Mesh(msh_t)
         mesh.write(str(self.mesh1), format='grd', overwrite=False)
 

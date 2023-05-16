@@ -16,7 +16,6 @@ import ocsmesh
 
 from tests.api.common import (
     raster_from_numpy,
-    msht_from_numpy,
     create_rectangle_mesh,
     topo_2rast_1mesh,
 )

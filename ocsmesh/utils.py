@@ -25,7 +25,13 @@ import geopandas as gpd
 import utm
 
 
+# TODO: Remove one of these two constants
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
+MESH_TYPES = {
+    'tria3': 'TRIA3_t',
+    'quad4': 'QUAD4_t',
+    'hexa8': 'HEXA8_t'
+}
 
 def must_be_euclidean_mesh(func):
     def decorator(mesh, *args, **kwargs):
@@ -48,26 +54,27 @@ def mesh_to_tri(mesh):
 
 def cleanup_isolates(mesh):
 
-    # For triangle only (TODO: add support for other types)
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    used_indexes = np.unique(mesh.tria3['index'])
-    vert2_idxs = np.where(
-        np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+    used_old_idx = np.array([], dtype='int64')
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index'].flatten()
+        used_old_idx = np.hstack((used_old_idx, elem_idx))
+    used_old_idx = np.unique(used_old_idx)
 
-    # Since tria simplex refers to node index which always starts from
-    # 0 after removing isolate nodes we can use the map approach
-    tria3 = mesh.tria3['index'].flatten()
-    renum = {old: new for new, old in enumerate(np.unique(tria3))}
-    tria3 = np.array([renum[i] for i in tria3])
-    tria3 = tria3.reshape(mesh.tria3['index'].shape)
-
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
+    # update vert2 and value
+    mesh.vert2 = mesh.vert2.take(used_old_idx, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
-    mesh.tria3 = np.asarray(
-        [(tuple(indices), mesh.tria3['IDtag'][i])
-         for i, indices in enumerate(tria3)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+        mesh.value = mesh.value.take(used_old_idx, axis=0)
+
+    renum = {old: new for new, old in enumerate(np.unique(used_old_idx))}
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index']
+        elem_new_idx = np.array([renum[i] for i in elem_idx.flatten()])
+        elem_new_idx = elem_new_idx.reshape(elem_idx.shape)
+        # TODO: Keep IDTag?
+        setattr(mesh, etype, np.array(
+                [(idx, 0) for idx in elem_new_idx],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
 
 
 def put_edge2(mesh):
@@ -322,31 +329,32 @@ def _sieve_by_mask(mesh, sieve_mask):
     lone_elem_verts = get_lone_element_verts(mesh)
     vert2_mask[lone_elem_verts] = True
 
-    # Mask out elements containing the unwanted nodes.
-    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
+    used_old_idx = np.array([], dtype='int64')
+    filter_dict = {}
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index']
+        elem_mask = np.any(vert2_mask[elem_idx], axis=1)
 
-    # Tria and node removal and renumbering indexes ...
-    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
-    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
-    used_indexes = np.unique(tria3_index)
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    renum = {old: new for new, old in enumerate(np.unique(tria3_index))}
-    tria3_index = np.array([renum[i] for i in tria3_index])
-    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
-    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
+        # Tria and node removal and renumbering indexes ...
+        elem_keep_idx = elem_idx[~elem_mask, :].flatten()
+        used_old_idx = np.hstack((used_old_idx, elem_keep_idx))
+        filter_dict[etype] = [elem_keep_idx, elem_idx.shape[1]]
+    used_old_idx = np.unique(used_old_idx)
 
-    # update vert2
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
-
-    # update value
+    # update vert2 and value
+    mesh.vert2 = mesh.vert2.take(used_old_idx, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
+        mesh.value = mesh.value.take(used_old_idx, axis=0)
 
-    # update tria3
-    mesh.tria3 = np.array(
-        [(tuple(indices), tria3_id_tag[i])
-         for i, indices in enumerate(tria3_index)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+    renum = {old: new for new, old in enumerate(np.unique(used_old_idx))}
+    for etype, (elem_keep_idx, topo) in filter_dict.items():
+        elem_new_idx = np.array([renum[i] for i in elem_keep_idx])
+        elem_new_idx = elem_new_idx.reshape(-1, topo)
+        # TODO: Keep IDTag?
+        setattr(mesh, etype, np.array(
+                [(idx, 0) for idx in elem_new_idx],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
 
 
 def finalize_mesh(mesh, sieve_area=None):
@@ -441,49 +449,7 @@ def sieve(mesh, area=None):
         path = Path(multipolygon[idx].exterior.coords, closed=True)
         vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
 
-    # select any connected nodes; these ones are missed by
-    # path.contains_point() because they are at the path edges.
-    _idxs = np.where(vert2_mask)[0]
-    conn_verts = get_surrounding_elem_verts(mesh, _idxs)
-    vert2_mask[conn_verts] = True
-
-    # Also, there might be some dangling triangles without neighbors,
-    # which are also missed by path.contains_point()
-    lone_elem_verts = get_lone_element_verts(mesh)
-    vert2_mask[lone_elem_verts] = True
-
-
-    # Mask out elements containing the unwanted nodes.
-    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
-
-    # Renumber indexes ...
-    # isolated node removal does not require elimination of triangles from
-    # the table, therefore the length of the indexes is constant.
-    # We must simply renumber the tria3 indexes to match the new node indexes.
-    # Essentially subtract one, but going from the bottom of the index table
-    # to the top.
-    used_indexes = np.unique(mesh.tria3['index'])
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    tria3_idxs = np.where(~np.isin(node_indexes, used_indexes))[0]
-    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
-    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
-    for idx in reversed(tria3_idxs):
-        tria3_index[np.where(tria3_index >= idx)] -= 1
-    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
-    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
-
-    # update vert2
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
-
-    # update value
-    if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
-
-    # update tria3
-    mesh.tria3 = np.array(
-        [(tuple(indices), tria3_id_tag[i])
-         for i, indices in enumerate(tria3_index)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+    return _sieve_by_mask(mesh, vert2_mask)
 
 
 def sort_edges(edges):
@@ -808,13 +774,8 @@ def select_adjacent(mesh, in_indices, num_layers):
             coord = mesh.vert2['coord']
 
             # TODO: What about edge2
-            mesh_types = {
-                'tria3': 'TRIA3_t',
-                'quad4': 'QUAD4_t',
-                'hexa8': 'HEXA8_t'
-            }
             elm_dict = {
-                key: getattr(mesh, key)['index'] for key in mesh_types}
+                key: getattr(mesh, key)['index'] for key in MESH_TYPES}
 
             mark_func = np.any
 
@@ -998,13 +959,8 @@ def clip_mesh_by_vertex(
         coord = mesh.vert2['coord']
 
         # TODO: What about edge2 if in_place?
-        mesh_types = {
-            'tria3': 'TRIA3_t',
-            'quad4': 'QUAD4_t',
-            'hexa8': 'HEXA8_t'
-        }
         elm_dict = {
-            key: getattr(mesh, key)['index'] for key in mesh_types}
+            key: getattr(mesh, key)['index'] for key in MESH_TYPES}
 
         # Whether elements that include "in"-vertices can be created
         # using vertices other than "in"-vertices
@@ -1067,7 +1023,7 @@ def clip_mesh_by_vertex(
             [(coo, 0) for coo in new_coord],
             dtype=jigsaw_msh_t.VERT2_t)
 
-        for key, elem_type in mesh_types.items():
+        for key, elem_type in MESH_TYPES.items():
             setattr(
                 mesh_out,
                 key,
@@ -1644,14 +1600,8 @@ def merge_msh_t(
 
     dst_crs = CRS.from_user_input(out_crs)
 
-    mesh_types = {
-        'tria3': 'TRIA3_t',
-        'quad4': 'QUAD4_t',
-        'hexa8': 'HEXA8_t'
-    }
-
     coord = []
-    elems = {k: [] for k in mesh_types}
+    elems = {k: [] for k in MESH_TYPES}
     value = []
     offset = 0
 
@@ -1683,7 +1633,7 @@ def merge_msh_t(
         mesh_shape_list.append(mesh_shape)
 
 
-        for k in mesh_types:
+        for k in MESH_TYPES:
             cnn = getattr(mesh, k)
             elems[k].append(cnn['index'] + offset)
         coord.append(mesh.vert2['coord'])
@@ -1700,7 +1650,7 @@ def merge_msh_t(
     composite_mesh.value = np.array(
             np.vstack(value),
             dtype=jigsaw_msh_t.REALS_t)
-    for k, v in mesh_types.items():
+    for k, v in MESH_TYPES.items():
         setattr(composite_mesh, k, np.array(
             [(cnn, 0) for cnn in np.vstack(elems[k])],
             dtype=getattr(jigsaw_msh_t, v)))

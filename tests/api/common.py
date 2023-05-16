@@ -5,7 +5,14 @@ from jigsawpy import jigsaw_msh_t
 
 import ocsmesh
 
-def create_rectangle_mesh(nx, ny, holes, x_extent=None, y_extent=None):
+def create_rectangle_mesh(
+    nx,
+    ny,
+    holes,
+    x_extent=None,
+    y_extent=None,
+    quads=None,
+):
     """
     Note:
         x = x-index
@@ -21,7 +28,7 @@ def create_rectangle_mesh(nx, ny, holes, x_extent=None, y_extent=None):
       3     *---*---*---*---*
             | \ |   | \ | \ |
       2     *---*---*---*---*
-            | \ | \ | \ | \ |
+            | \ | \ | # | \ |
       1     *---*---*---*---*
             | \ | \ | \ | \ |
       0     *---*---*---*---*
@@ -40,15 +47,29 @@ def create_rectangle_mesh(nx, ny, holes, x_extent=None, y_extent=None):
     else:
         y_range = np.linspace(y_extent[0], y_extent[1], ny)
 
+    if quads is None:
+        quads = []
+
     X, Y = np.meshgrid(x_range, y_range)
     verts = np.array(list(zip(X.ravel(), Y.ravel())))
-    cells = []
+    tria3 = []
+    quad4 = []
     for j in range(ny - 1):
         for i in range(nx - 1):
-            if (i + 1) + ((nx-1) * j) in holes:
+            is_quad = (i + 1) + ((nx-1) * j) in quads
+            is_hole = (i + 1) + ((nx-1) * j) in holes
+            if is_hole:
                 continue
-            cells.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
-            cells.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
+            if is_quad:
+                quad4.append([
+                    j * nx + i,
+                    j * nx + (i + 1),
+                    (j + 1) * nx + (i + 1),
+                    (j + 1) * nx + i
+                ])
+            else: # is tria
+                tria3.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
+                tria3.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
     # NOTE: Everywhere is above 0 (auto: land) unless modified later
     vals = np.ones((len(verts), 1)) * 10
 
@@ -57,7 +78,10 @@ def create_rectangle_mesh(nx, ny, holes, x_extent=None, y_extent=None):
     mesh_msht.ndims = +2
     mesh_msht.mshID = 'euclidean-mesh'
     mesh_msht.tria3 = np.array(
-        [(c, 0) for c in cells], dtype=jigsaw_msh_t.TRIA3_t
+        [(c, 0) for c in tria3], dtype=jigsaw_msh_t.TRIA3_t
+    )
+    mesh_msht.quad4 = np.array(
+        [(c, 0) for c in quad4], dtype=jigsaw_msh_t.QUAD4_t
     )
     mesh_msht.vert2 = np.array(
         [(v, 0) for v in verts], dtype=jigsaw_msh_t.VERT2_t
@@ -102,6 +126,7 @@ def raster_from_numpy(
 def msht_from_numpy(
     coordinates,
     triangles,
+    quadrilaterals=None,
     crs=CRS.from_epsg(4326)
 ):
     if not isinstance(crs, CRS):
@@ -118,6 +143,11 @@ def msht_from_numpy(
         [(index, 0) for index in triangles],
         dtype=jigsaw_msh_t.TRIA3_t
         )
+    if quadrilaterals is not None:
+        mesh.quad4 = np.array(
+            [(index, 0) for index in quadrilaterals],
+            dtype=jigsaw_msh_t.QUAD4_t
+            )
 
     return mesh
 
