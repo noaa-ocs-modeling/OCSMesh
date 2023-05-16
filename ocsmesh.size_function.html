@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Mesh size definition &mdash; ocsmesh 0.1.dev1+g4e4590f documentation</title>
+  <title>Mesh size definition &mdash; ocsmesh 1.3.1 documentation</title>
   
 
   
@@ -165,7 +165,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunMesh.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.size_from_mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.size_from_mesh()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.add_patch"><code class="docutils literal notranslate"><span class="pre">HfunMesh.add_patch()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.apply_added_constraints"><code class="docutils literal notranslate"><span class="pre">HfunMesh.apply_added_constraints()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.apply_constraints"><code class="docutils literal notranslate"><span class="pre">HfunMesh.apply_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.hmin"><code class="docutils literal notranslate"><span class="pre">HfunMesh.hmin</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.hmax"><code class="docutils literal notranslate"><span class="pre">HfunMesh.hmax</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.mesh</span></code></a></li>
@@ -178,6 +179,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_bound_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_func_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_courant_num_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_courant_num_constraint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_region_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_region_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_contour"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_contour()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_channel"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_channel()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_subtidal_flow_limiter()</span></code></a></li>
@@ -385,25 +387,28 @@ else.</p>
 <tr class="row-even"><td><p><strong>add_courant_num_constraint(…)</strong></p></td>
 <td><p>Add constraint based on approximated Courant number</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_patch(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_region_constraint(…)</strong></p></td>
+<td><p>Add a constraint on size based on a specified region</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>add_patch(…)</strong></p></td>
 <td><p>Add a region of fixed size refinement with optional expansion rate for points outside the region to achieve smooth size transition.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_contour(level expansion_rate target_size=None, nprocs=None)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_contour(level expansion_rate target_size=None, nprocs=None)</strong></p></td>
 <td><p>Add refinement based on contour lines auto-extrcted from the underlying raster data. The size is calculated based on the specified <cite>rate</cite>, <cite>target_size</cite> and the distance from the extracted feature line.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_channel(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_channel(…)</strong></p></td>
 <td><p>Add refinement for auto-detected narrow domain regions. Optionally use an expansion rate for points outside detected narrow regions for smooth size transition.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_feature(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_feature(…)</strong></p></td>
 <td><p>Decorated method to add size refinement based on the specified <cite>expansion_rate</cite>, <cite>target_size</cite>, and distance from the input feature lines <cite>feature</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_xy_memcache(window, dst_crs)</strong></p></td>
+<tr class="row-even"><td><p><strong>get_xy_memcache(window, dst_crs)</strong></p></td>
 <td><p>Get XY grid cached onto disk. Useful for when XY needs to be projected to UTM so as to avoid reprojecting on every call.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
 <td><p>Add mesh size refinement based on the value as well as gradient of the topography within the region between specified by lower and upper bound on topography.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_constant_value(value, lower_bound=None, upper_bound=None)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_constant_value(value, lower_bound=None, upper_bound=None)</strong></p></td>
 <td><p>Add fixed size mesh refinement in the region specified by upper and lower bounds on topography.</p></td>
 </tr>
 </tbody>
@@ -632,13 +637,16 @@ even if provided, are not applied in during initialization.</p>
 <tr class="row-even"><td><p><strong>add_patch</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_subtidal_flow_limiter</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_region_constraint</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_topo_bound_constraint</strong></p></td>
+<tr class="row-even"><td><p><strong>add_subtidal_flow_limiter</strong></p></td>
 <td></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_topo_func_constraint</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_topo_bound_constraint</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>add_topo_func_constraint</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1685,7 +1693,7 @@ during the context</p>
 at each point of the mesh based on the specified criteria.</p>
 <p class="rubric">Notes</p>
 <p>Unlike raster size function, mesh based size function doesn’t
-support constraint at this point.</p>
+support topo-based constraint at this point.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -1715,7 +1723,16 @@ support constraint at this point.</p>
 <tr class="row-even"><td><p><strong>add_feature(feature, expansion_rate, target_size=None,</strong></p></td>
 <td><p>max_verts=200, <a href="#id1"><span class="problematic" id="id2">*</span></a>, nprocs=None, pool=None) Decorated method to add size refinement based on the specified <cite>expansion_rate</cite>, <cite>target_size</cite>, and distance from the input feature lines <cite>feature</cite>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_bbox(**kwargs)</strong></p></td>
+<tr class="row-odd"><td><p><strong>apply_added_constraints()</strong></p></td>
+<td><p>Re-apply the existing constraint. Mostly used internally.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>apply_constraints(constraint_list)</strong></p></td>
+<td><p>Apply constraint objects in the <cite>constraint_list</cite>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_region_constraint(…)</strong></p></td>
+<td><p>Add a constraint on size based on a specified region.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>get_bbox(**kwargs)</strong></p></td>
 <td><p>Return  the bounding box of the underlying mesh.</p></td>
 </tr>
 </tbody>
@@ -1760,16 +1777,19 @@ user is not careful, one might run into unexpected behavior!</p>
 <p class="rubric">Methods</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.add_patch" title="ocsmesh.hfun.HfunMesh.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>(multipolygon[, expansion_rate, ...])</p></td>
-<td><p>Add refinement as a region of fixed size with an optional rate</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.apply_added_constraints" title="ocsmesh.hfun.HfunMesh.apply_added_constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_added_constraints</span></code></a>()</p></td>
+<td><p>Apply all the added constraints</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.get_bbox" title="ocsmesh.hfun.HfunMesh.get_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox</span></code></a>(**kwargs)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.apply_constraints" title="ocsmesh.hfun.HfunMesh.apply_constraints"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_constraints</span></code></a>(constraint_list)</p></td>
+<td><p>Applies constraints specified by the list of contraint objects.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.get_bbox" title="ocsmesh.hfun.HfunMesh.get_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox</span></code></a>(**kwargs)</p></td>
 <td><p>Returns the bounding box of the underlying mesh</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.msh_t" title="ocsmesh.hfun.HfunMesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.msh_t" title="ocsmesh.hfun.HfunMesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
 <td><p>Return the size function specified on the underlying mesh</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.size_from_mesh" title="ocsmesh.hfun.HfunMesh.size_from_mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">size_from_mesh</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.size_from_mesh" title="ocsmesh.hfun.HfunMesh.size_from_mesh"><code class="xref py py-obj docutils literal notranslate"><span class="pre">size_from_mesh</span></code></a>()</p></td>
 <td><p>Calculates sizes based on the underlying mesh edge lengths.</p></td>
 </tr>
 </tbody>
@@ -1777,6 +1797,12 @@ user is not careful, one might run into unexpected behavior!</p>
 <table class="docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><strong>add_feature</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-even"><td><p><strong>add_patch</strong></p></td>
+<td></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_region_constraint</strong></p></td>
 <td></td>
 </tr>
 </tbody>
@@ -1833,26 +1859,37 @@ discard the projected CRS it used for calculations.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="ocsmesh.hfun.HfunMesh.add_patch">
-<span class="sig-name descname"><span class="pre">add_patch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multipolygon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expansion_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunMesh.add_patch" title="Permalink to this definition">¶</a></dt>
-<dd><p>Add refinement as a region of fixed size with an optional rate</p>
-<p>Add a refinement based on a region specified by <cite>multipolygon</cite>.
-The fixed <cite>target_size</cite> refinement can be expanded outside the
-region specified by the shape if <cite>expansion_rate</cite> is provided.</p>
+<dt class="sig sig-object py" id="ocsmesh.hfun.HfunMesh.apply_added_constraints">
+<span class="sig-name descname"><span class="pre">apply_added_constraints</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunMesh.apply_added_constraints" title="Permalink to this definition">¶</a></dt>
+<dd><p>Apply all the added constraints</p>
+<p>This method is implemented for internal use. It’s public
+because it needs to be called from outside the class through
+a decorator.</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><blockquote>
+<div></div></blockquote>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.hfun.HfunMesh.apply_constraints">
+<span class="sig-name descname"><span class="pre">apply_constraints</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">constraint_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><span class="pre">Constraint</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunMesh.apply_constraints" title="Permalink to this definition">¶</a></dt>
+<dd><p>Applies constraints specified by the list of contraint objects.</p>
+<p>Applies constraints from the provided list <cite>constraint_list</cite>,
+but doesn’t not store them in the internal size function
+constraint list. This is mostly for internal use.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>multipolygon</strong><span class="classifier">MultiPolygon or Polygon</span></dt><dd><p>Shape of the region to use specified <cite>target_size</cite> for
-refinement.</p>
-</dd>
-<dt><strong>expansion_rate</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Optional rate to use for expanding refinement outside
-the specified shape in <cite>multipolygon</cite>.</p>
-</dd>
-<dt><strong>target_size</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Fixed target size of mesh to use for refinement in
-<cite>multipolygon</cite></p>
-</dd>
-<dt><strong>nprocs</strong><span class="classifier">int or None, default=None</span></dt><dd><p>Number of processors to use in parallel sections of the
-algorithm</p>
+<dt><strong>constraint_list</strong><span class="classifier">iterable of Constraint</span></dt><dd><p>List of constraint objects to be applied to (not stored in)
+the size function.</p>
 </dd>
 </dl>
 </dd>
@@ -1862,13 +1899,6 @@ algorithm</p>
 </dl>
 </dd>
 </dl>
-<div class="admonition seealso">
-<p class="admonition-title">See also</p>
-<dl class="simple">
-<dt><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_feature</span></code></dt><dd><p>Add refinement for specified line string</p>
-</dd>
-</dl>
-</div>
 </dd></dl>
 
 <dl class="py property">
@@ -1962,19 +1992,22 @@ resolution large raster that covers all the input rasters.</p>
 <tr class="row-odd"><td><p><strong>add_topo_func_constraint(upper_bound=np.inf, lower_bound=-np.inf,</strong></p></td>
 <td><p>value_type=’min’, rate=0.01) Add size value constraint based on function of depth/elevation to the area bounded by specified bounds with the expansion or contraction rate <cite>rate</cite> specified. This constraint is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_patch(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_region_constraint(…)</strong></p></td>
+<td><p>Add a constraint on size based on a specified region</p></td>
+</tr>
+<tr class="row-odd"><td><p><strong>add_patch(…)</strong></p></td>
 <td><p>Add a region of fixed size refinement with optional expansion rate for points outside the region to achieve smooth size transition.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_contour(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_contour(…)</strong></p></td>
 <td><p>Add refinement based on contour lines auto-extrcted from the underlying raster data. The size is calculated based on the specified <cite>rate</cite>, <cite>target_size</cite> and the distance from the extracted feature line. For refinement contours are extracted only from raster inputs, but are applied on all input size function bases.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_channel(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_channel(…)</strong></p></td>
 <td><p>Add refinement for auto-detected narrow domain regions. Optionally use an expansion rate for points outside detected narrow regions for smooth size transition.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
+<tr class="row-even"><td><p><strong>add_subtidal_flow_limiter(…)</strong></p></td>
 <td><p>Add mesh size refinement based on the value as well as gradient of the topography within the region between specified by lower and upper bound on topography. This refinement is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>add_constant_value(…)</strong></p></td>
+<tr class="row-odd"><td><p><strong>add_constant_value(…)</strong></p></td>
 <td><p>Add fixed size mesh refinement in the region specified by upper and lower bounds on topography.  This refinement is only applied on rasters with specified indices. The index is w.r.t the full input list for collector object creation.</p></td>
 </tr>
 </tbody>
@@ -2017,16 +2050,19 @@ resolution large raster that covers all the input rasters.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_patch" title="ocsmesh.hfun.HfunCollector.add_patch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_patch</span></code></a>([shape, patch_defn, shapefile, ...])</p></td>
 <td><p>Add refinement as a region of fixed size with an optional rate</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_region_constraint" title="ocsmesh.hfun.HfunCollector.add_region_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_region_constraint</span></code></a>(value, shape[, crs, ...])</p></td>
+<td><p>Add a value contraint for the points in specified region</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter" title="ocsmesh.hfun.HfunCollector.add_subtidal_flow_limiter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></a>([hmin, hmax, ...])</p></td>
 <td><p>Add mesh refinement based on topography.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_bound_constraint</span></code></a>(value[, ...])</p></td>
 <td><p>Add a fixed-value or fixed-matrix constraint.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.add_topo_func_constraint" title="ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code></a>([func, ...])</p></td>
 <td><p>Add constraint based on a function of the topography</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.hfun.HfunCollector.msh_t" title="ocsmesh.hfun.HfunCollector.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a>()</p></td>
 <td><p>Interpolates mesh size functions on an unstructred mesh</p></td>
 </tr>
 </tbody>
@@ -2090,7 +2126,7 @@ point.</p>
 <dt><strong>rate</strong><span class="classifier">float, default=0.01</span></dt><dd><p>Rate of relaxation of constraint outside the region defined
 by <cite>lower_bound</cite> and <cite>upper_bound</cite>.</p>
 </dd>
-<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of raster entries from the input list argument
+<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of entries from the input list argument
 of the constructor of collector size function. If <cite>None</cite>
 all input rasters are used.</p>
 </dd>
@@ -2133,7 +2169,7 @@ specified <cite>func</cite> at each point.</p>
 <dt><strong>rate</strong><span class="classifier">float, default=0.01</span></dt><dd><p>Rate of relaxation of constraint outside the region defined
 by <cite>lower_bound</cite> and <cite>upper_bound</cite>.</p>
 </dd>
-<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of raster entries from the input list argument
+<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of entries from the input list argument
 of the constructor of collector size function. If <cite>None</cite>
 all input rasters are used.</p>
 </dd>
@@ -2163,9 +2199,45 @@ all input rasters are used.</p>
 <dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference
 (i.e. wave height)</p>
 </dd>
-<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of raster entries from the input list argument
+<dt><strong>source_index</strong><span class="classifier">int or list of ints or None, default=None</span></dt><dd><p>The index of entries from the input list argument
 of the constructor of collector size function. If <cite>None</cite>
 all input rasters are used.</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>None</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.hfun.HfunCollector.add_region_constraint">
+<span class="sig-name descname"><span class="pre">add_region_constraint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">CRS</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'min'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'max'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'min'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">source_index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunCollector.add_region_constraint" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add a value contraint for the points in specified region</p>
+<p>Add a fixed-value constraint to the region of the size function
+specified by the input shape.  Optionally a <cite>rate</cite> can be
+specified to relax the constraint gradually outside the bounds.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>value</strong><span class="classifier">float or array-like</span></dt><dd><p>A single fixed value to be used for
+mesh size if condition is not met based on <cite>value_type</cite>.</p>
+</dd>
+<dt><strong>shape: MultiPolygon or Polygon</strong></dt><dd><p>Region of specified constraint</p>
+</dd>
+<dt><strong>crs: CRS or None, default=None</strong></dt><dd><p>The CRS of the input shape</p>
+</dd>
+<dt><strong>value_type</strong><span class="classifier">{‘min’, ‘max’}, default=’min’</span></dt><dd><p>Type of contraint. If ‘min’, it means the mesh size
+should not be smaller than the specified <cite>value</cite> at each
+point.</p>
+</dd>
+<dt><strong>rate</strong><span class="classifier">float, default=0.01</span></dt><dd><p>Rate of relaxation of constraint outside the specified region</p>
+</dd>
+<dt><strong>source_index: int or list of ints or None, default=None</strong></dt><dd><p>The index of input hfun source. If <cite>None</cite> all inputs
+are used.</p>
 </dd>
 </dl>
 </dd>
