@@ -48,26 +48,27 @@ def mesh_to_tri(mesh):
 
 def cleanup_isolates(mesh):
 
-    # For triangle only (TODO: add support for other types)
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    used_indexes = np.unique(mesh.tria3['index'])
-    vert2_idxs = np.where(
-        np.isin(node_indexes, used_indexes, assume_unique=True))[0]
+    used_old_idx = np.array([], dtype='int64')
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index'].flatten()
+        used_old_idx = np.hstack((used_old_idx, elem_idx))
+    used_old_idx = np.unique(used_old_idx)
 
-    # Since tria simplex refers to node index which always starts from
-    # 0 after removing isolate nodes we can use the map approach
-    tria3 = mesh.tria3['index'].flatten()
-    renum = {old: new for new, old in enumerate(np.unique(tria3))}
-    tria3 = np.array([renum[i] for i in tria3])
-    tria3 = tria3.reshape(mesh.tria3['index'].shape)
-
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
+    # update vert2 and value
+    mesh.vert2 = mesh.vert2.take(used_old_idx, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
-    mesh.tria3 = np.asarray(
-        [(tuple(indices), mesh.tria3['IDtag'][i])
-         for i, indices in enumerate(tria3)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+        mesh.value = mesh.value.take(used_old_idx, axis=0)
+
+    renum = {old: new for new, old in enumerate(np.unique(used_old_idx))}
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index']
+        elem_new_idx = np.array([renum[i] for i in elem_idx.flatten()])
+        elem_new_idx = elem_new_idx.reshape(elem_idx.shape)
+        # TODO: Keep IDTag?
+        setattr(mesh, etype, np.array(
+                [(idx, 0) for idx in elem_new_idx],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
 
 
 def put_edge2(mesh):
