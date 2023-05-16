@@ -322,31 +322,32 @@ def _sieve_by_mask(mesh, sieve_mask):
     lone_elem_verts = get_lone_element_verts(mesh)
     vert2_mask[lone_elem_verts] = True
 
-    # Mask out elements containing the unwanted nodes.
-    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
+    used_old_idx = np.array([], dtype='int64')
+    filter_dict = {}
+    for etype in ELEM_2D_TYPES:
+        elem_idx = getattr(mesh, etype)['index']
+        elem_mask = np.any(vert2_mask[elem_idx], axis=1)
 
-    # Tria and node removal and renumbering indexes ...
-    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
-    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
-    used_indexes = np.unique(tria3_index)
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    renum = {old: new for new, old in enumerate(np.unique(tria3_index))}
-    tria3_index = np.array([renum[i] for i in tria3_index])
-    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
-    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
+        # Tria and node removal and renumbering indexes ...
+        elem_keep_idx = elem_idx[~elem_mask, :].flatten()
+        used_old_idx = np.hstack((used_old_idx, elem_keep_idx))
+        filter_dict[etype] = [elem_keep_idx, elem_idx.shape[1]]
+    used_old_idx = np.unique(used_old_idx)
 
-    # update vert2
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
-
-    # update value
+    # update vert2 and value
+    mesh.vert2 = mesh.vert2.take(used_old_idx, axis=0)
     if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
+        mesh.value = mesh.value.take(used_old_idx, axis=0)
 
-    # update tria3
-    mesh.tria3 = np.array(
-        [(tuple(indices), tria3_id_tag[i])
-         for i, indices in enumerate(tria3_index)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+    renum = {old: new for new, old in enumerate(np.unique(used_old_idx))}
+    for etype, (elem_keep_idx, topo) in filter_dict.items():
+        elem_new_idx = np.array([renum[i] for i in elem_keep_idx])
+        elem_new_idx = elem_new_idx.reshape(-1, topo)
+        # TODO: Keep IDTag?
+        setattr(mesh, etype, np.array(
+                [(idx, 0) for idx in elem_new_idx],
+                dtype=getattr(
+                    jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
 
 
 def finalize_mesh(mesh, sieve_area=None):
