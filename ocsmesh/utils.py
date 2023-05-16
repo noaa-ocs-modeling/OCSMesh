@@ -443,49 +443,7 @@ def sieve(mesh, area=None):
         path = Path(multipolygon[idx].exterior.coords, closed=True)
         vert2_mask = vert2_mask | path.contains_points(mesh.vert2['coord'])
 
-    # select any connected nodes; these ones are missed by
-    # path.contains_point() because they are at the path edges.
-    _idxs = np.where(vert2_mask)[0]
-    conn_verts = get_surrounding_elem_verts(mesh, _idxs)
-    vert2_mask[conn_verts] = True
-
-    # Also, there might be some dangling triangles without neighbors,
-    # which are also missed by path.contains_point()
-    lone_elem_verts = get_lone_element_verts(mesh)
-    vert2_mask[lone_elem_verts] = True
-
-
-    # Mask out elements containing the unwanted nodes.
-    tria3_mask = np.any(vert2_mask[mesh.tria3['index']], axis=1)
-
-    # Renumber indexes ...
-    # isolated node removal does not require elimination of triangles from
-    # the table, therefore the length of the indexes is constant.
-    # We must simply renumber the tria3 indexes to match the new node indexes.
-    # Essentially subtract one, but going from the bottom of the index table
-    # to the top.
-    used_indexes = np.unique(mesh.tria3['index'])
-    node_indexes = np.arange(mesh.vert2['coord'].shape[0])
-    tria3_idxs = np.where(~np.isin(node_indexes, used_indexes))[0]
-    tria3_id_tag = mesh.tria3['IDtag'].take(np.where(~tria3_mask)[0])
-    tria3_index = mesh.tria3['index'][~tria3_mask, :].flatten()
-    for idx in reversed(tria3_idxs):
-        tria3_index[np.where(tria3_index >= idx)] -= 1
-    tria3_index = tria3_index.reshape((tria3_id_tag.shape[0], 3))
-    vert2_idxs = np.where(np.isin(node_indexes, used_indexes))[0]
-
-    # update vert2
-    mesh.vert2 = mesh.vert2.take(vert2_idxs, axis=0)
-
-    # update value
-    if len(mesh.value) > 0:
-        mesh.value = mesh.value.take(vert2_idxs, axis=0)
-
-    # update tria3
-    mesh.tria3 = np.array(
-        [(tuple(indices), tria3_id_tag[i])
-         for i, indices in enumerate(tria3_index)],
-        dtype=jigsaw_msh_t.TRIA3_t)
+    return _sieve_by_mask(mesh, vert2_mask)
 
 
 def sort_edges(edges):
