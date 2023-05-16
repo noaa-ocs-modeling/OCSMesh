@@ -1597,7 +1597,8 @@ class Boundaries:
 
         ext_bdry_nodes = []
         for ring in self.mesh.hull.rings.exterior().itertuples():
-            # TODO: Enforce external rings to be ccw as https://github.com/noaa-ocs-modeling/OCSMesh/issues/65
+            # TODO: Enforce external rings to be ccw as
+            # https://github.com/noaa-ocs-modeling/OCSMesh/issues/65
             ext_ring_coo = ring.geometry.coords
             ext_ring = np.array([
                     (coo_to_idx[ext_ring_coo[e]],
@@ -2044,8 +2045,7 @@ class Boundaries:
             if this_edge_info is None:
                 warnings.warn(f"Edge boundary {edge} didn't have prior boundary set!")
                 continue
-            else:
-                tp_id, bd_id, ed_idx = this_edge_info
+            tp_id, bd_id, ed_idx = this_edge_info
             splits_idx.setdefault((tp_id, bd_id), []).append(ed_idx)
 
         # Apply splits to the boundary dictionary
