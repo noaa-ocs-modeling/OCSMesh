@@ -15,8 +15,6 @@ from shapely import geometry
 import ocsmesh
 
 from tests.api.common import (
-    raster_from_numpy,
-    create_rectangle_mesh,
     topo_2rast_1mesh,
 )
 
@@ -32,11 +30,11 @@ class GeomType(unittest.TestCase):
         rast_xy = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z = np.ones_like(rast_xy[0]) * 10
 
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast, rast_z, rast_xy, 4326
         )
 
-        msh_t = create_rectangle_mesh(
+        msh_t = ocsmesh.utils.create_rectangle_mesh(
             nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
 
         with warnings.catch_warnings():

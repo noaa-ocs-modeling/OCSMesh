@@ -16,9 +16,6 @@ from shapely import geometry
 import ocsmesh
 
 from tests.api.common import (
-    raster_from_numpy,
-    msht_from_numpy,
-    create_rectangle_mesh,
     topo_2rast_1mesh,
 )
 
@@ -34,11 +31,11 @@ class SizeFunctionType(unittest.TestCase):
         rast_xy = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z = np.ones_like(rast_xy[0])
 
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast, rast_z, rast_xy, 4326
         )
 
-        msh_t = create_rectangle_mesh(
+        msh_t = ocsmesh.utils.create_rectangle_mesh(
             nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
 
         with warnings.catch_warnings():
@@ -629,10 +626,10 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z_1 = np.ones_like(rast_xy_1[0])
 
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast1, rast_z_1, rast_xy_1, 4326
         )
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast2, rast_z_1, rast_xy_2, 4326
         )
 
@@ -656,7 +653,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
             [0, 2, 6],
             [5, 4, 7],
         ])
-        msh_t = msht_from_numpy(crd, tria, crs=4326)
+        msh_t = ocsmesh.utils.msht_from_numpy(crd, tria, crs=4326)
         mesh = ocsmesh.Mesh(msh_t)
         mesh.write(str(self.mesh1), format='grd', overwrite=False)
 
@@ -838,14 +835,14 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         rast_xy_2 = np.mgrid[0:1.1:0.1, -0.7:0.1:0.1]
         rast_z_1 = np.ones_like(rast_xy_1[0])
 
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast1, rast_z_1, rast_xy_1, 4326
         )
-        raster_from_numpy(
+        ocsmesh.utils.raster_from_numpy(
             self.rast2, rast_z_1, rast_xy_2, 4326
         )
 
-        msh_t = create_rectangle_mesh(
+        msh_t = ocsmesh.utils.create_rectangle_mesh(
             nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
 
         with warnings.catch_warnings():

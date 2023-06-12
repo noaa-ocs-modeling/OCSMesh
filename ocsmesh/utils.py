@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt  # type: ignore[import]
 from matplotlib.tri import Triangulation  # type: ignore[import]
 import numpy as np  # type: ignore[import]
 import numpy.typing as npt
+import rasterio as rio
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
@@ -76,6 +77,9 @@ def cleanup_isolates(mesh):
                 dtype=getattr(
                     jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
 
+
+def cleanup_duplicates(mesh):
+    pass
 
 def put_edge2(mesh):
     tri = Triangulation(
@@ -383,6 +387,7 @@ def finalize_mesh(mesh, sieve_area=None):
             break
 
     cleanup_isolates(mesh)
+    cleanup_duplicates(mesh)
     put_id_tags(mesh)
 
 
@@ -1986,3 +1991,154 @@ def approximate_courant_number_for_depth(
     # For overland where h < nu the characteristic velocity is 2 * sqrt(g*h)
     characteristic_velocity_magnitude[~depth_mask] = 2 * particle_velocity[~depth_mask]
     return characteristic_velocity_magnitude * timestep / element_size
+
+
+def create_rectangle_mesh(
+    nx,
+    ny,
+    holes,
+    x_extent=None,
+    y_extent=None,
+    quads=None,
+):
+    # pylint: disable=W1401
+    """
+    Note:
+        x = x-index
+        y = y-index
+
+        holes or quads count starting at 1 from bottom corner square
+
+        node-index(node-id)
+
+              25(26)             29(30)
+          5     *---*---*---*---*
+                | \ | \ | \ | \ |
+          4     *---*---*---*---*
+                | \ | \ | \ | \ |
+          3     *---*---*---*---*
+                | \ |   | \ | \ |
+          2     *---*---*---*---*
+                | \ | \ | # | \ |
+          1     *---*---*---*---*
+                | \ | \ | \ | \ |
+          0     *---*---*---*---*
+              0(1)               4(5)
+
+                0   1   2   3   4
+    """
+
+    if x_extent is None:
+        x_range = range(nx)
+    else:
+        x_range = np.linspace(x_extent[0], x_extent[1], nx)
+
+    if y_extent is None:
+        y_range = range(ny)
+    else:
+        y_range = np.linspace(y_extent[0], y_extent[1], ny)
+
+    if quads is None:
+        quads = []
+
+    X, Y = np.meshgrid(x_range, y_range)
+    verts = np.array(list(zip(X.ravel(), Y.ravel())))
+    tria3 = []
+    quad4 = []
+    for j in range(ny - 1):
+        for i in range(nx - 1):
+            is_quad = (i + 1) + ((nx-1) * j) in quads
+            is_hole = (i + 1) + ((nx-1) * j) in holes
+            if is_hole:
+                continue
+            if is_quad:
+                quad4.append([
+                    j * nx + i,
+                    j * nx + (i + 1),
+                    (j + 1) * nx + (i + 1),
+                    (j + 1) * nx + i
+                ])
+            else: # is tria
+                tria3.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
+                tria3.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
+
+
+
+    # NOTE: Everywhere is above 0 (auto: land) unless modified later
+    vals = np.ones((len(verts), 1)) * 10
+
+    mesh_msht = msht_from_numpy(
+        coordinates=verts,
+        triangles=tria3,
+        quadrilaterals=quad4 if len(quad4) > 0 else None,
+        crs=None
+    )
+
+    # Drop unused verts (e.g. 4 connected holes)
+    cleanup_isolates(mesh_msht)
+    mesh_msht.value = np.array(
+        vals, dtype=jigsaw_msh_t.REALS_t
+    )
+
+    return mesh_msht
+
+
+def raster_from_numpy(
+    filename,
+    data,
+    mgrid,
+    crs=CRS.from_epsg(4326)
+) -> None:
+    x = mgrid[0][:, 0]
+    y = mgrid[1][0, :]
+    res_x = (x[-1] - x[0]) / data.shape[1]
+    res_y = (y[-1] - y[0]) / data.shape[0]
+    # TODO: Mistake in transformation if x and y extent are different?
+    transform = rio.transform.Affine.translation(
+        x[0], y[0]
+    ) * rio.transform.Affine.scale(res_x, res_y)
+    if not isinstance(crs, CRS):
+        crs = CRS.from_user_input(crs)
+
+    with rio.open(
+        filename,
+        'w',
+        driver='GTiff',
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+    ) as dst:
+        dst.write(data, 1)
+
+
+def msht_from_numpy(
+    coordinates,
+    triangles,
+    quadrilaterals=None,
+    crs=CRS.from_epsg(4326)
+):
+    mesh = jigsaw_msh_t()
+    mesh.mshID = 'euclidean-mesh'
+    mesh.ndims = +2
+    if crs is not None:
+        if not isinstance(crs, CRS):
+            crs = CRS.from_user_input(crs)
+        mesh.crs = crs
+    mesh.vert2 = np.array(
+        [(coord, 0) for coord in coordinates],
+        dtype=jigsaw_msh_t.VERT2_t
+        )
+    mesh.tria3 = np.array(
+        [(index, 0) for index in triangles],
+        dtype=jigsaw_msh_t.TRIA3_t
+        )
+    if quadrilaterals is not None:
+        mesh.quad4 = np.array(
+            [(index, 0) for index in quadrilaterals],
+            dtype=jigsaw_msh_t.QUAD4_t
+            )
+
+    return mesh

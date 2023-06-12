@@ -15,8 +15,6 @@ from shapely import geometry
 import ocsmesh
 
 from tests.api.common import (
-    raster_from_numpy,
-    create_rectangle_mesh,
     topo_2rast_1mesh,
 )
 

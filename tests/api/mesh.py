@@ -8,9 +8,9 @@ import numpy as np
 from jigsawpy import jigsaw_msh_t
 from shapely import geometry
 
+from ocsmesh import utils
 from ocsmesh.mesh.mesh import Mesh
 
-from tests.api.common import create_rectangle_mesh
 
 
 def edge_at (x, y):
@@ -44,7 +44,7 @@ class BoundaryExtraction(unittest.TestCase):
         """
 
         # x and y coords are the same as index (in value)
-        mesh_msht = create_rectangle_mesh(nx=5, ny=6, holes=[10])
+        mesh_msht = utils.create_rectangle_mesh(nx=5, ny=6, holes=[10])
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
