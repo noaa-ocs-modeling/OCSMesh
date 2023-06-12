@@ -79,7 +79,53 @@ def cleanup_isolates(mesh):
 
 
 def cleanup_duplicates(mesh):
-    pass
+
+    """Cleanup duplicate nodes and elements
+
+    Notes
+    -----
+    Elements and nodes are duplicate if they fully overlapping (not
+    partially)
+    """
+
+    _, cooidx, coorev = np.unique(
+        mesh.vert2['coord'],
+        axis=0,
+        return_index=True,
+        return_inverse=True
+    )
+    nd_map = {e: i for e, i in enumerate(coorev)}
+    mesh.vert2 = mesh.vert2.take(cooidx, axis=0)
+
+    for etype, otype in MESH_TYPES.items():
+        cnn = getattr(mesh, etype)['index']
+
+        n_node = cnn.shape[1]
+
+        cnn_renu = np.array(
+            [nd_map[i] for i in cnn.flatten()]
+        ).reshape(-1, n_node)
+
+        _, cnnidx = np.unique(
+            np.sort(cnn_renu, axis=1),
+            axis=0,
+            return_index=True
+        )
+        mask = np.zeros(len(cnn_renu), dtype=bool)
+        mask[cnnidx] = True
+        adj_cnn = cnn_renu[mask]
+
+        setattr(
+            mesh,
+            etype,
+            np.array(
+                [(idx, 0) for idx in adj_cnn],
+                dtype=getattr(jigsaw_msh_t, otype)
+            )
+        )
+
+    if len(mesh.value) > 0:
+        mesh.value = mesh.value.take(sorted(cooidx), axis=0)
 
 def put_edge2(mesh):
     tri = Triangulation(
@@ -761,7 +807,7 @@ def get_verts_in_shape(
     # We need point indices in the shapes, not the shape indices
     # query bulk returns all combination of intersections in case
     # input shape results in multi-row series
-    in_shp_idx = pt_series.sindex.query_bulk(
+    in_shp_idx = pt_series.sindex.query(
             shp_series, predicate="intersects")[1]
 
     in_shp_idx = select_adjacent(mesh, in_shp_idx, num_layers=num_adjacent)

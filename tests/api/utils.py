@@ -49,6 +49,47 @@ class FinalizeMesh(unittest.TestCase):
         utils.finalize_mesh(msh_t)
 
 
+    def test_cleanup_duplicate(self):
+
+        # Create two mesh with "exact" element overlaps
+        mesh_1 = utils.create_rectangle_mesh(
+            nx=6, ny=6, holes=[],
+            x_extent=(0, 5), y_extent=(-4, 1)
+        )
+        mesh_2 = utils.create_rectangle_mesh(
+            nx=6, ny=6, holes=[],
+            x_extent=(3, 8), y_extent=(-2, 3)
+        )
+
+        trias = deepcopy(mesh_1.tria3['index'])
+        verts = deepcopy(mesh_1.vert2['coord'])
+        trias = np.vstack([
+            trias, deepcopy(mesh_2.tria3['index']) + len(verts)
+        ])
+        verts = np.vstack([
+            verts, deepcopy(mesh_2.vert2['coord'])
+        ])
+
+        n_vert_pre = len(verts)
+        n_tria_pre = len(trias)
+        mesh_comb = utils.msht_from_numpy(
+            coordinates=verts,
+            triangles=trias
+        )
+
+        utils.cleanup_duplicates(mesh_comb)
+        n_vert_fix = len(mesh_comb.vert2)
+        n_tria_fix = len(mesh_comb.tria3)
+
+        self.assertEqual(n_vert_pre - n_vert_fix, 12)
+        self.assertEqual(n_tria_pre - n_tria_fix, 12)
+
+        try:
+            utils.get_boundary_segments(mesh_comb)
+        except ValueError as e:
+            self.fail(str(e))
+
+
 class RemovePolygonHoles(unittest.TestCase):
 
     def setUp(self):
