@@ -8,7 +8,7 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   
-  <title>Utility classes and functions &mdash; ocsmesh 1.3.1 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.3.2 documentation</title>
   
 
   
@@ -155,6 +155,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.must_be_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">must_be_euclidean_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.mesh_to_tri"><code class="docutils literal notranslate"><span class="pre">mesh_to_tri()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_isolates"><code class="docutils literal notranslate"><span class="pre">cleanup_isolates()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_duplicates"><code class="docutils literal notranslate"><span class="pre">cleanup_duplicates()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.put_edge2"><code class="docutils literal notranslate"><span class="pre">put_edge2()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.geom_to_multipolygon"><code class="docutils literal notranslate"><span class="pre">geom_to_multipolygon()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_boundary_segments"><code class="docutils literal notranslate"><span class="pre">get_boundary_segments()</span></code></a></li>
@@ -216,6 +217,9 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory"><code class="docutils literal notranslate"><span class="pre">can_velocity_be_approximated_by_linear_wave_theory()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_particle_velocity_from_depth"><code class="docutils literal notranslate"><span class="pre">estimate_particle_velocity_from_depth()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.approximate_courant_number_for_depth"><code class="docutils literal notranslate"><span class="pre">approximate_courant_number_for_depth()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.create_rectangle_mesh"><code class="docutils literal notranslate"><span class="pre">create_rectangle_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.raster_from_numpy"><code class="docutils literal notranslate"><span class="pre">raster_from_numpy()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.msht_from_numpy"><code class="docutils literal notranslate"><span class="pre">msht_from_numpy()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -1207,7 +1211,7 @@ geo interface protocol (passed to <cite>rasterio.mask.mask</cite>).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.raster.Raster.adjust">
-<span class="sig-name descname"><span class="pre">adjust</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inside_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outside_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cond</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.adjust" title="Permalink to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">adjust</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">None</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inside_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">-inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outside_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cond</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">ndarray</span><span class="p"><span class="pre">[</span></span><span class="pre">Any</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">dtype</span><span class="p"><span class="pre">[</span></span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.adjust" title="Permalink to this definition">¶</a></dt>
 <dd><p>Adjust raster data in-place based on specified shape.</p>
 <p>This method can be used to adjust e.g. raster elevation values
 based on a more accurate land-mass polygon.</p>
@@ -1527,6 +1531,15 @@ property is recalculated every time the property is retrieved.</p>
 <dt class="sig sig-object py" id="ocsmesh.utils.cleanup_isolates">
 <span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_isolates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.cleanup_isolates" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.cleanup_duplicates">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_duplicates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.cleanup_duplicates" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cleanup duplicate nodes and elements</p>
+<p class="rubric">Notes</p>
+<p>Elements and nodes are duplicate if they fully overlapping (not
+partially)</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.put_edge2">
@@ -2002,6 +2015,60 @@ be scalar otherwise match the dimension of depth</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.create_rectangle_mesh">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">create_rectangle_mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nx</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ny</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">holes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x_extent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y_extent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quads</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.create_rectangle_mesh" title="Permalink to this definition">¶</a></dt>
+<dd><dl>
+<dt>Note:</dt><dd><p>x = x-index
+y = y-index</p>
+<p>holes or quads count starting at 1 from bottom corner square</p>
+<p>node-index(node-id)</p>
+<blockquote>
+<div><blockquote>
+<div><p>25(26)             29(30)</p>
+</div></blockquote>
+<dl>
+<dt>5     <em>—</em>—<em>—</em>—*</dt><dd><div class="line-block">
+<div class="line">| | | |</div>
+</div>
+</dd>
+<dt>4     <em>—</em>—<em>—</em>—*</dt><dd><div class="line-block">
+<div class="line">| | | |</div>
+</div>
+</dd>
+<dt>3     <em>—</em>—<em>—</em>—*</dt><dd><div class="line-block">
+<div class="line">|   | | |</div>
+</div>
+</dd>
+<dt>2     <em>—</em>—<em>—</em>—*</dt><dd><div class="line-block">
+<div class="line">| | # | |</div>
+</div>
+</dd>
+<dt>1     <em>—</em>—<em>—</em>—*</dt><dd><div class="line-block">
+<div class="line">| | | |</div>
+</div>
+</dd>
+<dt>0     <em>—</em>—<em>—</em>—*</dt><dd><p>0(1)               4(5)</p>
+<blockquote>
+<div><p>0   1   2   3   4</p>
+</div></blockquote>
+</dd>
+</dl>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.raster_from_numpy">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">raster_from_numpy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mgrid</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.utils.raster_from_numpy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.msht_from_numpy">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">msht_from_numpy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">triangles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quadrilaterals=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.msht_from_numpy" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 </section>
 
