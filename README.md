@@ -49,7 +49,7 @@ python ./setup.py develop # Run this if you are a developer.
 ```
 
 #### Requirements
-* 3.7 <= Python < 3.10
+* 3.9 <= Python
 * CMake 
 * C/C++ compilers
 
