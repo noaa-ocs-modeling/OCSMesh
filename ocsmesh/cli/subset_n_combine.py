@@ -316,6 +316,21 @@ class SubsetAndCombine:
         jig_mesh.value = np.zeros((jig_mesh.vert2.shape[0], 1))
         self._transform_mesh(jig_mesh, crs)
 
+        # NOTE: Remove out of domain elements (some corner cases!)
+        elems = jig_mesh.tria3['index']
+        coord = jig_mesh.vert2['coord']
+
+        gdf_elems = gpd.GeoDataFrame(
+            geometry=[Polygon(tri) for tri in coord[elems]],
+            crs=jig_mesh.crs
+        )
+        idx = gdf_elems.representative_point().sindex.query(
+            seam.get_multipolygon(), predicate='intersects'
+        )
+        flag = np.zeros(len(gdf_elems), dtype=bool)
+        flag[idx] = True
+        jig_mesh.tria3 = jig_mesh.tria3[flag]
+
         return jig_mesh
 
 
