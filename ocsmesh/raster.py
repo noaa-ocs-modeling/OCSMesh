@@ -43,7 +43,6 @@ from rasterio import windows
 from scipy.ndimage import gaussian_filter, generic_filter
 from scipy import LowLevelCallable
 from shapely import ops
-from shapely.errors import GEOSException
 from shapely.geometry import (
     Polygon, MultiPolygon, LineString, MultiLineString, box)
 from numba import cfunc, carray
@@ -1426,10 +1425,12 @@ class Raster:
             plt.close(fig)
         for path_collection in ax.collections:
             for path in path_collection.get_paths():
+                # LineStrings must have at least 2 coordinate tuples
+                if len(path.vertices) < 2:
+                    continue
                 try:
                     features.append(LineString(path.vertices))
-                except (ValueError, GEOSException):
-                    # LineStrings must have at least 2 coordinate tuples
+                except ValueError
                     pass
         return ops.linemerge(features)
 
