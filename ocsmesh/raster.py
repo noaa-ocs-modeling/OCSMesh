@@ -1426,11 +1426,11 @@ class Raster:
         for path_collection in ax.collections:
             for path in path_collection.get_paths():
                 # LineStrings must have at least 2 coordinate tuples
-                if len(path.vertices) < 2:
-                    continue
+                # if len(path.vertices) < 2:
+                #     continue
                 try:
                     features.append(LineString(path.vertices))
-                except ValueError
+                except ValueError:
                     pass
         return ops.linemerge(features)
 
