@@ -8,10 +8,7 @@ import warnings
 
 from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
-import rasterio as rio
-import requests
 from shapely import geometry
 
 import ocsmesh
