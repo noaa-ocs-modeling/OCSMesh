@@ -6,6 +6,7 @@ from copy import deepcopy
 import numpy as np
 from jigsawpy import jigsaw_msh_t
 from pyproj import CRS
+import re
 from shapely.geometry import (
     Point,
     LineString,
@@ -16,6 +17,28 @@ from shapely.geometry import (
 )
 
 from ocsmesh import Raster, utils
+
+
+class SetUp(unittest.TestCase):
+
+    def test_cpp_version_parsing(self):
+        # inline copy of code in setup.py.
+        def _cpp_version(line):
+            m = re.search('(\d+\.)(\d+\.)(\d+)', line)
+            return line[m.start(): m.end()].split('.')
+
+        _test_data = [
+            ('c++ (GCC) 11.3.1 20221121 (Red Hat 11.3.1-4)', '11', '3', '1'),
+            ('c++ (GCC) 7.3.1 20180712 (Red Hat 7.3.1-15)', '7', '3', '1'),
+            ('Apple clang version 12.0.0 (clang-1200.0.32.29)', '12', '0', '0'),
+            ('Apple clang version 14.0.3 (clang-1403.0.22.14.1)', '14', '0', '3'),
+            ('cpp (MacPorts gcc12 12.2.0_2+stdlib_flag) 12.2.0', '12', '2', '0')
+        ]
+        for line in _test_data:
+            major, minor, patch = _cpp_version(line[0])
+            assert major == line[1]
+            assert minor == line[2]
+            assert patch == line[3]
 
 
 class FinalizeMesh(unittest.TestCase):
