@@ -6,11 +6,12 @@ import shutil
 import platform
 from multiprocessing import cpu_count
 from pathlib import Path
+import site
 import sys
 import os
 
 PARENT = Path(__file__).parent.absolute()
-PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
+PYENV_PREFIX = Path(site.PREFIXES[0])
 SYSLIB = {
     "Windows": "jigsaw.dll",
     "Linux": "libjigsaw.so",
