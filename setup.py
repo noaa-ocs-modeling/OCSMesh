@@ -6,11 +6,13 @@ import shutil
 import platform
 from multiprocessing import cpu_count
 from pathlib import Path
+import site
 import sys
 import os
+import re
 
 PARENT = Path(__file__).parent.absolute()
-PYENV_PREFIX = Path("/".join(sys.executable.split('/')[:-2]))
+PYENV_PREFIX = Path(site.PREFIXES[0])
 SYSLIB = {
     "Windows": "jigsaw.dll",
     "Linux": "libjigsaw.so",
@@ -66,14 +68,13 @@ class InstallJigsawCommand(distutils.cmd.Command):
         envlib = PYENV_PREFIX / 'lib' / SYSLIB[platform.system()]
         os.symlink(envlib, libsaw_prefix / envlib.name)
         os.chdir(PARENT)
-        subprocess.check_call(
-          ["git", "submodule", "deinit", "-f", "submodules/jigsaw-python"])
+        subprocess.check_call(["git", "submodule", "deinit", "-f", "submodules/jigsaw-python"])
 
     def _check_gcc_version(self):
         cpp = shutil.which("c++")
-        major, minor, patch = subprocess.check_output(
-            [cpp, "--version"]
-            ).decode('utf-8').split('\n')[0].split()[-1].split('.')
+        line = subprocess.check_output([cpp, "--version"]).decode('utf-8').split('\n')[0]
+        m = re.search('(\d+\.)?(\d+\.)?(\d+)', line)
+        major, minor, patch = line[m.start(): m.end()].split('.')
         current_version = float(f"{major}.{minor}")
         if current_version < 7.:
             raise Exception(
@@ -85,5 +86,5 @@ class InstallJigsawCommand(distutils.cmd.Command):
 setuptools.setup(
     cmdclass={
         'install_jigsaw': InstallJigsawCommand,
-        },
+    },
 )
