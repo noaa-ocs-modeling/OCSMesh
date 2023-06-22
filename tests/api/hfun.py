@@ -8,7 +8,7 @@ import warnings
 
 from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
-matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import rasterio as rio
 import requests
@@ -198,9 +198,8 @@ class SizeFunctionCollector(unittest.TestCase):
         rast3 = self.tdir / 'rast_3.tif'
         rast_xy_3 = np.mgrid[-1:0.1:0.1, -0.7:0.1:0.1]
         rast_z_3 = np.ones_like(rast_xy_3[0]) * 2.0
-        rast_z_3 = np.ones_like(rast_xy_3[0]) * 2.0
-        rast_z_3[:, 0, 0] = 1
-        rast_z_3[:, -1, -1] = 3
+        rast_z_3[0, 0] = 1
+        rast_z_3[-1, -1] = 3
 
         ocsmesh.utils.raster_from_numpy(
             rast3, rast_z_3, rast_xy_3, 4326
@@ -214,7 +213,7 @@ class SizeFunctionCollector(unittest.TestCase):
             method='exact'
         )
         hfun_coll.add_contour(
-            level=2,
+            level=1,
             target_size=1000,
             )
 
