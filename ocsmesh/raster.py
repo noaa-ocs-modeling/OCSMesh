@@ -1425,10 +1425,12 @@ class Raster:
             plt.close(fig)
         for path_collection in ax.collections:
             for path in path_collection.get_paths():
+                # LineStrings must have at least 2 coordinate tuples
+                if len(path.vertices) < 2:
+                    continue
                 try:
                     features.append(LineString(path.vertices))
                 except ValueError:
-                    # LineStrings must have at least 2 coordinate tuples
                     pass
         return ops.linemerge(features)
 
