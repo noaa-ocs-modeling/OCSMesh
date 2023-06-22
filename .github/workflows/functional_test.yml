@@ -1,6 +1,22 @@
 name: Functional
 
-on: [push]
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - '**.py'
+      - '.github/workflows/*.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+  pull_request:
+    paths:
+      - '**.py'
+      - '.github/workflows/*.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
 
 jobs:
   basic-functional-tests:
