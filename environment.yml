@@ -18,7 +18,6 @@ dependencies:
   - numba
   - numpy>=1.21 # numpy.typing
   - matplotlib
-  - requests
   - mpi4py
   - pyarrow
   - pytz

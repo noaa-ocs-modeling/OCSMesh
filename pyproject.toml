@@ -37,7 +37,7 @@ Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
 ocsmesh = "ocsmesh.__main__:main"
 
 [project.optional-dependencies]
-testing = ['pylint>=2.14', 'requests']
+testing = ['pylint>=2.14']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',
