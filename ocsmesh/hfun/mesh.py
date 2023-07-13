@@ -276,9 +276,9 @@ class HfunMesh(BaseHfun):
 
         # For expansion_rate
         if expansion_rate is not None:
-            exteriors = [ply.exterior for ply in multipolygon]
+            exteriors = [ply.exterior for ply in multipolygon.geoms]
             interiors = [
-                inter for ply in multipolygon for inter in ply.interiors]
+                inter for ply in multipolygon.geoms for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
             # pylint: disable=E1123, E1125
