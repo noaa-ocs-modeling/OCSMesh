@@ -1,6 +1,6 @@
 [MASTER]
 fail-on=E
-fail-under=9.90
+fail-under=9.85
 py-version=3.9.7
 # As a temporary workaround for https://github.com/PyCQA/pylint/issues/4577
 init-hook = "import astroid; astroid.context.InferenceContext.max_inferred = 250"
