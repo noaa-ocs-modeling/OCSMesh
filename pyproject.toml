@@ -21,11 +21,11 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = '>=3.9' # 3.8 not supported by scipy
 dependencies = [
-    "colored-traceback", "fiona", "geoalchemy2", "geopandas",
+    "colored-traceback", "fiona", "geopandas",
     "jigsawpy", "matplotlib", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
-    "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "requests", "scipy",
-    "shapely", "tqdm", "typing_extensions", "utm",
+    "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy",
+    "shapely", "typing_extensions", "utm",
     ]
 dynamic = ["version"]
 
@@ -35,7 +35,6 @@ Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
 
 [project.scripts]
 ocsmesh = "ocsmesh.__main__:main"
-interp = "ocsmesh.interp:main"
 
 [project.optional-dependencies]
 testing = ['pylint>=2.14']
