@@ -2157,6 +2157,8 @@ def raster_from_numpy(
         crs=crs,
         transform=transform,
     ) as dst:
+        if isinstance(data, np.ma.MaskedArray):
+            dst.nodata = data.fill_value
         dst.write(data, 1)
 
 
