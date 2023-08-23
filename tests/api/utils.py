@@ -619,6 +619,39 @@ class CreateRasterFromNumpy(unittest.TestCase):
         # TODO: Test when x and y extent are different
         pass
 
+    
+    def test_data_masking(self):
+        fill_value = 12
+        in_rast_xy = np.mgrid[0:1:0.2, 0:1:0.2]
+        in_rast_z_nomask = np.random.random(in_rast_xy[0].shape)
+        in_rast_z_mask = np.ma.MaskedArray(
+            in_rast_z_nomask,
+            mask=np.random.random(size=in_rast_z_nomask.shape) < 0.5,
+            fill_value=fill_value
+        )
+
+        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+            utils.raster_from_numpy(
+                tf.name,
+                data=in_rast_z_nomask,
+                mgrid=in_rast_xy,
+                crs=4326
+                )
+
+            rast = Raster(tf.name)
+            self.assertEqual(rast.src.nodata, None)
+
+        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+            utils.raster_from_numpy(
+                tf.name,
+                data=in_rast_z_mask,
+                mgrid=in_rast_xy,
+                crs=4326
+                )
+
+            rast = Raster(tf.name)
+            self.assertEqual(rast.src.nodata, fill_value)
+
 
 if __name__ == '__main__':
     unittest.main()
