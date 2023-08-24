@@ -978,6 +978,7 @@ class Raster:
 
                 outband_new[mask] = dst.nodatavals[bnd_idx]
                 outband_ma = ma.masked_array(outband_new, mask=mask)
+                ma.set_fill_value(outband_ma, dst.nodatavals[bnd_idx])
                 dst.write_band(i, outband_ma)
 
 
