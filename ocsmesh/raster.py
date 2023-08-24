@@ -965,8 +965,13 @@ class Raster:
                     mask_below = ma.getdata(outband) < drop_below
                     outband[mask_below] = np.nan
 
+                # Since the nbmean checks for isnan, other fill values
+                # will be treated as normal numbers
                 outband_new = generic_filter(
-                    outband, LowLevelCallable(nbmean.ctypes), size=size)
+                    outband.filled(np.nan),
+                    LowLevelCallable(nbmean.ctypes),
+                    size=size
+                )
 
                 # Mask raster based on result of filter?
                 if drop_above is not None:
