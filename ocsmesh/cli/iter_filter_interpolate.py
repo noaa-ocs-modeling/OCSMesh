@@ -140,7 +140,7 @@ def interpolate_data():
                 break
 
             filter_multiplier = filter_multiplier * 2
-            if filter_multiplier >= max_multiplier:
+            if filter_multiplier > max_multiplier:
                 break
 
             iteration_raster_paths = np.unique(gdf_0pts['source'].array).tolist()
@@ -161,8 +161,10 @@ def interpolate_data():
     # Write interpolated mesh to the disk
     mesh.write(out_dir / 'interpolated.2dm', format='2dm', overwrite=True)
 
-    # Read metadata file
-    df_vdatum = pd.read_csv(out_dir/'interp_info.csv', header=None)
+    # Read metadata file and update nodes that are above threshold
+    df_vdatum = pd.read_csv(out_dir/'interp_info.csv', header=None, index_col=0)
+    df_vdatum.loc[df_vdatum[5] > threshold, 5] = threshold
+    df_vdatum.to_csv(out_dir/'interp_info.csv', header=False)
     idxs = df_vdatum.iloc[:, 0].array
 
     # Clip the interpolated mesh based on the index of nodes in the metadatafile
