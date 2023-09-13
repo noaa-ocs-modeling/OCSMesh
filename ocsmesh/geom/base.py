@@ -144,42 +144,8 @@ def multipolygon_to_jigsaw_msh_t(
         transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
         multipolygon = ops.transform(transformer.transform, multipolygon)
 
-    vert2: List[Tuple[Tuple[float, float], int]] = []
-    for polygon in multipolygon.geoms:
-        if np.all(
-                np.asarray(
-                    polygon.exterior.coords).flatten() == float('inf')):
-            raise NotImplementedError("ellispoidal-mesh")
-        for x, y in polygon.exterior.coords[:-1]:
-            vert2.append(((x, y), 0))
-        for interior in polygon.interiors:
-            for x, y in interior.coords[:-1]:
-                vert2.append(((x, y), 0))
-
-    # edge2
-    edge2: List[Tuple[int, int]] = []
-    for polygon in multipolygon.geoms:
-        polygon = [polygon.exterior, *polygon.interiors]
-        for linear_ring in polygon:
-            _edge2 = []
-            for i in range(len(linear_ring.coords)-2):
-                _edge2.append((i, i+1))
-            _edge2.append((_edge2[-1][1], _edge2[0][0]))
-            edge2.extend(
-                [(e0+len(edge2), e1+len(edge2))
-                    for e0, e1 in _edge2])
-    # geom
-    geom = jigsaw_msh_t()
-    geom.ndims = +2
-    geom.mshID = 'euclidean-mesh'
-    # TODO: Consider ellipsoidal case.
-    # geom.mshID = 'euclidean-mesh' if self._ellipsoid is None \
-    #     else 'ellipsoidal-mesh'
-    geom.vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
-    geom.edge2 = np.asarray(
-        [((e0, e1), 0) for e0, e1 in edge2],
-        dtype=jigsaw_msh_t.EDGE2_t)
-    geom.crs = crs
+    msht = utils.shape_to_msh_t(multipolygon)
+    msht.crs = crs
     if utm_crs is not None:
-        geom.crs = utm_crs
-    return geom
+        msht.crs = utm_crs
+    return msht

@@ -13,10 +13,12 @@ from matplotlib.tri import Triangulation  # type: ignore[import]
 import numpy as np  # type: ignore[import]
 import numpy.typing as npt
 import rasterio as rio
+import triangle as tr
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse, constants
+from shapely import force_2d
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
@@ -2190,3 +2192,133 @@ def msht_from_numpy(
             )
 
     return mesh
+
+
+def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
+    """Calculate vertex-edge representation of polygon shape
+
+    Calculate `jigsawpy` vertex-edge representation of the input
+    `shapely` shape.
+
+    Parameters
+    ----------
+    shape : Polygon or MultiPolygon
+        Input polygon for which the vertex-edge representation is to
+        be calculated
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Vertex-edge representation of the input shape
+
+    Raises
+    ------
+    NotImplementedError
+    """
+
+    vert2: List[Tuple[Tuple[float, float], int]] = []
+    if isinstance(shape, Polygon):
+        shape = MultiPolygon([shape])
+    for polygon in shape.geoms:
+        if np.all(
+                np.asarray(
+                    polygon.exterior.coords).flatten() == float('inf')):
+            raise NotImplementedError("ellispoidal-mesh")
+        for x, y in polygon.exterior.coords[:-1]:
+            vert2.append(((x, y), 0))
+        for interior in polygon.interiors:
+            for x, y in interior.coords[:-1]:
+                vert2.append(((x, y), 0))
+
+    # edge2
+    edge2: List[Tuple[int, int]] = []
+    for polygon in shape.geoms:
+        polygon = [polygon.exterior, *polygon.interiors]
+        for linear_ring in polygon:
+            edg = []
+            for i in range(len(linear_ring.coords) - 2):
+                edg.append((i, i+1))
+            edg.append((edg[-1][1], edg[0][0]))
+            edge2.extend(
+                [(e0+len(edge2), e1+len(edge2))
+                    for e0, e1 in edg])
+
+    msht = jigsaw_msh_t()
+    msht.ndims = +2
+    msht.mshID = 'euclidean-mesh'
+    msht.vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
+    msht.edge2 = np.asarray(
+        [((e0, e1), 0) for e0, e1 in edge2],
+        dtype=jigsaw_msh_t.EDGE2_t)
+    return msht
+
+
+def triangulate_polygon(
+    shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
+    aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
+    opts='p',
+) -> None:
+    '''
+
+    '''
+
+    # NOTE: Triangle can handle separate closed polygons,
+    # so no need to have for loop
+
+    if isinstance(shape, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        shape = shape.unary_union
+
+    if isinstance(shape, Polygon):
+        shape = MultiPolygon([shape])
+
+    if not isinstance(shape, (MultiPolygon, Polygon)):
+        raise ValueError("Input shape must be convertible to polygon!")
+    
+    msht_shape = shape_to_msh_t(shape)
+    coords = msht_shape.vert2['coord']
+    edges = msht_shape.edge2['index']
+
+    holes = []
+    for poly in shape.geoms:
+        for ring in poly.interiors:
+            holes.append(
+                np.array(Polygon(ring).representative_point().xy).ravel()
+            )
+    holes = np.array(holes)
+
+
+    if aux_pts is not None:
+        if isinstance(aux_pts, (gpd.GeoDataFrame, gpd.GeoSeries)):
+            aux_pts = np.array(aux_pts.unary_union.xy).T
+
+        elif isinstance(aux_pts, (Point, MultiPolygon)):
+            aux_pts = np.array(aux_pts.xy).T
+
+        coords = np.vstack((coords, aux_pts))
+
+    input_dict = {'vertices': coords, 'segments': edges}
+    if len(holes):
+        input_dict['holes'] = holes
+    cdt = tr.triangulate(input_dict, opts=opts)
+
+    cells = cdt['triangles']
+    points = cdt['vertices']
+
+    msht_tri = jigsaw_msh_t()
+    msht_tri.mshID = 'euclidean-mesh'
+    msht_tri.ndims = 2
+
+    msht_tri.vert2 = np.array(
+        [(crd, -1) for crd in points],
+        dtype=jigsaw_msh_t.VERT2_t
+    )
+    msht_tri.tria3 = np.array(
+        [(cell, -1) for cell in cells],
+        dtype=jigsaw_msh_t.TRIA3_t
+    )
+    msht_tri.value = np.array(
+        np.zeros((len(points) ,1)),
+        dtype=jigsaw_msh_t.REALS_t
+    )
+
+    return msht_tri
