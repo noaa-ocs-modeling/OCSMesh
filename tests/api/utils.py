@@ -590,6 +590,16 @@ class CreateMeshTFromNumpy(unittest.TestCase):
 
         self.assertEqual(out_msht_2.crs, CRS.from_user_input('esri:102008'))
 
+    def test_values(self):
+        # Test it has values
+        # Test value input of wrong size
+        # Test value None input
+        self.assertTrue(False)
+
+
+    def test_kwonly_args(self):
+        self.assertTrue(False)
+
 
 class CreateRasterFromNumpy(unittest.TestCase):
 
@@ -653,6 +663,49 @@ class CreateRasterFromNumpy(unittest.TestCase):
 
             rast = Raster(tf.name)
             self.assertEqual(rast.src.nodata, fill_value)
+
+
+class ShapeToMeshT(unittest.TestCase):
+
+    def test_input_output_types(self):
+        self.assertTrue(False)
+
+
+    def test_old_implementation(self):
+        self.assertTrue(False)
+
+
+    def test_new_implementation(self):
+        self.assertTrue(False)
+
+
+
+
+class TestTriangulatePolygon(unittest.TestCase):
+
+
+    def test_different_input_types(self):
+        self.assertTrue(False)
+
+
+    def test_wrong_input_of_right_type(self):
+        self.assertTrue(False)
+
+
+    def test_output_types(self):
+        self.assertTrue(False)
+
+
+    def test_fixed_boundary(self):
+        self.assertTrue(False)
+
+
+    def test_aux_points(self)
+        self.assertTrue(False)
+
+
+    def test_polygon_holes(self)
+        self.assertTrue(False)
 
 
 if __name__ == '__main__':
