@@ -67,7 +67,9 @@ class FinalizeMesh(unittest.TestCase):
         quads = msh_t1.quad4['index']
         quads = np.vstack((quads, msh_t2.quad4['index'] + len(msh_t1.vert2)))
 
-        msh_t = utils.msht_from_numpy(verts, trias, quads)
+        msh_t = utils.msht_from_numpy(
+            verts, triangles=trias, quadrilaterals=quads
+        )
 
         utils.finalize_mesh(msh_t)
 
