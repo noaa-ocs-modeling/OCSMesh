@@ -18,7 +18,6 @@ from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse, constants
-from shapely import force_2d
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
@@ -2259,29 +2258,21 @@ def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     if not isinstance(shape, gpd.GeoDataFrame):
         gdf_shape = gpd.GeoDataFrame(geometry=[shape])
 
-    df_pts = (
+    df_lonlat = (
         gdf_shape
         .geometry
-        .transform(force_2d)
         .boundary
         .explode(ignore_index=True)
         .map(lambda i: i.coords)
         .explode()
+        .apply(lambda s: pd.Series({'lon': s[0], 'lat': s[1]}))
+        .reset_index() # put polygon index in the dataframe
+        .drop_duplicates() # drop duplicates within polygons
     )
 
-    
-    df_pts_2 = (
-        pd.DataFrame(
-            df_pts.tolist(),
-            index=df_pts.index,
-            columns=['lon', 'lat']
-        )
-        .reset_index()
-        .drop_duplicates() # Polygon index is used for duplicate removal
-    )
     df_seg = (
-        df_pts_2.join(
-            df_pts_2.groupby('index').transform(np.roll, 1, axis=0),
+        df_lonlat.join(
+            df_lonlat.groupby('index').transform(np.roll, 1, axis=0),
             lsuffix='_1',
             rsuffix='_2'
         ).dropna()
@@ -2289,8 +2280,8 @@ def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     )
 
     df_nodes = (
-        df_pts_2.drop(columns='index')
-        .drop_duplicates()
+        df_lonlat.drop(columns='index') # drop to allow cross poly dupl
+        .drop_duplicates() # drop duplicates across multiple polygons
         .reset_index(drop=True) # renumber nodes
         .reset_index() # add node idx as df data column
         .set_index(['lon','lat'])
