@@ -290,7 +290,7 @@ class SubsetAndCombine:
             geom=Geom(buffer_domain, crs=utm),
             hfun=hfun_rep,
             initial_mesh=False
-        ).run()
+        ).run(sieve=0)
 
         msht_domain_rep = deepcopy(mesh_domain_rep.msh_t)
         utils.reproject(msht_domain_rep, utm)
@@ -329,7 +329,7 @@ class SubsetAndCombine:
             geom=Geom(buffer_polygon, crs=utm),
             hfun=hfun_buffer,
             initial_mesh=False
-        ).run()
+        ).run(sieve=0)
 
         msht_domain_interp = deepcopy(mesh_domain_interp.msh_t)
         in_verts_mask = np.ones_like(msht_domain_interp.vert2, dtype=bool)
