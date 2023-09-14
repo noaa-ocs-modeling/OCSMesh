@@ -14,7 +14,7 @@ from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
-from shapely.ops import polygonize, unary_union
+from shapely.ops import polygonize, unary_union, transform
 
 from ocsmesh import Raster, Geom, Mesh, Hfun, utils, JigsawDriver
 
@@ -259,6 +259,8 @@ class SubsetAndCombine:
         utm = utils.estimate_bounds_utm(
             buffer_domain.bounds, buffer_crs
         )
+        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
+        buffer_domain = transform(transformer.transform, buffer_domain)
 
         # calculate mesh size for clipped bits
         msht_hi = deepcopy(hires_mesh_clip)
@@ -274,9 +276,9 @@ class SubsetAndCombine:
         msht_cdt = utils.triangulate_polygon(
             buffer_domain, None, opts='p'
         )
-        msht_cdt.crs = buffer_crs
+        msht_cdt.crs = utm
 
-        utils.reproject(msht_cdt, utm)
+#        utils.reproject(msht_cdt, utm)
         hfun_cdt = Hfun(Mesh(msht_cdt))
         hfun_cdt.size_from_mesh()
 
@@ -285,7 +287,7 @@ class SubsetAndCombine:
         hfun_rep = Hfun(Mesh(msht_cdt))
 
         mesh_domain_rep = JigsawDriver(
-            geom=Geom(buffer_domain, crs=buffer_crs),
+            geom=Geom(buffer_domain, crs=utm),
             hfun=hfun_rep,
             initial_mesh=False
         ).run()
@@ -317,8 +319,14 @@ class SubsetAndCombine:
     def _generate_mesh_for_buffer_region(
             self, buffer_polygon, hfun_buffer, buffer_crs):
 
+        utm = utils.estimate_bounds_utm(
+            buffer_polygon.bounds, buffer_crs
+        )
+        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
+        buffer_polygon = transform(transformer.transform, buffer_polygon)
+
         mesh_domain_interp = JigsawDriver(
-            geom=Geom(buffer_polygon, crs=buffer_crs),
+            geom=Geom(buffer_polygon, crs=utm),
             hfun=hfun_buffer,
             initial_mesh=False
         ).run()
@@ -329,13 +337,13 @@ class SubsetAndCombine:
             np.unique(utils.get_boundary_edges(msht_domain_interp))
         ] = False
 
-        utils.reproject(msht_domain_interp, buffer_crs)
+#        utils.reproject(msht_domain_interp, buffer_crs)
         msht_buffer = utils.triangulate_polygon(
             shape=buffer_polygon,
             aux_pts=msht_domain_interp.vert2[in_verts_mask]['coord'],
             opts='p'
         )
-        msht_buffer.crs = buffer_crs
+        msht_buffer.crs = utm
 
         return msht_buffer
 

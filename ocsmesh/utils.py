@@ -25,6 +25,7 @@ from shapely.geometry import ( # type: ignore[import]
         LineString, LinearRing)
 from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
+import pandas as pd
 import utm
 
 
@@ -2253,6 +2254,96 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     return msht
 
 
+def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
+    gdf_shape = shape
+    if not isinstance(shape, gpd.GeoDataFrame):
+        gdf_shape = gpd.GeoDataFrame(geometry=[shape])
+
+    df_pts = (
+        gdf_shape
+        .geometry
+        .transform(force_2d)
+        .boundary
+        .explode(ignore_index=True)
+        .map(lambda i: i.coords)
+        .explode()
+    )
+
+    
+    df_pts_2 = (
+        pd.DataFrame(
+            df_pts.tolist(),
+            index=df_pts.index,
+            columns=['lon', 'lat']
+        )
+        .reset_index()
+        .drop_duplicates() # Polygon index is used for duplicate removal
+    )
+    df_seg = (
+        df_pts_2.join(
+            df_pts_2.groupby('index').transform(np.roll, 1, axis=0),
+            lsuffix='_1',
+            rsuffix='_2'
+        ).dropna()
+        .set_index('index')
+    )
+
+    df_nodes = (
+        df_pts_2.drop(columns='index')
+        .drop_duplicates()
+        .reset_index(drop=True) # renumber nodes
+        .reset_index() # add node idx as df data column
+        .set_index(['lon','lat'])
+    )
+
+    # CRD Table
+    df_coo = df_nodes.reset_index().drop(columns='index')
+
+    # CNN Table
+    df_edg = (
+        df_nodes.loc[
+            pd.MultiIndex.from_frame(df_seg[['lon_1', 'lat_1']])
+        ].reset_index(drop=True)
+        .join(
+            df_nodes.loc[
+                pd.MultiIndex.from_frame(df_seg[['lon_2', 'lat_2']])
+            ]
+            .reset_index(drop=True),
+            lsuffix='_1',
+            rsuffix='_2'
+        )
+    )
+
+    
+    ar_edg = np.sort(df_edg.values, axis=1)
+    df_cnn = (
+        pd.DataFrame.from_records(
+            ar_edg,
+            columns=['index_1', 'index_2'],
+        )
+        .drop_duplicates() # Remove duplicate edges
+        .reset_index(drop=True)
+    )
+
+    msht = jigsaw_msh_t()
+    msht.ndims = +2
+    msht.mshID = 'euclidean-mesh'
+    msht.vert2 = np.asarray(
+        [(crd, 0) for crd in df_coo[['lon', 'lat']].values],
+        dtype=jigsaw_msh_t.VERT2_t
+    )
+    msht.edge2 = np.asarray(
+        [((e0, e1), 0) for e0, e1 in df_cnn.values],
+        dtype=jigsaw_msh_t.EDGE2_t
+    )
+    msht.value = np.array(
+        np.zeros((len(msht.vert2) ,1)),
+        dtype=jigsaw_msh_t.REALS_t
+    )
+    return msht
+
+
+
 def triangulate_polygon(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
     aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
@@ -2274,7 +2365,8 @@ def triangulate_polygon(
     if not isinstance(shape, (MultiPolygon, Polygon)):
         raise ValueError("Input shape must be convertible to polygon!")
     
-    msht_shape = shape_to_msh_t(shape)
+#    msht_shape = shape_to_msh_t(shape)
+    msht_shape = shape_to_msh_t_2(shape)
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']
 
