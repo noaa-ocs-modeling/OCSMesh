@@ -2166,7 +2166,9 @@ def raster_from_numpy(
 
 def msht_from_numpy(
     coordinates,
-    triangles,
+    *, # Get everything else as keyword args
+    edges=None,
+    triangles=None,
     quadrilaterals=None,
     values=None,
     crs=CRS.from_epsg(4326)
@@ -2182,25 +2184,32 @@ def msht_from_numpy(
         [(coord, 0) for coord in coordinates],
         dtype=jigsaw_msh_t.VERT2_t
         )
-    mesh.tria3 = np.array(
-        [(index, 0) for index in triangles],
-        dtype=jigsaw_msh_t.TRIA3_t
+
+    if edges is not None:
+        mesh.edge2 = np.array(
+            [(index, 0) for index in edges],
+            dtype=jigsaw_msh_t.EDGE2_t
+        )
+    if triangles is not None:
+        mesh.tria3 = np.array(
+            [(index, 0) for index in triangles],
+            dtype=jigsaw_msh_t.TRIA3_t
         )
     if quadrilaterals is not None:
         mesh.quad4 = np.array(
             [(index, 0) for index in quadrilaterals],
             dtype=jigsaw_msh_t.QUAD4_t
-            )
+        )
     if values is None:
         values = np.array(
             np.zeros((len(mesh.vert2), 1)),
             dtype=jigsaw_msh_t.REALS_t
         )
     elif values.shape != (len(mesh.vert2), 1):
-            raise ValueError(
-                "Input for mesh values must either be None or a"
-                " 2D-array with row count equal to vertex count!"
-            )
+        raise ValueError(
+            "Input for mesh values must either be None or a"
+            " 2D-array with row count equal to vertex count!"
+        )
 
     mesh.value = values
 
@@ -2266,7 +2275,7 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     return msht
 
 
-def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon], crs=None) -> jigsaw_msh_t:
+def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     gdf_shape = shape
     if not isinstance(shape, gpd.GeoDataFrame):
         gdf_shape = gpd.GeoDataFrame(geometry=[shape])
@@ -2328,16 +2337,14 @@ def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon], crs=None) -> jigsaw_ms
         .drop_duplicates() # Remove duplicate edges
         .reset_index(drop=True)
     )
-
-
+    
     msht = msht_from_numpy(
         coordinates=df_coo[['lon', 'lat']].values,
-        triangles=df_cnn.values,
-        quadrilaterals=None,
-        values=None,
-        crs=crs,
+        edges=df_cnn.values,
+        values=np.zeros((len(df_coo) ,1)),
+        crs=None
     )
-    
+
     return msht
 
 
@@ -2346,7 +2353,6 @@ def triangulate_polygon(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
     aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
     opts='p',
-    crs=None,
 ) -> None:
     '''
 
@@ -2364,8 +2370,7 @@ def triangulate_polygon(
     if not isinstance(shape, (MultiPolygon, Polygon)):
         raise ValueError("Input shape must be convertible to polygon!")
     
-#    msht_shape = shape_to_msh_t(shape)
-    msht_shape = shape_to_msh_t_2(shape, crs)
+    msht_shape = shape_to_msh_t_2(shape)
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']
 
@@ -2392,24 +2397,11 @@ def triangulate_polygon(
         input_dict['holes'] = holes
     cdt = tr.triangulate(input_dict, opts=opts)
 
-    cells = cdt['triangles']
-    points = cdt['vertices']
-
-    msht_tri = jigsaw_msh_t()
-    msht_tri.mshID = 'euclidean-mesh'
-    msht_tri.ndims = 2
-
-    msht_tri.vert2 = np.array(
-        [(crd, -1) for crd in points],
-        dtype=jigsaw_msh_t.VERT2_t
-    )
-    msht_tri.tria3 = np.array(
-        [(cell, -1) for cell in cells],
-        dtype=jigsaw_msh_t.TRIA3_t
-    )
-    msht_tri.value = np.array(
-        np.zeros((len(points) ,1)),
-        dtype=jigsaw_msh_t.REALS_t
+    msht_tri = msht_from_numpy(
+        coordinates=cdt['vertices'],
+        triangles=cdt['triangles'],
+        values=np.zeros((len(cdt['vertices']) ,1)),
+        crs=None,
     )
 
     return msht_tri
