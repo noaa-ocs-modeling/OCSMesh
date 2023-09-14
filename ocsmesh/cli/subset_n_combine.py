@@ -345,6 +345,8 @@ class SubsetAndCombine:
         )
         msht_buffer.crs = utm
 
+        utils.reproject(msht_buffer, buffer_crs)
+
         return msht_buffer
 
 
