@@ -23,7 +23,7 @@ jobs:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
         extra-specs: |
-          python=3.*
+          python=3.10
     - name: Install dependencies
       shell: bash -l {0}
       run: |

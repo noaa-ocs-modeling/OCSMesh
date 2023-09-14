@@ -19,7 +19,7 @@ maintainers = [
 description = "Package to generate computational unstructured meshes from planetary modeling."
 license = {file = "LICENSE"}
 readme = "README.md"
-requires-python = '>=3.9' # 3.8 not supported by scipy
+requires-python = '>=3.9, <3.11' # 3.8 -> scipy, 3.11 -> triangle
 dependencies = [
     "colored-traceback", "fiona", "geopandas",
     "jigsawpy", "matplotlib", "netCDF4", "numba",
