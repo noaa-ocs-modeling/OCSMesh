@@ -2419,5 +2419,8 @@ def triangulate_polygon(
         values=np.zeros((len(cdt['vertices']) ,1)),
         crs=None,
     )
+    if aux_pts is not None:
+        # To make sure unused points are discarded
+        cleanup_isolates(msht_tri)
 
     return msht_tri
