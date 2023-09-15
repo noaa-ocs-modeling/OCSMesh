@@ -1,12 +1,13 @@
 #! python
-import unittest
+import re
 import tempfile
+import unittest
 from copy import deepcopy
 
 import numpy as np
+import geopandas as gpd
 from jigsawpy import jigsaw_msh_t
 from pyproj import CRS
-import re
 from shapely.geometry import (
     Point,
     LineString,
@@ -15,6 +16,7 @@ from shapely.geometry import (
     MultiPolygon,
     GeometryCollection,
 )
+from shapely.ops import polygonize
 
 from ocsmesh import Raster, utils
 
@@ -667,22 +669,182 @@ class CreateRasterFromNumpy(unittest.TestCase):
 
 class ShapeToMeshT(unittest.TestCase):
 
-    def test_input_output_types(self):
-        self.assertTrue(False)
+    def setUp(self):
+        self.valid_input_1 = box(0, 0, 1, 1)
+        self.valid_input_2 = gpd.GeoDataFrame(
+            geometry=[self.valid_input_1]
+        )
+        self.valid_input_3 = gpd.GeoSeries(self.valid_input_1)
+        # NOTE: Hole touching boundary is still valid shape for shapely
+        self.valid_input_4 = Polygon(
+            [
+                [0, 0],
+                [2, 2],
+                [4, 0],
+                [2, -2],
+                [0, 0],
+            ],
+            [
+                [
+                    [0, 0],
+                    [1, -0.5],
+                    [2, 0],
+                    [1, 0.5],
+                    [0, 0]
+                ]
+            ]
+        )
+        self.valid_input_5 = MultiPolygon(
+            [box(0, 0, 1, 1), box(2, 2, 3, 3)]
+        )
+
+        self.invalid_input_1 = Point(0, 0)
+        self.invalid_input_2 = LineString([[0, 0], [1, 1]])
+        # NOTE: Unlike hole touching boundary, this is invalid shape!!
+        self.invalid_input_3 = Polygon(
+            [
+                [0, 0],
+                [2, 2],
+                [4, 0],
+                [2, -2],
+                [0, 0],
+                [1, -1],
+                [2, 0],
+                [1, 1],
+                [0, 0]
+            ]
+        )
+
+
+    def test_old_input_output_validity(self):
+        msht = utils.shape_to_msh_t(self.valid_input_1)
+        with self.assertRaises(ValueError) as exc_1:
+            utils.shape_to_msh_t(self.invalid_input_1)
+
+        with self.assertRaises(ValueError) as exc_2:
+            utils.shape_to_msh_t(self.invalid_input_2)
+
+        with self.assertRaises(ValueError) as exc_3:
+            utils.shape_to_msh_t(self.invalid_input_3)
+
+        self.assertIsInstance(msht, jigsaw_msh_t)
+
+        self.assertIsNotNone(
+            re.search('invalid.*type', str(exc_1.exception).lower()),
+        )
+
+        self.assertIsNotNone(
+            re.search('invalid.*type', str(exc_2.exception).lower()),
+        )
+
+        self.assertIsNotNone(
+            re.search('invalid.*polygon', str(exc_3.exception).lower()),
+        )
+
+
+    def test_new_input_output_validity(self):
+        msht_1 = utils.shape_to_msh_t_2(self.valid_input_1)
+        msht_2 = utils.shape_to_msh_t_2(self.valid_input_2)
+        msht_3 = utils.shape_to_msh_t_2(self.valid_input_3)
+
+        with self.assertRaises(ValueError) as exc_1:
+            utils.shape_to_msh_t_2(self.invalid_input_1)
+
+        with self.assertRaises(ValueError) as exc_2:
+            utils.shape_to_msh_t_2(self.invalid_input_2)
+
+        with self.assertRaises(ValueError) as exc_3:
+            utils.shape_to_msh_t_2(self.invalid_input_3)
+
+        self.assertIsInstance(msht_1, jigsaw_msh_t)
+        self.assertIsInstance(msht_2, jigsaw_msh_t)
+        self.assertIsInstance(msht_3, jigsaw_msh_t)
+        
+        self.assertTrue(
+            np.all(msht_1.vert2 == msht_2.vert2)
+            & np.all(msht_2.vert2 == msht_3.vert2)
+        )
+        self.assertTrue(
+            np.all(msht_1.edge2 == msht_2.edge2)
+            & np.all(msht_2.edge2 == msht_3.edge2)
+        )
+        self.assertTrue(
+            np.all(msht_1.value == msht_2.value)
+            & np.all(msht_2.value == msht_3.value)
+        )
+
+        self.assertIsNotNone(
+            re.search('have.*area', str(exc_1.exception).lower()),
+        )
+
+        self.assertIsNotNone(
+            re.search('have.*area', str(exc_2.exception).lower()),
+        )
+
+        self.assertIsNotNone(
+            re.search('invalid.*polygon', str(exc_3.exception).lower()),
+        )
 
 
     def test_old_implementation(self):
-        self.assertTrue(False)
+        msht_1 = utils.shape_to_msh_t(self.valid_input_1)
+        msht_2 = utils.shape_to_msh_t(self.valid_input_4)
+        msht_3 = utils.shape_to_msh_t(self.valid_input_5)
+
+        self.assertTrue(
+            list(
+                polygonize(msht_1.vert2['coord'][msht_1.edge2['index']])
+            )[0].equals(self.valid_input_1)
+        )
+        self.assertTrue(
+            list(
+                polygonize(msht_2.vert2['coord'][msht_2.edge2['index']])
+            )[0].equals(self.valid_input_4)
+        )
+        self.assertTrue(
+            MultiPolygon(
+                polygonize(msht_3.vert2['coord'][msht_3.edge2['index']])
+            ).equals(self.valid_input_5)
+        )
+
+        # Old approach result in duplicate nodes!
+        self.assertEqual(
+            len(msht_2.vert2['coord']) - 1,
+            len(np.unique(msht_2.vert2['coord'], axis=0))
+        )
 
 
     def test_new_implementation(self):
-        self.assertTrue(False)
+        msht_1 = utils.shape_to_msh_t_2(self.valid_input_1)
+        msht_2 = utils.shape_to_msh_t_2(self.valid_input_4)
+        msht_3 = utils.shape_to_msh_t_2(self.valid_input_5)
+
+        self.assertTrue(
+            list(
+                polygonize(msht_1.vert2['coord'][msht_1.edge2['index']])
+            )[0].equals(self.valid_input_1)
+        )
+        self.assertTrue(
+            list(
+                polygonize(msht_2.vert2['coord'][msht_2.edge2['index']])
+            )[0].equals(self.valid_input_4)
+        )
+        self.assertTrue(
+            MultiPolygon(
+                polygonize(msht_3.vert2['coord'][msht_3.edge2['index']])
+            ).equals(self.valid_input_5)
+        )
+
+        # New approach removes duplicate nodes!
+        self.assertEqual(
+            len(msht_2.vert2['coord']),
+            len(np.unique(msht_2.vert2['coord'], axis=0))
+        )
 
 
 
 
 class TestTriangulatePolygon(unittest.TestCase):
-
 
     def test_different_input_types(self):
         self.assertTrue(False)
@@ -700,11 +862,11 @@ class TestTriangulatePolygon(unittest.TestCase):
         self.assertTrue(False)
 
 
-    def test_aux_points(self)
+    def test_aux_points(self):
         self.assertTrue(False)
 
 
-    def test_polygon_holes(self)
+    def test_polygon_holes(self):
         self.assertTrue(False)
 
 

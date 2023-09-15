@@ -2241,6 +2241,13 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     vert2: List[Tuple[Tuple[float, float], int]] = []
     if isinstance(shape, Polygon):
         shape = MultiPolygon([shape])
+
+    if not isinstance(shape, MultiPolygon):
+        raise ValueError(f"Invalid input shape type: {type(shape)}!")
+
+    if not shape.is_valid:
+        raise ValueError("Input contains invalid (multi)polygons!")
+
     for polygon in shape.geoms:
         if np.all(
                 np.asarray(
@@ -2275,14 +2282,23 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     return msht
 
 
-def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
+def shape_to_msh_t_2(
+    shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries]
+) -> jigsaw_msh_t:
     gdf_shape = shape
-    if not isinstance(shape, gpd.GeoDataFrame):
+    if isinstance(shape, gpd.GeoSeries):
+        gdf_shape = gpd.GeoDataFrame(geometry=shape)
+    elif not isinstance(shape, gpd.GeoDataFrame):
         gdf_shape = gpd.GeoDataFrame(geometry=[shape])
+
+    if np.sum(gdf_shape.area) == 0:
+        raise ValueError("The shape must have an area, such as Polygon!")
+
+    if not np.all(gdf_shape.is_valid):
+        raise ValueError("Input contains invalid (multi)polygons!")
 
     df_lonlat = (
         gdf_shape
-        .geometry
         .boundary
         .explode(ignore_index=True)
         .map(lambda i: i.coords)
@@ -2342,7 +2358,7 @@ def shape_to_msh_t_2(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
         coordinates=df_coo[['lon', 'lat']].values,
         edges=df_cnn.values,
         values=np.zeros((len(df_coo) ,1)),
-        crs=None
+        crs=gdf_shape.crs
     )
 
     return msht
