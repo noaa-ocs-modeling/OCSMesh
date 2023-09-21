@@ -417,7 +417,7 @@ class EuclideanMesh2D(EuclideanMesh):
                             vert_cs = rast_crs.source_crs
 
 
-                vert_cs_name = vert_cs.name
+                vert_cs_name = vert_cs.name if vert_cs else None
                 idxs = np.argwhere(mask).ravel()
                 interp_info_map.update({
                     idx: (rast.path, vert_cs_name)
