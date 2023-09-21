@@ -597,10 +597,12 @@ class CreateMeshTFromNumpy(unittest.TestCase):
         # Test value input of wrong size
         # Test value None input
         self.assertTrue(False)
+        #TODO:
 
 
     def test_kwonly_args(self):
         self.assertTrue(False)
+        #TODO:
 
 
 class CreateRasterFromNumpy(unittest.TestCase):
@@ -960,6 +962,8 @@ class TriangulatePolygon(unittest.TestCase):
         msht = utils.triangulate_polygon(bx)
         bdry_lines = utils.get_boundary_segments(msht)
 
+        # TODO: Make sure equal means equal in all vertices, not just
+        # combined shape (i.e. no edge split)
         self.assertTrue(
             list(polygonize(bdry_lines))[0].equals(bx)
         )
@@ -1014,17 +1018,22 @@ class TriangulatePolygon(unittest.TestCase):
         self.assertTrue(mpoly.equals(mesh_poly))
 
 
+    def test_polygons_touching_two_points_no_hole(self):
+        poly1 = Polygon(
+            [[0, 0], [0, 4], [6, 4], [6, 0], [4, 2], [2, 2], [0, 0]],
+        )
+        poly2 = Polygon(
+            [[0, 0], [0, -4], [6, -4], [6, 0], [4, -2], [2, -2], [0, 0]],
+        )
+        multpoly = MultiPolygon([poly1, poly2])
+        msht = utils.triangulate_polygon(multpoly, opts='p')
+        mesh_poly = utils.get_mesh_polygons(msht)
+
+        self.assertTrue(multpoly.equals(mesh_poly))
 
 
-class MeshTFromNumpy(unittest.TestCase):
-
-    def test_io_validity(self):
-        self.assertTrue(False)
-
-    def test_values(self):
-        self.assertTrue(False)
-
-    def test_crs(self):
+class GetMeshPolygon(unittest.TestCase):
+    def test_something(self):
         self.assertTrue(False)
 
 

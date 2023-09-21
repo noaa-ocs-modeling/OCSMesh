@@ -193,86 +193,14 @@ def get_boundary_segments(mesh):
 
 
 def get_mesh_polygons(mesh):
+    elm_polys = []
+    for elm_type in ELEM_2D_TYPES:
+        elems = getattr(mesh, elm_type)['index']
+        elm_polys.extend(
+            [Polygon(mesh.vert2['coord'][cell]) for cell in elems]
+        )
 
-
-    # TODO: Copy mesh?
-    target_mesh = mesh
-    result_polys = []
-
-    # 2-pass find, first find using polygons that intersect non-boundary
-    # vertices, then from the rest of the mesh find polygons that
-    # intersect any vertex
-    for find_pass in range(2):
-
-
-        coords = target_mesh.vert2['coord']
-
-        if len(coords) == 0:
-            continue
-
-        boundary_edges = get_boundary_edges(target_mesh)
-
-        lines = get_boundary_segments(target_mesh)
-
-        poly_gen = polygonize(lines)
-        polys = list(poly_gen)
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
-
-
-        bndry_verts = np.unique(boundary_edges)
-
-        if find_pass == 0:
-            non_bndry_verts = np.setdiff1d(
-                    np.arange(len(coords)), bndry_verts)
-            pnts = MultiPoint(coords[non_bndry_verts])
-        else:
-            pnts = MultiPoint(coords[bndry_verts])
-
-
-        # NOTE: This logic requires polygons to be sorted by area
-        pass_valid_polys = []
-        while len(pnts.geoms) > 0:
-
-
-            idx = np.random.randint(len(pnts.geoms))
-            pnt = pnts.geoms[idx]
-
-            polys_gdf = gpd.GeoDataFrame(
-                {'geometry': polys, 'list_index': range(len(polys))})
-
-
-            res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
-            if len(res_gdf) == 0:
-                # How is this possible for the remaining points not to
-                # intersect with the remaining polys?!
-                pnts = MultiPoint([pt for i, pt in enumerate(pnts.geoms) if i != idx])
-                if pnts.is_empty:
-                    break
-
-                continue
-
-            poly = res_gdf.geometry.iloc[0]
-            polys.pop(res_gdf.iloc[0].list_index)
-
-
-
-            pass_valid_polys.append(poly)
-            pnts = pnts.difference(poly)
-            if pnts.is_empty:
-                break
-            if isinstance(pnts, Point):
-                pnts = MultiPoint([pnts])
-
-
-        result_polys.extend(pass_valid_polys)
-        target_mesh = clip_mesh_by_shape(
-            target_mesh,
-            shape=MultiPolygon(pass_valid_polys),
-            inverse=True, fit_inside=True)
-
-
-
-    return MultiPolygon(result_polys)
+    return unary_union(elm_polys)
 
 
 def repartition_features(linestring, max_verts):
@@ -2390,12 +2318,19 @@ def triangulate_polygon(
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']
 
+    # To make sure islands formed by two polygons touching at multiple
+    # points are also considered as holes, instead of getting interiors,
+    # we get the negative of the domain and calculate points in all
+    # negative polygons!
+
+    # buffer by 1/100 of shape length scale = sqrt(area)/100
+    world = box(*shape.buffer(np.sqrt(shape.area) / 100).bounds)
+    neg_shape = world.difference(shape)
+    if isinstance(neg_shape, Polygon):
+        neg_shape = MultiPolygon([neg_shape])
     holes = []
-    for poly in shape.geoms:
-        for ring in poly.interiors:
-            holes.append(
-                np.array(Polygon(ring).representative_point().xy).ravel()
-            )
+    for poly in neg_shape.geoms:
+        holes.append(np.array(poly.representative_point().xy).ravel())
     holes = np.array(holes)
 
 
