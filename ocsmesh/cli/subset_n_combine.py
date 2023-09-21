@@ -13,7 +13,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
+from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, MultiPoint
 from shapely.ops import polygonize, unary_union, transform
 
 from ocsmesh import Raster, Geom, Mesh, Hfun, utils, JigsawDriver
@@ -325,23 +325,30 @@ class SubsetAndCombine:
         transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
         buffer_polygon = transform(transformer.transform, buffer_polygon)
 
-        mesh_domain_interp = JigsawDriver(
+        mesh_buf_apprx = JigsawDriver(
             geom=Geom(buffer_polygon, crs=utm),
             hfun=hfun_buffer,
             initial_mesh=False
         ).run(sieve=0)
 
-        msht_domain_interp = deepcopy(mesh_domain_interp.msh_t)
-        in_verts_mask = np.ones_like(msht_domain_interp.vert2, dtype=bool)
-        in_verts_mask[
-            np.unique(utils.get_boundary_edges(msht_domain_interp))
-        ] = False
+        msht_buf_apprx = deepcopy(mesh_buf_apprx.msh_t)
+        # If vertices are too close to buffer geom boundary, 
+        # it's going to cause issues (thin elements)
+        if msht_buf_apprx.crs != hfun_buffer.crs:
+            ocsmesh.utils.reproject(msht_buf_apprx, hfun_buffer.crs)
+        gdf_pts = gpd.GeoDataFrame(
+            geometry=[MultiPoint(msht_buf_apprx.vert2['coord'])],
+            crs=msht_buf_apprx.crs
+        ).explode()
+        gdf_aux_pts = gdf_pts[
+            (~gdf_pts.intersects(
+                buffer_polygon.boundary.buffer(hfun_buffer.hmin))
+            ) & (gdf_pts.within(buffer_polygon))
+        ]
 
-#        utils.reproject(msht_domain_interp, buffer_crs)
+#        utils.reproject(msht_buf_apprx, buffer_crs)
         msht_buffer = utils.triangulate_polygon(
-            shape=buffer_polygon,
-            aux_pts=msht_domain_interp.vert2[in_verts_mask]['coord'],
-            opts='p'
+            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
         )
         msht_buffer.crs = utm
 
