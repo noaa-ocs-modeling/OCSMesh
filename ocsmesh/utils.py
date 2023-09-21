@@ -200,7 +200,11 @@ def get_mesh_polygons(mesh):
             [Polygon(mesh.vert2['coord'][cell]) for cell in elems]
         )
 
-    return unary_union(elm_polys)
+    poly = unary_union(elm_polys)
+    if isinstance(poly, Polygon):
+        poly = MultiPolygon([poly])
+
+    return poly
 
 
 def repartition_features(linestring, max_verts):

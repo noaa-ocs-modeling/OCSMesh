@@ -1033,7 +1033,7 @@ class TriangulatePolygon(unittest.TestCase):
 
 
 class GetMeshPolygon(unittest.TestCase):
-    def test_something(self):
+    def test_always_returns_multipolygon(self):
         self.assertTrue(False)
 
 
