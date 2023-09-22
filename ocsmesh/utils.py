@@ -2339,11 +2339,14 @@ def triangulate_polygon(
 
 
     if aux_pts is not None:
-        if isinstance(aux_pts, (gpd.GeoDataFrame, gpd.GeoSeries)):
-            aux_pts = np.array(aux_pts.unary_union.xy).T
+        if isinstance(aux_pts, (Point, MultiPolygon)):
+            aux_pts = gpd.GeoSeries(aux_pts)
+        elif isinstance(aux_pts, gpd.GeoDataFrame):
+            aux_pts = aux_pts.geometry
+        elif not isinstance(aux_pts, gpd.GeoSeries):
+            raise ValueError("Wrong input type for <aux_pts>!")
 
-        elif isinstance(aux_pts, (Point, MultiPolygon)):
-            aux_pts = np.array(aux_pts.xy).T
+        aux_pts = aux_pts.get_coordinates().values
 
         coords = np.vstack((coords, aux_pts))
 
