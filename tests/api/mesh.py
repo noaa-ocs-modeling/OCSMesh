@@ -53,6 +53,18 @@ class BoundaryExtraction(unittest.TestCase):
 
             self.mesh = Mesh(mesh_msht)
 
+    def _chkEqualPermutations(self, a, b):
+        # Make sure there are rings!
+        assert a[0] == a[-1] and b[0] == b[-1]
+
+        a = np.array(a[:-1])
+        b = np.array(b[:-1])
+        idx = np.nonzero(a == b[0])
+        if len(idx) == 0:
+            raise ValueError("One item in arg2 is not found in arg1")
+        shift = -idx[0].item()
+        self.assertTrue(np.all(np.roll(a, shift=shift) == np.array(b)))
+
     def test_auto_boundary_fails_if_na_elev(self):
         # Set one node to nan value
         self.mesh.msh_t.value[-1] = np.nan
@@ -79,7 +91,7 @@ class BoundaryExtraction(unittest.TestCase):
             bdry.land().iloc[0]['index_id'],
             [5, 4, 3, 2, 1, 6, 11, 16, 21, 26, 27, 28, 29, 30]
         )
-        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+        self._chkEqualPermutations(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_auto_boundary_2open_correctness(self):
@@ -100,7 +112,7 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.open().iloc[1]['index_id'], [30, 25, 20, 15, 10, 5])
         self.assertEqual(bdry.land().iloc[0]['index_id'], [5, 4, 3, 2, 1])
         self.assertEqual(bdry.land().iloc[1]['index_id'], [26, 27, 28, 29, 30])
-        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+        self._chkEqualPermutations(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_manual_boundary_specification_correctness(self):
@@ -127,7 +139,7 @@ class BoundaryExtraction(unittest.TestCase):
             [1, 6, 11, 16, 21, 26, 27, 28, 29, 30, 25, 20, 15, 10, 5]
         )
         self.assertEqual(bdry.land().iloc[1]['index_id'], [2, 3, 4])
-        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+        self._chkEqualPermutations(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_manual_boundary_notaffect_interior(self):
@@ -288,7 +300,7 @@ class BoundaryExtraction(unittest.TestCase):
         bdry.find_islands()
 
         self.assertEqual(len(bdry.interior()), 1)
-        self.assertEqual(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
+        self._chkEqualPermutations(bdry.interior().iloc[0]['index_id'], [12, 13, 18, 17, 12])
 
 
     def test_specify_boundary_on_mesh_with_no_boundary(self):
@@ -303,3 +315,7 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 0)
 
         self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
+
+
+if __name__ == '__main__':
+    unittest.main()

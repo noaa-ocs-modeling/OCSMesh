@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import permutations
-from typing import Union, Dict, Sequence, Tuple
+from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
 from copy import deepcopy
@@ -13,6 +13,7 @@ from matplotlib.tri import Triangulation  # type: ignore[import]
 import numpy as np  # type: ignore[import]
 import numpy.typing as npt
 import rasterio as rio
+import triangle as tr
 from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
@@ -23,6 +24,7 @@ from shapely.geometry import ( # type: ignore[import]
         LineString, LinearRing)
 from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
+import pandas as pd
 import utm
 
 
@@ -94,7 +96,7 @@ def cleanup_duplicates(mesh):
         return_index=True,
         return_inverse=True
     )
-    nd_map = {e: i for e, i in enumerate(coorev)}
+    nd_map = dict(enumerate(coorev))
     mesh.vert2 = mesh.vert2.take(cooidx, axis=0)
 
     for etype, otype in MESH_TYPES.items():
@@ -191,86 +193,18 @@ def get_boundary_segments(mesh):
 
 
 def get_mesh_polygons(mesh):
+    elm_polys = []
+    for elm_type in ELEM_2D_TYPES:
+        elems = getattr(mesh, elm_type)['index']
+        elm_polys.extend(
+            [Polygon(mesh.vert2['coord'][cell]) for cell in elems]
+        )
 
+    poly = unary_union(elm_polys)
+    if isinstance(poly, Polygon):
+        poly = MultiPolygon([poly])
 
-    # TODO: Copy mesh?
-    target_mesh = mesh
-    result_polys = []
-
-    # 2-pass find, first find using polygons that intersect non-boundary
-    # vertices, then from the rest of the mesh find polygons that
-    # intersect any vertex
-    for find_pass in range(2):
-
-
-        coords = target_mesh.vert2['coord']
-
-        if len(coords) == 0:
-            continue
-
-        boundary_edges = get_boundary_edges(target_mesh)
-
-        lines = get_boundary_segments(target_mesh)
-
-        poly_gen = polygonize(lines)
-        polys = list(poly_gen)
-        polys = sorted(polys, key=lambda p: p.area, reverse=True)
-
-
-        bndry_verts = np.unique(boundary_edges)
-
-        if find_pass == 0:
-            non_bndry_verts = np.setdiff1d(
-                    np.arange(len(coords)), bndry_verts)
-            pnts = MultiPoint(coords[non_bndry_verts])
-        else:
-            pnts = MultiPoint(coords[bndry_verts])
-
-
-        # NOTE: This logic requires polygons to be sorted by area
-        pass_valid_polys = []
-        while len(pnts.geoms) > 0:
-
-
-            idx = np.random.randint(len(pnts.geoms))
-            pnt = pnts.geoms[idx]
-
-            polys_gdf = gpd.GeoDataFrame(
-                {'geometry': polys, 'list_index': range(len(polys))})
-
-
-            res_gdf = polys_gdf[polys_gdf.intersects(pnt)]
-            if len(res_gdf) == 0:
-                # How is this possible for the remaining points not to
-                # intersect with the remaining polys?!
-                pnts = MultiPoint([pt for i, pt in enumerate(pnts.geoms) if i != idx])
-                if pnts.is_empty:
-                    break
-
-                continue
-
-            poly = res_gdf.geometry.iloc[0]
-            polys.pop(res_gdf.iloc[0].list_index)
-
-
-
-            pass_valid_polys.append(poly)
-            pnts = pnts.difference(poly)
-            if pnts.is_empty:
-                break
-            if isinstance(pnts, Point):
-                pnts = MultiPoint([pnts])
-
-
-        result_polys.extend(pass_valid_polys)
-        target_mesh = clip_mesh_by_shape(
-            target_mesh,
-            shape=MultiPolygon(pass_valid_polys),
-            inverse=True, fit_inside=True)
-
-
-
-    return MultiPolygon(result_polys)
+    return poly
 
 
 def repartition_features(linestring, max_verts):
@@ -1112,7 +1046,7 @@ def get_mesh_edges(mesh: jigsaw_msh_t, unique=True):
                         (elm_type, np.roll(elm_type, shift=1, axis=1)),
                         axis=2),
                     axis=2)
-            edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+            edges = edges.reshape(np.prod(edges.shape[0:2]), 2)
             all_edges = np.vstack((all_edges, edges))
 
     if unique:
@@ -2164,8 +2098,11 @@ def raster_from_numpy(
 
 def msht_from_numpy(
     coordinates,
-    triangles,
+    *, # Get everything else as keyword args
+    edges=None,
+    triangles=None,
     quadrilaterals=None,
+    values=None,
     crs=CRS.from_epsg(4326)
 ):
     mesh = jigsaw_msh_t()
@@ -2179,14 +2116,282 @@ def msht_from_numpy(
         [(coord, 0) for coord in coordinates],
         dtype=jigsaw_msh_t.VERT2_t
         )
-    mesh.tria3 = np.array(
-        [(index, 0) for index in triangles],
-        dtype=jigsaw_msh_t.TRIA3_t
+
+    if edges is not None:
+        mesh.edge2 = np.array(
+            [(index, 0) for index in edges],
+            dtype=jigsaw_msh_t.EDGE2_t
+        )
+    if triangles is not None:
+        mesh.tria3 = np.array(
+            [(index, 0) for index in triangles],
+            dtype=jigsaw_msh_t.TRIA3_t
         )
     if quadrilaterals is not None:
         mesh.quad4 = np.array(
             [(index, 0) for index in quadrilaterals],
             dtype=jigsaw_msh_t.QUAD4_t
-            )
+        )
+    if values is None:
+        values = np.array(
+            np.zeros((len(mesh.vert2), 1)),
+            dtype=jigsaw_msh_t.REALS_t
+        )
+    elif not isinstance(values, np.ndarray):
+        values = np.array(values).reshape(-1, 1)
+
+    if values.shape != (len(mesh.vert2), 1):
+        raise ValueError(
+            "Input for mesh values must either be None or a"
+            " 2D-array with row count equal to vertex count!"
+        )
+
+    mesh.value = values
 
     return mesh
+
+
+def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
+    """Calculate vertex-edge representation of polygon shape
+
+    Calculate `jigsawpy` vertex-edge representation of the input
+    `shapely` shape.
+
+    Parameters
+    ----------
+    shape : Polygon or MultiPolygon
+        Input polygon for which the vertex-edge representation is to
+        be calculated
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Vertex-edge representation of the input shape
+
+    Raises
+    ------
+    NotImplementedError
+    """
+
+    vert2: List[Tuple[Tuple[float, float], int]] = []
+    if isinstance(shape, Polygon):
+        shape = MultiPolygon([shape])
+
+    if not isinstance(shape, MultiPolygon):
+        raise ValueError(f"Invalid input shape type: {type(shape)}!")
+
+    if not shape.is_valid:
+        raise ValueError("Input contains invalid (multi)polygons!")
+
+    for polygon in shape.geoms:
+        if np.all(
+                np.asarray(
+                    polygon.exterior.coords).flatten() == float('inf')):
+            raise NotImplementedError("ellispoidal-mesh")
+        for x, y in polygon.exterior.coords[:-1]:
+            vert2.append(((x, y), 0))
+        for interior in polygon.interiors:
+            for x, y in interior.coords[:-1]:
+                vert2.append(((x, y), 0))
+
+    # edge2
+    edge2: List[Tuple[int, int]] = []
+    for polygon in shape.geoms:
+        polygon = [polygon.exterior, *polygon.interiors]
+        for linear_ring in polygon:
+            edg = []
+            for i in range(len(linear_ring.coords) - 2):
+                edg.append((i, i+1))
+            edg.append((edg[-1][1], edg[0][0]))
+            edge2.extend(
+                [(e0+len(edge2), e1+len(edge2))
+                    for e0, e1 in edg])
+
+    msht = jigsaw_msh_t()
+    msht.ndims = +2
+    msht.mshID = 'euclidean-mesh'
+    msht.vert2 = np.asarray(vert2, dtype=jigsaw_msh_t.VERT2_t)
+    msht.edge2 = np.asarray(
+        [((e0, e1), 0) for e0, e1 in edge2],
+        dtype=jigsaw_msh_t.EDGE2_t)
+    return msht
+
+
+def shape_to_msh_t_2(
+    shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries]
+) -> jigsaw_msh_t:
+    gdf_shape = shape
+    if isinstance(shape, gpd.GeoSeries):
+        gdf_shape = gpd.GeoDataFrame(geometry=shape)
+    elif not isinstance(shape, gpd.GeoDataFrame):
+        gdf_shape = gpd.GeoDataFrame(geometry=[shape])
+
+    if np.sum(gdf_shape.area) == 0:
+        raise ValueError("The shape must have an area, such as Polygon!")
+
+    if not np.all(gdf_shape.is_valid):
+        raise ValueError("Input contains invalid (multi)polygons!")
+
+    df_lonlat = (
+        gdf_shape
+        .boundary
+        .explode(ignore_index=True)
+        .map(lambda i: i.coords)
+        .explode()
+        .apply(lambda s: pd.Series({'lon': s[0], 'lat': s[1]}))
+        .reset_index() # put polygon index in the dataframe
+        .drop_duplicates() # drop duplicates within polygons
+    )
+
+    df_seg = (
+        df_lonlat.join(
+            df_lonlat.groupby('index').transform(np.roll, 1, axis=0),
+            lsuffix='_1',
+            rsuffix='_2'
+        ).dropna()
+        .set_index('index')
+    )
+
+    df_nodes = (
+        df_lonlat.drop(columns='index') # drop to allow cross poly dupl
+        .drop_duplicates() # drop duplicates across multiple polygons
+        .reset_index(drop=True) # renumber nodes
+        .reset_index() # add node idx as df data column
+        .set_index(['lon','lat'])
+    )
+
+    # CRD Table
+    df_coo = df_nodes.reset_index().drop(columns='index')
+
+    # CNN Table
+    df_edg = (
+        df_nodes.loc[
+            pd.MultiIndex.from_frame(df_seg[['lon_1', 'lat_1']])
+        ].reset_index(drop=True)
+        .join(
+            df_nodes.loc[
+                pd.MultiIndex.from_frame(df_seg[['lon_2', 'lat_2']])
+            ]
+            .reset_index(drop=True),
+            lsuffix='_1',
+            rsuffix='_2'
+        )
+    )
+
+
+    ar_edg = np.sort(df_edg.values, axis=1)
+    df_cnn = (
+        pd.DataFrame.from_records(
+            ar_edg,
+            columns=['index_1', 'index_2'],
+        )
+        .drop_duplicates() # Remove duplicate edges
+        .reset_index(drop=True)
+    )
+
+    msht = msht_from_numpy(
+        coordinates=df_coo[['lon', 'lat']].values,
+        edges=df_cnn.values,
+        values=np.zeros((len(df_coo) ,1)),
+        crs=gdf_shape.crs
+    )
+
+    return msht
+
+
+
+def triangulate_polygon(
+    shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
+    aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
+    opts='p',
+) -> None:
+    """Triangulate the input shape, with additional points provided
+
+    Use `triangle` package to triangulate the input shape. If provided,
+    use the input additional points as well. The input `opts` controls
+    how `triangle` treats the inputs.
+    See the documentation for `triangle` more information
+
+    Parameters
+    ----------
+    shape : Polygon or MultiPolygon or GeoDataFrame or GeoSeries
+        Input polygon to triangulate
+    aux_pts : numpy array or Point or MultiPoint or GeoDataFrame or GeoSeries
+        Extra points to be used in the triangulation
+    opts : string, default='p'
+        Options for controlling `triangle` package
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Generated triangulation
+
+    Raises
+    ------
+    ValueError
+        If input shape is invalid or the point input cannot be used
+        to generate point shape
+    """
+
+    # NOTE: Triangle can handle separate closed polygons,
+    # so no need to have for loop
+
+    if isinstance(shape, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        shape = shape.unary_union
+
+    if isinstance(shape, Polygon):
+        shape = MultiPolygon([shape])
+
+    if not isinstance(shape, (MultiPolygon, Polygon)):
+        raise ValueError("Input shape must be convertible to polygon!")
+
+    msht_shape = shape_to_msh_t_2(shape)
+    coords = msht_shape.vert2['coord']
+    edges = msht_shape.edge2['index']
+
+    # To make sure islands formed by two polygons touching at multiple
+    # points are also considered as holes, instead of getting interiors,
+    # we get the negative of the domain and calculate points in all
+    # negative polygons!
+
+    # buffer by 1/100 of shape length scale = sqrt(area)/100
+    world = box(*shape.buffer(np.sqrt(shape.area) / 100).bounds)
+    neg_shape = world.difference(shape)
+    if isinstance(neg_shape, Polygon):
+        neg_shape = MultiPolygon([neg_shape])
+    holes = []
+    for poly in neg_shape.geoms:
+        holes.append(np.array(poly.representative_point().xy).ravel())
+    holes = np.array(holes)
+
+
+    if aux_pts is not None:
+        if isinstance(aux_pts, (np.ndarray, list, tuple)):
+            aux_pts = MultiPoint(aux_pts)
+        if isinstance(aux_pts, (Point, MultiPoint)):
+            aux_pts = gpd.GeoSeries(aux_pts)
+        elif isinstance(aux_pts, gpd.GeoDataFrame):
+            aux_pts = aux_pts.geometry
+        elif not isinstance(aux_pts, gpd.GeoSeries):
+            raise ValueError("Wrong input type for <aux_pts>!")
+
+        aux_pts = aux_pts.get_coordinates().values
+
+        coords = np.vstack((coords, aux_pts))
+
+    input_dict = {'vertices': coords, 'segments': edges}
+    if len(holes):
+        input_dict['holes'] = holes
+    cdt = tr.triangulate(input_dict, opts=opts)
+
+    msht_tri = msht_from_numpy(
+        coordinates=cdt['vertices'],
+        triangles=cdt['triangles'],
+        values=np.zeros((len(cdt['vertices']) ,1)),
+        crs=None,
+    )
+    if aux_pts is not None:
+        # To make sure unused points are discarded
+        cleanup_isolates(msht_tri)
+
+    return msht_tri
