@@ -383,10 +383,11 @@ class HfunRaster(BaseHfun, Raster):
                 transformer = Transformer.from_crs(
                     self.crs, utm_crs, always_xy=True)
                 bbox = [
-                    *[(x, left[0]) for x in bottom],
-                    *[(bottom[-1], y) for y in reversed(right)],
-                    *[(x, right[-1]) for x in reversed(top)],
-                    *[(bottom[0], y) for y in reversed(left)]]
+                    *[(x, left[0]) for x in bottom][:-1],
+                    *[(bottom[-1], y) for y in right][:-1],
+                    *[(x, right[-1]) for x in reversed(top)][:-1],
+                    *[(bottom[0], y) for y in reversed(left)][:-1]
+                ]
                 geom = PolygonGeom(
                     ops.transform(transformer.transform, Polygon(bbox)),
                     utm_crs
