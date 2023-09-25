@@ -1060,9 +1060,22 @@ class TriangulatePolygon(unittest.TestCase):
 
 class GetMeshPolygon(unittest.TestCase):
     def test_always_returns_multipolygon(self):
-        self.assertTrue(False)
+        poly1 = Polygon(
+            [[0, 0], [0, 4], [6, 4], [6, 0], [4, 2], [2, 2], [0, 0]],
+        )
+        poly2 = Polygon(
+            [[0, 0], [0, -4], [6, -4], [6, 0], [4, -2], [2, -2], [0, 0]],
+        )
+        multpoly = MultiPolygon([poly1, poly2])
 
+        msht_1 = utils.triangulate_polygon(poly1, opts='p')
+        msht_2 = utils.triangulate_polygon(multpoly, opts='p')
 
+        mesh_poly_1 = utils.get_mesh_polygons(msht_1)
+        mesh_poly_2 = utils.get_mesh_polygons(msht_2)
+
+        self.assertIsInstance(mesh_poly_1, MultiPolygon)
+        self.assertIsInstance(mesh_poly_2, MultiPolygon)
 
 if __name__ == '__main__':
     unittest.main()
