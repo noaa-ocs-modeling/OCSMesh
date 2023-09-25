@@ -2363,7 +2363,9 @@ def triangulate_polygon(
 
 
     if aux_pts is not None:
-        if isinstance(aux_pts, (Point, MultiPolygon)):
+        if isinstance(aux_pts, (np.ndarray, list, tuple)):
+            aux_pts = MultiPoint(aux_pts)
+        if isinstance(aux_pts, (Point, MultiPoint)):
             aux_pts = gpd.GeoSeries(aux_pts)
         elif isinstance(aux_pts, gpd.GeoDataFrame):
             aux_pts = aux_pts.geometry
