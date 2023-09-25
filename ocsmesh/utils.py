@@ -1046,7 +1046,7 @@ def get_mesh_edges(mesh: jigsaw_msh_t, unique=True):
                         (elm_type, np.roll(elm_type, shift=1, axis=1)),
                         axis=2),
                     axis=2)
-            edges = edges.reshape(np.product(edges.shape[0:2]), 2)
+            edges = edges.reshape(np.prod(edges.shape[0:2]), 2)
             all_edges = np.vstack((all_edges, edges))
 
     if unique:
