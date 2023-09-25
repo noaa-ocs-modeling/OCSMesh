@@ -1,6 +1,6 @@
 from collections import defaultdict
 from itertools import permutations
-from typing import Union, Dict, Sequence, Tuple
+from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
 from copy import deepcopy
@@ -96,7 +96,7 @@ def cleanup_duplicates(mesh):
         return_index=True,
         return_inverse=True
     )
-    nd_map = {e: i for e, i in enumerate(coorev)}
+    nd_map = dict(enumerate(coorev))
     mesh.vert2 = mesh.vert2.take(cooidx, axis=0)
 
     for etype, otype in MESH_TYPES.items():
@@ -2275,7 +2275,7 @@ def shape_to_msh_t_2(
         )
     )
 
-    
+
     ar_edg = np.sort(df_edg.values, axis=1)
     df_cnn = (
         pd.DataFrame.from_records(
@@ -2285,7 +2285,7 @@ def shape_to_msh_t_2(
         .drop_duplicates() # Remove duplicate edges
         .reset_index(drop=True)
     )
-    
+
     msht = msht_from_numpy(
         coordinates=df_coo[['lon', 'lat']].values,
         edges=df_cnn.values,
@@ -2302,9 +2302,33 @@ def triangulate_polygon(
     aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
     opts='p',
 ) -> None:
-    '''
+    """Triangulate the input shape, with additional points provided
 
-    '''
+    Use `triangle` package to triangulate the input shape. If provided,
+    use the input additional points as well. The input `opts` controls
+    how `triangle` treats the inputs.
+    See the documentation for `triangle` more information
+
+    Parameters
+    ----------
+    shape : Polygon or MultiPolygon or GeoDataFrame or GeoSeries
+        Input polygon to triangulate
+    aux_pts : numpy array or Point or MultiPoint or GeoDataFrame or GeoSeries
+        Extra points to be used in the triangulation
+    opts : string, default='p'
+        Options for controlling `triangle` package
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Generated triangulation
+
+    Raises
+    ------
+    ValueError
+        If input shape is invalid or the point input cannot be used
+        to generate point shape
+    """
 
     # NOTE: Triangle can handle separate closed polygons,
     # so no need to have for loop
@@ -2317,7 +2341,7 @@ def triangulate_polygon(
 
     if not isinstance(shape, (MultiPolygon, Polygon)):
         raise ValueError("Input shape must be convertible to polygon!")
-    
+
     msht_shape = shape_to_msh_t_2(shape)
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']

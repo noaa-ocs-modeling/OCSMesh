@@ -6,9 +6,7 @@ import sys
 from time import time
 
 import geopandas as gpd
-import jigsawpy
 from jigsawpy.msh_t import jigsaw_msh_t
-from jigsawpy.jig_t import jigsaw_jig_t
 import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
@@ -251,7 +249,7 @@ class SubsetAndCombine:
             buffer_crs
         ):
 
-        assert(buffer_crs == hires_mesh_clip.crs == lores_mesh_clip.crs)
+        assert buffer_crs == hires_mesh_clip.crs == lores_mesh_clip.crs
 
         # HARDCODED FOR NOW
         approx_elem_per_width = 3
@@ -283,7 +281,7 @@ class SubsetAndCombine:
         hfun_cdt.size_from_mesh()
 
         hfun_cdt_sz = deepcopy(hfun_cdt.msh_t().value) / approx_elem_per_width
-        msht_cdt.value[:] = hfun_cdt_sz 
+        msht_cdt.value[:] = hfun_cdt_sz
         hfun_rep = Hfun(Mesh(msht_cdt))
 
         mesh_domain_rep = JigsawDriver(
@@ -332,10 +330,10 @@ class SubsetAndCombine:
         ).run(sieve=0)
 
         msht_buf_apprx = deepcopy(mesh_buf_apprx.msh_t)
-        # If vertices are too close to buffer geom boundary, 
+        # If vertices are too close to buffer geom boundary,
         # it's going to cause issues (thin elements)
         if msht_buf_apprx.crs != hfun_buffer.crs:
-            ocsmesh.utils.reproject(msht_buf_apprx, hfun_buffer.crs)
+            utils.reproject(msht_buf_apprx, hfun_buffer.crs)
         gdf_pts = gpd.GeoDataFrame(
             geometry=[MultiPoint(msht_buf_apprx.vert2['coord'])],
             crs=msht_buf_apprx.crs

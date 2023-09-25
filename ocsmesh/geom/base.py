@@ -2,10 +2,9 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Any, Union
+from typing import Any, Union
 
 from jigsawpy import jigsaw_msh_t
-import numpy as np
 from pyproj import CRS, Transformer
 from shapely import ops
 from shapely.geometry import MultiPolygon
