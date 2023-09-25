@@ -592,17 +592,43 @@ class CreateMeshTFromNumpy(unittest.TestCase):
 
         self.assertEqual(out_msht_2.crs, CRS.from_user_input('esri:102008'))
 
-    def test_values(self):
-        # Test it has values
-        # Test value input of wrong size
-        # Test value None input
-        self.assertTrue(False)
-        #TODO:
+    def test_values_are_assigned(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            crs=None
+        )
+
+        self.assertTrue(len(out_msht.value) == len(self.in_verts))
+        self.assertTrue(np.all(out_msht.value == 0))
+
+    def test_values_input_validation(self):
+        with self.assertRaises(ValueError) as exc_1:
+            utils.msht_from_numpy(
+                coordinates=self.in_verts,
+                triangles=self.in_tria,
+                values=[1,2,3],
+                crs=None
+            )
+
+        self.assertIsNotNone(
+            re.search(
+                'values must either be',
+                str(exc_1.exception).lower()
+            ),
+        )
 
 
     def test_kwonly_args(self):
-        self.assertTrue(False)
-        #TODO:
+        with self.assertRaises(Exception) as exc_1:
+            utils.msht_from_numpy(self.in_verts, self.in_tria)
+
+        self.assertIsNotNone(
+            re.search(
+                'takes 1 positional argument',
+                str(exc_1.exception).lower()
+            ),
+        )
 
 
 class CreateRasterFromNumpy(unittest.TestCase):

@@ -2137,7 +2137,10 @@ def msht_from_numpy(
             np.zeros((len(mesh.vert2), 1)),
             dtype=jigsaw_msh_t.REALS_t
         )
-    elif values.shape != (len(mesh.vert2), 1):
+    elif not isinstance(values, np.ndarray):
+        values = np.array(values).reshape(-1, 1)
+
+    if values.shape != (len(mesh.vert2), 1):
         raise ValueError(
             "Input for mesh values must either be None or a"
             " 2D-array with row count equal to vertex count!"
