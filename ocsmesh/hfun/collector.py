@@ -1964,8 +1964,15 @@ class HfunCollector(BaseHfun):
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
 
-        box_epsg4326 = box(x0, y0, x1, y1)
-        poly_utm = ops.transform(transformer.transform, Polygon(box_epsg4326))
+        # If it's the full earth, then the spaces are at least 1/2 deg
+        xs = np.linspace(x0, x1, 720)
+        ys = np.linspace(y0, y1, 720)
+        coords = [[x0, y] for y in ys]
+        coords.extend([[x, y1] for x in xs])
+        coords.extend([[x1, y] for y in reversed(ys)])
+        coords.extend([[x, y0] for x in reversed(xs)])
+        poly_epsg4326 = Polygon(np.array(coords))
+        poly_utm = ops.transform(transformer.transform, poly_epsg4326)
         x0, y0, x1, y1 = poly_utm.bounds
 
         worst_res = 0
