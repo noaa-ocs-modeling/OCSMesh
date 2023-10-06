@@ -463,7 +463,7 @@ class SizeFunctionCollector(unittest.TestCase):
 
     def test_hfun_fast_extent(self):
         r_path = self.tdir / 'rast_large.tif'
-        rast_xy = np.mgrid[-50:50:0.2, 0:50:0.2]
+        rast_xy = np.mgrid[-80:80:0.2, 20:70:0.2]
         rast_z = np.ones_like(rast_xy[0]) * 100
 
         ocsmesh.utils.raster_from_numpy(
