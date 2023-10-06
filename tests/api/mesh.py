@@ -317,5 +317,13 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
 
 
+class RasterInterpolation(unittest.TestCase):
+
+    def test_interpolation_io(self):
+        self.assert(False)
+
+    def test_interpolation_band(self):
+        self.assert(False)
+
 if __name__ == '__main__':
     unittest.main()
