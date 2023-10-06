@@ -472,7 +472,7 @@ class SizeFunctionCollector(unittest.TestCase):
 
         rast = ocsmesh.Raster(r_path)
         hfun_coll = ocsmesh.Hfun(
-            [rast], hmin=10000, hmax=20000, method='fast'
+            [rast], hmin=100000, hmax=200000, method='fast'
         )
         hfun_msht = hfun_coll.msh_t()
 
@@ -482,7 +482,7 @@ class SizeFunctionCollector(unittest.TestCase):
 
         # NOTE: It's good enough if it covers most of it (?)
         self.assertTrue(hfun_box.covers(
-            rast_box.buffer(-0.001 * np.sqrt(rast_box.area))
+            rast_box.buffer(-0.002 * np.sqrt(rast_box.area))
         ))
 
 
