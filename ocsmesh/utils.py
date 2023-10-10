@@ -1385,13 +1385,13 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     desc = "EPSG:4326"
     if src_crs is not None:
         # TODO: Support non EPSG:4326 CRS
-#        desc = src_crs.to_string()
-        epsg_4326 = CRS.from_epsg(4326)
-        if not src_crs.equals(epsg_4326):
-            transformer = Transformer.from_crs(
-                src_crs, epsg_4326, always_xy=True)
-            coords = np.vstack(
-                transformer.transform(coords[:, 0], coords[:, 1])).T
+        desc = src_crs.to_string()
+#        epsg_4326 = CRS.from_epsg(4326)
+#        if not src_crs.equals(epsg_4326):
+#            transformer = Transformer.from_crs(
+#                src_crs, epsg_4326, always_xy=True)
+#            coords = np.vstack(
+#                transformer.transform(coords[:, 0], coords[:, 1])).T
 
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
@@ -2080,20 +2080,31 @@ def raster_from_numpy(
     if not isinstance(crs, CRS):
         crs = CRS.from_user_input(crs)
 
+    nbands = 1
+    if data.ndim == 3:
+        nbands = data.shape[2]
+    elif data.ndim != 2:
+        raise ValueError("Invalid data dimensions!")
+
     with rio.open(
         filename,
         'w',
         driver='GTiff',
         height=data.shape[0],
         width=data.shape[1],
-        count=1,
+        count=nbands,
         dtype=data.dtype,
         crs=crs,
         transform=transform,
     ) as dst:
         if isinstance(data, np.ma.MaskedArray):
             dst.nodata = data.fill_value
-        dst.write(data, 1)
+
+        data = data.reshape(data.shape[0], data.shape[1], -1)
+        for i in range(nbands):
+            dst.write(data.take(i, axis=2), i + 1)
+
+
 
 
 def msht_from_numpy(
