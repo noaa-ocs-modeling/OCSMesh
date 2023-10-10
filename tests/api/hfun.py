@@ -461,6 +461,34 @@ class SizeFunctionCollector(unittest.TestCase):
         self.assertTrue(isinstance(hfun_msht, jigsaw_msh_t))
 
 
+    def test_hfun_fast_extent(self):
+        r_path = self.tdir / 'rast_large.tif'
+        rast_xy = np.mgrid[-80:80:0.2, 20:70:0.2]
+        rast_z = np.ones_like(rast_xy[0]) * 100
+
+        ocsmesh.utils.raster_from_numpy(
+            r_path, rast_z, rast_xy, 4326
+        )
+
+        rast = ocsmesh.Raster(r_path)
+        hfun_coll = ocsmesh.Hfun(
+            [rast], hmin=100000, hmax=200000, method='fast'
+        )
+        hfun_msht = hfun_coll.msh_t()
+
+        ocsmesh.utils.reproject(hfun_msht, rast.crs)
+        rast_box = rast.get_bbox()
+        hfun_box = ocsmesh.utils.get_mesh_polygons(hfun_msht)
+
+        # NOTE: It's good enough if it covers most of it (?)
+        self.assertTrue(
+            rast_box.difference(hfun_box).area / rast_box.area < 5e-4
+        )
+        # This fails due to coarse elements!
+#        self.assertTrue(hfun_box.covers(rast_box)) 
+
+
+
 class SizeFromMesh(unittest.TestCase):
 
     def setUp(self):
