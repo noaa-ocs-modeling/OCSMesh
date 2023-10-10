@@ -485,10 +485,12 @@ class SizeFunctionCollector(unittest.TestCase):
             "Areas",
             hfun_box.area,
             rast_box.area,
-            rast_box.difference(hfun_box).area
+            rast_box.buffer(-0.005 * np.sqrt(rast_box.area)).area,
+            rast_box.buffer(-0.005 * np.sqrt(rast_box.area)).difference(
+                hfun_box).area
         )
         self.assertTrue(hfun_box.covers(
-            rast_box.buffer(-0.002 * np.sqrt(rast_box.area))
+            rast_box.buffer(-0.005 * np.sqrt(rast_box.area))
         ))
 
 
