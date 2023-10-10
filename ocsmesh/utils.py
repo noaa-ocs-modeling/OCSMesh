@@ -1385,13 +1385,13 @@ def msh_t_to_grd(msh: jigsaw_msh_t) -> Dict:
     desc = "EPSG:4326"
     if src_crs is not None:
         # TODO: Support non EPSG:4326 CRS
-        desc = src_crs.to_string()
-#        epsg_4326 = CRS.from_epsg(4326)
-#        if not src_crs.equals(epsg_4326):
-#            transformer = Transformer.from_crs(
-#                src_crs, epsg_4326, always_xy=True)
-#            coords = np.vstack(
-#                transformer.transform(coords[:, 0], coords[:, 1])).T
+#        desc = src_crs.to_string()
+        epsg_4326 = CRS.from_epsg(4326)
+        if not src_crs.equals(epsg_4326):
+            transformer = Transformer.from_crs(
+                src_crs, epsg_4326, always_xy=True)
+            coords = np.vstack(
+                transformer.transform(coords[:, 0], coords[:, 1])).T
 
     nodes = {
         i + 1: [tuple(p.tolist()), v] for i, (p, v) in
