@@ -481,6 +481,12 @@ class SizeFunctionCollector(unittest.TestCase):
         hfun_box = ocsmesh.utils.get_mesh_polygons(hfun_msht)
 
         # NOTE: It's good enough if it covers most of it (?)
+        print(
+            "Areas",
+            hfun_box.area,
+            rast_box.area,
+            rast_box.difference(hfun_box).area
+        )
         self.assertTrue(hfun_box.covers(
             rast_box.buffer(-0.002 * np.sqrt(rast_box.area))
         ))
