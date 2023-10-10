@@ -2,14 +2,16 @@
 import tempfile
 import unittest
 import warnings
+import shutil
 from pathlib import Path
 
 import numpy as np
 from jigsawpy import jigsaw_msh_t
+from pyproj import CRS
 from shapely import geometry
 
 from ocsmesh import utils
-from ocsmesh.mesh.mesh import Mesh
+from ocsmesh.mesh.mesh import Mesh, Raster
 
 
 
@@ -315,6 +317,67 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 0)
 
         self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
+
+
+class RasterInterpolation(unittest.TestCase):
+
+    def setUp(self):
+        self.tdir = Path(tempfile.mkdtemp())
+
+        msht1 = utils.create_rectangle_mesh(
+            nx=13, ny=5, x_extent=(-73.9, -71.1), y_extent=(40.55, 40.85),
+            holes=[],
+        )
+        msht1.crs = CRS.from_user_input(4326)
+        msht2 = utils.create_rectangle_mesh(
+            nx=11, ny=7, x_extent=(-73.9, -71.1), y_extent=(40.55, 40.85),
+            holes=[],
+        )
+        msht2.crs = CRS.from_user_input(4326)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning,
+                message='Input mesh has no CRS information'
+            )
+            self.mesh1 = Mesh(msht1)
+            self.mesh2 = Mesh(msht2)
+
+        self.rast = self.tdir / 'rast.tif'
+
+        rast_xy = np.mgrid[-74:-71:0.1, 40.9:40.5:-0.01]
+        rast_z = np.ones((rast_xy.shape[1], rast_xy.shape[2], 2))
+        rast_z[:, :, 1] = 2
+        utils.raster_from_numpy(
+            self.rast, rast_z, rast_xy, 4326
+        )
+
+
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
+
+
+    def test_interpolation_io(self):
+        rast = Raster(self.rast)
+
+        self.mesh1.interpolate(rast)
+        self.assertTrue(np.isclose(self.mesh1.value, 1).all())
+
+        # TODO: Improve the assertion!
+        with self.assertRaises(Exception):
+            self.mesh1.interpolate(self.mesh2)
+
+
+    def test_interpolation_band(self):
+        rast = Raster(self.rast)
+
+        self.mesh1.interpolate(rast)
+        self.assertTrue(np.isclose(self.mesh1.value, 1).all())
+
+        self.mesh1.interpolate(rast, band=2)
+        self.assertTrue(np.isclose(self.mesh1.value, 2).all())
+
+
+    # TODO Add more interpolation tests
 
 
 if __name__ == '__main__':

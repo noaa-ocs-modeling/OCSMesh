@@ -695,6 +695,45 @@ class CreateRasterFromNumpy(unittest.TestCase):
             self.assertEqual(rast.src.nodata, fill_value)
 
 
+    def test_multiband_raster_data(self):
+        nbands = 5
+        in_data = np.ones((3, 4, nbands))
+        for i in range(nbands):
+            in_data[:, :, i] *= i
+        in_rast_xy = np.mgrid[-74:-71:1, 40.5:40.9:0.1]
+        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+            utils.raster_from_numpy(
+                tf.name,
+                data=in_data,
+                mgrid=in_rast_xy,
+                crs=4326
+                )
+            rast = Raster(tf.name)
+            self.assertEqual(rast.count, nbands)
+            for i in range(nbands):
+                with self.subTest(band_number=i):
+                    self.assertTrue(
+                        (rast.get_values(band=i+1) == i).all()
+                    )
+
+
+    def test_multiband_raster_invalid_io(self):
+        in_data = np.ones((3, 4, 5, 6))
+        in_rast_xy = np.mgrid[-74:-71:1, 40.5:40.9:0.1]
+        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+            with self.assertRaises(ValueError) as cm:
+                utils.raster_from_numpy(
+                    tf.name,
+                    data=in_data,
+                    mgrid=in_rast_xy,
+                    crs=4326
+                    )
+            exc = cm.exception
+            self.assertRegex(str(exc).lower(), '.*dimension.*')
+
+
+
+
 class ShapeToMeshT(unittest.TestCase):
 
     def setUp(self):

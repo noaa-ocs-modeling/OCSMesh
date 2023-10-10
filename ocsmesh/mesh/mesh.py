@@ -344,7 +344,8 @@ class EuclideanMesh2D(EuclideanMesh):
             method: Literal['spline', 'linear', 'nearest'] = 'spline',
             nprocs: Optional[int] = None,
             info_out_path: Union[pathlib.Path, str, None] = None,
-            filter_by_shape: bool = False
+            filter_by_shape: bool = False,
+            band: int = 1,
             ) -> None:
         """Interplate values from raster inputs to the mesh nodes.
 
@@ -359,8 +360,10 @@ class EuclideanMesh2D(EuclideanMesh):
             Number of workers to use when interpolating data.
         info_out_path : pathlike or str or None
             Path for the output node interpolation information file
-        filter_by_shape : bool
+        filter_by_shape : bool, default=False
             Flag for node filtering based on raster bbox or shape
+        band : int, default=1
+            The band from rasters to use for interpolation
 
         Returns
         -------
@@ -382,7 +385,7 @@ class EuclideanMesh2D(EuclideanMesh):
                     _mesh_interpolate_worker,
                     [(self.vert2['coord'], self.crs,
                         _raster.tmpfile, _raster.chunk_size,
-                        method, filter_by_shape)
+                        method, filter_by_shape, band)
                      for _raster in raster]
                     )
             pool.join()
@@ -390,7 +393,7 @@ class EuclideanMesh2D(EuclideanMesh):
             res = [_mesh_interpolate_worker(
                         self.vert2['coord'], self.crs,
                         _raster.tmpfile, _raster.chunk_size,
-                        method, filter_by_shape)
+                        method, filter_by_shape, band)
                    for _raster in raster]
 
         values = self.msh_t.value.flatten()
@@ -2234,7 +2237,8 @@ def _mesh_interpolate_worker(
         raster_path: Union[str, Path],
         chunk_size: Optional[int],
         method: Literal['spline', 'linear', 'nearest'] = "spline",
-        filter_by_shape: bool = False):
+        filter_by_shape: bool = False,
+        band: int = 1):
     """Interpolator worker function to be used in parallel calls
 
     Parameters
@@ -2249,8 +2253,10 @@ def _mesh_interpolate_worker(
         Chunk size for windowing over the raster.
     method : {'spline', 'linear', 'nearest'}, default='spline'
         Method of interpolation.
-    filter_by_shape : bool
+    filter_by_shape : bool, default=False
         Flag for node filtering based on raster bbox or shape
+    band : int, default=1
+        The band from rasters to use for interpolation
 
     Returns
     -------
@@ -2281,7 +2287,7 @@ def _mesh_interpolate_worker(
         xi = raster.get_x(window)
         yi = raster.get_y(window)
         # Use masked array to ignore missing values from DEM
-        zi = raster.get_values(window=window, masked=True)
+        zi = raster.get_values(window=window, masked=True, band=band)
 
         if not filter_by_shape:
             _idxs = np.logical_and(

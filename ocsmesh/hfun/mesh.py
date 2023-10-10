@@ -571,8 +571,6 @@ class HfunMesh(BaseHfun):
             Add fixed-value or fixed-matrix constraint.
         add_topo_func_constraint :
             Addint constraint based on function of topography
-        add_courant_num_constraint :
-            Add constraint based on approximated Courant number
         """
 
         if crs is None:
