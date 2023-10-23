@@ -6,16 +6,15 @@ import sys
 from time import time
 
 import geopandas as gpd
-import jigsawpy
 from jigsawpy.msh_t import jigsaw_msh_t
-from jigsawpy.jig_t import jigsaw_jig_t
 import numpy as np
 from pyproj import CRS, Transformer
+from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
-from shapely.ops import polygonize, unary_union
+from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, MultiPoint
+from shapely.ops import polygonize, unary_union, transform
 
-from ocsmesh import Raster, Geom, Mesh, Hfun, utils
+from ocsmesh import Raster, Geom, Mesh, Hfun, utils, JigsawDriver
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -242,96 +241,118 @@ class SubsetAndCombine:
 
         return new_polygon, clipped_mesh
 
-    def _calculate_mesh_size_function(self, hires_mesh_clip, lores_mesh_clip, crs):
+    def _calculate_mesh_size_function(
+            self,
+            buffer_domain,
+            hires_mesh_clip,
+            lores_mesh_clip,
+            buffer_crs
+        ):
+
+        assert buffer_crs == hires_mesh_clip.crs == lores_mesh_clip.crs
+
+        # HARDCODED FOR NOW
+        approx_elem_per_width = 3
+
+        utm = utils.estimate_bounds_utm(
+            buffer_domain.bounds, buffer_crs
+        )
+        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
+        buffer_domain = transform(transformer.transform, buffer_domain)
 
         # calculate mesh size for clipped bits
-        hfun_hires = Hfun(Mesh(deepcopy(hires_mesh_clip)))
-        hfun_hires.size_from_mesh()
-        hfun_lowres = Hfun(Mesh(deepcopy(lores_mesh_clip)))
-        hfun_lowres.size_from_mesh()
+        msht_hi = deepcopy(hires_mesh_clip)
+        utils.reproject(msht_hi, utm)
+        hfun_hi = Hfun(Mesh(msht_hi))
+        hfun_hi.size_from_mesh()
 
-#    _logger.info("Writing hfun clips...")
-#    start = time()
-#    hfun_hires.mesh.write(str(out_dir / "hfun_fine.2dm"), format="2dm", overwrite=True)
-#    hfun_lowres.mesh.write(str(out_dir / "hfun_coarse.2dm"), format="2dm", overwrite=True)
-#    _logger.info(f"Done in {time() - start} sec")
+        msht_lo = deepcopy(lores_mesh_clip)
+        utils.reproject(msht_lo, utm)
+        hfun_lo = Hfun(Mesh(msht_lo))
+        hfun_lo.size_from_mesh()
 
-        jig_hfun = utils.merge_msh_t(
-            hfun_hires.msh_t(), hfun_lowres.msh_t(),
-            out_crs=crs)#jig_geom) ### TODO: CRS MUST BE == GEOM_MSHT CRS
+        msht_cdt = utils.triangulate_polygon(
+            buffer_domain, None, opts='p'
+        )
+        msht_cdt.crs = utm
 
-        return jig_hfun
+#        utils.reproject(msht_cdt, utm)
+        hfun_cdt = Hfun(Mesh(msht_cdt))
+        hfun_cdt.size_from_mesh()
+
+        hfun_cdt_sz = deepcopy(hfun_cdt.msh_t().value) / approx_elem_per_width
+        msht_cdt.value[:] = hfun_cdt_sz
+        hfun_rep = Hfun(Mesh(msht_cdt))
+
+        mesh_domain_rep = JigsawDriver(
+            geom=Geom(buffer_domain, crs=utm),
+            hfun=hfun_rep,
+            initial_mesh=False
+        ).run(sieve=0)
+
+        msht_domain_rep = deepcopy(mesh_domain_rep.msh_t)
+        utils.reproject(msht_domain_rep, utm)
+
+        pts_2mesh = np.vstack(
+            (hfun_hi.msh_t().vert2['coord'], hfun_lo.msh_t().vert2['coord'])
+        )
+        val_2mesh = np.vstack(
+            (hfun_hi.msh_t().value, hfun_lo.msh_t().value)
+        )
+        domain_sz_1 = griddata(
+            pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='linear'
+        )
+        domain_sz_2 = griddata(
+            pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='nearest'
+        )
+        domain_sz = domain_sz_1.copy()
+        domain_sz[np.isnan(domain_sz_1)] = domain_sz_2[np.isnan(domain_sz_1)]
+
+        msht_domain_rep.value[:] = domain_sz
+        hfun_interp = Hfun(Mesh(msht_domain_rep))
+
+        return hfun_interp
 
 
     def _generate_mesh_for_buffer_region(
-            self, buffer_polygon, jig_hfun, crs):
+            self, buffer_polygon, hfun_buffer, buffer_crs):
 
-        seam = Geom(buffer_polygon, crs=crs)
-
-        jig_geom = seam.msh_t()
-
-        # IMPORTANT: Setting these to -1 results in NON CONFORMAL boundary
-#    jig_geom.vert2['IDtag'][:] = -1
-#    jig_geom.edge2['IDtag'][:] = -1
-
-        jig_init = deepcopy(seam.msh_t())
-        jig_init.vert2['IDtag'][:] = -1
-        jig_init.edge2['IDtag'][:] = -1
-
-        # Calculate length of all edges on geom
-        geom_edges = jig_geom.edge2['index']
-        geom_coords = jig_geom.vert2['coord'][geom_edges, :]
-        geom_edg_lens = np.sqrt(np.sum(
-            np.power(np.abs(np.diff(geom_coords, axis=1)), 2),
-            axis=2)).squeeze()
-
-        # TODO: Use marche to calculate mesh size in the area between
-        # the two regions?
-
-        _logger.info("Meshing...")
-        start = time()
-        opts = jigsaw_jig_t()
-        opts.hfun_scal = "absolute"
-        opts.hfun_hmin = np.min(geom_edg_lens)
-        opts.hfun_hmax = np.max(geom_edg_lens)
-#    opts.hfun_hmin = np.min(jig_hfun.value.ravel())
-#    opts.hfun_hmax = np.max(jig_hfun.value.ravel())
-        opts.optm_zip_ = False
-        opts.optm_div_ = False
-        opts.mesh_dims = +2
-        opts.mesh_rad2 = 1.05
-#    opts.mesh_rad2 = 2.0
-
-        jig_mesh = jigsaw_msh_t()
-        jig_mesh.mshID = 'euclidean-mesh'
-        jig_mesh.ndims = 2
-        jig_mesh.crs = jig_geom.crs
-
-        jigsawpy.lib.jigsaw(
-            opts, jig_geom, jig_mesh,
-#        hfun=jig_hfun,
-            init=jig_init
-            )
-
-        jig_mesh.value = np.zeros((jig_mesh.vert2.shape[0], 1))
-        self._transform_mesh(jig_mesh, crs)
-
-        # NOTE: Remove out of domain elements (some corner cases!)
-        elems = jig_mesh.tria3['index']
-        coord = jig_mesh.vert2['coord']
-
-        gdf_elems = gpd.GeoDataFrame(
-            geometry=[Polygon(tri) for tri in coord[elems]],
-            crs=jig_mesh.crs
+        utm = utils.estimate_bounds_utm(
+            buffer_polygon.bounds, buffer_crs
         )
-        idx = gdf_elems.representative_point().sindex.query(
-            seam.get_multipolygon(), predicate='intersects'
-        )
-        flag = np.zeros(len(gdf_elems), dtype=bool)
-        flag[idx] = True
-        jig_mesh.tria3 = jig_mesh.tria3[flag]
+        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
+        buffer_polygon = transform(transformer.transform, buffer_polygon)
 
-        return jig_mesh
+        mesh_buf_apprx = JigsawDriver(
+            geom=Geom(buffer_polygon, crs=utm),
+            hfun=hfun_buffer,
+            initial_mesh=False
+        ).run(sieve=0)
+
+        msht_buf_apprx = deepcopy(mesh_buf_apprx.msh_t)
+        # If vertices are too close to buffer geom boundary,
+        # it's going to cause issues (thin elements)
+        if msht_buf_apprx.crs != hfun_buffer.crs:
+            utils.reproject(msht_buf_apprx, hfun_buffer.crs)
+        gdf_pts = gpd.GeoDataFrame(
+            geometry=[MultiPoint(msht_buf_apprx.vert2['coord'])],
+            crs=msht_buf_apprx.crs
+        ).explode()
+        gdf_aux_pts = gdf_pts[
+            (~gdf_pts.intersects(
+                buffer_polygon.boundary.buffer(hfun_buffer.hmin))
+            ) & (gdf_pts.within(buffer_polygon))
+        ]
+
+#        utils.reproject(msht_buf_apprx, buffer_crs)
+        msht_buffer = utils.triangulate_polygon(
+            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
+        )
+        msht_buffer.crs = utm
+
+        utils.reproject(msht_buffer, buffer_crs)
+
+        return msht_buffer
 
 
     def _transform_mesh(self, mesh, out_crs):
@@ -623,9 +644,13 @@ class SubsetAndCombine:
 
         poly_seam = poly_seam_8
 
-        # TODO: Get CRS correctly from geom utm
-#    jig_hfun = self._calculate_mesh_size_function(jig_clip_hires, jig_clip_lowres, crs)
-        jig_buffer_mesh = self._generate_mesh_for_buffer_region(poly_seam, None, crs)
+        hfun_buffer = self._calculate_mesh_size_function(
+            poly_seam, jig_clip_hires, jig_clip_lowres, crs
+        )
+        jig_buffer_mesh = self._generate_mesh_for_buffer_region(
+            poly_seam, hfun_buffer, crs
+        )
+        # TODO: UTM TO CRS?
 
         _logger.info("Combining meshes...")
         start = time()

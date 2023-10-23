@@ -1,6 +1,22 @@
 name: Pylint
 
-on: [push]
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - '**.py'
+      - '.github/workflows/*.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
+  pull_request:
+    paths:
+      - '**.py'
+      - '.github/workflows/*.yml'
+      - 'pyproject.toml'
+      - 'setup.py'
+      - 'setup.cfg'
 
 jobs:
   format-check:
@@ -14,8 +30,6 @@ jobs:
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
-        extra-specs: |
-          python=3.*
     - name: Install dependencies
       shell: bash -l {0}
       run: |

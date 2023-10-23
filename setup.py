@@ -73,7 +73,7 @@ class InstallJigsawCommand(distutils.cmd.Command):
     def _check_gcc_version(self):
         cpp = shutil.which("c++")
         line = subprocess.check_output([cpp, "--version"]).decode('utf-8').split('\n')[0]
-        m = re.search('(\d+\.)?(\d+\.)?(\d+)', line)
+        m = re.search('(\d+\.)(\d+\.)(\d+)', line)
         major, minor, patch = line[m.start(): m.end()].split('.')
         current_version = float(f"{major}.{minor}")
         if current_version < 7.:

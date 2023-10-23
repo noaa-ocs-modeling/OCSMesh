@@ -276,9 +276,9 @@ class HfunMesh(BaseHfun):
 
         # For expansion_rate
         if expansion_rate is not None:
-            exteriors = [ply.exterior for ply in multipolygon]
+            exteriors = [ply.exterior for ply in multipolygon.geoms]
             interiors = [
-                inter for ply in multipolygon for inter in ply.interiors]
+                inter for ply in multipolygon.geoms for inter in ply.interiors]
 
             features = MultiLineString([*exteriors, *interiors])
             # pylint: disable=E1123, E1125
@@ -571,8 +571,6 @@ class HfunMesh(BaseHfun):
             Add fixed-value or fixed-matrix constraint.
         add_topo_func_constraint :
             Addint constraint based on function of topography
-        add_courant_num_constraint :
-            Add constraint based on approximated Courant number
         """
 
         if crs is None:
