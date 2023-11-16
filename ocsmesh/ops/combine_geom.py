@@ -163,16 +163,17 @@ class GeomCombine:
 
         poly_files_coll = []
         _logger.info(f"Number of processes: {nprocs}")
-        with tempfile.TemporaryDirectory(dir=out_dir) as temp_dir, \
-                tempfile.NamedTemporaryFile() as base_file:
+        with tempfile.TemporaryDirectory(dir=out_dir) as temp_dir:
 
+            tmpfd, tmppath = tempfile.mkstemp()
             if base_mult_poly:
-                base_mesh_path = base_file.name
+                base_mesh_path = tmppath
                 self._multipolygon_to_disk(
                     base_mesh_path, base_mult_poly, fix=False)
             else:
                 base_mesh_path = None
             base_mult_poly = None
+            os.close(tmpfd)
 
 
             _logger.info("Processing DEM priorities ...")
@@ -235,6 +236,7 @@ class GeomCombine:
                     ],
                     ignore_index=True
                 )
+            pathlib.Path(tmppath).unlink()
 
 
             # The assumption is this returns polygon or multipolygon

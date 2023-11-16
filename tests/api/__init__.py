@@ -14,9 +14,10 @@ tif_url = (
 )
 TEST_FILE = os.path.join(tempfile.gettempdir(), 'test_dem.tif')
 if not Path(TEST_FILE).exists():
-    with tempfile.NamedTemporaryFile() as tfp:
-        urllib.request.urlretrieve(tif_url, filename=tfp.name)
-        r = Raster(tfp.name)
-        r.resampling_method = Resampling.average
-        r.resample(scaling_factor=0.01)
-        r.save(TEST_FILE)
+    tmpfd, tmppath = tempfile.mkstemp()
+    urllib.request.urlretrieve(tif_url, filename=tmppath)
+    os.close(tmpfd)
+    r = Raster(tmppath)
+    r.resampling_method = Resampling.average
+    r.resample(scaling_factor=0.01)
+    r.save(TEST_FILE)

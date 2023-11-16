@@ -907,7 +907,6 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
             )
             mesh = ocsmesh.Mesh(msh_t)
             mesh.write(str(self.mesh1), format='grd', overwrite=False)
-            mesh.write('/tmp/ocsmesh/mytest2.2dm', format='2dm', overwrite=True)
 
 
     def tearDown(self):
