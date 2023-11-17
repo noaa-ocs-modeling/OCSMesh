@@ -832,6 +832,10 @@ class HfunCollector(BaseHfun):
                 rast = self._create_big_raster(temp_dir)
                 hfun = self._apply_features_fast(rast)
                 composite_hfun = self._get_hfun_composite_fast(hfun)
+                # So that the tempfiles are deleted and the dir can be
+                # safely removed
+                del rast
+                del hfun
 
         else:
             raise ValueError(f"Invalid method specified: {self._method}")
