@@ -53,10 +53,12 @@ jobs:
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite /tmp/fullsize_dem.tif /tmp/test_dem.tif
 
     - name: Export Conda environment
+      if: runner.os != 'Windows'
       shell: bash -el {0}
       run: conda list > environment_py${{ matrix.python-version }}.yml
 
     - name: 'Upload conda environment'
+      if: runner.os != 'Windows'
       uses: actions/upload-artifact@v2
       with:
         name: conda-environment-${{ matrix.python-version }}
