@@ -3,6 +3,7 @@ import re
 import tempfile
 import unittest
 from copy import deepcopy
+from pathlib import Path
 
 import numpy as np
 import geopandas as gpd
@@ -638,9 +639,11 @@ class CreateRasterFromNumpy(unittest.TestCase):
         in_rast_xy = np.mgrid[1:3:0.1, -1:1:0.1]
         in_rast_z = np.random.random(in_rast_xy[0].shape)
 
-        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+        with tempfile.TemporaryDirectory() as tdir:
+#        with tempfile.NamedTemporaryFile(suffix='.tiff', mode='w') as tf:
             retval = utils.raster_from_numpy(
-                tf.name,
+                Path(tdir) / 'test_rast.tiff',
+#                tf.name,
                 data=in_rast_z,
                 mgrid=in_rast_xy,
                 crs=4326
@@ -648,7 +651,8 @@ class CreateRasterFromNumpy(unittest.TestCase):
 
             self.assertEqual(retval, None)
 
-            rast = Raster(tf.name)
+            rast = Raster(Path(tdir) / 'test_rast.tiff')
+#            rast = Raster(tf.name)
 
             self.assertTrue(np.all(np.isclose(
                 in_rast_xy.transpose([2,1,0]).reshape(-1, 2),
@@ -656,6 +660,7 @@ class CreateRasterFromNumpy(unittest.TestCase):
             )))
             self.assertTrue(np.all(in_rast_z == rast.values))
             self.assertEqual(rast.crs, CRS.from_epsg(4326))
+            del rast
 
     def test_diff_extent_x_n_y(self):
         # TODO: Test when x and y extent are different
@@ -672,27 +677,34 @@ class CreateRasterFromNumpy(unittest.TestCase):
             fill_value=fill_value
         )
 
-        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+#        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+        with tempfile.TemporaryDirectory() as tdir:
+            tf_name = Path(tdir) / 'tiff1.tiff'
             utils.raster_from_numpy(
-                tf.name,
+#                tf.name,
+                tf_name,
                 data=in_rast_z_nomask,
                 mgrid=in_rast_xy,
                 crs=4326
                 )
 
-            rast = Raster(tf.name)
+            rast = Raster(tf_name)
             self.assertEqual(rast.src.nodata, None)
+            del rast
 
-        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+#        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+            tf_name = Path(tdir) / 'tiff2.tiff'
             utils.raster_from_numpy(
-                tf.name,
+#                tf.name,
+                tf_name,
                 data=in_rast_z_mask,
                 mgrid=in_rast_xy,
                 crs=4326
                 )
 
-            rast = Raster(tf.name)
+            rast = Raster(tf_name)
             self.assertEqual(rast.src.nodata, fill_value)
+            del rast
 
 
     def test_multiband_raster_data(self):
@@ -701,20 +713,25 @@ class CreateRasterFromNumpy(unittest.TestCase):
         for i in range(nbands):
             in_data[:, :, i] *= i
         in_rast_xy = np.mgrid[-74:-71:1, 40.5:40.9:0.1]
-        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+#        with tempfile.NamedTemporaryFile(suffix='.tiff') as tf:
+        with tempfile.TemporaryDirectory() as tdir:
+            tf_name = Path(tdir) / 'tiff3.tiff'
             utils.raster_from_numpy(
-                tf.name,
+                tf_name,
+#                tf.name,
                 data=in_data,
                 mgrid=in_rast_xy,
                 crs=4326
                 )
-            rast = Raster(tf.name)
+            rast = Raster(tf_name)
+#            rast = Raster(tf.name)
             self.assertEqual(rast.count, nbands)
             for i in range(nbands):
                 with self.subTest(band_number=i):
                     self.assertTrue(
                         (rast.get_values(band=i+1) == i).all()
                     )
+            del rast
 
 
     def test_multiband_raster_invalid_io(self):

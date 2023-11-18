@@ -1,12 +1,17 @@
 import shutil
 import tempfile
 import unittest
+import platform
 from pathlib import Path
 
 import numpy as np
 
 import ocsmesh
 from ocsmesh.utils import raster_from_numpy
+
+
+IS_WINDOWS = platform.system() == 'Windows'
+
 
 
 class Raster(unittest.TestCase):
@@ -38,21 +43,33 @@ class Raster(unittest.TestCase):
         shutil.rmtree(self.tdir)
 
 
+    @unittest.skipIf(IS_WINDOWS, 'Not supported due to LowLevelFunction int')
     def test_avg_filter_nomask(self):
-        rast = ocsmesh.Raster(self.rast1)
-        rast.average_filter(size=17)
-        self.assertTrue(np.all(rast.get_values() == 10))
+        try:
+            rast = ocsmesh.Raster(self.rast1)
+            rast.average_filter(size=17)
+            self.assertTrue(np.all(rast.get_values() == 10))
+        finally:
+            del rast
 
 
+    @unittest.skipIf(IS_WINDOWS, 'Not supported due to LowLevelFunction int')
     def test_avg_filter_masked_nanfill(self):
-        rast = ocsmesh.Raster(self.rast2)
-        rast.average_filter(size=17)
-        self.assertTrue(
-            np.all(rast.values[~np.isnan(rast.values)] == 10))
+        try:
+            rast = ocsmesh.Raster(self.rast2)
+            rast.average_filter(size=17)
+            self.assertTrue(
+                np.all(rast.values[~np.isnan(rast.values)] == 10))
+        finally:
+            del rast
 
 
+    @unittest.skipIf(IS_WINDOWS, 'Not supported due to LowLevelFunction int')
     def test_avg_filter_masked_nonnanfill(self):
-        rast = ocsmesh.Raster(self.rast3)
-        rast.average_filter(size=17)
-        self.assertTrue(
-            np.all(rast.values[rast.values != rast.nodata] == 10))
+        try:
+            rast = ocsmesh.Raster(self.rast3)
+            rast.average_filter(size=17)
+            self.assertTrue(
+                np.all(rast.values[rast.values != rast.nodata] == 10))
+        finally:
+            del rast

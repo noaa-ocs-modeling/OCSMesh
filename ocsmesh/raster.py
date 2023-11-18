@@ -13,6 +13,7 @@ import os
 import pathlib
 import tempfile
 import warnings
+import platform
 from time import time
 from contextlib import contextmanager, ExitStack
 from typing import (
@@ -144,15 +145,23 @@ class TemporaryFile:
     cleanup capabities on object destruction.
     """
 
-    def __set__(self, obj, val: tempfile.NamedTemporaryFile):
+    def __set__(self, obj, val: Optional[os.PathLike]):
+        tmpfile = obj.__dict__.get('tmpfile')
+        if tmpfile is not None:
+            obj._src = None
+            pathlib.Path(tmpfile).unlink()
+
         obj.__dict__['tmpfile'] = val
-        obj._src = rasterio.open(val.name)
+        if val is None:
+            obj._src = None
+        else:
+            obj._src = rasterio.open(val)
 
     def __get__(self, obj, objtype=None) -> pathlib.Path:
         tmpfile = obj.__dict__.get('tmpfile')
         if tmpfile is None:
             return obj.path
-        return pathlib.Path(tmpfile.name)
+        return pathlib.Path(tmpfile)
 
 
 class SourceRaster:
@@ -165,7 +174,10 @@ class SourceRaster:
     opening it everytime need arises.
     """
 
-    def __set__(self, obj, val: rasterio.DatasetReader):
+    def __set__(self, obj, val: Optional[rasterio.DatasetReader]):
+        source = obj.__dict__.get('source')
+        if source is not None:
+            source.close()
         obj.__dict__['source'] = val
 
     def __get__(self, obj, objtype=None) -> rasterio.DatasetReader:
@@ -345,6 +357,9 @@ class Raster:
         self._path = path
         self._crs = crs
 
+    def __del__(self):
+        self._tmpfile = None
+
     def __iter__(self, chunk_size: int = None, overlap: int = None):
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
@@ -380,16 +395,18 @@ class Raster:
         """
 
         no_except = False
+        tmpfd = None
         try:
             # pylint: disable=R1732
-            tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir)
+#            tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir, mode='w')
+            tmpfd, tmppath = tempfile.mkstemp(prefix=tmpdir)
 
             new_meta = kwargs
             # Flag to workaround cases where "src" is NOT set yet
             if use_src_meta:
                 new_meta = self.src.meta.copy()
                 new_meta.update(**kwargs)
-            with rasterio.open(tmpfile.name, 'w', **new_meta) as dst:
+            with rasterio.open(tmppath, 'w', **new_meta) as dst:
                 if use_src_meta:
                     for i, desc in enumerate(self.src.descriptions):
                         dst.set_band_description(i+1, desc)
@@ -399,9 +416,13 @@ class Raster:
 
         finally:
             if no_except:
-                # So that tmpfile is NOT destroyed when it locally
-                # goes out of scope
-                self._tmpfile = tmpfile
+                self._tmpfile = tmppath
+
+            # We don't need to keep the descriptor open, we kept it
+            # open # so that there's no race condition on the temp
+            # file up to now
+            if tmpfd is not None:
+                os.close(tmpfd)
 
 
 
@@ -944,6 +965,8 @@ class Raster:
         # in other parts of the code. Thorough testing is needed for
         # modifying the raster (e.g. hfun add_contour is affected)
 
+        if platform.system() == 'Windows':
+            raise NotImplementedError('Not supported on Windows!')
         bands = apply_on_bands
         if bands is None:
             bands = range(1, self.src.count + 1)
@@ -1001,6 +1024,9 @@ class Raster:
         -------
         None
         """
+
+        if platform.system() == 'Windows':
+            raise NotImplementedError('Not supported on Windows!')
 
         # TODO: Don't overwrite; add additoinal bands for filtered values
 

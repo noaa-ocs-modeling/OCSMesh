@@ -4,8 +4,10 @@
 import functools
 import gc
 import logging
+import os
 from multiprocessing import cpu_count, Pool
 import operator
+import pathlib
 import tempfile
 from time import time
 from typing import Union, List, Callable, Optional, Iterable, Tuple
@@ -232,6 +234,11 @@ class HfunRaster(BaseHfun, Raster):
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
         self._constraints = []
+
+
+    def __del__(self):
+        for _, memfile_path in self._xy_cache.items():
+            pathlib.Path(memfile_path).unlink()
 
 
     def msh_t(
@@ -1296,15 +1303,17 @@ class HfunRaster(BaseHfun, Raster):
             transformer = Transformer.from_crs(
                 self.src.crs, dst_crs, always_xy=True)
             # pylint: disable=R1732
-            tmpfile = tempfile.NamedTemporaryFile()
+#            tmpfile = tempfile.NamedTemporaryFile()
+            tmpfd, tmppath = tempfile.mkstemp()
             xy = self.get_xy(window)
-            fp = np.memmap(tmpfile, dtype='float32', mode='w+', shape=xy.shape)
+            fp = np.memmap(tmppath, dtype='float32', mode='w+', shape=xy.shape)
+            os.close(tmpfd)
             fp[:] = np.vstack(
                 transformer.transform(xy[:, 0], xy[:, 1])).T
             _logger.info('Saving values to memcache...')
             fp.flush()
             _logger.info('Done!')
-            self._xy_cache[f'{window}{dst_crs}'] = tmpfile
+            self._xy_cache[f'{window}{dst_crs}'] = tmppath
             return fp[:]
 
         _logger.info('Loading values from memcache...')

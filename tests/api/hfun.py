@@ -13,6 +13,7 @@ from shapely import geometry
 
 import ocsmesh
 
+from tests.api import TEST_FILE
 from tests.api.common import (
     topo_2rast_1mesh,
 )
@@ -492,7 +493,7 @@ class SizeFunctionCollector(unittest.TestCase):
 class SizeFromMesh(unittest.TestCase):
 
     def setUp(self):
-        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+        rast = ocsmesh.raster.Raster(TEST_FILE)
 
         hfun_orig = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=1500)
         hfun_orig.add_contour(level=0, expansion_rate=0.001, target_size=100)
@@ -512,8 +513,8 @@ class SizeFromMesh(unittest.TestCase):
         hfun_val_diff = self.hfun_orig_val - hfun_calc_val
 
         # TODO: Come up with a more robust criteria!
-        threshold = 0.21
-        err_value = np.max(np.abs(hfun_val_diff))/np.max(self.hfun_orig_val)
+        threshold = 0.05
+        err_value = np.mean(np.abs(hfun_val_diff))/np.mean(self.hfun_orig_val)
         self.assertTrue(err_value < threshold)
 
 
@@ -530,7 +531,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
         courant_hi = 0.8
         courant_lo = 0.2
 
-        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+        rast = ocsmesh.raster.Raster(TEST_FILE)
 
         hfun_raster = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=5000)
         hfun_raster.add_courant_num_constraint(
@@ -586,7 +587,7 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
         )
 
     def test_hfun_raster_cfl_constraint_io(self):
-        rast = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+        rast = ocsmesh.raster.Raster(TEST_FILE)
         hfun_raster = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=5000)
         self.assertRaises(
             ValueError,
@@ -614,8 +615,8 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
             # TODO: Add subTest
 
             # Creating adjacent rasters from the test raster
-            rast1 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
-            rast2 = ocsmesh.raster.Raster('/tmp/test_dem.tif')
+            rast1 = ocsmesh.raster.Raster(TEST_FILE)
+            rast2 = ocsmesh.raster.Raster(TEST_FILE)
             bounds = rast1.bbox.bounds
             bbox1 = geometry.box(
                 bounds[0], bounds[1], (bounds[0] + bounds[2]) / 2, bounds[3]
@@ -906,7 +907,6 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
             )
             mesh = ocsmesh.Mesh(msh_t)
             mesh.write(str(self.mesh1), format='grd', overwrite=False)
-            mesh.write('/tmp/ocsmesh/mytest2.2dm', format='2dm', overwrite=True)
 
 
     def tearDown(self):

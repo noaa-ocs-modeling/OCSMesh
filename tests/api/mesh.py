@@ -1,4 +1,5 @@
 #! python
+import os
 import tempfile
 import unittest
 import warnings
@@ -279,9 +280,11 @@ class BoundaryExtraction(unittest.TestCase):
     def test_specify_boundary_on_imported_mesh_with_boundary(self):
         self.mesh.boundaries.auto_generate()
 
-        with tempfile.NamedTemporaryFile(suffix='.grd') as fo:
-            self.mesh.write(fo.name, format='grd', overwrite=True)
-            imported_mesh = Mesh.open(fo.name)
+        tmpfd, tmppath = tempfile.mkstemp(suffix='.grd')
+        self.mesh.write(tmppath, format='grd', overwrite=True)
+        imported_mesh = Mesh.open(tmppath)
+        os.close(tmpfd)
+        os.unlink(tmppath)
 
         bdry = imported_mesh.boundaries
 
