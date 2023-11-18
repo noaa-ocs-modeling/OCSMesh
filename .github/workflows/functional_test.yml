@@ -53,7 +53,7 @@ jobs:
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite /tmp/fullsize_dem.tif /tmp/test_dem.tif
 
     - name: Export Conda environment
-      shell: bash -l {0}
+      shell: bash -el {0}
       run: conda list > environment_py${{ matrix.python-version }}.yml
 
     - name: 'Upload conda environment'
@@ -112,5 +112,5 @@ jobs:
         retention-days: 7
 
     - name: Run Python API tests
-      shell: bash -l {0}
+      shell: bash -el {0}
       run: python -m unittest discover tests/api -p "*.py"

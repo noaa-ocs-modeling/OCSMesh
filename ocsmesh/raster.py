@@ -395,6 +395,7 @@ class Raster:
         """
 
         no_except = False
+        tmpfd = None
         try:
             # pylint: disable=R1732
 #            tmpfile = tempfile.NamedTemporaryFile(prefix=tmpdir, mode='w')
@@ -420,7 +421,8 @@ class Raster:
             # We don't need to keep the descriptor open, we kept it
             # open # so that there's no race condition on the temp
             # file up to now
-            os.close(tmpfd)
+            if tmpfd is not None:
+                os.close(tmpfd)
 
 
 
@@ -964,7 +966,7 @@ class Raster:
         # modifying the raster (e.g. hfun add_contour is affected)
 
         if platform.system() == 'Windows':
-            raise ImplementationError('Not supported on Windows!')
+            raise NotImplementedError('Not supported on Windows!')
         bands = apply_on_bands
         if bands is None:
             bands = range(1, self.src.count + 1)
@@ -1024,7 +1026,7 @@ class Raster:
         """
 
         if platform.system() == 'Windows':
-            raise ImplementationError('Not supported on Windows!')
+            raise NotImplementedError('Not supported on Windows!')
 
         # TODO: Don't overwrite; add additoinal bands for filtered values
 
