@@ -132,18 +132,22 @@ class SubsetAndCombine:
 
 
 
-    def _get_region_bounded_by_isotach(self, track_file, wind_speed=34):
+    def _get_region_of_interest(self, track_file, wind_speed=34):
 
-        gdf_region_of_interset = gpd.read_file(track_file)
-        if "RADII" in gdf_region_of_interset.columns:
-            gdf_specific_isotach = gdf_region_of_interset[
-                    gdf_region_of_interset.RADII.astype(int) == wind_speed]
+        # CRS is assumed to be epsg 4326
+        crs = 4326
+        gdf_roi = gpd.read_file(track_file)
+        if not (gdf_roi.crs is None or gdf_roi.crs.equals(crs)):
+            gdf_roi = gdf_roi.to_crs(crs)
+        if "RADII" in gdf_roi.columns:
+            gdf_specific_isotach = gdf_roi[
+                    gdf_roi.RADII.astype(int) == wind_speed]
             isotach_exterior_polygon = MultiPolygon(
                 list(polygonize(list(gdf_specific_isotach.exterior))))
             region_of_interest = isotach_exterior_polygon
 
         else:
-            region_of_interest = gdf_region_of_interset.unary_union
+            region_of_interest = gdf_roi.unary_union
 
 
         return region_of_interest
@@ -175,6 +179,9 @@ class SubsetAndCombine:
         # Islands are not of intereset when clipping high and low-res meshes
         clip_poly = utils.remove_holes(unary_union([
             clip_poly_draft, *poly_upstreams]))
+
+        t = Transformer.from_crs(4326, crs, always_xy=True)
+        clip_poly = transform(t.transform, clip_poly)
 
         return clip_poly
 
@@ -254,29 +261,24 @@ class SubsetAndCombine:
         # HARDCODED FOR NOW
         approx_elem_per_width = 3
 
-        utm = utils.estimate_bounds_utm(
-            buffer_domain.bounds, buffer_crs
-        )
-        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
-        buffer_domain = transform(transformer.transform, buffer_domain)
+        msht_hi = deepcopy(hires_mesh_clip)
+        msht_lo = deepcopy(lores_mesh_clip)
+
+        crs = buffer_crs
+        assert(not buffer_crs.is_geographic)
 
         # calculate mesh size for clipped bits
-        msht_hi = deepcopy(hires_mesh_clip)
-        utils.reproject(msht_hi, utm)
         hfun_hi = Hfun(Mesh(msht_hi))
         hfun_hi.size_from_mesh()
 
-        msht_lo = deepcopy(lores_mesh_clip)
-        utils.reproject(msht_lo, utm)
         hfun_lo = Hfun(Mesh(msht_lo))
         hfun_lo.size_from_mesh()
 
         msht_cdt = utils.triangulate_polygon(
             buffer_domain, None, opts='p'
         )
-        msht_cdt.crs = utm
+        msht_cdt.crs = crs
 
-#        utils.reproject(msht_cdt, utm)
         hfun_cdt = Hfun(Mesh(msht_cdt))
         hfun_cdt.size_from_mesh()
 
@@ -285,13 +287,13 @@ class SubsetAndCombine:
         hfun_rep = Hfun(Mesh(msht_cdt))
 
         mesh_domain_rep = JigsawDriver(
-            geom=Geom(buffer_domain, crs=utm),
+            geom=Geom(buffer_domain, crs=crs),
             hfun=hfun_rep,
             initial_mesh=False
         ).run(sieve=0)
 
         msht_domain_rep = deepcopy(mesh_domain_rep.msh_t)
-        utils.reproject(msht_domain_rep, utm)
+#        utils.reproject(msht_domain_rep, crs)
 
         pts_2mesh = np.vstack(
             (hfun_hi.msh_t().vert2['coord'], hfun_lo.msh_t().vert2['coord'])
@@ -317,14 +319,12 @@ class SubsetAndCombine:
     def _generate_mesh_for_buffer_region(
             self, buffer_polygon, hfun_buffer, buffer_crs):
 
-        utm = utils.estimate_bounds_utm(
-            buffer_polygon.bounds, buffer_crs
-        )
-        transformer = Transformer.from_crs(buffer_crs, utm, always_xy=True)
-        buffer_polygon = transform(transformer.transform, buffer_polygon)
+        crs = buffer_crs
+        assert(not buffer_crs.is_geographic)
+        assert(buffer_crs == hfun_buffer.crs)
 
         mesh_buf_apprx = JigsawDriver(
-            geom=Geom(buffer_polygon, crs=utm),
+            geom=Geom(buffer_polygon, crs=crs),
             hfun=hfun_buffer,
             initial_mesh=False
         ).run(sieve=0)
@@ -332,8 +332,8 @@ class SubsetAndCombine:
         msht_buf_apprx = deepcopy(mesh_buf_apprx.msh_t)
         # If vertices are too close to buffer geom boundary,
         # it's going to cause issues (thin elements)
-        if msht_buf_apprx.crs != hfun_buffer.crs:
-            utils.reproject(msht_buf_apprx, hfun_buffer.crs)
+#        if msht_buf_apprx.crs != hfun_buffer.crs:
+#            utils.reproject(msht_buf_apprx, hfun_buffer.crs)
         gdf_pts = gpd.GeoDataFrame(
             geometry=[MultiPoint(msht_buf_apprx.vert2['coord'])],
             crs=msht_buf_apprx.crs
@@ -348,9 +348,9 @@ class SubsetAndCombine:
         msht_buffer = utils.triangulate_polygon(
             shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
         )
-        msht_buffer.crs = utm
+        msht_buffer.crs = crs
 
-        utils.reproject(msht_buffer, buffer_crs)
+#        utils.reproject(msht_buffer, buffer_crs)
 
         return msht_buffer
 
@@ -557,21 +557,35 @@ class SubsetAndCombine:
         _logger.info(f"Done in {time() - start} sec")
 
 
+
+        _logger.info("Calculate impact area...")
+        start = time()
+
+        # poly_isotach is in EPSG:4326
+        poly_isotach = self._get_region_of_interest(
+            track_file, wind_speed
+        )
+        utm = utils.estimate_bounds_utm(poly_isotach.bounds, 4326)
+
+        # Transform all inputs to UTM:
+        t1 = Transformer.from_crs(4326, utm, always_xy=True)
+        poly_isotach = transform(t1.transform, poly_isotach)
+        utils.reproject(mesh_fine.msh_t, utm)
+        utils.reproject(mesh_coarse.msh_t, utm)
+
+
         _logger.info("Calculate mesh polygons...")
         start = time()
         poly_fine = self._get_largest_polygon(mesh_fine.get_multipolygon())
         poly_coarse = self._get_largest_polygon(mesh_coarse.get_multipolygon())
         _logger.info(f"Done in {time() - start} sec")
 
-        _logger.info("Calculate impact area...")
-        start = time()
-        poly_isotach = self._get_region_bounded_by_isotach(track_file, wind_speed)
         poly_storm_roi = poly_isotach.intersection(poly_fine)
 
         poly_clipper = self._calculate_clipping_polygon(
             pathlist_raster=pathlist_raster,
             region_of_interest=poly_storm_roi,
-            crs=crs,
+            crs=utm,
             cutoff_elev=cutoff_elev,
             upstream_size_max=upstream_size_max,
             upstream_poly_list=[poly_fine])
@@ -645,17 +659,16 @@ class SubsetAndCombine:
         poly_seam = poly_seam_8
 
         hfun_buffer = self._calculate_mesh_size_function(
-            poly_seam, jig_clip_hires, jig_clip_lowres, crs
+            poly_seam, jig_clip_hires, jig_clip_lowres, utm
         )
         jig_buffer_mesh = self._generate_mesh_for_buffer_region(
-            poly_seam, hfun_buffer, crs
+            poly_seam, hfun_buffer, utm
         )
-        # TODO: UTM TO CRS?
 
         _logger.info("Combining meshes...")
         start = time()
         jig_combined_mesh, buffer_shrd_idx = self._merge_all_meshes(
-                crs, jig_buffer_mesh, jig_clip_lowres, jig_clip_hires)
+                utm, jig_buffer_mesh, jig_clip_lowres, jig_clip_hires)
         _logger.info(f"Done in {time() - start} sec")
 
         # NOTE: This call also detects overlap issues
@@ -668,7 +681,7 @@ class SubsetAndCombine:
         self._write_outputs(
             out_dir,
             out_all,
-            crs,
+            utm,
             poly_clip_hires,
             poly_clip_lowres,
             poly_seam,

@@ -37,6 +37,7 @@ jobs:
     - name: OS binaries
       shell: bash -l {0}
       run: |
+        sudo apt update
         sudo apt install gdal-bin
 
     - name: Install Python
