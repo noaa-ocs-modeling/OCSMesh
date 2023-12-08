@@ -1563,16 +1563,11 @@ class Raster:
                 feathers.append(tmpfile)
         _logger.debug('Concatenating feathers.')
         features = []
-        out = gpd.GeoDataFrame()
         for feather in feathers:
-            out = out.append(gpd.read_feather(feather), ignore_index=True)
-            feather.unlink()
-            geometry = []
-            for geom in out.geometry:
-                if isinstance(geom, LineString):
-                    geometry = MultiLineString([geom])
-                    break
-            for linestring in geometry:
+            gdf = gpd.read_feather(feather)
+            pathlib.Path(feather).unlink()
+
+            for linestring in gdf.geometry.explode(index_parts=False):
                 features.append(linestring)
         _logger.debug('Merging features.')
         return ops.linemerge(features)
