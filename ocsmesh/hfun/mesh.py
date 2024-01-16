@@ -6,6 +6,7 @@ import logging
 import operator
 import warnings
 from collections import defaultdict
+from contextlib import contextmanager
 from typing import Union, Optional, Iterable, Literal
 from multiprocessing import cpu_count, Pool
 from time import time
@@ -111,6 +112,8 @@ class HfunMesh(BaseHfun):
         self._mesh = mesh
         self._crs = mesh.crs
         self._constraints = []
+        self._hold_const = False
+        self._hold_const_hit = 0
 
     def msh_t(self) -> jigsaw_msh_t:
         """Return the size function specified on the underlying mesh
@@ -472,6 +475,18 @@ class HfunMesh(BaseHfun):
         self.mesh.msh_t.value = values
 
 
+    @contextmanager
+    def hold_applying_added_constratins(self):
+        try:
+            self._hold_const = True
+            yield
+        finally:
+            self._hold_const = False
+            if self._hold_const_hit > 0:
+                self.apply_added_constraints()
+                self._hold_const_hit = 0
+
+
     def apply_added_constraints(self) -> None:
         """Apply all the added constraints
 
@@ -487,6 +502,9 @@ class HfunMesh(BaseHfun):
         None
         """
 
+        if self._hold_const:
+            self._hold_const_hit += 1
+            return
         self.apply_constraints(self._constraints)
 
 

@@ -11,7 +11,7 @@ import pathlib
 import tempfile
 from time import time
 from typing import Union, List, Callable, Optional, Iterable, Tuple
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 import warnings
 try:
     # pylint: disable=C0412
@@ -234,6 +234,8 @@ class HfunRaster(BaseHfun, Raster):
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
         self._constraints = []
+        self._hold_const = False
+        self._hold_const_hit = 0
 
 
     def __del__(self):
@@ -499,6 +501,18 @@ class HfunRaster(BaseHfun, Raster):
         return output_mesh
 
 
+    @contextmanager
+    def hold_applying_added_constratins(self):
+        try:
+            self._hold_const = True
+            yield
+        finally:
+            self._hold_const = False
+            if self._hold_const_hit > 0:
+                self.apply_added_constraints()
+                self._hold_const_hit = 0
+
+
     def apply_added_constraints(self) -> None:
         """Apply all the added constraints
 
@@ -514,6 +528,9 @@ class HfunRaster(BaseHfun, Raster):
         None
         """
 
+        if self._hold_const:
+            self._hold_const_hit += 1
+            return
         self.apply_constraints(self._constraints)
 
 

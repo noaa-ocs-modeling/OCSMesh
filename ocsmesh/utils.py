@@ -2066,7 +2066,7 @@ def create_rectangle_mesh(
 def raster_from_numpy(
     filename,
     data,
-    mgrid,
+    mgrid, # Needs to have ij indexing!
     crs=CRS.from_epsg(4326)
 ) -> None:
     x = mgrid[0][:, 0]
