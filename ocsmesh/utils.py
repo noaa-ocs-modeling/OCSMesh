@@ -207,19 +207,34 @@ def get_mesh_polygons(mesh):
     return poly
 
 
-def repartition_features(linestring, max_verts):
+def repartition_features(
+    linestring: LineString,
+    max_verts: int,
+):
+
+
+    if not isinstance(linestring, LineString):
+        raise ValueError(
+            f"Input shape must be a LineString not {type(linestring)}!"
+        )
+    if not isinstance(max_verts, int):
+        raise ValueError(
+            "Maximum number of vertices must be an integer!"
+        )
+
     features = []
-    if len(linestring.coords) > max_verts:
-        new_feat = []
-        for segment in list(map(LineString, zip(
-                linestring.coords[:-1],
-                linestring.coords[1:]))):
-            new_feat.append(segment)
-            if len(new_feat) == max_verts - 1:
-                features.append(linemerge(new_feat))
-                new_feat = []
-        if len(new_feat) != 0:
-            features.append(linemerge(new_feat))
+    lstr_len = len(linestring.coords)
+    if lstr_len > max_verts:
+        # NOTE: -1 is because of shared connecting nodes
+        list_lens = [max_verts] * ((lstr_len - 1) // (max_verts - 1))
+        if (lstr_len - 1) % (max_verts - 1) != 0:
+            list_lens += [(lstr_len - 1) % (max_verts - 1) + 1]
+        new_idx = np.cumsum(np.array(list_lens) - 1)
+        orig_coords = np.array(linestring.coords)
+        last_idx = 0
+        for idx in new_idx:
+            features.append(LineString(orig_coords[last_idx:idx + 1]))
+            last_idx = idx
     else:
         features.append(linestring)
     return features
@@ -229,16 +244,37 @@ def transform_linestring(
     linestring: LineString,
     target_size: float,
 ):
-    distances = [0.]
-    while distances[-1] + target_size < linestring.length:
-        distances.append(distances[-1] + target_size)
-    distances.append(linestring.length)
-    linestring = LineString([
-        linestring.interpolate(distance)
-        for distance in distances
-        ])
-    return linestring
 
+    if not isinstance(linestring, LineString):
+        raise ValueError(
+            f"Input shape must be a LineString not {type(linestring)}!"
+        )
+
+    lstr_len = linestring.length
+    distances = np.cumsum(np.ones(int(lstr_len // target_size)) * target_size)
+    if len(distances) == 0:
+        return linestring
+    if distances[-1] < lstr_len:
+        distances = np.append(distances, lstr_len)
+
+    orig_coords = np.array(linestring.coords)
+    lengths = ((orig_coords[1:] - orig_coords[:-1]) ** 2).sum(axis=1) ** 0.5
+    cum_len = np.cumsum(lengths)
+
+    assert(max(cum_len) == max(distances))
+
+    # Memory issue due to matrix creation?
+    idx = len(cum_len) - (distances[:, None] <= cum_len).sum(axis=1)
+    ratio = ((cum_len[idx] - distances) / lengths[idx])[:, None]
+    
+    interp_coords = (
+        orig_coords[idx] * (ratio) + orig_coords[idx + 1] * (1 - ratio)
+    )
+    interp_coords = np.vstack((orig_coords[0], interp_coords))
+
+    linestring = LineString(interp_coords)
+
+    return linestring
 
 
 def needs_sieve(mesh, area=None):
