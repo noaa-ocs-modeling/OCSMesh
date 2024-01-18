@@ -4,6 +4,8 @@ import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
+from collections.abc import Sequence
+from collections import namedtuple
 
 import numpy as np
 import geopandas as gpd
@@ -12,6 +14,7 @@ from pyproj import CRS
 from shapely.geometry import (
     Point,
     LineString,
+    MultiLineString,
     box,
     Polygon,
     MultiPolygon,
@@ -1132,6 +1135,133 @@ class GetMeshPolygon(unittest.TestCase):
 
         self.assertIsInstance(mesh_poly_1, MultiPolygon)
         self.assertIsInstance(mesh_poly_2, MultiPolygon)
+
+
+class RepartitionFeature(unittest.TestCase):
+    def _chk_segment_validity(
+        self,
+        results,
+        n_segment,
+        fix_len,
+        last_len
+    ):
+        with self.subTest('Invalid number of segments'):
+            self.assertEqual(len(results), n_segment)
+
+        with self.subTest('Invalid segment length'):
+            self.assertTrue(all(len(i.coords) == fix_len for i in results[:-1]))
+            self.assertEqual(len(results[-1].coords), last_len)
+
+        for i, (seg1, seg2) in enumerate(zip(results[:-1], results[1:])):
+            with self.subTest('Invalid end nodes', segment_1=i):
+                crd1 = list(seg1.coords)
+                crd2 = list(seg2.coords)
+                self.assertEqual(crd1[-1], crd2[0])
+
+    def test_io_types(self):
+        lstr1 = LineString([[i, i] for i in range(100)])
+        res1 = utils.repartition_features(lstr1, 20)
+        self.assertIsInstance(res1, Sequence)
+        self.assertTrue(
+            all([isinstance(i, LineString) for i in res1])
+        )
+
+        wrong_in_1 = box(0, 0, 1, 1)
+        with self.assertRaises(ValueError) as exc_1:
+            utils.repartition_features(wrong_in_1, 20)
+        print(exc_1.exception)
+        self.assertIsNotNone(
+            re.search(
+                'must be a LineString',
+                str(exc_1.exception)
+            ),
+        )
+
+        wrong_in_2 = MultiLineString(
+            [[[0, 0], [1, 1]], [[2, 2], [3, 3]]]
+        )
+        with self.assertRaises(ValueError) as exc_2:
+            utils.repartition_features(wrong_in_2, 20)
+        self.assertIsNotNone(
+            re.search(
+                'must be a LineString',
+                str(exc_2.exception)
+            ),
+        )
+
+        wrong_in_3 = 20.0
+        with self.assertRaises(ValueError) as exc_3:
+            utils.repartition_features(lstr1, wrong_in_3)
+        self.assertIsNotNone(
+            re.search(
+                'must be an integer',
+                str(exc_3.exception)
+            ),
+        )
+
+
+    def test_validity(self):
+        # NOTE: In counts, be careful about having shared nodes.
+        # The first 4-5 tests are for easy hand verification
+        lstr = LineString([[i, i] for i in range(10)])
+        res = utils.repartition_features(lstr, 2)
+        self._chk_segment_validity(
+            res, n_segment=9, fix_len=2, last_len=2
+        )
+
+        lstr = LineString([[i, i] for i in range(10)])
+        res = utils.repartition_features(lstr, 3)
+        self._chk_segment_validity(
+            res, n_segment=5, fix_len=3, last_len=2
+        )
+
+        lstr = LineString([[i, i] for i in range(11)])
+        res = utils.repartition_features(lstr, 3)
+        self._chk_segment_validity(
+            res, n_segment=5, fix_len=3, last_len=3
+        )
+
+        lstr = LineString([[i, i] for i in range(47)])
+        res = utils.repartition_features(lstr, 5)
+        self._chk_segment_validity(
+            res, n_segment=12, fix_len=5, last_len=3
+        )
+
+        lstr = LineString([[i, i] for i in range(100)])
+        res = utils.repartition_features(lstr, 7)
+        self._chk_segment_validity(
+            res, n_segment=17, fix_len=7, last_len=4
+        )
+
+        lstr = LineString([[i, i] for i in range(100000)])
+        res = utils.repartition_features(lstr, 200)
+        self._chk_segment_validity(
+            res, n_segment=503, fix_len=200, last_len=102
+        )
+
+        lstr = LineString([[i, i] for i in range(100000)])
+        res = utils.repartition_features(lstr, 201)
+        self._chk_segment_validity(
+            res, n_segment=500, fix_len=201, last_len=200
+        )
+
+
+class TransformLineString(unittest.TestCase):
+    def test_io_types(self):
+        self.assertTrue(False)
+
+
+    def test_basic_case(self):
+        self.assertTrue(False)
+
+
+    def test_begin_and_end(self):
+        self.assertTrue(False)
+
+
+    def test_lengths(self):
+        self.assertTrue(False)
+
 
 if __name__ == '__main__':
     unittest.main()
