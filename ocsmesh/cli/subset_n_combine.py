@@ -596,13 +596,11 @@ class SubsetAndCombine:
         jig_clip_hires_0 = utils.clip_mesh_by_shape(
                 mesh_fine.msh_t, poly_clipper,
                 fit_inside=False)
-        # 9 layers buffer because of fine mesh being coarser than coarse
-        # in some non US areas!
         jig_clip_lowres_0 = utils.clip_mesh_by_shape(
                 mesh_coarse.msh_t, poly_clipper,
                 fit_inside=True,
                 inverse=True,
-                adjacent_layers=9)
+                adjacent_layers=num_buffer_layers)
         _logger.info(f"Done in {time() - start} sec")
 
         _logger.info("Calculate clipped polygons...")

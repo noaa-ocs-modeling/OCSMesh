@@ -5,11 +5,13 @@ from pathlib import Path
 import shutil
 import tempfile
 import warnings
+from unittest.mock import MagicMock
 
 from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
 import numpy as np
 from shapely import geometry
+from pyproj import CRS
 
 import ocsmesh
 
@@ -1063,6 +1065,62 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
 
         self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.25))
         self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.1))
+
+
+class HfunConstraintApplyHold(unittest.TestCase):
+    def test_hold_rasterhfun_constraint(self):
+        hfun_rast = ocsmesh.Hfun(
+            ocsmesh.Raster(TEST_FILE),
+            hmin=500,
+            hmax=10000
+        )
+        hfun_rast.apply_constraints = MagicMock()
+
+        with hfun_rast.hold_applying_added_constratins():
+            hfun_rast.add_topo_bound_constraint(
+                value=2700, lower_bound=0, value_type='min')
+            hfun_rast.add_constant_value(value=150, lower_bound=-10)
+            hfun_rast.add_constant_value(value=150, lower_bound=-20)
+            hfun_rast.add_constant_value(value=150, lower_bound=-30)
+
+        hfun_rast.apply_constraints.assert_called_once()
+
+
+    def test_hold_meshhfun_constraint(self):
+        msh_t = ocsmesh.utils.create_rectangle_mesh(
+            nx=29, ny=17, holes=[40, 41],
+            x_extent=(-76, -75), y_extent=(37, 38)
+        )
+        msh_t.crs = CRS.from_epsg(4326)
+
+        hfun_mesh = ocsmesh.Hfun(ocsmesh.Mesh(msh_t))
+
+        hfun_mesh.apply_constraints = MagicMock()
+
+        with hfun_mesh.hold_applying_added_constratins():
+            hfun_mesh.add_region_constraint(
+                value=150,
+                shape=geometry.box(-75.75, 37.25, -75.5, 37.5),
+                value_type='min',
+                crs=CRS.from_epsg(4326)
+            )
+            hfun_mesh.add_feature(
+                feature=geometry.LineString(
+                    [[-75.5, 37.5], [-75.25, 37.75]]
+                ),
+                expansion_rate=0.02,
+                target_size=200,
+            )
+            hfun_mesh.add_feature(
+                feature=geometry.LineString(
+                    [[-75.5, 37.25], [-75.25, 37.75]]
+                ),
+                expansion_rate=0.03,
+                target_size=300,
+            )
+
+        hfun_mesh.apply_constraints.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()
