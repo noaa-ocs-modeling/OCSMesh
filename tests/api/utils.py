@@ -1143,7 +1143,7 @@ class RepartitionFeature(unittest.TestCase):
         results,
         n_segment,
         fix_len,
-        last_len
+        last_len,
     ):
         with self.subTest('Invalid number of segments'):
             self.assertEqual(len(results), n_segment)
@@ -1158,6 +1158,7 @@ class RepartitionFeature(unittest.TestCase):
                 crd2 = list(seg2.coords)
                 self.assertEqual(crd1[-1], crd2[0])
 
+
     def test_io_types(self):
         lstr1 = LineString([[i, i] for i in range(100)])
         res1 = utils.repartition_features(lstr1, 20)
@@ -1169,7 +1170,6 @@ class RepartitionFeature(unittest.TestCase):
         wrong_in_1 = box(0, 0, 1, 1)
         with self.assertRaises(ValueError) as exc_1:
             utils.repartition_features(wrong_in_1, 20)
-        print(exc_1.exception)
         self.assertIsNotNone(
             re.search(
                 'must be a LineString',
@@ -1247,20 +1247,69 @@ class RepartitionFeature(unittest.TestCase):
 
 
 class TransformLineString(unittest.TestCase):
+    def _chk_segments(self, lstr_in, result, fix_dist):
+        with self.subTest('Invalid number of segments!'):
+            exp_nseg = (
+                lstr_in.length // fix_dist
+                + 1 * bool(lstr_in.length % fix_dist)
+            )
+            self.assertEqual(exp_nseg, len(result.coords) - 1)
+
+        with self.subTest('Invalid segment length!'):
+            out_crd = np.array(result.coords)
+            out_lens = ((out_crd[1:] - out_crd[:-1]) ** 2).sum(axis=1) ** 0.5
+            np.testing.assert_allclose(out_lens[:-1], fix_dist)
+
+
+    def _chk_begin_end(self, lstr_in, result):
+        with self.subTest('Beginning and end points must remain the same!'):
+            in_crd = list(lstr_in.coords)
+            out_crd = list(result.coords)
+            self.assertEqual(in_crd[0], out_crd[0])
+            self.assertEqual(in_crd[-1], out_crd[-1])
+
+
     def test_io_types(self):
-        self.assertTrue(False)
+        lstr1 = LineString([[i, i] for i in range(100)])
+        res1 = utils.transform_linestring(lstr1, 2)
+        self.assertIsInstance(res1, LineString)
+
+        wrong_in_1 = box(0, 0, 1, 1)
+        with self.assertRaises(ValueError) as exc_1:
+            utils.repartition_features(wrong_in_1, 2)
+        self.assertIsNotNone(
+            re.search(
+                'must be a LineString',
+                str(exc_1.exception)
+            ),
+        )
+
+        wrong_in_2 = MultiLineString(
+            [[[0, 0], [1, 1]], [[2, 2], [3, 3]]]
+        )
+        with self.assertRaises(ValueError) as exc_2:
+            utils.repartition_features(wrong_in_2, 2)
+        self.assertIsNotNone(
+            re.search(
+                'must be a LineString',
+                str(exc_2.exception)
+            ),
+        )
 
 
-    def test_basic_case(self):
-        self.assertTrue(False)
+    def test_validity(self):
+        lstr1 = LineString([[i, i] for i in range(50)])
+        res1 = utils.transform_linestring(lstr1, 3)
+        self._chk_segments(lstr1, res1, 3)
+        self._chk_begin_end(lstr1, res1)
 
+        lstr2 = LineString([[i, i] for i in range(50)])
+        res2 = utils.transform_linestring(lstr2, 0.3)
+        self._chk_segments(lstr2, res2, 0.3)
+        self._chk_begin_end(lstr2, res2)
 
-    def test_begin_and_end(self):
-        self.assertTrue(False)
+        # TODO: Add test cases of non-straight linestring
 
-
-    def test_lengths(self):
-        self.assertTrue(False)
 
 
 if __name__ == '__main__':
