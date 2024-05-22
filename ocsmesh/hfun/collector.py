@@ -786,7 +786,7 @@ class HfunCollector(BaseHfun):
                 else:
                     raise TypeError("Input file extension not supported!")
 
-            self._hfun_list.append(hfun)
+            self._hfun_list.append(hfun) # pylint: disable=E0606
 
 
     def msh_t(self) -> jigsaw_msh_t:
