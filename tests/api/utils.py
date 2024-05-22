@@ -123,7 +123,7 @@ class FinalizeMesh(unittest.TestCase):
     def test_cleanup_folded_bound_el(self):
 
         # Open mesh that has folded boundary elements
-        p = Path().absolute().parents[0] / "data" / "before_cleanup_folded_bound_el.2dm"
+        p = Path(__file__).parents[0] / "data" / "before_cleanup_folded_bound_el.2dm"
         folded_bound_el_mesh = Mesh.open(p, crs=4326)
         
         utils.cleanup_folded_bound_el(folded_bound_el_mesh)
