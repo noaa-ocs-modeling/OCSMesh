@@ -22,7 +22,7 @@ from shapely.geometry import (
 )
 from shapely.ops import polygonize
 
-from ocsmesh import Raster, utils
+from ocsmesh import Raster, utils, Mesh
 
 
 class SetUp(unittest.TestCase):
