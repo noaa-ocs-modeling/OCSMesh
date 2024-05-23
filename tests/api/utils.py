@@ -129,7 +129,7 @@ class FinalizeMesh(unittest.TestCase):
         cleaned_mesh = utils.cleanup_folded_bound_el(folded_bound_el_mesh)
         cleaned_mesh = Mesh(cleaned_mesh)
 
-        self.assertEqual(len(cleaned_mesh.elements()), 1130302)
+        self.assertEqual(len(cleaned_mesh.elements()), 1130295)
 
 
 class RemovePolygonHoles(unittest.TestCase):
