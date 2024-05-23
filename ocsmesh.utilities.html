@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.5.3 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.5.4 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -113,6 +113,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.mesh_to_tri"><code class="docutils literal notranslate"><span class="pre">mesh_to_tri()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_isolates"><code class="docutils literal notranslate"><span class="pre">cleanup_isolates()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_duplicates"><code class="docutils literal notranslate"><span class="pre">cleanup_duplicates()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_folded_bound_el"><code class="docutils literal notranslate"><span class="pre">cleanup_folded_bound_el()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.put_edge2"><code class="docutils literal notranslate"><span class="pre">put_edge2()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.geom_to_multipolygon"><code class="docutils literal notranslate"><span class="pre">geom_to_multipolygon()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_boundary_segments"><code class="docutils literal notranslate"><span class="pre">get_boundary_segments()</span></code></a></li>
@@ -1458,6 +1459,12 @@ property is recalculated every time the property is retrieved.</p>
 <p class="rubric">Notes</p>
 <p>Elements and nodes are duplicate if they fully overlapping (not
 partially)</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.cleanup_folded_bound_el">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_folded_bound_el</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.cleanup_folded_bound_el" title="Permalink to this definition"></a></dt>
+<dd><p>delete all boundary elements whose nodes (all 3) are boundary nodes</p>
 </dd></dl>
 
 <dl class="py function">
