@@ -248,7 +248,7 @@ class GeomCollector(BaseGeom):
                 else:
                     raise TypeError("Input file extension not supported!")
 
-            self._geom_list.append(geom)
+            self._geom_list.append(geom) # pylint: disable=E0606
 
 
     def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:

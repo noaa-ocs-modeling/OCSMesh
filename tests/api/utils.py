@@ -22,7 +22,7 @@ from shapely.geometry import (
 )
 from shapely.ops import polygonize
 
-from ocsmesh import Raster, utils
+from ocsmesh import Raster, utils, Mesh
 
 
 class SetUp(unittest.TestCase):
@@ -119,6 +119,16 @@ class FinalizeMesh(unittest.TestCase):
             utils.get_boundary_segments(mesh_comb)
         except ValueError as e:
             self.fail(str(e))
+
+    def test_cleanup_folded_bound_el(self):
+
+        # Open mesh that has folded boundary elements
+        p = Path(__file__).parents[1] / "data" / "before_cleanup_folded_bound_el.2dm"
+        folded_bound_el_mesh = Mesh.open(p, crs=4326)
+
+        cleaned_mesh = utils.cleanup_folded_bound_el(folded_bound_el_mesh)
+
+        self.assertEqual(len(cleaned_mesh.tria3), 1130295)
 
 
 class RemovePolygonHoles(unittest.TestCase):

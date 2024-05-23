@@ -129,6 +129,54 @@ def cleanup_duplicates(mesh):
     if len(mesh.value) > 0:
         mesh.value = mesh.value.take(sorted(cooidx), axis=0)
 
+
+def cleanup_folded_bound_el(mesh):
+    '''
+    delete all boundary elements whose nodes (all 3) are boundary nodes
+    '''
+    # nodes (id) at the boundary
+    nb = get_boundary_edges(mesh.msh_t)+1
+    nb = np.sort(list(set(nb.ravel())))
+    # these are the coord of all nodes
+    coords = mesh.coord
+    # these are the coord of all boundary nodes
+    # coord_sel = [coords[i] for i in nb-1]
+    el = mesh.elements()
+    # all triangles:
+    el = dict([e for e in list(el.items()) if len(e[-1])==3])
+    el_pd = pd.DataFrame.from_dict(el,
+                                   orient='index',
+                                   columns=['one', 'two','tree'])
+    selection = el_pd[el_pd.isin(nb)].dropna().astype(int)
+    # elements and nodes to be deleted
+    # del_el = list(selection.index)
+    del_tri = selection.values.tolist()
+    # preparing the geodataframe for the triangles
+    all_gdf = []
+    for t in del_tri:
+        x,y=[],[]
+        for n in t:
+            x.append(coords[n-1][0])
+            y.append(coords[n-1][-1])
+        polygon_geom = Polygon(zip(x,
+                                   y))
+        all_gdf.append(gpd.GeoDataFrame(index=[0],
+                                        crs='epsg:4326',
+                                        geometry=[polygon_geom]))
+    clip_tri=gpd.GeoDataFrame(pd.concat(all_gdf,ignore_index=True))
+    # removing the erroneous elements using the triangles (clip_tri)
+    fixed_mesh = clip_mesh_by_shape(
+                mesh.msh_t,
+                shape=clip_tri.unary_union,
+                inverse=True,
+                fit_inside=True,
+                check_cross_edges=True,
+                adjacent_layers=0,
+            )
+
+    return fixed_mesh
+
+
 def put_edge2(mesh):
     tri = Triangulation(
         mesh.vert2['coord'][:, 0],
