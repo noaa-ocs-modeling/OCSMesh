@@ -22,7 +22,7 @@ from shapely.geometry import (
 )
 from shapely.ops import polygonize
 
-from ocsmesh import Raster, utils, Mesh
+from ocsmesh import Raster, utils
 
 
 class SetUp(unittest.TestCase):
@@ -127,9 +127,8 @@ class FinalizeMesh(unittest.TestCase):
         folded_bound_el_mesh = Mesh.open(p, crs=4326)
 
         cleaned_mesh = utils.cleanup_folded_bound_el(folded_bound_el_mesh)
-        cleaned_mesh = Mesh(cleaned_mesh)
 
-        self.assertEqual(len(cleaned_mesh.elements()), 1130295)
+        self.assertEqual(len(cleaned_mesh.tria3), 1130295)
 
 
 class RemovePolygonHoles(unittest.TestCase):
