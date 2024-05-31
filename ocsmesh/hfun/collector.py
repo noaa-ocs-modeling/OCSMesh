@@ -721,7 +721,7 @@ class HfunCollector(BaseHfun):
 
             if isinstance(in_item, BaseHfun):
                 hfun = in_item
-
+            # pylint: disable=R0801
             elif isinstance(in_item, Raster):
                 if self._base_shape:
                     clip_shape = self._base_shape
