@@ -72,7 +72,6 @@ class SmallAreaElements(unittest.TestCase):
     def test_clip_mesh_by_mesh(self):
         p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
         mesh = Mesh.open(p, crs=4326)
-        filtered = utils.filter_el_by_area(mesh)
 
         p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
         patch = Mesh.open(p3, crs=4326)
@@ -83,27 +82,32 @@ class SmallAreaElements(unittest.TestCase):
     def test_create_mesh_from_mesh_diff(self):
         p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
         mesh = Mesh.open(p, crs=4326)
-        p2 = Path(__file__).parents[1] / "data" / "clipped_out.2dm"
-        carved_mesh = Mesh.open(p2, crs=4326)
+
         p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
         patch = Mesh.open(p3, crs=4326)
 
+        carved_mesh = utils.clip_mesh_by_mesh(mesh.msh_t,patch.msh_t)
+
         msht_buffer = utils.create_mesh_from_mesh_diff(mesh.msh_t,
                                                        patch.msh_t,
-                                                       carved_mesh.msh_t)
+                                                       carved_mesh)
 
         self.assertEqual(len(msht_buffer.tria3), 48)
 
     def test_merge_neighboring_meshes(self):
+        p0 = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p0, crs=4326)
+
         p = Path(__file__).parents[1] / "data" / "msht_buffer.2dm"
         msht_buffer = Mesh.open(p, crs=4326)
-        p2 = Path(__file__).parents[1] / "data" / "clipped_out.2dm"
-        carved_mesh = Mesh.open(p2, crs=4326)
+
         p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
         patch = Mesh.open(p3, crs=4326)
 
+        carved_mesh = utils.clip_mesh_by_mesh(mesh.msh_t,patch.msh_t)
+
         merged_mesh = utils.merge_neighboring_meshes(patch.msh_t,
-                                                     carved_mesh.msh_t,
+                                                     carved_mesh,
                                                      msht_buffer.msh_t)
 
         self.assertEqual(len(merged_mesh.tria3), 1130251)
