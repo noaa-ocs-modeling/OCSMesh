@@ -311,7 +311,7 @@ def transform_linestring(
     # Memory issue due to matrix creation?
     idx = len(cum_len) - (distances[:, None] <= cum_len).sum(axis=1)
     ratio = ((cum_len[idx] - distances) / lengths[idx])[:, None]
-    
+
     interp_coords = (
         orig_coords[idx] * (ratio) + orig_coords[idx + 1] * (1 - ratio)
     )
@@ -2708,7 +2708,7 @@ def merge_neighboring_meshes(*all_msht):
     msht_combined = all_msht[0]
     crs = msht_combined.crs
 
-    for msht in all_msht[1:]: 
+    for msht in all_msht[1:]:
         # Find shared boundary nodes from the tree and bdry nodes
         combined_bdry_edges = get_boundary_edges(msht_combined)
         combined_bdry_verts = np.unique(combined_bdry_edges)
