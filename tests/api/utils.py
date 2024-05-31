@@ -47,6 +47,78 @@ class SetUp(unittest.TestCase):
             assert patch == line[3]
 
 
+class SmallAreaElements(unittest.TestCase):
+
+    def test_filter_el_by_area(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        filtered = utils.filter_el_by_area(mesh)
+
+        self.assertEqual(len(filtered), 21)
+
+    def test_create_patch_mesh(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        filtered = utils.filter_el_by_area(mesh)
+
+        p2 = Path(__file__).parents[1] / "data" / "hfun.2dm"
+        mesh_for_patch = Mesh.open(p2, crs=4326)
+        patch = utils.create_patch_mesh(mesh,
+                                filtered,
+                                mesh_for_patch)
+
+        self.assertEqual(len(patch.tria3), 73)
+
+    def test_clip_mesh_by_mesh(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        filtered = utils.filter_el_by_area(mesh)
+
+        p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
+        patch = Mesh.open(p3, crs=4326)
+        carved_mesh = utils.clip_mesh_by_mesh(mesh.msh_t,patch.msh_t)
+
+        self.assertEqual(len(carved_mesh.tria3), 1130130)
+
+    def test_create_mesh_from_mesh_diff(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        p2 = Path(__file__).parents[1] / "data" / "clipped_out.2dm"
+        carved_mesh = Mesh.open(p2, crs=4326)
+        p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
+        patch = Mesh.open(p3, crs=4326)
+
+        msht_buffer = utils.create_mesh_from_mesh_diff(mesh.msh_t,
+                                                       patch.msh_t,
+                                                       carved_mesh.msh_t)
+
+        self.assertEqual(len(msht_buffer.tria3), 48)
+
+    def test_merge_neighboring_meshes(self):
+        p = Path(__file__).parents[1] / "data" / "msht_buffer.2dm"
+        msht_buffer = Mesh.open(p, crs=4326)
+        p2 = Path(__file__).parents[1] / "data" / "clipped_out.2dm"
+        carved_mesh = Mesh.open(p2, crs=4326)
+        p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
+        patch = Mesh.open(p3, crs=4326)
+
+        merged_mesh = utils.merge_neighboring_meshes(patch.msh_t,
+                                                     carved_mesh.msh_t,
+                                                     msht_buffer.msh_t)
+
+        self.assertEqual(len(merged_mesh.tria3), 1130251)
+
+    def test_fix_small_el(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        p2 = Path(__file__).parents[1] / "data" / "hfun.2dm"
+        mesh_for_patch = Mesh.open(p2, crs=4326)
+
+        fixed_mesh = utils.fix_small_el(mesh,mesh_for_patch)
+
+        self.assertEqual(len(fixed_mesh.tria3), 1130213)
+
+
 class FinalizeMesh(unittest.TestCase):
 
     def test_cleanup_mesh_and_generate_valid_mesh(self):
@@ -123,10 +195,10 @@ class FinalizeMesh(unittest.TestCase):
     def test_cleanup_folded_bound_el(self):
 
         # Open mesh that has folded boundary elements
-        p = Path(__file__).parents[1] / "data" / "before_cleanup_folded_bound_el.2dm"
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
         folded_bound_el_mesh = Mesh.open(p, crs=4326)
 
-        cleaned_mesh = utils.cleanup_folded_bound_el(folded_bound_el_mesh)
+        cleaned_mesh = utils.cleanup_folded_bound_el(folded_bound_el_mesh.msh_t)
 
         self.assertEqual(len(cleaned_mesh.tria3), 1130295)
 
