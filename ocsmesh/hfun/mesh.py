@@ -253,6 +253,7 @@ class HfunMesh(BaseHfun):
 
         # TODO: Add pool input support like add_feature for performance
 
+        # pylint: disable=R0801
         # TODO: Support other shapes - call buffer(1) on non polygons(?)
         if not isinstance(multipolygon, (Polygon, MultiPolygon)):
             raise TypeError(

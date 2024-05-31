@@ -1531,9 +1531,12 @@ class Elements:
         y = xy[:, 1]
 
         elnode = self.mesh.elements.array()
-        x1 = x[elnode[:, 0]]; y1 = y[elnode[:, 0]]
-        x2 = x[elnode[:, 1]]; y2 = y[elnode[:, 1]]
-        x3 = x[elnode[:, 2]]; y3 = y[elnode[:, 2]]
+        x1 = x[elnode[:, 0]]
+        y1 = y[elnode[:, 0]]
+        x2 = x[elnode[:, 1]]
+        y2 = y[elnode[:, 1]]
+        x3 = x[elnode[:, 2]]
+        y3 = y[elnode[:, 2]]
         if np.any(elnode.mask):
             x4 = x[elnode[:, 3]]; y4 = y[elnode[:, 3]]
             mask = elnode.mask[:, -1]
