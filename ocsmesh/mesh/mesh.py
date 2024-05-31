@@ -1511,6 +1511,39 @@ class Elements:
             self.mesh.coord[:, 1],
             triangles)
 
+    def area(self):
+        """
+        Get the element areas from mesh
+        Adapted from:
+        https://github.com/schism-dev/pyschism/blob/main/pyschism/mesh/base.py
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        numpy.array
+            Area of each element
+        """
+
+        xy = self.mesh.nodes.coords()
+        x = xy[:, 0]
+        y = xy[:, 1]
+
+        elnode = self.mesh.elements.array()
+        x1 = x[elnode[:, 0]]; y1 = y[elnode[:, 0]]
+        x2 = x[elnode[:, 1]]; y2 = y[elnode[:, 1]]
+        x3 = x[elnode[:, 2]]; y3 = y[elnode[:, 2]]
+        if np.any(elnode.mask):
+            x4 = x[elnode[:, 3]]; y4 = y[elnode[:, 3]]
+            mask = elnode.mask[:, -1]
+            x4[mask] = x1[mask]; y4[mask] = y1[mask]
+        else:
+            x4 = x1; y4 = y1
+        area=((x2-x1)*(y3-y1)-(x3-x1)*(y2-y1)+(x3-x1)*(y4-y1)-(x4-x1)*(y3-y1))/2
+
+        return area
+
     def geodataframe(self) -> gpd.GeoDataFrame:
         """Create polygons for each element and return in dataframe
 

@@ -18,6 +18,7 @@ from pyproj import CRS, Transformer  # type: ignore[import]
 from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse, constants
+from scipy.spatial import cKDTree
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
@@ -134,16 +135,12 @@ def cleanup_folded_bound_el(mesh):
     '''
     delete all boundary elements whose nodes (all 3) are boundary nodes
     '''
-    # nodes (id) at the boundary
-    nb = get_boundary_edges(mesh.msh_t)+1
+
+    nb = get_boundary_edges(mesh)+1
     nb = np.sort(list(set(nb.ravel())))
-    # these are the coord of all nodes
-    coords = mesh.coord
-    # these are the coord of all boundary nodes
-    # coord_sel = [coords[i] for i in nb-1]
-    el = mesh.elements()
-    # all triangles:
-    el = dict([e for e in list(el.items()) if len(e[-1])==3])
+    coords = mesh.vert2['coord']
+    el = {i+1: index+1 for i, index
+                    in enumerate(mesh.tria3['index'])}
     el_pd = pd.DataFrame.from_dict(el,
                                    orient='index',
                                    columns=['one', 'two','tree'])
@@ -166,7 +163,7 @@ def cleanup_folded_bound_el(mesh):
     clip_tri=gpd.GeoDataFrame(pd.concat(all_gdf,ignore_index=True))
     # removing the erroneous elements using the triangles (clip_tri)
     fixed_mesh = clip_mesh_by_shape(
-                mesh.msh_t,
+                mesh,
                 shape=clip_tri.unary_union,
                 inverse=True,
                 fit_inside=True,
@@ -2490,3 +2487,372 @@ def triangulate_polygon(
         cleanup_isolates(msht_tri)
 
     return msht_tri
+
+
+def filter_el_by_area(mesh,l_limit=0,u_limit=1e-7):
+    '''
+    Get the elements that have area within limits
+
+    Parameters
+    ----------
+    mesh : ocsmesh.mesh.mesh.EuclideanMesh2D
+        Input mesh to be filtered
+    l_limit : float
+        lower area limit
+    u_limit : float
+        lower area limit
+
+    Returns
+    -------
+    dict
+        Mapping between selected element IDs and associated node Ids
+    
+    Notes
+    -----
+    Default l_limit and u_limit area optimum for finding small area elements
+    '''
+
+    areas = mesh.elements.area()
+
+    inf_areas = np.where((areas>=l_limit) & (areas<=u_limit))
+    inf_areas = np.array(inf_areas).ravel()
+    inf_areas = np.array(inf_areas)+1
+
+    el = mesh.elements()
+    el = pd.DataFrame.from_dict(el,orient='index',columns=['one','two','tree'])
+    selection = el.loc[inf_areas]
+    del_el = list(selection.index)
+    del_tri = selection.values.tolist()
+
+    sel_el_dict = {del_el[i]: np.array(del_tri[i]) for i in range(len(del_el))}
+
+    return sel_el_dict
+
+
+def create_patch_mesh(mesh_w_problem,
+                      sel_el_dict,
+                      mesh_for_patch,
+                      buffer_size=1000,
+                      crs=CRS.from_epsg(4326)
+                      ):
+    '''
+    Extracts "patches" from a mesh (mesh_for_patch)
+    based on a buffer of size "buffer_size" 
+    around elements ("sel_el_dict") from another mesh ("mesh_w_problem")
+
+    Parameters
+    ----------
+    mesh_w_problem : ocsmesh.mesh.mesh.EuclideanMesh2D
+        mesh with erroneous elements
+    sel_el_dict : dict
+        dict with elements for which a buffer will be created
+    mesh_for_patch : ocsmesh.mesh.mesh.EuclideanMesh2D
+        mesh that will be used for creating the patches
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Patch mesh
+    
+    Notes
+    -----
+    The hfun.2dm can be used as mesh_for_patch
+    Default buffer_size is optimum for finding small area elements
+    '''
+
+    coords = mesh_w_problem.coord
+    all_gdf = []
+    for t in list(sel_el_dict.values()):
+        x,y = [],[]
+        for n in t:
+            x.append(coords[n-1][0])
+            y.append(coords[n-1][-1])
+
+        polygon_geom = Polygon(zip(x,y))
+        all_gdf.append(gpd.GeoDataFrame(index=[0],
+                                        crs=crs, geometry=[polygon_geom]))
+
+    clip_tri = gpd.GeoDataFrame(pd.concat(all_gdf, ignore_index=True))
+    clip_tri = clip_tri.dissolve()
+    clip_tri = clip_tri.to_crs(crs=3857)
+    clip_tri.geometry = clip_tri.buffer(buffer_size)
+    clip_tri = clip_tri.to_crs(crs=crs)
+
+    patch = clip_mesh_by_shape(
+                mesh_for_patch.msh_t,
+                shape=clip_tri.unary_union,
+                inverse=False,
+                fit_inside=False,
+                check_cross_edges=False,
+                adjacent_layers=0,
+            )
+
+    return patch
+
+
+def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
+                      mesh_clipper: jigsaw_msh_t,
+                      inverse: bool = True,
+                      fit_inside: bool = False,
+                      check_cross_edges: bool =True,
+                      adjacent_layers: int = 2,
+                      crs=CRS.from_epsg(4326)
+                      )-> jigsaw_msh_t:
+    '''
+    Clip a mesh ("mesh_to_be_clipped") based on the
+    mesh extent of another mesh ("mesh_clipper")
+
+    Parameters
+    ----------
+    mesh_to_be_clipped : jigsawpy.msh_t.jigsaw_msh_t
+        mesh to be clipped
+    mesh_clipper : jigsawpy.msh_t.jigsaw_msh_t
+        mesh that will be used to clip
+
+    Returns
+    -------
+    jigsaw_msh_t
+        clipped mesh
+    
+    Notes
+    -----
+    '''
+
+    gdf_mesh = [get_mesh_polygons(mesh_to_be_clipped)]
+    gdf_mesh = gpd.GeoDataFrame(geometry=gdf_mesh, crs=crs)
+
+    gdf_clipper = [get_mesh_polygons(mesh_clipper)]
+    gdf_clipper = gpd.GeoDataFrame(geometry=gdf_clipper, crs=crs)
+
+    clipped_mesh = clip_mesh_by_shape(
+                mesh_to_be_clipped,
+                shape=gdf_clipper.unary_union,
+                inverse=inverse,
+                fit_inside=fit_inside,
+                check_cross_edges=check_cross_edges,
+                adjacent_layers=adjacent_layers,
+            )
+
+    return clipped_mesh
+
+
+def create_mesh_from_mesh_diff(mesh_for_domain,
+                               mesh_1,
+                               mesh_2,
+                               crs=CRS.from_epsg(4326)):
+    '''
+    Create a triangulation for the area correspondent to
+    the difference between "mesh_1" and "mesh_2" 
+    for the extent defined by "mesh_for_domain"
+
+    Parameters
+    ----------
+    mesh_for_domain : jigsawpy.msh_t.jigsaw_msh_t
+        mesh used as the extent
+    mesh_1 : jigsawpy.msh_t.jigsaw_msh_t
+        mesh_1
+    mesh_2 : jigsawpy.msh_t.jigsaw_msh_t
+        mesh_2
+
+    Returns
+    -------
+    jigsaw_msh_t
+        mesh for the area between mesh_1 and mesh_2 within mesh_for_domain
+    
+    Notes
+    -----
+    '''
+
+    gdf_mesh = [get_mesh_polygons(mesh_for_domain)]
+    gdf_mesh = gpd.GeoDataFrame(geometry=gdf_mesh,crs=crs)
+
+    poly_buffer = gdf_mesh.unary_union.difference(
+        gpd.GeoDataFrame(
+            geometry=[
+                get_mesh_polygons(mesh_1),
+                get_mesh_polygons(mesh_2),
+            ],
+            crs = crs
+        ).unary_union
+    )
+    gdf_full_buffer = gpd.GeoDataFrame(
+        geometry = [poly_buffer],crs=crs)
+
+    msht_buffer = triangulate_polygon(gdf_full_buffer)
+    msht_buffer.crs = gdf_mesh.crs
+
+    return msht_buffer
+
+
+def merge_neighboring_meshes(*all_msht):
+    '''
+    Get combine meshes whose boundaries match
+    Adapted from:
+    https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py
+
+    Parameters
+    ----------
+    all_msht : jigsawpy.msh_t.jigsaw_msh_t
+        mesh to be merged, sections of boundaries of these mesh must overlap
+        (i.e. they must share boundary nodes)
+
+    Returns
+    -------
+    jigsaw_msh_t
+        merged mesh
+    
+    Notes
+    -----
+    '''
+
+    msht_combined = all_msht[0]
+    crs = msht_combined.crs
+
+    for msht in all_msht[1:]: 
+        # Find shared boundary nodes from the tree and bdry nodes
+        combined_bdry_edges = get_boundary_edges(msht_combined)
+        combined_bdry_verts = np.unique(combined_bdry_edges)
+        combined_bdry_coords = msht_combined.vert2['coord'][combined_bdry_verts]
+
+        msht_bdry_edges = get_boundary_edges(msht)
+        msht_bdry_verts = np.unique(msht_bdry_edges)
+        msht_bdry_coords = msht.vert2['coord'][msht_bdry_verts]
+
+        tree_comb = cKDTree(combined_bdry_coords)
+        tree_msht= cKDTree(msht_bdry_coords)
+
+        neigh_idxs = tree_comb.query_ball_tree(tree_msht, r=1e-8)
+
+        # Create a map for shared nodes
+        map_idx_shared = {}
+        for idx_tree_comb, neigh_idx_list in enumerate(neigh_idxs):
+            num_match = len(neigh_idx_list)
+            if num_match == 0:
+                continue
+            if num_match > 1:
+                #continue
+                raise ValueError("More than one node match on boundary!")
+
+            idx_tree_msht = neigh_idx_list[0]
+            map_idx_shared[msht_bdry_verts[idx_tree_msht]] = combined_bdry_verts[idx_tree_comb]
+
+        # Combine seam into the rest replacing the index for shared nodes
+        # with the ones from tree
+        mesh_types = {
+            'tria3': 'TRIA3_t',
+            'quad4': 'QUAD4_t',
+            'hexa8': 'HEXA8_t',
+        }
+        coord = []
+        elems = {k: [] for k in mesh_types}
+        offset = 0
+
+        for k in mesh_types:
+            elems[k].append(getattr(msht_combined, k)['index'] + offset)
+        coord.append(msht_combined.vert2['coord'])
+        offset += coord[-1].shape[0]
+
+        # Drop shared vertices and update element cnn based on map and dropped offset
+        mesh_orig_idx = np.arange(len(msht.vert2))
+        mesh_shrd_idx = np.unique(list(map_idx_shared.keys()))
+        mesh_renum_idx = np.setdiff1d(mesh_orig_idx, mesh_shrd_idx)
+        map_to_combined_idx = {
+            index: i + offset for i, index in enumerate(mesh_renum_idx)}
+        map_to_combined_idx.update(map_idx_shared)
+
+        for k in mesh_types:
+            cnn = getattr(msht, k)['index']
+            if cnn.shape[0] == 0:
+                elems[k].append(cnn)
+                continue
+
+            elems[k].append(np.array([[map_to_combined_idx[x]
+                                      for x in  elm] for elm in cnn]))
+
+        coord.append(msht.vert2['coord'][mesh_renum_idx, :])
+
+        # Putting it all together
+        msht_combined = jigsawpy.jigsaw_msh_t()
+        msht_combined.mshID = 'euclidean-mesh'
+        msht_combined.ndims = 2
+
+        msht_combined.vert2 = np.array(
+                [(crd, 0) for crd in np.vstack(coord)],
+                dtype=jigsawpy.jigsaw_msh_t.VERT2_t)
+
+        for k, v in mesh_types.items():
+            setattr(msht_combined, k, np.array(
+                [(cnn, 0) for cnn in np.vstack(elems[k])],
+                dtype=getattr(jigsawpy.jigsaw_msh_t, v)))
+
+        msht_combined.crs = crs
+
+    return msht_combined
+
+
+def fix_small_el(mesh_w_problem,
+                 mesh_for_patch,
+                 l_limit=0,u_limit=1e-7,
+                 buffer_size=1000,
+                adjacent_layers=2):
+    '''
+    Fix spurious small elements (<u_limit=1e-7)
+
+    Parameters
+    ----------
+    mesh_w_problem : ocsmesh.mesh.mesh.EuclideanMesh2D 
+        mesh that has small areas
+    mesh_for_patch : ocsmesh.mesh.mesh.EuclideanMesh2D 
+        mesh that will be used for fixing the mesh_w_problem
+
+    Returns
+    -------
+    ocsmesh.mesh.mesh.EuclideanMesh2D
+        fixed mesh with no small area elements
+
+    Notes
+    -----
+    Other optimal attributes were determined based on testing
+    and they can be changed as needed:
+         l_limit=0,u_limit=1e-7,
+         buffer_size=1000,
+         adjacent_layers=2    
+    
+    '''
+
+    # find small elements
+    small_el = filter_el_by_area(mesh_w_problem,
+                                 l_limit=l_limit,
+                                 u_limit=u_limit)
+
+    #creating the 3 mesh to be merged:
+    patch = create_patch_mesh(mesh_w_problem,
+                              small_el,
+                              mesh_for_patch,
+                              buffer_size=buffer_size)
+    carved_mesh=clip_mesh_by_mesh(mesh_w_problem.msh_t,
+                                  patch,
+                                  inverse=True,
+                                  fit_inside=False,
+                                  check_cross_edges=True,
+                                  adjacent_layers=adjacent_layers)
+    msht_buffer = create_mesh_from_mesh_diff(mesh_w_problem.msh_t,
+                                             patch,
+                                             carved_mesh)
+
+    # merged mesh:
+    fixed_mesh = merge_neighboring_meshes(patch,
+                                          carved_mesh,
+                                          msht_buffer)
+
+    #cleaning up mesh:
+    fixed_mesh = clip_mesh_by_mesh(fixed_mesh,
+                                   mesh_w_problem.msh_t,
+                                   inverse=False,
+                                   fit_inside=False,
+                                   check_cross_edges=False,
+                                   adjacent_layers=0)
+
+    fixed_mesh = cleanup_folded_bound_el(fixed_mesh)
+
+    return fixed_mesh
