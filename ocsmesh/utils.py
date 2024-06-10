@@ -2391,7 +2391,6 @@ def shape_to_msh_t_2(
     return msht
 
 
-
 def triangulate_polygon(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
     aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
@@ -2487,6 +2486,39 @@ def triangulate_polygon(
         cleanup_isolates(msht_tri)
 
     return msht_tri
+
+
+def triangulate_polygon_s(
+    shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
+    quality=30
+) -> None:
+    '''Triangulate the input shape smoothly
+    
+    Parameters
+    ----------
+    shape : Polygon or MultiPolygon or GeoDataFrame or GeoSeries
+        Input polygon to triangulate
+    quality : integer, default=30
+        Minimal internal angle for triangulation
+
+    Returns
+    -------
+    jigsaw_msh_t
+        Generated triangulation
+    '''
+    #First triangulation. Smooth but adds extra nodes at boundary
+    quality = 'q'+str(quality)
+    mesh1 = triangulate_polygon(shape,opts=['p',quality])
+    #Find all boundary modes
+    nb = get_boundary_edges(mesh1)
+    nb = np.sort(list(set(nb.ravel())))
+    #Select all internal modes
+    all_pts = mesh1.vert2['coord']
+    arr = np.delete(all_pts, nb, axis=0)
+    #Second triangulation. Not smooth ('p'), but intenal nodes are passed as aux_pts
+    mesh2 = triangulate_polygon(shape=shape,aux_pts=arr,opts='p')
+
+    return mesh2
 
 
 def filter_el_by_area(mesh,l_limit=0,u_limit=1e-7):
@@ -2596,7 +2628,8 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
                       fit_inside: bool = False,
                       check_cross_edges: bool =True,
                       adjacent_layers: int = 2,
-                      crs=CRS.from_epsg(4326)
+                      crs=CRS.from_epsg(4326),
+                      buffer_size = None,
                       )-> jigsaw_msh_t:
     '''
     Clip a mesh ("mesh_to_be_clipped") based on the
@@ -2624,6 +2657,11 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     gdf_clipper = [get_mesh_polygons(mesh_clipper)]
     gdf_clipper = gpd.GeoDataFrame(geometry=gdf_clipper, crs=crs)
 
+    if buffer_size != None:
+        gdf_clipper = gdf_clipper.to_crs(crs=3857)
+        gdf_clipper.geometry = gdf_clipper.buffer(buffer_size)
+        gdf_clipper = gdf_clipper.to_crs(crs=crs)
+
     clipped_mesh = clip_mesh_by_shape(
                 mesh_to_be_clipped,
                 shape=gdf_clipper.unary_union,
@@ -2636,10 +2674,17 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     return clipped_mesh
 
 
-def create_mesh_from_mesh_diff(mesh_for_domain,
-                               mesh_1,
-                               mesh_2,
-                               crs=CRS.from_epsg(4326)):
+def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
+                                             Polygon,
+                                             MultiPolygon,
+                                             gpd.GeoDataFrame,
+                                             gpd.GeoSeries],
+                               mesh_1: jigsaw_msh_t,
+                               mesh_2: jigsaw_msh_t,
+                               crs=CRS.from_epsg(4326),
+                               quality=None
+                               
+) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
     the difference between "mesh_1" and "mesh_2" 
@@ -2647,12 +2692,16 @@ def create_mesh_from_mesh_diff(mesh_for_domain,
 
     Parameters
     ----------
-    mesh_for_domain : jigsawpy.msh_t.jigsaw_msh_t
-        mesh used as the extent
+    domain : jigsawpy.msh_t or Polygon or MultiPolygon or GeoDataFrame or GeoSeries
+        extent of entire domain (mesh_1+mesh_2+gap)
     mesh_1 : jigsawpy.msh_t.jigsaw_msh_t
         mesh_1
     mesh_2 : jigsawpy.msh_t.jigsaw_msh_t
         mesh_2
+    quality : 
+        quality of transition
+        default = None, i.e. direct connection between vertices
+        recommended = 30
 
     Returns
     -------
@@ -2662,11 +2711,21 @@ def create_mesh_from_mesh_diff(mesh_for_domain,
     Notes
     -----
     '''
+    if isinstance(domain, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        domain = domain.unary_union
 
-    gdf_mesh = [get_mesh_polygons(mesh_for_domain)]
-    gdf_mesh = gpd.GeoDataFrame(geometry=gdf_mesh,crs=crs)
+    if isinstance(domain, Polygon):
+        domain = MultiPolygon([domain])
 
-    poly_buffer = gdf_mesh.unary_union.difference(
+    if isinstance(domain, jigsaw_msh_t):
+        domain = [get_mesh_polygons(domain)]
+        domain = gpd.GeoDataFrame(geometry=domain,crs=crs)
+        domain = domain.unary_union
+
+    if not isinstance(domain, (MultiPolygon, Polygon)):
+        raise ValueError("Input shape must be convertible to polygon!")
+
+    poly_buffer = domain.difference(
         gpd.GeoDataFrame(
             geometry=[
                 get_mesh_polygons(mesh_1),
@@ -2678,15 +2737,18 @@ def create_mesh_from_mesh_diff(mesh_for_domain,
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
 
-    msht_buffer = triangulate_polygon(gdf_full_buffer)
-    msht_buffer.crs = gdf_mesh.crs
+    if quality == None:
+        msht_buffer = triangulate_polygon(gdf_full_buffer)
+    else:
+        msht_buffer = triangulate_polygon_s(gdf_full_buffer,quality=quality)
+    msht_buffer.crs = domain.crs
 
     return msht_buffer
 
 
 def merge_neighboring_meshes(*all_msht):
     '''
-    Get combine meshes whose boundaries match
+    Combine meshes whose boundaries match
     Adapted from:
     https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py
 
@@ -2856,3 +2918,64 @@ def fix_small_el(mesh_w_problem,
     fixed_mesh = cleanup_folded_bound_el(fixed_mesh)
 
     return fixed_mesh
+
+
+def merge_overlapping_meshes(mesh_modify: jigsaw_msh_t,
+                             mesh_preserve: jigsaw_msh_t,
+                             adjacent_layers: int = 0,
+                             buffer_size: int = 9999,
+                             quality: int = 30,
+                             crs=CRS.from_epsg(4326)
+) -> jigsaw_msh_t:
+    '''
+    Combine meshes whose boundaries match
+
+    Parameters
+    ----------
+    mesh_modify : jigsawpy.msh_t
+        Low priority mesh
+    mesh_preserve : jigsawpy.msh_t
+        High priority mesh
+    adjacent_layers : int
+        # of elements of the low priority mesh that will be
+        deleted passed the overlap
+    buffer_size : int 
+        size of the buffer that will be added
+        around the high priority mesh
+        (sometimes this necessary if the mesh is too narrow)
+    quality : 
+        quality of transition
+        default = 30, i.e. triangles will have internal angles of at least 30 deg
+
+    Returns
+    -------
+    jigsaw_msh_t
+        final merged mesh
+    
+    Notes
+    -----
+    '''
+
+    carved_mesh = clip_mesh_by_mesh(mesh_modify,
+                                    mesh_preserve,
+                                    adjacent_layers=adjacent_layers,
+                                    buffer_size=buffer_size)
+
+    domain_1 = [get_mesh_polygons(mesh_modify)]
+    domain_1 = gpd.GeoDataFrame(geometry=domain_1,crs=crs)
+    domain_2 = [get_mesh_polygons(mesh_preserve)]
+    domain_2 = gpd.GeoDataFrame(geometry=domain_2,crs=crs)
+    domain = pd.concat([domain_1, domain_2]).dissolve()
+
+    buff_mesh = create_mesh_from_mesh_diff(domain,
+                                           carved_mesh,
+                                           mesh_preserve,
+                                           quality=quality)
+    
+    msht_combined = merge_neighboring_meshes(buff_mesh,
+                                             carved_mesh,
+                                             mesh_preserve)
+
+    msht_combined = cleanup_folded_bound_el(msht_combined)
+    
+    return msht_combined
