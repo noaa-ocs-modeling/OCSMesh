@@ -2490,7 +2490,7 @@ def triangulate_polygon(
 
 def triangulate_polygon_s(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
-    quality=30
+    min_int_ang=30
 ) -> None:
     '''Triangulate the input shape smoothly
     
@@ -2498,7 +2498,7 @@ def triangulate_polygon_s(
     ----------
     shape : Polygon or MultiPolygon or GeoDataFrame or GeoSeries
         Input polygon to triangulate
-    quality : integer, default=30
+    min_int_ang : integer, default=30
         Minimal internal angle for triangulation
 
     Returns
@@ -2507,14 +2507,15 @@ def triangulate_polygon_s(
         Generated triangulation
     '''
     #First triangulation. Smooth but adds extra nodes at boundary
-    quality = 'q'+str(quality)
-    mesh1 = triangulate_polygon(shape,opts=['p',quality])
+    min_int_ang = 'q'+str(min_int_ang)
+    mesh1 = triangulate_polygon(shape,opts=['p',min_int_ang])
     #Find all boundary modes
     nb = get_boundary_edges(mesh1)
     nb = np.sort(list(set(nb.ravel())))
     #Select all internal modes
     all_pts = mesh1.vert2['coord']
     arr = np.delete(all_pts, nb, axis=0)
+    del mesh1,all_pts,nb
     #Second triangulation. Not smooth ('p'), but intenal nodes are passed as aux_pts
     mesh2 = triangulate_polygon(shape=shape,aux_pts=arr,opts='p')
 
@@ -2564,7 +2565,7 @@ def filter_el_by_area(mesh,l_limit=0,u_limit=1e-7):
 def create_patch_mesh(mesh_w_problem,
                       sel_el_dict,
                       mesh_for_patch,
-                      buffer_size=1000,
+                      buffer_size=0.01,
                       crs=CRS.from_epsg(4326)
                       ):
     '''
@@ -2606,9 +2607,9 @@ def create_patch_mesh(mesh_w_problem,
 
     clip_tri = gpd.GeoDataFrame(pd.concat(all_gdf, ignore_index=True))
     clip_tri = clip_tri.dissolve()
-    clip_tri = clip_tri.to_crs(crs=3857)
+    clip_tri.crs = clip_tri.estimate_utm_crs()
     clip_tri.geometry = clip_tri.buffer(buffer_size)
-    clip_tri = clip_tri.to_crs(crs=crs)
+    clip_tri.crs = crs
 
     patch = clip_mesh_by_shape(
                 mesh_for_patch.msh_t,
@@ -2658,9 +2659,9 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     gdf_clipper = gpd.GeoDataFrame(geometry=gdf_clipper, crs=crs)
 
     if buffer_size != None:
-        gdf_clipper = gdf_clipper.to_crs(crs=3857)
+        gdf_clipper.crs = gdf_clipper.estimate_utm_crs()
         gdf_clipper.geometry = gdf_clipper.buffer(buffer_size)
-        gdf_clipper = gdf_clipper.to_crs(crs=crs)
+        gdf_clipper.crs = crs
 
     clipped_mesh = clip_mesh_by_shape(
                 mesh_to_be_clipped,
@@ -2678,12 +2679,13 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
                                              Polygon,
                                              MultiPolygon,
                                              gpd.GeoDataFrame,
-                                             gpd.GeoSeries],
+                                             gpd.GeoSeries,
+                                             list],
                                mesh_1: jigsaw_msh_t,
                                mesh_2: jigsaw_msh_t,
                                crs=CRS.from_epsg(4326),
-                               quality=None
-                               
+                               min_int_ang=None,
+                               buffer_domain = 0.001                            
 ) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
@@ -2698,8 +2700,8 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
         mesh_1
     mesh_2 : jigsawpy.msh_t.jigsaw_msh_t
         mesh_2
-    quality : 
-        quality of transition
+    min_int_ang : 
+        Minimal internal angle for triangulation
         default = None, i.e. direct connection between vertices
         recommended = 30
 
@@ -2711,21 +2713,32 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     Notes
     -----
     '''
-    if isinstance(domain, (gpd.GeoDataFrame, gpd.GeoSeries)):
-        domain = domain.unary_union
 
+    if isinstance(domain, (gpd.GeoDataFrame)):
+        domain = domain
+    if isinstance(domain, (gpd.GeoSeries)):
+        domain = gpd.GeoDataFrame(geometry=gpd.GeoSeries(domain))
     if isinstance(domain, Polygon):
         domain = MultiPolygon([domain])
-
+        domain = gpd.GeoDataFrame(index=[0], crs=crs, geometry=[domain])
     if isinstance(domain, jigsaw_msh_t):
         domain = [get_mesh_polygons(domain)]
         domain = gpd.GeoDataFrame(geometry=domain,crs=crs)
-        domain = domain.unary_union
+    if isinstance(domain, (list)):
+        domain = pd.concat([gpd.GeoDataFrame\
+                            (geometry=[get_mesh_polygons(i)\
+                                       .buffer(buffer_domain,join_style=2)],\
+                                        crs=crs) for i in domain])
+    if not isinstance(domain, (gpd.GeoDataFrame)):
+        raise ValueError("Input shape must be a gpd.GeoDataFrame!")
 
-    if not isinstance(domain, (MultiPolygon, Polygon)):
-        raise ValueError("Input shape must be convertible to polygon!")
+    domain = domain.dissolve().explode(index_parts=True)
+    domain.crs = domain.estimate_utm_crs()
+    domain = domain.loc[domain['geometry'].area == max(domain['geometry'].area)]
+    domain.crs = crs
+    domain = gpd.GeoDataFrame(geometry=[domain.unary_union],crs=crs)
 
-    poly_buffer = domain.difference(
+    poly_buffer = domain.unary_union.difference(
         gpd.GeoDataFrame(
             geometry=[
                 get_mesh_polygons(mesh_1),
@@ -2737,11 +2750,11 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
 
-    if quality == None:
+    if min_int_ang == None:
         msht_buffer = triangulate_polygon(gdf_full_buffer)
     else:
-        msht_buffer = triangulate_polygon_s(gdf_full_buffer,quality=quality)
-    msht_buffer.crs = domain.crs
+        msht_buffer = triangulate_polygon_s(gdf_full_buffer,min_int_ang=min_int_ang)
+    msht_buffer.crs = crs
 
     return msht_buffer
 
@@ -2852,11 +2865,13 @@ def merge_neighboring_meshes(*all_msht):
     return msht_combined
 
 
-def fix_small_el(mesh_w_problem,
-                 mesh_for_patch,
-                 l_limit=0,u_limit=1e-7,
-                 buffer_size=1000,
-                adjacent_layers=2):
+def fix_small_el(mesh_w_problem: jigsaw_msh_t,
+                 mesh_for_patch: jigsaw_msh_t,
+                 l_limit: float = 0.,
+                 u_limit: float = 1e-7,
+                 buffer_size: float = 0.01,
+                 adjacent_layers: int =2
+) -> jigsaw_msh_t:
     '''
     Fix spurious small elements (<u_limit=1e-7)
 
@@ -2869,7 +2884,7 @@ def fix_small_el(mesh_w_problem,
 
     Returns
     -------
-    ocsmesh.mesh.mesh.EuclideanMesh2D
+    jigsaw_msh_t
         fixed mesh with no small area elements
 
     Notes
@@ -2877,7 +2892,7 @@ def fix_small_el(mesh_w_problem,
     Other optimal attributes were determined based on testing
     and they can be changed as needed:
          l_limit=0,u_limit=1e-7,
-         buffer_size=1000,
+         buffer_size=0.001,
          adjacent_layers=2    
     
     '''
@@ -2887,25 +2902,15 @@ def fix_small_el(mesh_w_problem,
                                  l_limit=l_limit,
                                  u_limit=u_limit)
 
-    #creating the 3 mesh to be merged:
+    #creating the mesh to be merged:
     patch = create_patch_mesh(mesh_w_problem,
                               small_el,
                               mesh_for_patch,
                               buffer_size=buffer_size)
-    carved_mesh=clip_mesh_by_mesh(mesh_w_problem.msh_t,
-                                  patch,
-                                  inverse=True,
-                                  fit_inside=False,
-                                  check_cross_edges=True,
-                                  adjacent_layers=adjacent_layers)
-    msht_buffer = create_mesh_from_mesh_diff(mesh_w_problem.msh_t,
-                                             patch,
-                                             carved_mesh)
 
-    # merged mesh:
-    fixed_mesh = merge_neighboring_meshes(patch,
-                                          carved_mesh,
-                                          msht_buffer)
+    fixed_mesh = merge_overlapping_meshes([mesh_w_problem.msh_t,patch],
+                                          adjacent_layers=adjacent_layers
+                                          )
 
     #cleaning up mesh:
     fixed_mesh = clip_mesh_by_mesh(fixed_mesh,
@@ -2920,11 +2925,11 @@ def fix_small_el(mesh_w_problem,
     return fixed_mesh
 
 
-def merge_overlapping_meshes(mesh_modify: jigsaw_msh_t,
-                             mesh_preserve: jigsaw_msh_t,
+def merge_overlapping_meshes(all_msht: list,
                              adjacent_layers: int = 0,
-                             buffer_size: int = 9999,
-                             quality: int = 30,
+                             buffer_size: float = 0.001,
+                             buffer_domain: float = 0.01,
+                             min_int_ang: int = 30,
                              crs=CRS.from_epsg(4326)
 ) -> jigsaw_msh_t:
     '''
@@ -2932,20 +2937,24 @@ def merge_overlapping_meshes(mesh_modify: jigsaw_msh_t,
 
     Parameters
     ----------
-    mesh_modify : jigsawpy.msh_t
-        Low priority mesh
-    mesh_preserve : jigsawpy.msh_t
-        High priority mesh
+    *all_msht : jigsaw_msh_t 
+        list of meshes to be merged,
+        the later on the list the higher the priority
     adjacent_layers : int
         # of elements of the low priority mesh that will be
         deleted passed the overlap
-    buffer_size : int 
-        size of the buffer that will be added
-        around the high priority mesh
+    buffer_size : float
+        size of the buffer that will be added around the
+        high priority mesh when carving out the low priority mesh
         (sometimes this necessary if the mesh is too narrow)
-    quality : 
-        quality of transition
+    buffer_domain : float
+        size of the buffer that will be added
+        around the entire mesh domain. 
+        This is necessary for preventing slivers at the mesh boundary intersections
+    min_int_ang : int
+        Minimal internal angle for triangulation
         default = 30, i.e. triangles will have internal angles of at least 30 deg
+        For no smoothness min_int_ang = None
 
     Returns
     -------
@@ -2956,26 +2965,30 @@ def merge_overlapping_meshes(mesh_modify: jigsaw_msh_t,
     -----
     '''
 
-    carved_mesh = clip_mesh_by_mesh(mesh_modify,
-                                    mesh_preserve,
-                                    adjacent_layers=adjacent_layers,
-                                    buffer_size=buffer_size)
+    msht_combined = all_msht[0]
+    for msht in all_msht[1:]:
+        carved_mesh = clip_mesh_by_mesh(msht_combined,
+                                        msht,
+                                        adjacent_layers=adjacent_layers,
+                                        buffer_size=buffer_size
+                                        )
+        buff_mesh = create_mesh_from_mesh_diff([msht_combined,msht],
+                                               carved_mesh,msht,
+                                               min_int_ang=min_int_ang,
+                                               buffer_domain=buffer_domain
+                                               )
+        domain = pd.concat([gpd.GeoDataFrame(geometry=\
+                                             [get_mesh_polygons(i)],crs=crs) for \
+                                                i in [msht_combined,msht]])
 
-    domain_1 = [get_mesh_polygons(mesh_modify)]
-    domain_1 = gpd.GeoDataFrame(geometry=domain_1,crs=crs)
-    domain_2 = [get_mesh_polygons(mesh_preserve)]
-    domain_2 = gpd.GeoDataFrame(geometry=domain_2,crs=crs)
-    domain = pd.concat([domain_1, domain_2]).dissolve()
-
-    buff_mesh = create_mesh_from_mesh_diff(domain,
-                                           carved_mesh,
-                                           mesh_preserve,
-                                           quality=quality)
-    
-    msht_combined = merge_neighboring_meshes(buff_mesh,
-                                             carved_mesh,
-                                             mesh_preserve)
+        msht_combined = merge_neighboring_meshes(buff_mesh,
+                                                 carved_mesh,
+                                                 msht
+                                                 )
+        msht_combined = clip_mesh_by_shape(msht_combined,
+                                           domain.unary_union
+                                           )
 
     msht_combined = cleanup_folded_bound_el(msht_combined)
-    
+
     return msht_combined
