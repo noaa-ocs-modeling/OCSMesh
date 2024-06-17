@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.5.4 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.5.5 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -181,6 +181,14 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.shape_to_msh_t"><code class="docutils literal notranslate"><span class="pre">shape_to_msh_t()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.shape_to_msh_t_2"><code class="docutils literal notranslate"><span class="pre">shape_to_msh_t_2()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triangulate_polygon"><code class="docutils literal notranslate"><span class="pre">triangulate_polygon()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triangulate_polygon_s"><code class="docutils literal notranslate"><span class="pre">triangulate_polygon_s()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.filter_el_by_area"><code class="docutils literal notranslate"><span class="pre">filter_el_by_area()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.create_patch_mesh"><code class="docutils literal notranslate"><span class="pre">create_patch_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.clip_mesh_by_mesh"><code class="docutils literal notranslate"><span class="pre">clip_mesh_by_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.create_mesh_from_mesh_diff"><code class="docutils literal notranslate"><span class="pre">create_mesh_from_mesh_diff()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_neighboring_meshes"><code class="docutils literal notranslate"><span class="pre">merge_neighboring_meshes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.fix_small_el"><code class="docutils literal notranslate"><span class="pre">fix_small_el()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_overlapping_meshes"><code class="docutils literal notranslate"><span class="pre">merge_overlapping_meshes()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -2058,6 +2066,225 @@ See the documentation for <cite>triangle</cite> more information</p>
 <dd class="field-odd"><dl class="simple">
 <dt>ValueError</dt><dd><p>If input shape is invalid or the point input cannot be used
 to generate point shape</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.triangulate_polygon_s">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">triangulate_polygon_s</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoDataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoSeries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_int_ang</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.utils.triangulate_polygon_s" title="Permalink to this definition"></a></dt>
+<dd><p>Triangulate the input shape smoothly</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>shape</strong><span class="classifier">Polygon or MultiPolygon or GeoDataFrame or GeoSeries</span></dt><dd><p>Input polygon to triangulate</p>
+</dd>
+<dt><strong>min_int_ang</strong><span class="classifier">integer, default=30</span></dt><dd><p>Minimal internal angle for triangulation</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Generated triangulation</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.filter_el_by_area">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">filter_el_by_area</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-07</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.filter_el_by_area" title="Permalink to this definition"></a></dt>
+<dd><p>Get the elements that have area within limits</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh</strong><span class="classifier">ocsmesh.mesh.mesh.EuclideanMesh2D</span></dt><dd><p>Input mesh to be filtered</p>
+</dd>
+<dt><strong>l_limit</strong><span class="classifier">float</span></dt><dd><p>lower area limit</p>
+</dd>
+<dt><strong>u_limit</strong><span class="classifier">float</span></dt><dd><p>lower area limit</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>dict</dt><dd><p>Mapping between selected element IDs and associated node Ids</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Default l_limit and u_limit area optimum for finding small area elements</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.create_patch_mesh">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">create_patch_mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh_w_problem</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sel_el_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_for_patch</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size=0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.create_patch_mesh" title="Permalink to this definition"></a></dt>
+<dd><p>Extracts “patches” from a mesh (mesh_for_patch)
+based on a buffer of size “buffer_size” 
+around elements (“sel_el_dict”) from another mesh (“mesh_w_problem”)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh_w_problem</strong><span class="classifier">ocsmesh.mesh.mesh.EuclideanMesh2D</span></dt><dd><p>mesh with erroneous elements</p>
+</dd>
+<dt><strong>sel_el_dict</strong><span class="classifier">dict</span></dt><dd><p>dict with elements for which a buffer will be created</p>
+</dd>
+<dt><strong>mesh_for_patch</strong><span class="classifier">ocsmesh.mesh.mesh.EuclideanMesh2D</span></dt><dd><p>mesh that will be used for creating the patches</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>Patch mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>The hfun.2dm can be used as mesh_for_patch
+Default buffer_size is optimum for finding small area elements</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.clip_mesh_by_mesh">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">clip_mesh_by_mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh_to_be_clipped:</span> <span class="pre">~jigsawpy.msh_t.jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_clipper:</span> <span class="pre">~jigsawpy.msh_t.jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fit_inside:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_cross_edges:</span> <span class="pre">bool</span> <span class="pre">=</span> <span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacent_layers:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size=None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.clip_mesh_by_mesh" title="Permalink to this definition"></a></dt>
+<dd><p>Clip a mesh (“mesh_to_be_clipped”) based on the
+mesh extent of another mesh (“mesh_clipper”)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh_to_be_clipped</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh to be clipped</p>
+</dd>
+<dt><strong>mesh_clipper</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh that will be used to clip</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>clipped mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.create_mesh_from_mesh_diff">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">create_mesh_from_mesh_diff</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">domain:</span> <span class="pre">~jigsawpy.msh_t.jigsaw_msh_t</span> <span class="pre">|</span> <span class="pre">~shapely.geometry.polygon.Polygon</span> <span class="pre">|</span> <span class="pre">~shapely.geometry.multipolygon.MultiPolygon</span> <span class="pre">|</span> <span class="pre">~geopandas.geodataframe.GeoDataFrame</span> <span class="pre">|</span> <span class="pre">~geopandas.geoseries.GeoSeries</span> <span class="pre">|</span> <span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_1:</span> <span class="pre">~jigsawpy.msh_t.jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_2:</span> <span class="pre">~jigsawpy.msh_t.jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_int_ang=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_domain=0.001</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.create_mesh_from_mesh_diff" title="Permalink to this definition"></a></dt>
+<dd><p>Create a triangulation for the area correspondent to
+the difference between “mesh_1” and “mesh_2” 
+for the extent defined by “mesh_for_domain”</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>domain</strong><span class="classifier">jigsawpy.msh_t or Polygon or MultiPolygon or GeoDataFrame or GeoSeries</span></dt><dd><p>extent of entire domain (mesh_1+mesh_2+gap)</p>
+</dd>
+<dt><strong>mesh_1</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh_1</p>
+</dd>
+<dt><strong>mesh_2</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh_2</p>
+</dd>
+<dt><strong>min_int_ang</strong></dt><dd><p>Minimal internal angle for triangulation
+default = None, i.e. direct connection between vertices
+recommended = 30</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>mesh for the area between mesh_1 and mesh_2 within mesh_for_domain</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.merge_neighboring_meshes">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">merge_neighboring_meshes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">all_msht</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.merge_neighboring_meshes" title="Permalink to this definition"></a></dt>
+<dd><p>Combine meshes whose boundaries match
+Adapted from:
+<a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py">https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>all_msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh to be merged, sections of boundaries of these mesh must overlap
+(i.e. they must share boundary nodes)</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>merged mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.fix_small_el">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">fix_small_el</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh_w_problem</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mesh_for_patch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">l_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">u_limit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-07</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacent_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.fix_small_el" title="Permalink to this definition"></a></dt>
+<dd><p>Fix spurious small elements (&lt;u_limit=1e-7)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>mesh_w_problem</strong><span class="classifier">ocsmesh.mesh.mesh.EuclideanMesh2D</span></dt><dd><p>mesh that has small areas</p>
+</dd>
+<dt><strong>mesh_for_patch</strong><span class="classifier">ocsmesh.mesh.mesh.EuclideanMesh2D</span></dt><dd><p>mesh that will be used for fixing the mesh_w_problem</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>fixed mesh with no small area elements</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Other optimal attributes were determined based on testing
+and they can be changed as needed:</p>
+<blockquote>
+<div><p>l_limit=0,u_limit=1e-7,
+buffer_size=0.001,
+adjacent_layers=2</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.merge_overlapping_meshes">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">merge_overlapping_meshes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">all_msht:</span> <span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacent_layers:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.005</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_domain:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_int_ang:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.merge_overlapping_meshes" title="Permalink to this definition"></a></dt>
+<dd><p>Combine meshes whose boundaries match</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>*all_msht</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>list of meshes to be merged,
+the later on the list the higher the priority</p>
+</dd>
+<dt><strong>adjacent_layers</strong><span class="classifier">int</span></dt><dd><p># of elements of the low priority mesh that will be
+deleted passed the overlap</p>
+</dd>
+<dt><strong>buffer_size</strong><span class="classifier">float</span></dt><dd><p>size of the buffer that will be added around the
+high priority mesh when carving out the low priority mesh
+(sometimes this necessary if the mesh is too narrow)</p>
+</dd>
+<dt><strong>buffer_domain</strong><span class="classifier">float</span></dt><dd><p>size of the buffer that will be added
+around the entire mesh domain. 
+This is necessary for preventing slivers at the mesh boundary intersections</p>
+</dd>
+<dt><strong>min_int_ang</strong><span class="classifier">int</span></dt><dd><p>Minimal internal angle for triangulation
+default = 30, i.e. triangles will have internal angles of at least 30 deg
+For no smoothness min_int_ang = None</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>final merged mesh</p>
 </dd>
 </dl>
 </dd>
