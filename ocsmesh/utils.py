@@ -2927,7 +2927,7 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
 
 def merge_overlapping_meshes(all_msht: list,
                              adjacent_layers: int = 0,
-                             buffer_size: float = 0.001,
+                             buffer_size: float = 0.005,
                              buffer_domain: float = 0.01,
                              min_int_ang: int = 30,
                              crs=CRS.from_epsg(4326)
@@ -2988,6 +2988,7 @@ def merge_overlapping_meshes(all_msht: list,
         msht_combined = clip_mesh_by_shape(msht_combined,
                                            domain.unary_union
                                            )
+        del carved_mesh,buff_mesh,domain,msht
 
     msht_combined = cleanup_folded_bound_el(msht_combined)
 

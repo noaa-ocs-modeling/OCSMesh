@@ -67,7 +67,7 @@ class SmallAreaElements(unittest.TestCase):
                                 filtered,
                                 mesh_for_patch)
 
-        self.assertEqual(len(patch.tria3), 73)
+        self.assertEqual(len(patch.tria3), 101)
 
     def test_clip_mesh_by_mesh(self):
         p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
@@ -92,7 +92,7 @@ class SmallAreaElements(unittest.TestCase):
                                                        patch.msh_t,
                                                        carved_mesh)
 
-        self.assertEqual(len(msht_buffer.tria3), 48)
+        self.assertEqual(len(msht_buffer.tria3), 49)
 
     def test_merge_neighboring_meshes(self):
         p0 = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
@@ -110,7 +110,7 @@ class SmallAreaElements(unittest.TestCase):
                                                      carved_mesh,
                                                      msht_buffer.msh_t)
 
-        self.assertEqual(len(merged_mesh.tria3), 1130251)
+        self.assertEqual(len(merged_mesh.tria3), 1130280)
 
     def test_fix_small_el(self):
         p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
@@ -120,7 +120,17 @@ class SmallAreaElements(unittest.TestCase):
 
         fixed_mesh = utils.fix_small_el(mesh,mesh_for_patch)
 
-        self.assertEqual(len(fixed_mesh.tria3), 1130213)
+        self.assertEqual(len(fixed_mesh.tria3), 1130876)
+
+    def test_merge_overlapping_meshes(self):
+        p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
+        mesh = Mesh.open(p, crs=4326)
+        p3 = Path(__file__).parents[1] / "data" / "patch.2dm"
+        patch = Mesh.open(p3, crs=4326)
+
+        smooth = utils.merge_overlapping_meshes([mesh.msh_t,patch.msh_t])
+
+        self.assertEqual(len(smooth.tria3), 1130935)
 
 
 class FinalizeMesh(unittest.TestCase):
