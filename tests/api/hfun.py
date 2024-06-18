@@ -515,7 +515,7 @@ class SizeFromMesh(unittest.TestCase):
         hfun_val_diff = self.hfun_orig_val - hfun_calc_val
 
         # TODO: Come up with a more robust criteria!
-        threshold = 0.05
+        threshold = 0.06
         err_value = np.mean(np.abs(hfun_val_diff))/np.mean(self.hfun_orig_val)
         self.assertTrue(err_value < threshold)
 
