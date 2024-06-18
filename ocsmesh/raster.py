@@ -1455,15 +1455,18 @@ class Raster:
             ax.contour(x, y, values, levels=[level])
             _logger.debug(f'Took {time()-start}...')
             plt.close(fig)
-        for path_collection in ax.collections:
-            for path in path_collection.get_paths():
-                # LineStrings must have at least 2 coordinate tuples
-                if len(path.vertices) < 2:
-                    continue
-                try:
-                    features.append(LineString(path.vertices))
-                except ValueError:
-                    pass
+
+            for path_collection in ax.collections[:]:
+                for path in path_collection.allsegs:
+                    # LineStrings must have at least 2 coordinate tuples
+                    for p in path:
+                        if len(p) < 2:
+                            continue
+                        try:
+                            features.append(LineString(p))
+                        except ValueError:
+                            pass
+
         return ops.linemerge(features)
 
     def _get_raster_contour_feathered(

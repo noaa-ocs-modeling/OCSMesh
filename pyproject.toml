@@ -22,7 +22,7 @@ readme = "README.md"
 requires-python = '>=3.9' # 3.8 -> scipy
 dependencies = [
     "colored-traceback", "fiona", "geopandas",
-    "jigsawpy", "matplotlib", "netCDF4", "numba",
+    "jigsawpy", "matplotlib>=3.8", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
     "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy",
     "shapely", "triangle", "typing_extensions", "utm",
