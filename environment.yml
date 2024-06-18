@@ -17,7 +17,7 @@ dependencies:
   - scipy
   - numba
   - numpy>=1.21 # numpy.typing
-  - matplotlib
+  - matplotlib>=3.8
   - mpi4py
   - pyarrow
   - pytz
