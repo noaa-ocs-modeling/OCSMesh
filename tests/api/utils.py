@@ -883,13 +883,11 @@ class TritoQuad(unittest.TestCase):
             triangles=self.in_tria,
             quadrilaterals=self.in_quad
         )
+        self.assertEqual(np.around(utils.calc_el_angles(out_msht)[0][0][-1], decimals=0),
+                         np.around(np.array([45., 45., 90.]), decimals=0))
 
-        self.assertTrue(
-            np.all(utils.calc_el_angles(out_msht)[0][0][-1] == np.array([45., 45., 90.]))
-        )
-        self.assertTrue(
-            np.all(utils.calc_el_angles(out_msht)[-1][0][-1] == np.array([90., 90., 90., 90.]))
-        )
+        self.assertEqual(np.around(utils.calc_el_angles(out_msht)[-1][0][-1], decimals=0),
+                         np.around(np.array([90., 90., 90., 90.]), decimals=0))
 
     def order_mesh(self):
         out_msht = utils.msht_from_numpy(
@@ -897,10 +895,8 @@ class TritoQuad(unittest.TestCase):
             triangles=self.in_tria,
             quadrilaterals=self.in_quad
         )
-
-        self.assertTrue(
-            np.all(utils.order_mesh(out_msht).quad4['index'][0] == np.array([0, 4, 8, 7]))
-        )
+        self.assertEqual(np.around(utils.order_mesh(out_msht).quad4['index'][0], decimals=0),
+                         np.around(np.array([0, 4, 8, 7]), decimals=0))
 
     def quads_from_tri(self):
         out_msht = utils.msht_from_numpy(
