@@ -21,15 +21,15 @@ from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, Polygon, MultiPolygon)
 
-from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.crs import CRS as CRSDescriptor
-from ocsmesh import Mesh
-from ocsmesh import utils
+from ocsmesh.hfun.base import BaseHfun # pylint: disable=R0401
+from ocsmesh.crs import CRS as CRSDescriptor # pylint: disable=R0401
+from ocsmesh import Mesh # pylint: disable=R0401
+from ocsmesh import utils # pylint: disable=R0401
 from ocsmesh.features.constraint import (
     Constraint,
     RegionConstraint,
     apply_constraints_wrap
-)
+) # pylint: disable=R0401
 
 _logger = logging.getLogger(__name__)
 
