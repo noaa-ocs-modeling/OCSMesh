@@ -79,7 +79,7 @@ def cleanup_isolates(mesh):
                 [(idx, 0) for idx in elem_new_idx],
                 dtype=getattr(
                     jigsawpy.jigsaw_msh_t, f'{etype.upper()}_t')))
-        
+
     return mesh
 
 
@@ -2098,7 +2098,7 @@ def create_rectangle_mesh(
 
                 0   1   2   3   4
                 
-    ''' 
+    '''
 
     if x_extent is None:
         x_range = range(nx)
@@ -2696,7 +2696,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
                                mesh_2: jigsaw_msh_t,
                                crs=CRS.from_epsg(4326),
                                min_int_ang=None,
-                               buffer_domain = 0.001                            
+                               buffer_domain = 0.001
 ) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
@@ -3172,7 +3172,7 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
 
     ang_chk = calc_el_angles(msht)[0][0]
     el = msht.tria3['index']
-    
+
     # Finds the idx of the vertices closes to 90 deg
     # Then, creates an array of non right angle vertices (shared)
     idx_of_closest = np.abs(ang_chk - 90).argmin(axis=1)
@@ -3191,7 +3191,7 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     # separte the triangles to then be merged back to the quads
     tris_drop=[]
     for idxs in result.values():
-        tris_drop.append(idxs) 
+        tris_drop.append(idxs)
     tris_drop = np.array(tris_drop).ravel()
     tris = np.delete(msht.tria3['index'], tris_drop,axis=0)
 
@@ -3201,7 +3201,7 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     quads=[]
     for idxs in result.values():
         quads.append(np.unique(np.concatenate([el[idxs[0]],el[idxs[1]]])))
-    
+
     quads = np.array(quads)
     coords = msht.vert2['coord']
 
