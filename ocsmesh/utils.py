@@ -3082,6 +3082,7 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
     -----
     '''
 
+    mesh_ordered=[]
     def order_nodes(verts):
         '''
         Adapted from: https://gist.github.com/flashlib/e8261539915426866ae910d55a3f9959
@@ -3102,10 +3103,10 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
 
         if len(verts) == 4:
             (tr_idx, br_idx) = rightMost_idx
-            ord = np.array([tl_idx, tr_idx, br_idx, bl_idx], dtype="int")
+            order = np.array([tl_idx, tr_idx, br_idx, bl_idx], dtype="int")
         if len(verts) == 3:
-            ord = np.array([tl_idx, rightMost_idx[0], bl_idx], dtype="int")
-        return ord
+            order = np.array([tl_idx, rightMost_idx[0], bl_idx], dtype="int")
+        return order
 
     #order all element's nodes counterclockwise
     tri,quad=[],[]
