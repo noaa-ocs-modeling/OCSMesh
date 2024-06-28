@@ -2685,7 +2685,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
                                mesh_2: jigsaw_msh_t,
                                crs=CRS.from_epsg(4326),
                                min_int_ang=None,
-                               buffer_domain = 0.001                            
+                               buffer_domain = 0.001
 ) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
@@ -3009,7 +3009,7 @@ def merge_overlapping_meshes(all_msht: list,
 #     -------
 #     np.array
 #         internal angles of each element
-    
+
 #     Notes
 
 #     -----
@@ -3076,8 +3076,8 @@ def merge_overlapping_meshes(all_msht: list,
 #     jigsawpy.msh_t.jigsaw_msh_t
 #     -------
 #     np.array
-#         mesh whose nodes within each element are oriented counterclockwise 
-    
+#         mesh whose nodes within each element are oriented counterclockwise
+
 #     Notes
 #     -----
 #     '''
@@ -3154,7 +3154,7 @@ def merge_overlapping_meshes(all_msht: list,
 #     -------
 #     jigsawpy.msh_t.jigsaw_msh_t
 #         quadrangular + triangular mesh
-    
+
 #     Notes
 #     -----
 #     """
@@ -3185,7 +3185,7 @@ def merge_overlapping_meshes(all_msht: list,
 #     # separte the triangles to then be merged back to the quads
 #     tris_drop=[]
 #     for idxs in result.values():
-#         tris_drop.append(idxs) 
+#         tris_drop.append(idxs)
 #     tris_drop = np.array(tris_drop).ravel()
 #     tris = np.delete(msht.tria3['index'], tris_drop,axis=0)
 
@@ -3195,7 +3195,7 @@ def merge_overlapping_meshes(all_msht: list,
 #     quads=[]
 #     for idxs in result.values():
 #         quads.append(np.unique(np.concatenate([el[idxs[0]],el[idxs[1]]])))
-    
+
 #     quads = np.array(quads)
 #     coords = msht.vert2['coord']
 
