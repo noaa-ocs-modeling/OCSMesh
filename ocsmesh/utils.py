@@ -3116,7 +3116,7 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
         if len(el) > 0:
             ordered_idx = np.array([order_nodes(coord_verts[i]) for i in el])
             ordered_el = np.zeros(el.shape,dtype="int")
-            for i,e in enumerate(ordered_el):
+            for i,e in enumerate(ordered_idx):
                 ordered_el[i] = el[i][e]
             if etype == 'tria3':
                 tri.append(ordered_el)
