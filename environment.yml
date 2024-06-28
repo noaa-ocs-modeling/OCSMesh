@@ -12,7 +12,7 @@ dependencies:
   - shapely
   - rasterio
   - fiona
-  - geopandas
+  - geopandas<=0.14.4
   - utm
   - scipy
   - numba
