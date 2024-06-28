@@ -38,4 +38,4 @@ jobs:
     - name: Analysing the code with pylint
       shell: bash -l {0}
       run: |
-      run: pylint ocsmesh
+        pylint ocsmesh
