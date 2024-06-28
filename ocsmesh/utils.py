@@ -2658,7 +2658,7 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     gdf_clipper = [get_mesh_polygons(mesh_clipper)]
     gdf_clipper = gpd.GeoDataFrame(geometry=gdf_clipper, crs=crs)
 
-    if buffer_size != None:
+    if buffer_size is not None:
         gdf_clipper.crs = gdf_clipper.estimate_utm_crs()
         gdf_clipper.geometry = gdf_clipper.buffer(buffer_size)
         gdf_clipper.crs = crs
@@ -2715,7 +2715,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     '''
 
     if isinstance(domain, (gpd.GeoDataFrame)):
-        domain = domain
+        pass
     if isinstance(domain, (gpd.GeoSeries)):
         domain = gpd.GeoDataFrame(geometry=gpd.GeoSeries(domain))
     if isinstance(domain, Polygon):
@@ -2750,7 +2750,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
 
-    if min_int_ang == None:
+    if min_int_ang is None:
         msht_buffer = triangulate_polygon(gdf_full_buffer)
     else:
         msht_buffer = triangulate_polygon_s(gdf_full_buffer,min_int_ang=min_int_ang)
@@ -3125,7 +3125,7 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
                                        triangles = tri[0],
                                        quadrilaterals = quad[0],
                                        crs = crs)
-    elif len(tri)>0 and len(quad)==0:
+    if len(tri)>0 and len(quad)==0:
         mesh_ordered = msht_from_numpy(coordinates = coord_verts,
                                        triangles = tri[0],
                                        crs = crs)
@@ -3162,9 +3162,9 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     ang_chk = calc_el_angles(msht)[0][0]
     el = msht.tria3['index']
 
-    try:
+    if len(msht.quad4['index']) > 0:
         el_q = msht.quad4['index']
-    except:
+    else:
         el_q = []
 
     # Finds the idx of the vertices closes to 90 deg
