@@ -3102,9 +3102,10 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
 
         if len(verts) == 4:
             (tr_idx, br_idx) = rightMost_idx
-            return np.array([tl_idx, tr_idx, br_idx, bl_idx], dtype="int")
+            ord = np.array([tl_idx, tr_idx, br_idx, bl_idx], dtype="int")
         if len(verts) == 3:
-            return np.array([tl_idx, rightMost_idx[0], bl_idx], dtype="int")
+            ord = np.array([tl_idx, rightMost_idx[0], bl_idx], dtype="int")
+        return ord
 
     #order all element's nodes counterclockwise
     tri,quad=[],[]
@@ -3114,8 +3115,8 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
         if len(el) > 0:
             ordered_idx = np.array([order_nodes(coord_verts[i]) for i in el])
             ordered_el = np.zeros(el.shape,dtype="int")
-            for i in range(len(ordered_el)):
-                ordered_el[i] = el[i][ordered_idx[i]]
+            for i,e in enumerate(ordered_el):
+                ordered_el[i] = el[i][e]
             if etype == 'tria3':
                 tri.append(ordered_el)
             if etype == 'quad4':
