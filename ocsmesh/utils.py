@@ -3184,11 +3184,11 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
 
     result = {key: value for key, value in duplicates.items() if len(value) > 1}
 
-    # separte the triangles to then be merged back to the quads
+    # separate the triangles to then be merged back to the quads
     tris_drop=[]
     for idxs in result.values():
         tris_drop.append(idxs)
-    tris_drop = np.array(tris_drop).ravel()
+    tris_drop = np.array(tris_drop, dtype="int").ravel()
     tris = np.delete(msht.tria3['index'], tris_drop,axis=0)
 
     # combines all triangles that share 2 non-right angle vertices
