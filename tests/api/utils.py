@@ -100,7 +100,7 @@ class TritoQuad(unittest.TestCase):
 
         self.assertIsInstance(out_msht, jigsaw_msh_t)
         self.assertTrue(
-            np.all(utils.order_mesh(out_msht).quad4['index'][0].astype(int) == np.array([0, 4, 8, 7]))
+            np.all(utils.order_mesh(out_msht).quad4['index'] == np.array([[ 0,  4,  8,  7],[ 7,  8, 10,  9]]))
         )
 
     # def test_quads_from_tri(self):
