@@ -82,6 +82,8 @@ class TritoQuad(unittest.TestCase):
             triangles=self.in_tria,
             quadrilaterals=self.in_quad
         )
+
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
         self.assertTrue(
             np.all(utils.calc_el_angles(out_msht)[0][0][-1].astype(int) == np.array([45, 44, 90]))
         )
@@ -95,6 +97,8 @@ class TritoQuad(unittest.TestCase):
             triangles=self.in_tria,
             quadrilaterals=self.in_quad
         )
+
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
         self.assertTrue(
             np.all(utils.order_mesh(out_msht).quad4['index'][0].astype(int) == np.array([0, 4, 8, 7]))
         )
@@ -106,11 +110,16 @@ class TritoQuad(unittest.TestCase):
             quadrilaterals=self.in_quad
         )
 
-        out_msht_ord = utils.order_mesh(out_msht)
-        out_msht_ord_q = utils.quads_from_tri(out_msht_ord)
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
 
-        self.assertEqual(len(out_msht_ord_q.tria3['index']), 2)
-        self.assertEqual(len(out_msht_ord_q.quad4['index']), 4)
+        out_msht_ord = utils.order_mesh(out_msht)
+        self.assertIsInstance(out_msht_ord, jigsaw_msh_t)
+
+        out_msht_ord_q = utils.quads_from_tri(out_msht_ord)
+        self.assertIsInstance(out_msht_ord_q, jigsaw_msh_t)
+
+        self.assertEqual(len(out_msht_ord_q.tria3), 2)
+        self.assertEqual(len(out_msht_ord_q.quad4), 4)
 
 
 class SmallAreaElements(unittest.TestCase):
