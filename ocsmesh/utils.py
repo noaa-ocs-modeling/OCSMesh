@@ -2658,7 +2658,7 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     gdf_clipper = [get_mesh_polygons(mesh_clipper)]
     gdf_clipper = gpd.GeoDataFrame(geometry=gdf_clipper, crs=crs)
 
-    if buffer_size != None:
+    if buffer_size is not None:
         gdf_clipper.crs = gdf_clipper.estimate_utm_crs()
         gdf_clipper.geometry = gdf_clipper.buffer(buffer_size)
         gdf_clipper.crs = crs
@@ -2685,7 +2685,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
                                mesh_2: jigsaw_msh_t,
                                crs=CRS.from_epsg(4326),
                                min_int_ang=None,
-                               buffer_domain = 0.001                            
+                               buffer_domain = 0.001
 ) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
@@ -2715,7 +2715,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     '''
 
     if isinstance(domain, (gpd.GeoDataFrame)):
-        domain = domain
+        pass
     if isinstance(domain, (gpd.GeoSeries)):
         domain = gpd.GeoDataFrame(geometry=gpd.GeoSeries(domain))
     if isinstance(domain, Polygon):
@@ -2750,7 +2750,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
 
-    if min_int_ang == None:
+    if min_int_ang is None:
         msht_buffer = triangulate_polygon(gdf_full_buffer)
     else:
         msht_buffer = triangulate_polygon_s(gdf_full_buffer,min_int_ang=min_int_ang)
@@ -2993,3 +2993,225 @@ def merge_overlapping_meshes(all_msht: list,
     msht_combined = cleanup_folded_bound_el(msht_combined)
 
     return msht_combined
+
+
+def calc_el_angles(msht):
+    '''
+    Adapted from: https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh
+
+    Calculates the internal angle of each node for element (triangular or quadrangular)
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+
+    Returns
+    -------
+    np.array
+        internal angles of each element
+
+    Notes
+
+    -----
+    '''
+
+    tri,quad=[],[]
+    for etype in ELEM_2D_TYPES[:-1]:
+        el = getattr(msht, etype)['index']
+        coord_verts = msht.vert2['coord'][el]
+
+        tria_verts = coord_verts[:,:3]
+        sides = np.linalg.norm(
+            tria_verts - np.roll(tria_verts, shift=-1, axis=1),
+            axis=2
+        )
+
+        ang_0_0 = np.degrees(np.arccos(
+            (sides[:, 1]**2 + sides[:, 2]**2 - sides[:, 0]**2)
+                / (2 * sides[:, 1] * sides[:, 2])
+        ))
+        ang_1_0 = np.degrees(np.arccos(
+            (sides[:, 0]**2 + sides[:, 2]**2 - sides[:, 1]**2)
+                / (2 * sides[:, 0] * sides[:, 2])
+        ))
+        ang_2_0 = 180 - (ang_0_0 + ang_1_0)
+
+        if etype == 'tria3' and len(el) > 0:
+            tri.append(np.vstack((ang_1_0, ang_2_0, ang_0_0)).T)
+        if etype == 'quad4' and len(el) > 0:
+            tria_verts = coord_verts[:,[2,3,0]]
+            sides = np.linalg.norm(
+                tria_verts - np.roll(tria_verts, shift=-1, axis=1),
+                axis=2
+            )
+
+            ang_0_1 = np.degrees(np.arccos(
+                (sides[:, 1]**2 + sides[:, 2]**2 - sides[:, 0]**2)
+                    / (2 * sides[:, 1] * sides[:, 2])
+            ))
+            ang_1_1 = np.degrees(np.arccos(
+                (sides[:, 0]**2 + sides[:, 2]**2 - sides[:, 1]**2)
+                    / (2 * sides[:, 0] * sides[:, 2])
+            ))
+            ang_2_1 = 180 - (ang_0_1 + ang_1_1)
+
+            quad.append(np.vstack(((ang_1_0+ang_0_1), ang_2_0,
+                                   (ang_0_0+ang_1_1), ang_2_1)).T)
+
+    return np.array(tri),np.array(quad)
+
+
+def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
+    '''
+    Order mesh nodes counterclockwise (triangles and quads)
+    based on the coordinates
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+        mesh with nodes out of order
+
+    Returns
+    -------
+    jigsawpy.msh_t.jigsaw_msh_t
+    -------
+    np.array
+        mesh whose nodes within each element are oriented counterclockwise
+
+    Notes
+    -----
+    '''
+
+    mesh_ordered=[]
+    def order_nodes(verts):
+        '''
+        Adapted from: https://gist.github.com/flashlib/e8261539915426866ae910d55a3f9959
+        '''
+        order=[]
+        xSorted_idx = np.argsort(verts[:, 0])
+        xSorted = verts[xSorted_idx, :]
+
+        leftMost = xSorted[:2, :]
+        leftMost_idx = xSorted_idx[:2]
+        rightMost = xSorted[2:, :]
+        rightMost_idx = xSorted_idx[2:]
+
+        leftMost_idx = leftMost_idx[np.argsort(leftMost[:, 1])]
+        (tl_idx, bl_idx) = leftMost_idx
+
+        rightMost_idx = rightMost_idx[np.argsort(rightMost[:, 1])]
+
+        if len(verts) == 4:
+            (tr_idx, br_idx) = rightMost_idx
+            order = np.array([tl_idx, tr_idx, br_idx, bl_idx], dtype="int")
+        if len(verts) == 3:
+            order = np.array([tl_idx, rightMost_idx[0], bl_idx], dtype="int")
+        return order
+
+    #order all element's nodes counterclockwise
+    tri,quad=[],[]
+    coord_verts = msht.vert2['coord']
+    for etype in ELEM_2D_TYPES[:-1]:
+        el = getattr(msht, etype)['index']
+        if len(el) > 0:
+            ordered_idx = np.array([order_nodes(coord_verts[i]) for i in el])
+            ordered_el = np.zeros(el.shape,dtype="int")
+            for i,e in enumerate(ordered_idx):
+                ordered_el[i] = el[i][e]
+            if etype == 'tria3':
+                tri.append(ordered_el)
+            if etype == 'quad4':
+                quad.append(ordered_el)
+    if len(tri)>0 and len(quad)>0:
+        mesh_ordered = msht_from_numpy(coordinates = coord_verts,
+                                       triangles = tri[0],
+                                       quadrilaterals = quad[0],
+                                       crs = crs)
+    if len(tri)>0 and len(quad)==0:
+        mesh_ordered = msht_from_numpy(coordinates = coord_verts,
+                                       triangles = tri[0],
+                                       crs = crs)
+    if len(tri)==0 and len(quad)>0:
+        mesh_ordered = msht_from_numpy(coordinates = coord_verts,
+                                       quadrilaterals = quad[0],
+                                       crs = crs)
+
+    return mesh_ordered
+
+
+def quads_from_tri(msht) -> jigsaw_msh_t:
+    """
+    Partially adapted from:
+    https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list
+
+    Combines all triangles that share vertices that are not right angles.
+    right angles is defined as the internal angle closest to 90deg
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+        triangular mesh
+
+    Returns
+    -------
+    jigsawpy.msh_t.jigsaw_msh_t
+        quadrangular + triangular mesh
+
+    Notes
+    -----
+    """
+
+    ang_chk = calc_el_angles(msht)[0][0]
+    el = msht.tria3['index']
+
+    if len(msht.quad4['index']) > 0:
+        el_q = msht.quad4['index']
+    else:
+        el_q = []
+
+    # Finds the idx of the vertices closes to 90 deg
+    # Then, creates an array of non right angle vertices (shared)
+    idx_of_closest = np.abs(ang_chk - 90).argmin(axis=1)
+    # right = np.array([el[row,column] for row,column in enumerate(idx_of_closest)])
+    shared = np.array([np.delete(el[row],column) for \
+                       row,column in enumerate(idx_of_closest)])
+    shared.sort()
+
+    #Creates a dict of all elements that share 2 non-right angle vertices
+    duplicates = defaultdict(list)
+    for i, number in enumerate(shared):
+        duplicates[str(number)].append(i)
+
+    result = {key: value for key, value in duplicates.items() if len(value) > 1}
+
+    # separate the triangles to then be merged back to the quads
+    tris_drop=[]
+    for idxs in result.values():
+        tris_drop.append(idxs)
+    tris_drop = np.array(tris_drop, dtype="int")
+    tris = np.delete(msht.tria3['index'], tris_drop.ravel(),axis=0)
+
+    # combines all triangles that share 2 non-right angle vertices
+    # the quads array is composed of 2 right angle nodes (idx_of_closest)
+    # and 2 shared nodes (result)
+    quads=[]
+    for idxs in result.values():
+        quads.append(np.unique(np.concatenate([el[idxs[0]],el[idxs[1]]])))
+
+    quads = np.array(quads)
+    coords = msht.vert2['coord']
+
+    msht_q = msht_from_numpy(coordinates = coords,
+                             triangles = tris,
+                             quadrilaterals = quads)
+
+    if len(el_q) > 0:
+        msht_previous_quads = msht_from_numpy(coordinates = coords,
+                                              quadrilaterals = el_q)
+        msht_q = merge_neighboring_meshes(msht_previous_quads,msht_q)
+
+    msht_q = order_mesh(msht_q)
+    cleanup_duplicates(msht_q)
+    put_id_tags(msht_q)
+
+    return msht_q

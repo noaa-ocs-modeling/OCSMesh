@@ -47,6 +47,81 @@ class SetUp(unittest.TestCase):
             assert patch == line[3]
 
 
+class TritoQuad(unittest.TestCase):
+    def setUp(self):
+
+        self.in_verts = [
+            [0, 5],
+            [0, 0],
+            [.5, 3],
+            [3, 3],
+            [2.5, 5],
+            [1, 0],
+            [3, .5],
+            [0, 7],
+            [2.5, 7],
+            [0, 9],
+            [2.5, 9],
+        ]
+        self.in_tria = [
+            [0, 1, 2],
+            [0, 2, 3],
+            [0, 3, 4],
+            [5, 6, 2],
+            [5, 2, 1],
+            [2, 6, 3],
+        ]
+        self.in_quad = [
+            [0, 7, 4, 8],
+            [7, 9, 10, 8],
+        ]
+
+    def test_calc_el_angles(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
+        self.assertTrue(
+            np.all(utils.calc_el_angles(out_msht)[0][0][-1].astype(int) == np.array([45, 44, 90]))
+        )
+        self.assertTrue(
+            np.all(utils.calc_el_angles(out_msht)[-1][0][-1] == np.array([90., 90., 90., 90.]))
+        )
+
+    def test_order_mesh(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
+        self.assertTrue(
+            np.all(utils.order_mesh(out_msht).quad4['index'] == np.array([[ 0,  4,  8,  7],[ 7,  8, 10,  9]]))
+        )
+
+    def test_quads_from_tri(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+
+        self.assertIsInstance(out_msht, jigsaw_msh_t)
+
+        out_msht_ord = utils.order_mesh(out_msht)
+        self.assertIsInstance(out_msht_ord, jigsaw_msh_t)
+
+        out_msht_ord_q = utils.quads_from_tri(out_msht_ord)
+        self.assertIsInstance(out_msht_ord_q, jigsaw_msh_t)
+
+        self.assertEqual(len(out_msht_ord_q.tria3), 2)
+        self.assertEqual(len(out_msht_ord_q.quad4), 4)
+
+
 class SmallAreaElements(unittest.TestCase):
 
     def test_filter_el_by_area(self):

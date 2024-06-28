@@ -37,4 +37,5 @@ jobs:
         pip install .[testing]
     - name: Analysing the code with pylint
       shell: bash -l {0}
-      run: pylint ocsmesh
+      run: |
+        pylint ocsmesh
