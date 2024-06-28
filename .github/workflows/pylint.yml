@@ -24,20 +24,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - name: Setup Mamba environment for Python
-        uses: mamba-org/provision-with-micromamba@main
-        with:
-          environment-file: ./environment.yml
-          environment-name: ocsmesh-env
-      - name: Install dependencies
-        shell: bash -l {0}
-        run: |
-          python ./setup.py install_jigsaw
-          pip install .[testing]
-      - name: Analysing the code with pylint
-        shell: bash -l {0}
-        run: |
-          pylint $(git ls-files '*.py') --output=lint.txt || true
-        # run: |
-        #   run: pylint ocsmesh
+    - uses: actions/checkout@v3
+    - name: Setup Mamba environment for Python
+      uses: mamba-org/provision-with-micromamba@main
+      with:
+        environment-file: ./environment.yml
+        environment-name: ocsmesh-env
+    - name: Install dependencies
+      shell: bash -l {0}
+      run: |
+        python ./setup.py install_jigsaw
+        pip install .[testing]
+    - name: Analysing the code with pylint
+      shell: bash -l {0}
+      run: pylint ocsmesh
