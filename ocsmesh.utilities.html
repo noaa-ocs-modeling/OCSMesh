@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.5.6 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.5.7 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -189,6 +189,9 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_neighboring_meshes"><code class="docutils literal notranslate"><span class="pre">merge_neighboring_meshes()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.fix_small_el"><code class="docutils literal notranslate"><span class="pre">fix_small_el()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_overlapping_meshes"><code class="docutils literal notranslate"><span class="pre">merge_overlapping_meshes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.calc_el_angles"><code class="docutils literal notranslate"><span class="pre">calc_el_angles()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.order_mesh"><code class="docutils literal notranslate"><span class="pre">order_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.quads_from_tri"><code class="docutils literal notranslate"><span class="pre">quads_from_tri()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -2285,6 +2288,78 @@ For no smoothness min_int_ang = None</p>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
 <dt>jigsaw_msh_t</dt><dd><p>final merged mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.calc_el_angles">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">calc_el_angles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.calc_el_angles" title="Permalink to this definition"></a></dt>
+<dd><p>Adapted from: <a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh">https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh</a></p>
+<p>Calculates the internal angle of each node for element (triangular or quadrangular)</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>np.array</dt><dd><p>internal angles of each element</p>
+</dd>
+<dt>Notes</dt><dd></dd>
+</dl>
+<blockquote>
+<div></div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.order_mesh">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">order_mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.order_mesh" title="Permalink to this definition"></a></dt>
+<dd><p>Order mesh nodes counterclockwise (triangles and quads)
+based on the coordinates</p>
+<dl class="field-list">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh with nodes out of order</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsawpy.msh_t.jigsaw_msh_t</dt><dd></dd>
+</dl>
+<blockquote>
+<div></div></blockquote>
+<dl class="simple">
+<dt>np.array</dt><dd><p>mesh whose nodes within each element are oriented counterclockwise</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.quads_from_tri">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">quads_from_tri</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.quads_from_tri" title="Permalink to this definition"></a></dt>
+<dd><p>Partially adapted from:
+<a class="reference external" href="https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list">https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list</a></p>
+<p>Combines all triangles that share vertices that are not right angles.
+right angles is defined as the internal angle closest to 90deg</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>triangular mesh</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsawpy.msh_t.jigsaw_msh_t</dt><dd><p>quadrangular + triangular mesh</p>
 </dd>
 </dl>
 </dd>
