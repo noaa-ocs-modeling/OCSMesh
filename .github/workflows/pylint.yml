@@ -36,5 +36,6 @@ jobs:
         python ./setup.py install_jigsaw
         pip install .[testing]
     - name: Analysing the code with pylint
+      run: |
       shell: bash -l {0}
       run: pylint ocsmesh
