@@ -89,7 +89,7 @@ class TritoQuad(unittest.TestCase):
             np.all(utils.calc_el_angles(out_msht)[-1][0][-1] == np.array([90., 90., 90., 90.]))
         )
 
-    def order_mesh(self):
+    def test_order_mesh(self):
         out_msht = utils.msht_from_numpy(
             coordinates=self.in_verts,
             triangles=self.in_tria,
@@ -99,7 +99,7 @@ class TritoQuad(unittest.TestCase):
             np.all(utils.order_mesh(out_msht).quad4['index'][0] == np.array([0, 4, 8, 7]))
         )
 
-    def quads_from_tri(self):
+    def test_quads_from_tri(self):
         out_msht = utils.msht_from_numpy(
             coordinates=self.in_verts,
             triangles=self.in_tria,
