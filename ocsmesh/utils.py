@@ -3087,7 +3087,7 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
         '''
         Adapted from: https://gist.github.com/flashlib/e8261539915426866ae910d55a3f9959
         '''
-
+        order=[]
         xSorted_idx = np.argsort(verts[:, 0])
         xSorted = verts[xSorted_idx, :]
 
