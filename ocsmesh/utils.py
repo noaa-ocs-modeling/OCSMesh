@@ -3188,8 +3188,8 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     tris_drop=[]
     for idxs in result.values():
         tris_drop.append(idxs)
-    tris_drop = np.array(tris_drop, dtype="int").ravel()
-    tris = np.delete(msht.tria3['index'], tris_drop,axis=0)
+    tris_drop = np.array(tris_drop, dtype="int")
+    tris = np.delete(msht.tria3['index'], tris_drop.ravel(),axis=0)
 
     # combines all triangles that share 2 non-right angle vertices
     # the quads array is composed of 2 right angle nodes (idx_of_closest)

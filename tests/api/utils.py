@@ -96,7 +96,7 @@ class TritoQuad(unittest.TestCase):
             quadrilaterals=self.in_quad
         )
         self.assertTrue(
-            np.all(utils.order_mesh(out_msht).quad4['index'][0] == np.array([0, 4, 8, 7]))
+            np.all(utils.order_mesh(out_msht).quad4['index'][0].astype(int) == np.array([0, 4, 8, 7]))
         )
 
     def test_quads_from_tri(self):
