@@ -164,7 +164,7 @@ def cleanup_folded_bound_el(mesh):
     # removing the erroneous elements using the triangles (clip_tri)
     fixed_mesh = clip_mesh_by_shape(
                 mesh,
-                shape=clip_tri.unary_union,
+                shape=clip_tri.union_all(),
                 inverse=True,
                 fit_inside=True,
                 check_cross_edges=True,
@@ -1646,7 +1646,7 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
                    if p.area > width**2 * (1-np.pi/4)]))
 
 
-    ret_val = channels_gdf.unary_union
+    ret_val = channels_gdf.union_all()
     if isinstance(ret_val, GeometryCollection):
         return None
 
@@ -2428,7 +2428,7 @@ def triangulate_polygon(
     # so no need to have for loop
 
     if isinstance(shape, (gpd.GeoDataFrame, gpd.GeoSeries)):
-        shape = shape.unary_union
+        shape = shape.union_all()
 
     if isinstance(shape, Polygon):
         shape = MultiPolygon([shape])
@@ -2613,7 +2613,7 @@ def create_patch_mesh(mesh_w_problem,
 
     patch = clip_mesh_by_shape(
                 mesh_for_patch.msh_t,
-                shape=clip_tri.unary_union,
+                shape=clip_tri.union_all(),
                 inverse=False,
                 fit_inside=False,
                 check_cross_edges=False,
@@ -2665,7 +2665,7 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
 
     clipped_mesh = clip_mesh_by_shape(
                 mesh_to_be_clipped,
-                shape=gdf_clipper.unary_union,
+                shape=gdf_clipper.union_all(),
                 inverse=inverse,
                 fit_inside=fit_inside,
                 check_cross_edges=check_cross_edges,
@@ -2736,16 +2736,16 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     domain.crs = domain.estimate_utm_crs()
     domain = domain.loc[domain['geometry'].area == max(domain['geometry'].area)]
     domain.crs = crs
-    domain = gpd.GeoDataFrame(geometry=[domain.unary_union],crs=crs)
+    domain = gpd.GeoDataFrame(geometry=[domain.union_all()],crs=crs)
 
-    poly_buffer = domain.unary_union.difference(
+    poly_buffer = domain.union_all().difference(
         gpd.GeoDataFrame(
             geometry=[
                 get_mesh_polygons(mesh_1),
                 get_mesh_polygons(mesh_2),
             ],
             crs = crs
-        ).unary_union
+        ).union_all()
     )
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
@@ -2986,7 +2986,7 @@ def merge_overlapping_meshes(all_msht: list,
                                                  msht
                                                  )
         msht_combined = clip_mesh_by_shape(msht_combined,
-                                           domain.unary_union
+                                           domain.union_all()
                                            )
         del carved_mesh,buff_mesh,domain,msht
 
