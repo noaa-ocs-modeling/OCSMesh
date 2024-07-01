@@ -147,7 +147,7 @@ class SubsetAndCombine:
             region_of_interest = isotach_exterior_polygon
 
         else:
-            region_of_interest = gdf_roi.unary_union
+            region_of_interest = gdf_roi.union_all()
 
 
         return region_of_interest
