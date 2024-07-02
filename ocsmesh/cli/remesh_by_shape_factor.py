@@ -202,7 +202,7 @@ class RemeshByShape:
                 gdf_to_refine = gpd.overlay(
                         gdf_to_refine, cutoff_gdf, how='intersection')
 
-            refine_polys = gdf_to_refine.unary_union
+            refine_polys = gdf_to_refine.union_all()
 
             # Initial mesh for the refinement (all except refinement area)
             init_jig = deepcopy(mesh.msh_t)

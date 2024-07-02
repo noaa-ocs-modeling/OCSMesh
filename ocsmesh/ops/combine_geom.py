@@ -240,7 +240,7 @@ class GeomCombine:
 
 
             # The assumption is this returns polygon or multipolygon
-            fin_mult_poly = rasters_gdf.unary_union
+            fin_mult_poly = rasters_gdf.union_all()
             _logger.info("Done")
 
 

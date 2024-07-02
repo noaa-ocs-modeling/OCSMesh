@@ -2252,7 +2252,7 @@ class HfunCollector(BaseHfun):
         if big_hfun:
             dem_gdf = gpd.GeoDataFrame(
                     geometry=dem_box_list, crs=epsg4326)
-            big_cut_shape = dem_gdf.unary_union
+            big_cut_shape = dem_gdf.union_all()
             big_msh_t = big_hfun.msh_t()
             if hasattr(big_msh_t, "crs"):
                 if not epsg4326.equals(big_msh_t.crs):

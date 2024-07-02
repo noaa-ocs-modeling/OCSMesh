@@ -59,10 +59,10 @@ class LineFeatureCapabilities(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tdir:
 
-            shape_path = tdir
+            shape_path = tdir + "/mysubdir"
 
             gdf = gpd.GeoDataFrame(geometry=[self._mult_line_1], crs=self._crs_2)
-            gdf.to_file(shape_path)
+            gdf.to_file(shape_path, mode='a')
 
             lf = LineFeature(shapefile=shape_path)
             shape, crs = lf.get_multiline()
@@ -90,11 +90,11 @@ class LineFeatureCapabilities(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tdir:
 
-            shape_path = tdir
+            shape_path = tdir + "/mysubdir"
 
             # NOTE: This time shapefile doesn't have CRS
             gdf = gpd.GeoDataFrame(geometry=[self._mult_line_1])
-            gdf.to_file(shape_path)
+            gdf.to_file(shape_path, mode='a')
 
             lf = LineFeature(shapefile=shape_path)
             with self.assertRaises(ValueError):

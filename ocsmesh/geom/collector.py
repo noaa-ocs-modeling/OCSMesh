@@ -322,7 +322,7 @@ class GeomCollector(BaseGeom):
                     [gdf, gpd.read_feather(f).to_crs(gdf.crs)]
                 )
 
-            mp = gdf.unary_union
+            mp = gdf.union_all()
             if isinstance(mp, Polygon):
                 mp = MultiPolygon([mp])
 
