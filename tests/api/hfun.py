@@ -752,7 +752,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
 
         refine_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
             mesh=msh_t,
-            shape=refine_gdf.unary_union,
+            shape=refine_gdf.union_all(),
             fit_inside=True,
             inverse=False
         )))
@@ -760,7 +760,7 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
         refine_avg = np.mean(refine_msh_t.msh_t().value)
         rest_msh_t = ocsmesh.Hfun(ocsmesh.Mesh(ocsmesh.utils.clip_mesh_by_shape(
             mesh=msh_t,
-            shape=refine_gdf.unary_union,
+            shape=refine_gdf.union_all(),
             fit_inside=False,
             inverse=True
         )))
