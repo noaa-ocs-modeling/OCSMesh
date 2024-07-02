@@ -59,7 +59,7 @@ class LineFeatureCapabilities(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tdir:
 
-            shape_path = tdir
+            shape_path = Path(tdir)
 
             gdf = gpd.GeoDataFrame(geometry=[self._mult_line_1], crs=self._crs_2)
             gdf.to_file(shape_path, mode='a')
@@ -90,7 +90,7 @@ class LineFeatureCapabilities(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tdir:
 
-            shape_path = tdir
+            shape_path = Path(tdir)
 
             # NOTE: This time shapefile doesn't have CRS
             gdf = gpd.GeoDataFrame(geometry=[self._mult_line_1])
