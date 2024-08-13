@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mesh size definition &mdash; ocsmesh 1.5.7 documentation</title>
+  <title>Mesh size definition &mdash; ocsmesh 1.5.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -185,10 +185,6 @@
 <p>Size function object factory</p>
 <p>Factory class that creates and returns concrete mesh size function
 object based on the type of the inputs.</p>
-<p class="rubric">Notes</p>
-<p>The object created when using this class is not an instance of
-this class or a subclass of it. It is a subclass of BaseHfun
-instead.</p>
 <p class="rubric">Methods</p>
 <table class="docutils align-default">
 <tbody>
@@ -197,6 +193,10 @@ instead.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>The object created when using this class is not an instance of
+this class or a subclass of it. It is a subclass of BaseHfun
+instead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -234,40 +234,6 @@ correct size function type</p>
 <p>Creates a raster based size function. The mesh size is specified
 at each point of the grid of the input raster, based on the
 specified criteria.</p>
-<p class="rubric">Notes</p>
-<p>Currently the implementation of this size function is such that
-when an object is created, the “size” values of this object is
-set to be maximum <cite>np.float32</cite>, and maximum and minimum constraints
-are not applied. After application of any refinement or constrant
-these constraints are actually applied. As a result if a raster
-based size function is created and no <cite>add_*</cite> or <cite>apply_*</cite> method
-is called, the values of <cite>hmin</cite> and <cite>hmax</cite> attributes as well as
-any value on the size function grid is meaningless.</p>
-<p>An important distinction that must be made is between
-<strong>refinements</strong> and <strong>constraints</strong>. These two concepts are applied
-differently when it comes to calculating the sizes. Refinements
-specification guarantees that the sizes in the specified region
-is at most equal to the specified value, however it does <strong>not</strong>
-have any guarantee on the minimum of sizes. In other words if
-multiple refinements are specified, then the size at everypoint
-is equal to the minimum calculated from all of those refinements.
-Contraints are applied a bit differently. Constraints ensure that
-a given condition is met at a given point. A list of specified
-constraints is created and after application of any refinements
-or other constraints, all the constraint are re-applied.
-As a result constraint can be used to ensure the size at a given
-point is not smaller that a specified value. Constraint can also
-be used similar to refinements to ensure the size is smaller
-than a specified value.</p>
-<p>Another important different between contraints and refinements is
-that for refinements the final value is the minimum of all, but
-constraints are applied one at a time and depending on their type
-and condition, it might result on a value between all specified
-maximums and minimums.</p>
-<p>Note that constraints can be conflicting, currently there’s no
-automatic conflict resolutions and the constrains are applied in
-the order specified, so if applicable the last one overrides all
-else.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -329,6 +295,40 @@ else.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>Currently the implementation of this size function is such that
+when an object is created, the “size” values of this object is
+set to be maximum <cite>np.float32</cite>, and maximum and minimum constraints
+are not applied. After application of any refinement or constrant
+these constraints are actually applied. As a result if a raster
+based size function is created and no <cite>add_*</cite> or <cite>apply_*</cite> method
+is called, the values of <cite>hmin</cite> and <cite>hmax</cite> attributes as well as
+any value on the size function grid is meaningless.</p>
+<p>An important distinction that must be made is between
+<strong>refinements</strong> and <strong>constraints</strong>. These two concepts are applied
+differently when it comes to calculating the sizes. Refinements
+specification guarantees that the sizes in the specified region
+is at most equal to the specified value, however it does <strong>not</strong>
+have any guarantee on the minimum of sizes. In other words if
+multiple refinements are specified, then the size at everypoint
+is equal to the minimum calculated from all of those refinements.
+Contraints are applied a bit differently. Constraints ensure that
+a given condition is met at a given point. A list of specified
+constraints is created and after application of any refinements
+or other constraints, all the constraint are re-applied.
+As a result constraint can be used to ensure the size at a given
+point is not smaller that a specified value. Constraint can also
+be used similar to refinements to ensure the size is smaller
+than a specified value.</p>
+<p>Another important different between contraints and refinements is
+that for refinements the final value is the minimum of all, but
+constraints are applied one at a time and depending on their type
+and condition, it might result on a value between all specified
+maximums and minimums.</p>
+<p>Note that constraints can be conflicting, currently there’s no
+automatic conflict resolutions and the constrains are applied in
+the order specified, so if applicable the last one overrides all
+else.</p>
 <p>Initialize a raster based size function object</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -350,14 +350,8 @@ constraint applications are not capped off.</p>
 </dd>
 </dl>
 </dd>
-</dl>
-<p class="rubric">Notes</p>
-<p>All the points in the raster grid are set to have maximum
-<cite>np.float32</cite> value. The <cite>hmin</cite> and <cite>hmax</cite> arguments,
-even if provided, are not applied in during initialization.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.bbox" title="ocsmesh.hfun.HfunRaster.bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bbox</span></code></a></dt><dd><p>Read-only attribute for the bounding box of the raster grid</p>
 </dd>
 <dt><a class="reference internal" href="#ocsmesh.hfun.HfunRaster.chunk_size" title="ocsmesh.hfun.HfunRaster.chunk_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunk_size</span></code></a></dt><dd><p>Modfiable attribute for stored square raster window size</p>
@@ -570,6 +564,10 @@ even if provided, are not applied in during initialization.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>All the points in the raster grid are set to have maximum
+<cite>np.float32</cite> value. The <cite>hmin</cite> and <cite>hmax</cite> arguments,
+even if provided, are not applied in during initialization.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.hfun.HfunRaster.msh_t">
 <span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">window</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Window</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marche</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunRaster.msh_t" title="Permalink to this definition"></a></dt>
@@ -1610,9 +1608,6 @@ during the context</p>
 <p>Mesh based size function.</p>
 <p>Creates a mesh based size function. The mesh size is specified
 at each point of the mesh based on the specified criteria.</p>
-<p class="rubric">Notes</p>
-<p>Unlike raster size function, mesh based size function doesn’t
-support topo-based constraint at this point.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -1656,6 +1651,9 @@ support topo-based constraint at this point.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>Unlike raster size function, mesh based size function doesn’t
+support topo-based constraint at this point.</p>
 <p>Initialize a mesh based size function object</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1667,21 +1665,8 @@ object of this type.</p>
 </dd>
 </dl>
 </dd>
-</dl>
-<p class="rubric">Notes</p>
-<p>When a size function is created from a mesh, it takes
-the values associated with the underlying mesh. Unless
-<cite>size_from_mesh</cite> is called or refinements are applied, the
-values can be meaningless.</p>
-<p>Unlike raster size function where the user defines the
-minimum and maximum, for mesh based hfun, the minimum and
-maximum is based on the values stored on the mesh.</p>
-<p>Note that currently object of this type holds onto a crs
-variable separate from <cite>mesh.crs</cite>. Because of this, if the
-user is not careful, one might run into unexpected behavior!</p>
-<dl class="field-list simple">
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.crs" title="ocsmesh.hfun.HfunMesh.crs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">crs</span></code></a></dt><dd><p>Read-only attribute holding onto hfun CRS</p>
 </dd>
 <dt><a class="reference internal" href="#ocsmesh.hfun.HfunMesh.hmax" title="ocsmesh.hfun.HfunMesh.hmax"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hmax</span></code></a></dt><dd><p>Read-only attribute for the maximum mesh size constraint</p>
@@ -1729,6 +1714,17 @@ user is not careful, one might run into unexpected behavior!</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>When a size function is created from a mesh, it takes
+the values associated with the underlying mesh. Unless
+<cite>size_from_mesh</cite> is called or refinements are applied, the
+values can be meaningless.</p>
+<p>Unlike raster size function where the user defines the
+minimum and maximum, for mesh based hfun, the minimum and
+maximum is based on the values stored on the mesh.</p>
+<p>Note that currently object of this type holds onto a crs
+variable separate from <cite>mesh.crs</cite>. Because of this, if the
+user is not careful, one might run into unexpected behavior!</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.hfun.HfunMesh.msh_t">
 <span class="sig-name descname"><span class="pre">msh_t</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.hfun.HfunMesh.msh_t" title="Permalink to this definition"></a></dt>
@@ -1874,28 +1870,6 @@ the size function.</p>
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.hfun.</span></span><span class="sig-name descname"><span class="pre">HfunCollector</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">in_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Iterable</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster" title="ocsmesh.raster.Raster"><span class="pre">Raster</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D" title="ocsmesh.mesh.mesh.EuclideanMesh2D"><span class="pre">EuclideanMesh2D</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh" title="ocsmesh.mesh.mesh.Mesh"><span class="pre">Mesh</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hmin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hmax</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nprocs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbosity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'exact'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'fast'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'exact'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_as_hfun</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_shape_crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">CRS</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'EPSG:4326'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.hfun.HfunCollector" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseHfun</span></code></p>
 <p>Define size function based on multiple inputs of different types</p>
-<p class="rubric">Notes</p>
-<p>All the refinements and constraints of this collector size
-function are applied lazily. That means the size values are <strong>not</strong>
-evaluated at the time they are called. Instead the effect of
-all these refinements and constraints on the size is calculated
-when <cite>msh_t()</cite> method is called.</p>
-<p>Two distinct algorithms are implemented for storing the size
-function values during evaluation and before creating the
-“background mesh” on which sizes are specified. Currently
-the difference between algorithms are only due to how raster
-inputs to the collector are processed. The <strong>exact</strong> algorithm
-is more computationally expensive; it processes all refinements
-on the original rasters and applies the indivitually on all
-of those individual rasters; this results in exponential time
-calculation of contours or raster features as the extracted
-features on all rasters must be applied on all rasters. Application
-of features usually involve distance calculation using a tree
-and can be very expensive when many rasters-features are involved.
-The <strong>fast</strong> approach is less exact and can use more memory, but
-it is much faster. The approach it takes is to still extract
-the raster features individually but then apply it to a lower
-resolution large raster that covers all the input rasters.</p>
 <dl class="field-list">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><blockquote>
@@ -1934,6 +1908,28 @@ resolution large raster that covers all the input rasters.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>All the refinements and constraints of this collector size
+function are applied lazily. That means the size values are <strong>not</strong>
+evaluated at the time they are called. Instead the effect of
+all these refinements and constraints on the size is calculated
+when <cite>msh_t()</cite> method is called.</p>
+<p>Two distinct algorithms are implemented for storing the size
+function values during evaluation and before creating the
+“background mesh” on which sizes are specified. Currently
+the difference between algorithms are only due to how raster
+inputs to the collector are processed. The <strong>exact</strong> algorithm
+is more computationally expensive; it processes all refinements
+on the original rasters and applies the indivitually on all
+of those individual rasters; this results in exponential time
+calculation of contours or raster features as the extracted
+features on all rasters must be applied on all rasters. Application
+of features usually involve distance calculation using a tree
+and can be very expensive when many rasters-features are involved.
+The <strong>fast</strong> approach is less exact and can use more memory, but
+it is much faster. The approach it takes is to still extract
+the raster features individually but then apply it to a lower
+resolution large raster that covers all the input rasters.</p>
 <p>Initialize a collector size function object</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

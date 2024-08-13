@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Domain definition &mdash; ocsmesh 1.5.7 documentation</title>
+  <title>Domain definition &mdash; ocsmesh 1.5.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -135,10 +135,6 @@
 <p>Geometry object factory</p>
 <p>Factory class that creates and returns concrete geometry object
 based on the input types.</p>
-<p class="rubric">Notes</p>
-<p>The object created when using this class is not an instance of
-this class or a subclass of it. It is a subclass of BaseGeom
-instead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -157,6 +153,10 @@ instead.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>The object created when using this class is not an instance of
+this class or a subclass of it. It is a subclass of BaseGeom
+instead.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -266,10 +266,6 @@ value as calling <cite>get_multipolygon</cite> without any arguments.</p>
 <p>Raster based geometry.</p>
 <p>Create geometry based on a raster object. All the calculations
 are done on the raster image.</p>
-<p class="rubric">Notes</p>
-<p>This is the main object to use for handling DEM data. The objects
-of this class hold a reference to the original raster object and
-use that handle to extract data using <cite>Raster</cite> API.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -291,6 +287,10 @@ use that handle to extract data using <cite>Raster</cite> API.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>This is the main object to use for handling DEM data. The objects
+of this class hold a reference to the original raster object and
+use that handle to extract data using <cite>Raster</cite> API.</p>
 <p>Initialize a raster based geometry object.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -437,10 +437,6 @@ value as calling <cite>get_multipolygon</cite> without any arguments.</p>
 <p>Mesh based geometry.</p>
 <p>Create a geometry based on an input mesh. All the calculations
 for polygon are done on the underlying mesh object.</p>
-<p class="rubric">Notes</p>
-<p>This class is a handy tool for reusing existing mesh extent
-for geometry (i.e. domain) definition and then remeshing that
-domain.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -462,6 +458,10 @@ domain.</p>
 </tr>
 </tbody>
 </table>
+<p class="rubric">Notes</p>
+<p>This class is a handy tool for reusing existing mesh extent
+for geometry (i.e. domain) definition and then remeshing that
+domain.</p>
 <p>Initialize a mesh based geometry object</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

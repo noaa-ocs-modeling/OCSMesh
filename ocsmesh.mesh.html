@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mesh representation &mdash; ocsmesh 1.5.7 documentation</title>
+  <title>Mesh representation &mdash; ocsmesh 1.5.8 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -142,20 +142,6 @@ based on the input types.</p>
 </dd>
 </dl>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><dl class="simple">
-<dt>MeshType</dt><dd><p>Mesh object created from the input</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
-<dt>TypeError</dt><dd><p>Input <cite>mesh</cite> is not a <cite>jigsaw_msh_t</cite> object.</p>
-</dd>
-<dt>NotImplementedError</dt><dd><p>Input <cite>mesh</cite> object cannot be used to create a EuclideanMesh2D</p>
-</dd>
-</dl>
-</dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord" title="ocsmesh.mesh.Mesh.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
@@ -173,6 +159,22 @@ based on the input types.</p>
 </tr>
 </tbody>
 </table>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt>MeshType</dt><dd><p>Mesh object created from the input</p>
+</dd>
+</dl>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>TypeError</dt><dd><p>Input <cite>mesh</cite> is not a <cite>jigsaw_msh_t</cite> object.</p>
+</dd>
+<dt>NotImplementedError</dt><dd><p>Input <cite>mesh</cite> object cannot be used to create a EuclideanMesh2D</p>
+</dd>
+</dl>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.open">
 <em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">open</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">CRS</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D" title="ocsmesh.mesh.mesh.EuclideanMesh2D"><span class="pre">EuclideanMesh2D</span></a></span></span><a class="headerlink" href="#ocsmesh.mesh.Mesh.open" title="Permalink to this definition"></a></dt>
@@ -283,14 +285,8 @@ object, it will affect the mesh.</p>
 </dd>
 </dl>
 </dd>
-<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt>ValueError</dt><dd><p>If number of mesh dimensions is not equal to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p>
-</dd>
-</dl>
-</dd>
-<dt class="field-odd">Attributes<span class="colon">:</span></dt>
-<dd class="field-odd"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.bbox" title="ocsmesh.mesh.EuclideanMesh2D.bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bbox</span></code></a></dt><dd><p>Calculates and returns bounding box of the mesh hull.</p>
 </dd>
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.boundaries" title="ocsmesh.mesh.EuclideanMesh2D.boundaries"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundaries</span></code></a></dt><dd><p>Handle to boundaries calculator helper object</p>
@@ -345,6 +341,14 @@ object, it will affect the mesh.</p>
 </tr>
 </tbody>
 </table>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt>ValueError</dt><dd><p>If number of mesh dimensions is not equal to <code class="docutils literal notranslate"><span class="pre">2</span></code>.</p>
+</dd>
+</dl>
+</dd>
+</dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.get_bbox">
 <span class="sig-name descname"><span class="pre">get_bbox</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">crs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">CRS</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Literal</span><span class="p"><span class="pre">[</span></span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'polygon'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'bbox'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Bbox</span></span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.get_bbox" title="Permalink to this definition"></a></dt>
