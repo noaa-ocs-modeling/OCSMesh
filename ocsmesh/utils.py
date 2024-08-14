@@ -28,6 +28,8 @@ import geopandas as gpd
 import pandas as pd
 import utm
 
+import logging
+import warnings
 
 # TODO: Remove one of these two constants
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
@@ -36,6 +38,8 @@ MESH_TYPES = {
     'quad4': 'QUAD4_t',
     'hexa8': 'HEXA8_t'
 }
+
+_logger = logging.getLogger(__name__)
 
 def must_be_euclidean_mesh(func):
     def decorator(mesh, *args, **kwargs):
@@ -3521,7 +3525,7 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
             meshes.append(mesh)
 
         except:
-            pass
+            warnings.warn(f"Error quadrangulating arcs id: {r_idx}")
 
     # Now that all streams are ready
     # i.e., quadrangulated and free of folded quads)
