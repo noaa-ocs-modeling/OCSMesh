@@ -46,6 +46,81 @@ class SetUp(unittest.TestCase):
             assert minor == line[2]
             assert patch == line[3]
 
+class RiverMapper(unittest.TestCase):
+    def test_quadrangulate_rivermapper_arcs(self):
+        p = Path(__file__).parents[1] / "data" / "diag_arcs_clipped.shp"
+        arcs_shp = gpd.read_file(p)
+        quads =  utils.quadrangulate_rivermapper_arcs(arcs_shp)
+
+        self.assertEqual(len(quads.quad4), 3250)
+
+class QuadCleanup(unittest.TestCase):
+    def setUp(self):
+        self.in_verts = [
+            [0, 5],
+            [-.5, 1],
+            [0, 3],
+            [3, 2.1],
+            [2.75, 2.5],
+            [3, 2],
+            [0, 7],
+            [2.5, 7],
+            [0, 9],
+            [2.5, 9],
+        ]
+        self.in_tria = [
+            [0, 1, 2],
+        ]
+        self.in_quad = [
+            [0, 2, 1, 5],
+            [6, 7, 9, 8],
+            [6, 0, 4, 7],
+            [0, 5, 3, 4],
+        ]
+
+    def test_cleanup_skewed_el(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+        clean_skew = utils.cleanup_skewed_el(out_msht,lw_bound_tri= 10.)
+        self.assertIsInstance(clean_skew, jigsaw_msh_t)
+        self.assertEqual(len(clean_skew.tria3), 0)
+        self.assertTrue(
+            np.all(clean_skew.quad4['index'] == np.array([[0, 2, 1, 4],
+                                                          [5, 6, 8, 7],
+                                                          [5, 0, 3, 6]]))
+        )
+
+    def test_clean_concv(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+        clean_concv = utils.cleanup_concave_quads(out_msht)
+        self.assertIsInstance(clean_concv, jigsaw_msh_t)
+        self.assertTrue(
+            np.all(clean_concv.quad4['index'] == np.array([[6, 7, 9, 8],
+                                                           [6, 0, 4, 7],
+                                                           [0, 5, 3, 4]]))
+        )
+
+    def test_clip_elements_by_index(self):
+        out_msht = utils.msht_from_numpy(
+            coordinates=self.in_verts,
+            triangles=self.in_tria,
+            quadrilaterals=self.in_quad
+        )
+        clean_idx = utils.clip_elements_by_index(out_msht,
+                                                 tria=[0],
+                                                 quad=[1,2])
+        self.assertIsInstance(clean_idx, jigsaw_msh_t)
+        self.assertTrue(
+            np.all(clean_idx.quad4['index'] == np.array([[0, 2, 1, 5],
+                                                         [0, 5, 3, 4]]))
+        )
 
 class TritoQuad(unittest.TestCase):
     def setUp(self):

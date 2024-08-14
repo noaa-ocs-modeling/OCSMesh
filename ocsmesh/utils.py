@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import permutations
+from itertools import permutations,batched,combinations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
@@ -473,7 +473,7 @@ def remesh_small_elements(opts, geom, mesh, hfun):
     for coef in coeffs:
         tria_areas = calculate_tria_areas(fixed_mesh)
         tiny_sz = coef * equilat_area
-        tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas < tiny_sz, :].ravel())
+        tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas<tiny_sz,:].ravel())
         if len(tiny_verts) == 0:
             break
         mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
@@ -692,7 +692,7 @@ def get_multipolygon_from_pathplot(ax):
 
 
 def signed_polygon_area(vertices):
-    # https://code.activestate.com/recipes/578047-area-of-polygon-using-shoelace-formula/
+# https://code.activestate.com/recipes/578047-area-of-polygon-using-shoelace-formula/
     n = len(vertices)  # of vertices
     area = 0.0
     for i in range(n):
@@ -1909,7 +1909,8 @@ def get_element_size_courant(
     target_courant : float
         The Courant number to be achieved by the calculated element size
     characteristic_velocity_magnitude : float or array of floats
-        Magnitude of total velocity used for element size calculation (:math:`\\frac{m}{sec}`)
+        Magnitude of total velocity used for element size calculation
+        (:math:`\\frac{m}{sec}`)
     timestep : float
         Timestep size (:math:`seconds`) to
 
@@ -1936,7 +1937,8 @@ def can_velocity_be_approximated_by_linear_wave_theory(
     depth : float or array of float
         Depth of the point for which the approximation validation is checked
     wave_amplitude : float, default=2
-        Free surface elevation (:math:`meters`) from the reference (i.e. wave height)
+        Free surface elevation (:math:`meters`)
+        from the reference (i.e. wave height)
 
     Returns
     -------
@@ -1951,7 +1953,8 @@ def can_velocity_be_approximated_by_linear_wave_theory(
 
     References
     ----------
-    Based on OceanMesh2D approximation method https://doi.org/10.13140/RG.2.2.21840.61446/2.
+    Based on OceanMesh2D approximation method
+    https://doi.org/10.13140/RG.2.2.21840.61446/2.
     '''
 
     return depth <= -abs(wave_amplitude)
@@ -1984,7 +1987,8 @@ def estimate_particle_velocity_from_depth(
 
     References
     ----------
-    Based on OceanMesh2D approximation method https://doi.org/10.13140/RG.2.2.21840.61446/2.
+    Based on OceanMesh2D approximation method 
+    https://doi.org/10.13140/RG.2.2.21840.61446/2.
     '''
 
     if not isinstance(depth, np.ndarray):
@@ -1996,7 +2000,7 @@ def estimate_particle_velocity_from_depth(
         depth, wave_amplitude)
 
     velocity = np.zeros_like(depth)
-    velocity[depth_mask] = wave_amplitude * np.sqrt(constants.g / np.abs(depth[depth_mask]))
+    velocity[depth_mask] = wave_amplitude*np.sqrt(constants.g/np.abs(depth[depth_mask]))
     velocity[~depth_mask] = np.sqrt(constants.g * wave_amplitude)
 
     return velocity.reshape(dep_shape)
@@ -2023,7 +2027,8 @@ def approximate_courant_number_for_depth(
         Element size(s) to use for Courant number calculation. Must
         be scalar otherwise match the dimension of depth
     wave_amplitude : float, default=2
-        Free surface elevation (:math:`meters`) from the reference (i.e. wave height)
+        Free surface elevation (:math:`meters`) from the
+        reference (i.e. wave height)
 
     Returns
     -------
@@ -2045,7 +2050,8 @@ def approximate_courant_number_for_depth(
     depth_mask = can_velocity_be_approximated_by_linear_wave_theory(
         depth, wave_amplitude)
 
-    particle_velocity = estimate_particle_velocity_from_depth(depth, wave_amplitude)
+    particle_velocity = estimate_particle_velocity_from_depth(depth,
+                                                              wave_amplitude)
     characteristic_velocity_magnitude = (
         particle_velocity + np.sqrt(constants.g * np.abs(depth))
     )
@@ -2121,7 +2127,9 @@ def create_rectangle_mesh(
                 ])
             else: # is tria
                 tria3.append([j * nx + i, j * nx + (i + 1), (j + 1) * nx + i])
-                tria3.append([j * nx + (i + 1), (j + 1) * nx + (i + 1), (j + 1) * nx + i])
+                tria3.append([j * nx + (i + 1),
+                              (j + 1) * nx + (i + 1),
+                              (j + 1) * nx + i])
 
 
 
@@ -2393,8 +2401,10 @@ def shape_to_msh_t_2(
 
 def triangulate_polygon(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
-    aux_pts: Union[np.array, Point, MultiPoint, gpd.GeoDataFrame, gpd.GeoSeries] = None,
+    aux_pts:Union[np.array,Point,MultiPoint,
+                  gpd.GeoDataFrame,gpd.GeoSeries]=None,
     opts='p',
+    type=2,
 ) -> None:
     """Triangulate the input shape, with additional points provided
 
@@ -2411,6 +2421,8 @@ def triangulate_polygon(
         Extra points to be used in the triangulation
     opts : string, default='p'
         Options for controlling `triangle` package
+    type : int, default=2
+        Options for controlling the workflow of the triangulation (see Notes)
 
     Returns
     -------
@@ -2422,6 +2434,15 @@ def triangulate_polygon(
     ValueError
         If input shape is invalid or the point input cannot be used
         to generate point shape
+
+    Notes
+    -----
+    type was added to encompass polygons that fail to be triangulated
+    the default type = 2 is equal to the standard triangulate_polygon
+    prior to the implementation of the type variable.
+    type = 1 uses shape_to_msh_t instead of shape_to_msh_t_2
+    type = 3 places the point for the hole at the corned of the polygon
+             it should never be used in case there are multiple holes
     """
 
     # NOTE: Triangle can handle separate closed polygons,
@@ -2436,7 +2457,11 @@ def triangulate_polygon(
     if not isinstance(shape, (MultiPolygon, Polygon)):
         raise ValueError("Input shape must be convertible to polygon!")
 
-    msht_shape = shape_to_msh_t_2(shape)
+    if type == 2 or type == 3:
+        msht_shape = shape_to_msh_t_2(shape)
+    if type == 1:
+        msht_shape = shape_to_msh_t(shape)
+
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']
 
@@ -2450,10 +2475,14 @@ def triangulate_polygon(
     neg_shape = world.difference(shape)
     if isinstance(neg_shape, Polygon):
         neg_shape = MultiPolygon([neg_shape])
-    holes = []
-    for poly in neg_shape.geoms:
-        holes.append(np.array(poly.representative_point().xy).ravel())
-    holes = np.array(holes)
+
+    if type == 2 or type == 3:
+        holes = []
+        for poly in neg_shape.geoms:
+            holes.append(np.array(poly.representative_point().xy).ravel())
+        holes = np.array(holes)
+    if type == 1:
+        holes = np.array([[world.bounds[0]+0.00001, world.bounds[1]+0.00001]])
 
 
     if aux_pts is not None:
@@ -2516,7 +2545,8 @@ def triangulate_polygon_s(
     all_pts = mesh1.vert2['coord']
     arr = np.delete(all_pts, nb, axis=0)
     del mesh1,all_pts,nb
-    #Second triangulation. Not smooth ('p'), but intenal nodes are passed as aux_pts
+    #Second triangulation. Not smooth ('p'),
+    # but intenal nodes are passed as aux_pts
     mesh2 = triangulate_polygon(shape=shape,aux_pts=arr,opts='p')
 
     return mesh2
@@ -2694,7 +2724,8 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
 
     Parameters
     ----------
-    domain : jigsawpy.msh_t or Polygon or MultiPolygon or GeoDataFrame or GeoSeries
+    domain : jigsawpy.msh_t or Polygon or
+        MultiPolygon or GeoDataFrame or GeoSeries
         extent of entire domain (mesh_1+mesh_2+gap)
     mesh_1 : jigsawpy.msh_t.jigsaw_msh_t
         mesh_1
@@ -2734,7 +2765,7 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
 
     domain = domain.dissolve().explode(index_parts=True)
     domain.crs = domain.estimate_utm_crs()
-    domain = domain.loc[domain['geometry'].area == max(domain['geometry'].area)]
+    domain =domain.loc[domain['geometry'].area == max(domain['geometry'].area)]
     domain.crs = crs
     domain = gpd.GeoDataFrame(geometry=[domain.union_all()],crs=crs)
 
@@ -2753,7 +2784,8 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     if min_int_ang is None:
         msht_buffer = triangulate_polygon(gdf_full_buffer)
     else:
-        msht_buffer = triangulate_polygon_s(gdf_full_buffer,min_int_ang=min_int_ang)
+        msht_buffer = triangulate_polygon_s(gdf_full_buffer,
+                                            min_int_ang=min_int_ang)
     msht_buffer.crs = crs
 
     return msht_buffer
@@ -2763,7 +2795,7 @@ def merge_neighboring_meshes(*all_msht):
     '''
     Combine meshes whose boundaries match
     Adapted from:
-    https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py
+https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh
 
     Parameters
     ----------
@@ -2787,7 +2819,7 @@ def merge_neighboring_meshes(*all_msht):
         # Find shared boundary nodes from the tree and bdry nodes
         combined_bdry_edges = get_boundary_edges(msht_combined)
         combined_bdry_verts = np.unique(combined_bdry_edges)
-        combined_bdry_coords = msht_combined.vert2['coord'][combined_bdry_verts]
+        combined_bdry_coords=msht_combined.vert2['coord'][combined_bdry_verts]
 
         msht_bdry_edges = get_boundary_edges(msht)
         msht_bdry_verts = np.unique(msht_bdry_edges)
@@ -2809,7 +2841,8 @@ def merge_neighboring_meshes(*all_msht):
                 raise ValueError("More than one node match on boundary!")
 
             idx_tree_msht = neigh_idx_list[0]
-            map_idx_shared[msht_bdry_verts[idx_tree_msht]] = combined_bdry_verts[idx_tree_comb]
+            map_idx_shared[msht_bdry_verts[idx_tree_msht]] = \
+                combined_bdry_verts[idx_tree_comb]
 
         # Combine seam into the rest replacing the index for shared nodes
         # with the ones from tree
@@ -2827,7 +2860,8 @@ def merge_neighboring_meshes(*all_msht):
         coord.append(msht_combined.vert2['coord'])
         offset += coord[-1].shape[0]
 
-        # Drop shared vertices and update element cnn based on map and dropped offset
+        # Drop shared vertices and update element cnn based on
+        # map and dropped offset
         mesh_orig_idx = np.arange(len(msht.vert2))
         mesh_shrd_idx = np.unique(list(map_idx_shared.keys()))
         mesh_renum_idx = np.setdiff1d(mesh_orig_idx, mesh_shrd_idx)
@@ -2949,11 +2983,13 @@ def merge_overlapping_meshes(all_msht: list,
         (sometimes this necessary if the mesh is too narrow)
     buffer_domain : float
         size of the buffer that will be added
-        around the entire mesh domain. 
-        This is necessary for preventing slivers at the mesh boundary intersections
+        around the entire mesh domain.
+        This is necessary for preventing slivers at
+        the mesh boundary intersections
     min_int_ang : int
         Minimal internal angle for triangulation
-        default = 30, i.e. triangles will have internal angles of at least 30 deg
+        default = 30, i.e. triangles will have internal angles of
+        at least 30 deg
         For no smoothness min_int_ang = None
 
     Returns
@@ -2978,8 +3014,8 @@ def merge_overlapping_meshes(all_msht: list,
                                                buffer_domain=buffer_domain
                                                )
         domain = pd.concat([gpd.GeoDataFrame(geometry=\
-                                             [get_mesh_polygons(i)],crs=crs) for \
-                                                i in [msht_combined,msht]])
+                                        [get_mesh_polygons(i)],crs=crs) for \
+                                         i in [msht_combined,msht]])
 
         msht_combined = merge_neighboring_meshes(buff_mesh,
                                                  carved_mesh,
@@ -2997,9 +3033,11 @@ def merge_overlapping_meshes(all_msht: list,
 
 def calc_el_angles(msht):
     '''
-    Adapted from: https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh
+    Adapted from:
+    https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh
 
-    Calculates the internal angle of each node for element (triangular or quadrangular)
+    Calculates the internal angle of each node
+    for element (triangular or quadrangular)
 
     Parameters
     ----------
@@ -3085,7 +3123,8 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
     mesh_ordered=[]
     def order_nodes(verts):
         '''
-        Adapted from: https://gist.github.com/flashlib/e8261539915426866ae910d55a3f9959
+        Adapted from:
+        https://gist.github.com/flashlib/e8261539915426866ae910d55a3f9959
         '''
         order=[]
         xSorted_idx = np.argsort(verts[:, 0])
@@ -3142,7 +3181,7 @@ def order_mesh(msht,crs=CRS.from_epsg(4326)) -> jigsaw_msh_t:
 def quads_from_tri(msht) -> jigsaw_msh_t:
     """
     Partially adapted from:
-    https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list
+https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list
 
     Combines all triangles that share vertices that are not right angles.
     right angles is defined as the internal angle closest to 90deg
@@ -3172,7 +3211,7 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     # Finds the idx of the vertices closes to 90 deg
     # Then, creates an array of non right angle vertices (shared)
     idx_of_closest = np.abs(ang_chk - 90).argmin(axis=1)
-    # right = np.array([el[row,column] for row,column in enumerate(idx_of_closest)])
+
     shared = np.array([np.delete(el[row],column) for \
                        row,column in enumerate(idx_of_closest)])
     shared.sort()
@@ -3182,7 +3221,7 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     for i, number in enumerate(shared):
         duplicates[str(number)].append(i)
 
-    result = {key: value for key, value in duplicates.items() if len(value) > 1}
+    result = {key: value for key, value in duplicates.items() if len(value)> 1}
 
     # separate the triangles to then be merged back to the quads
     tris_drop=[]
@@ -3215,3 +3254,309 @@ def quads_from_tri(msht) -> jigsaw_msh_t:
     put_id_tags(msht_q)
 
     return msht_q
+
+
+def clip_elements_by_index(msht: jigsaw_msh_t,
+                           tria=None,
+                           quad=None,
+                           inverse: bool = False) -> jigsaw_msh_t:
+    '''
+    Adapted from:
+https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh/utils
+    
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+        mesh to beclipped
+
+    tria or quad: array with the element ids to be removed
+    inverse = default:False
+
+    Returns
+    -------
+    jigsaw_msh_t
+        mesh without skewed elements
+    
+    Notes
+    -----
+    '''
+
+    new_msht = deepcopy(msht)
+
+    rm_dict = {'tria3': tria, 'quad4': quad}
+    for elm_type, idx in rm_dict.items():
+        if idx is None: 
+            continue
+        mask = np.ones(getattr(new_msht, elm_type).shape, dtype=bool)
+        mask[idx] = False      
+        if inverse == False:
+            setattr(
+                new_msht,
+                elm_type,
+                getattr(new_msht, elm_type).take(np.where(mask)[0], axis=0)
+            )
+        else:
+            setattr(
+                new_msht,
+                elm_type,
+                getattr(new_msht, elm_type).take(np.where(~mask)[0], axis=0)
+            )
+    cleanup_isolates(new_msht)
+
+    return new_msht
+
+
+def cleanup_skewed_el(mesh: jigsaw_msh_t,
+                      lw_bound_tri: float = 1.,
+                      up_bound_tri: float = 175.,
+                      lw_bound_quad: float = 10.,
+                      up_bound_quad: float = 179.) -> jigsaw_msh_t:
+    '''
+    Removes elements based on their internal angles
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+    lw_bound_tri : default=1
+    up_bound_tri : default=175
+    lw_bound_quad : default=10
+    up_bound_quad : default=179
+
+    Returns
+    -------
+    np.array
+        internal angles of each element
+
+    Notes
+    -----
+    '''
+
+    tria=None
+    quad=None
+    ang_tri,ang_quad = calc_el_angles(mesh)
+    if len(ang_tri)>0:
+        ang_chk_tri = np.logical_or(ang_tri[0]<lw_bound_tri,
+                                    ang_tri[0]>=up_bound_tri)
+        mask_tri = np.where(np.any(ang_chk_tri, axis=1))[0]
+        tria=mask_tri
+
+    if len(ang_quad[0])>0:
+        ang_chk_quad=np.logical_or(ang_quad[0]<lw_bound_quad,
+                                   ang_quad[0]>=up_bound_quad)
+        mask_quad = np.where(np.any(ang_chk_quad, axis=1))[0]
+        quad = mask_quad
+
+    mesh_clean = clip_elements_by_index(
+                mesh,
+                tria=tria,
+                quad=quad,
+                inverse=False
+                )
+
+    return mesh_clean
+
+def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
+    '''
+    Removes concave quads that might have been wrongly created
+    during the quadrangulation process
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+
+    Returns
+    -------
+    np.array
+        internal angles of each element
+
+    Notes
+    -----
+    '''
+
+    quad = mesh.quad4['index']
+    coord=mesh.vert2['coord']
+
+    concave_el=[]
+    for l_idx,n_idx in enumerate(quad):
+        polygon = Polygon(coord[n_idx])
+        if np.isclose(polygon.convex_hull.area,polygon.area) == False:
+            concave_el.append(l_idx)
+
+    mesh_clean = clip_elements_by_index(
+                mesh,
+                tria=None,
+                quad=concave_el,
+                inverse=False
+                )
+
+    return mesh_clean
+
+
+def quadrangulate_rivermapper_arcs(arcs_shp,
+                                  _buffer_1: float = 0.001,
+                                  _buffer_2: float = 0.0001,
+                                  _batch_size: float = 1000,
+                                  crs=CRS.from_epsg(4326)
+                                  ) -> jigsaw_msh_t:
+    '''
+    Creates quads using the RiverMapper diagnostic outputs
+    removes quads with repetitive coords
+    removes all elements that intersect
+    merges all individual quads for each stream into a single mesh
+    removes intersecting quads at junctions
+
+    Parameters
+    ----------
+    arcs_shp : .shp file with the RiverMapper diagnostic arcs
+    _buffer_1 : default(0.001), controls the the removal of 
+                overlaping quads within a given stream
+    _buffer_2 : default(0.0001), controls the the removal of 
+                overlaping quads at the river junctions 
+    _batch_size : default(1000), batch size for merging stream quads
+
+    Returns
+    -------
+    jigsaw_msh_t
+        quad mesh
+
+    Notes
+    -----
+    Future versions of this function should be parallelized for efficiency
+    '''
+
+    shape = arcs_shp.sort_values(['river_idx', 'local_arc_'],
+                                 ascending=[True,True])
+    polygons_final = []
+    meshes=[]
+    #iterating over all streams
+    for r_idx in shape['river_idx'].unique():
+        quads=[]
+        coords=[]
+        n=0
+
+        # if the RiverMapper outputs were clipped, then
+        # the number of vertices in some streams won't match
+        # this try/except, skips these cases.
+        try:
+            if n>0:
+                coords_np = np.concatenate(coords)
+                # this is what ensures we are keeping track of the 
+                # node count as we move to the next streams
+                n=len(coords_np)
+            sub_shape = shape.loc[shape['river_idx'] == r_idx ]
+
+            #iterating over all arcs within the stream
+            for ln,g in enumerate(sub_shape.iterfeatures()):
+                if ln+1 < len(sub_shape):
+                    for nn,c in enumerate(g['geometry']['coordinates']):
+                        if nn+1 < len(g['geometry']['coordinates']):
+                            n=n+1
+                            quads.append([
+                                n-1,# [x node y arc,
+                                #x node y+1 arc:
+                                n+len(g['geometry']['coordinates'])-1,
+                                #x+1 node y+1 arc:
+                                n+len(g['geometry']['coordinates']),
+                                n # x+1 node y arc]
+                                         ])
+                    n=n+1
+                coords.append(np.vstack([
+                    np.array(g['geometry']['coordinates'])[:,0],
+                    np.array(g['geometry']['coordinates'])[:,1]]).T)
+
+            # removing quads with repetitive coords
+            # (i.e., quads that are actually tri)
+            coords = np.concatenate(coords)
+            quads_4 = []
+            x,y = np.array(coords)[:,0],np.array(coords)[:,1]
+            for q in quads:
+                vert = np.vstack((x[q],y[q])).T
+                if len(np.unique(vert,axis=0)) == 4:
+                    quads_4.append(q)
+
+            # removing folded elements, by:
+            # i. converting all elements to polygons,
+            # ii.finding the intersections,
+            # iii.removing all elements that intersect
+            mesh = msht_from_numpy(coordinates=coords,
+                                   quadrilaterals=quads_4)
+            quad = mesh.quad4['index']
+            xy=mesh.vert2['coord']
+            # i. converting all elements to polygons
+            poly=[]
+            for q in quad:
+                p=[xy[q][0],xy[q][1],xy[q][2],xy[q][3],xy[q][0],
+                  ]
+                poly.append(p)
+
+            # checking the validity of the geometry
+            pp = []
+            for row in range(len(poly)):
+                point =MultiPoint(poly[row])
+                if point.is_valid == True:
+                    pp.append(MultiPoint(point).convex_hull)
+
+            # ii.finding the intersections
+            d_pp = gpd.GeoDataFrame(gpd.GeoSeries(
+                [poly[0].intersection(poly[1]) for \
+                 poly in combinations(pp, 2) if \
+                 poly[0].intersects(poly[1])]),
+                                    columns=['geometry'],
+                                    crs=crs)
+            d_pp.crs = d_pp.estimate_utm_crs()
+            d_pp = d_pp.loc[
+                d_pp.geometry.geom_type=='Polygon'].buffer(_buffer_1)
+            d_pp.crs = crs
+            # iii.removing all elements that intersect
+            mesh = clip_mesh_by_shape(mesh,
+                                      d_pp.union_all(),
+                                      inverse=True,
+                                      fit_inside=False)
+           
+            cleanup_duplicates(mesh)
+            put_id_tags(mesh)
+
+            poly_goods = get_mesh_polygons(mesh)
+            polygons_final.append(poly_goods)
+            meshes.append(mesh)
+
+        except:
+            pass
+
+    # Now that all streams are ready
+    # i.e., quadrangulated and free of folded quads)
+    # we merge all the streams
+    merged_all=[]
+    for sub_list in batched(meshes, _batch_size):
+        merged = merge_msh_t(*sub_list,drop_by_bbox=False)
+        merged_all.append(merged)
+    merged_all = merge_msh_t(*merged_all,drop_by_bbox=False)
+
+    # find all stream overlaps
+    gdp_all = gpd.GeoDataFrame(gpd.GeoSeries(
+                [poly[0].intersection(poly[1]) for \
+                 poly in combinations(polygons_final, 2) if \
+                 poly[0].intersects(poly[1])]),
+                                    columns=['geometry'],
+                                    crs=crs)
+    # remove all quads that overlap
+    gdp_all.crs = gdp_all.estimate_utm_crs()
+    mesh_shape = gdp_all.buffer(_buffer_2)
+    gdp_all.crs = crs
+    mesh_shape.crs = crs
+    quad_mesh = clip_mesh_by_shape(
+                        merged_all,
+                        mesh_shape.union_all(),
+                        use_box_only=False,
+                        fit_inside=False,
+                        inverse=True,
+                        check_cross_edges=True,
+                        adjacent_layers=0)
+
+    quad_mesh = cleanup_skewed_el(quad_mesh)
+    quad_mesh = cleanup_concave_quads(quad_mesh)
+    cleanup_duplicates(quad_mesh)
+    put_id_tags(quad_mesh)
+
+    return quad_mesh
+
