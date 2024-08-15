@@ -1,9 +1,11 @@
 from collections import defaultdict
-from itertools import permutations,batched,combinations
+from itertools import permutations,islice,combinations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
 from copy import deepcopy
+import logging
+import warnings
 
 import jigsawpy
 from jigsawpy import jigsaw_msh_t  # type: ignore[import]
@@ -28,8 +30,6 @@ import geopandas as gpd
 import pandas as pd
 import utm
 
-import logging
-import warnings
 
 # TODO: Remove one of these two constants
 ELEM_2D_TYPES = ['tria3', 'quad4', 'hexa8']
@@ -2408,7 +2408,7 @@ def triangulate_polygon(
     aux_pts:Union[np.array,Point,MultiPoint,
                   gpd.GeoDataFrame,gpd.GeoSeries]=None,
     opts='p',
-    type=2,
+    type_t=2,
 ) -> None:
     """Triangulate the input shape, with additional points provided
 
@@ -2425,7 +2425,7 @@ def triangulate_polygon(
         Extra points to be used in the triangulation
     opts : string, default='p'
         Options for controlling `triangle` package
-    type : int, default=2
+    type_t : int, default=2
         Options for controlling the workflow of the triangulation (see Notes)
 
     Returns
@@ -2441,11 +2441,11 @@ def triangulate_polygon(
 
     Notes
     -----
-    type was added to encompass polygons that fail to be triangulated
-    the default type = 2 is equal to the standard triangulate_polygon
-    prior to the implementation of the type variable.
-    type = 1 uses shape_to_msh_t instead of shape_to_msh_t_2
-    type = 3 places the point for the hole at the corned of the polygon
+    type_t was added to encompass polygons that fail to be triangulated
+    the default type_t = 2 is equal to the standard triangulate_polygon
+    prior to the implementation of the type_t variable.
+    type_t = 1 uses shape_to_msh_t instead of shape_to_msh_t_2
+    type_t = 3 places the point for the hole at the corned of the polygon
              it should never be used in case there are multiple holes
     """
 
@@ -2461,10 +2461,10 @@ def triangulate_polygon(
     if not isinstance(shape, (MultiPolygon, Polygon)):
         raise ValueError("Input shape must be convertible to polygon!")
 
-    if type == 2 or type == 3:
-        msht_shape = shape_to_msh_t_2(shape)
-    if type == 1:
+    if type_t == 1:
         msht_shape = shape_to_msh_t(shape)
+    else:
+        msht_shape = shape_to_msh_t_2(shape)
 
     coords = msht_shape.vert2['coord']
     edges = msht_shape.edge2['index']
@@ -2480,12 +2480,12 @@ def triangulate_polygon(
     if isinstance(neg_shape, Polygon):
         neg_shape = MultiPolygon([neg_shape])
 
-    if type == 2 or type == 3:
+    if type_t in (2, 3):
         holes = []
         for poly in neg_shape.geoms:
             holes.append(np.array(poly.representative_point().xy).ravel())
         holes = np.array(holes)
-    if type == 1:
+    if type_t == 1:
         holes = np.array([[world.bounds[0]+0.00001, world.bounds[1]+0.00001]])
 
 
@@ -2497,7 +2497,7 @@ def triangulate_polygon(
         elif isinstance(aux_pts, gpd.GeoDataFrame):
             aux_pts = aux_pts.geometry
         elif not isinstance(aux_pts, gpd.GeoSeries):
-            raise ValueError("Wrong input type for <aux_pts>!")
+            raise ValueError("Wrong input type_t for <aux_pts>!")
 
         aux_pts = aux_pts.get_coordinates().values
 
@@ -3289,11 +3289,11 @@ https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh/utils
 
     rm_dict = {'tria3': tria, 'quad4': quad}
     for elm_type, idx in rm_dict.items():
-        if idx is None: 
+        if idx is None:
             continue
         mask = np.ones(getattr(new_msht, elm_type).shape, dtype=bool)
-        mask[idx] = False      
-        if inverse == False:
+        mask[idx] = False
+        if inverse is False:
             setattr(
                 new_msht,
                 elm_type,
@@ -3383,7 +3383,7 @@ def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
     concave_el=[]
     for l_idx,n_idx in enumerate(quad):
         polygon = Polygon(coord[n_idx])
-        if np.isclose(polygon.convex_hull.area,polygon.area) == False:
+        if np.isclose(polygon.convex_hull.area,polygon.area) is False:
             concave_el.append(l_idx)
 
     mesh_clean = clip_elements_by_index(
@@ -3394,7 +3394,6 @@ def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
                 )
 
     return mesh_clean
-
 
 def quadrangulate_rivermapper_arcs(arcs_shp,
                                   _buffer_1: float = 0.001,
@@ -3444,7 +3443,7 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
         try:
             if n>0:
                 coords_np = np.concatenate(coords)
-                # this is what ensures we are keeping track of the 
+                # this is what ensures we are keeping track of the
                 # node count as we move to the next streams
                 n=len(coords_np)
             sub_shape = shape.loc[shape['river_idx'] == r_idx ]
@@ -3495,9 +3494,9 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
 
             # checking the validity of the geometry
             pp = []
-            for row in range(len(poly)):
-                point =MultiPoint(poly[row])
-                if point.is_valid == True:
+            for row in enumerate(poly):
+                point =MultiPoint(poly[row[0]])
+                if point.is_valid is True:
                     pp.append(MultiPoint(point).convex_hull)
 
             # ii.finding the intersections
@@ -3516,7 +3515,7 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
                                       d_pp.union_all(),
                                       inverse=True,
                                       fit_inside=False)
-           
+
             cleanup_duplicates(mesh)
             put_id_tags(mesh)
 
@@ -3524,7 +3523,7 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
             polygons_final.append(poly_goods)
             meshes.append(mesh)
 
-        except:
+        except Exception:
             warnings.warn(f"Error quadrangulating arcs id: {r_idx}")
 
     # Now that all streams are ready
@@ -3564,3 +3563,16 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
 
     return quad_mesh
 
+def batched(iterable, n):
+    '''
+    This function is part of itertools for python 3.12+
+    This function was added to utils.py to ensure
+    OCSMesh can run on older with python<3.12
+    '''
+
+    # batched('ABCDEFG', 3) → ABC DEF G
+    if n < 1:
+        raise ValueError('n must be at least one')
+    iterator = iter(iterable)
+    while batch := tuple(islice(iterator, n)):
+        yield batch
