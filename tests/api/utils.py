@@ -46,14 +46,6 @@ class SetUp(unittest.TestCase):
             assert minor == line[2]
             assert patch == line[3]
 
-class RiverMapper(unittest.TestCase):
-    def test_quadrangulate_rivermapper_arcs(self):
-        p = Path(__file__).parents[1] / "data" / "diag_arcs_clipped.shp"
-        arcs_shp = gpd.read_file(p)
-        quads =  utils.quadrangulate_rivermapper_arcs(arcs_shp)
-
-        self.assertEqual(len(quads.quad4), 3250)
-
 class QuadCleanup(unittest.TestCase):
     def setUp(self):
         self.in_verts = [
@@ -100,6 +92,7 @@ class QuadCleanup(unittest.TestCase):
             quadrilaterals=self.in_quad
         )
         clean_concv = utils.cleanup_concave_quads(out_msht)
+        print(clean_concv.quad4['index'])
         self.assertIsInstance(clean_concv, jigsaw_msh_t)
         self.assertTrue(
             np.all(clean_concv.quad4['index'] == np.array([[6, 7, 9, 8],
@@ -121,6 +114,14 @@ class QuadCleanup(unittest.TestCase):
             np.all(clean_idx.quad4['index'] == np.array([[0, 2, 1, 5],
                                                          [0, 5, 3, 4]]))
         )
+
+class RiverMapper(unittest.TestCase):
+    def test_quadrangulate_rivermapper_arcs(self):
+        p = Path(__file__).parents[1] / "data" / "diag_arcs_clipped.shp"
+        arcs_shp = gpd.read_file(p)
+        quads =  utils.quadrangulate_rivermapper_arcs(arcs_shp)
+
+        self.assertEqual(len(quads.quad4), 3250)
 
 class TritoQuad(unittest.TestCase):
     def setUp(self):
