@@ -3383,7 +3383,7 @@ def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
     concave_el=[]
     for l_idx,n_idx in enumerate(quad):
         polygon = Polygon(coord[n_idx])
-        if np.isclose(polygon.convex_hull.area,polygon.area) is False:
+        if np.isclose(polygon.convex_hull.area,polygon.area) == False:
             concave_el.append(l_idx)
 
     mesh_clean = clip_elements_by_index(
@@ -3394,6 +3394,7 @@ def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
                 )
 
     return mesh_clean
+
 
 def quadrangulate_rivermapper_arcs(arcs_shp,
                                   _buffer_1: float = 0.001,
