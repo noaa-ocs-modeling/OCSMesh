@@ -3359,6 +3359,7 @@ def cleanup_skewed_el(mesh: jigsaw_msh_t,
 
     return mesh_clean
 
+
 def cleanup_concave_quads(mesh: jigsaw_msh_t) -> jigsaw_msh_t:
     '''
     Removes concave quads that might have been wrongly created
@@ -3563,6 +3564,7 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
     put_id_tags(quad_mesh)
 
     return quad_mesh
+
 
 def batched(iterable, n):
     '''

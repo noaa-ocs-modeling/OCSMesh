@@ -84,7 +84,6 @@ class QuadCleanup(unittest.TestCase):
                                                           [5, 6, 8, 7],
                                                           [5, 0, 3, 6]]))
         )
-        print("passed_test_cleanup_skewed_el")
 
     def test_clip_elements_by_index(self):
         out_msht = utils.msht_from_numpy(
@@ -100,7 +99,6 @@ class QuadCleanup(unittest.TestCase):
             np.all(clean_idx.quad4['index'] == np.array([[0, 2, 1, 5],
                                                          [0, 5, 3, 4]]))
         )
-        print("passed test_clip_elements_by_index")
 
     def test_clean_concv(self):
         out_msht = utils.msht_from_numpy(
@@ -109,8 +107,7 @@ class QuadCleanup(unittest.TestCase):
             quadrilaterals=self.in_quad
         )
         clean_concv = utils.cleanup_concave_quads(out_msht)
-        print("THis is clean_concv: ", clean_concv.quad4['index'])
-        # self.assertIsInstance(clean_concv, jigsaw_msh_t)
+        self.assertIsInstance(clean_concv, jigsaw_msh_t)
         self.assertTrue(
             np.all(clean_concv.quad4['index'] == np.array([[6, 7, 9, 8],
                                                            [6, 0, 4, 7],
