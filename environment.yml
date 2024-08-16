@@ -21,6 +21,6 @@ dependencies:
   - mpi4py
   - pyarrow
   - pytz
-  # - colored-traceback
+  - colored-traceback<=0.3.0
   - typing-extensions
   - jigsawpy

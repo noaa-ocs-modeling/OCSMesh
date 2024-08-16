@@ -21,7 +21,7 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = '>=3.9' # 3.8 -> scipy
 dependencies = [
-    # "colored-traceback", 
+    "colored-traceback<=0.3.0", 
     "fiona", "geopandas>=1.0.0",
     "jigsawpy", "matplotlib>=3.8", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
