@@ -25,7 +25,7 @@ dependencies = [
     "fiona", "geopandas>=1.0.0",
     "jigsawpy", "matplotlib>=3.8", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
-    "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy",
+    "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy<=1.13",
     "shapely", "triangle", "typing_extensions", "utm",
     ]
 dynamic = ["version"]
