@@ -49,6 +49,7 @@ jobs:
       shell: bash -l {0}
       run: |
         pip install packaging # jigsaw dependency in its setup.py
+        pip install scipy=<1.13
         python ./setup.py install_jigsaw
         pip install .
 
