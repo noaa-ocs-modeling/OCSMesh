@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.5.8 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.5.9 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -192,6 +192,11 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.calc_el_angles"><code class="docutils literal notranslate"><span class="pre">calc_el_angles()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.order_mesh"><code class="docutils literal notranslate"><span class="pre">order_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.quads_from_tri"><code class="docutils literal notranslate"><span class="pre">quads_from_tri()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.clip_elements_by_index"><code class="docutils literal notranslate"><span class="pre">clip_elements_by_index()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_skewed_el"><code class="docutils literal notranslate"><span class="pre">cleanup_skewed_el()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_concave_quads"><code class="docutils literal notranslate"><span class="pre">cleanup_concave_quads()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.quadrangulate_rivermapper_arcs"><code class="docutils literal notranslate"><span class="pre">quadrangulate_rivermapper_arcs()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.batched"><code class="docutils literal notranslate"><span class="pre">batched()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -1850,7 +1855,8 @@ and input value for timestep and characteristic velocity</p>
 <dd class="field-odd"><dl class="simple">
 <dt><strong>target_courant</strong><span class="classifier">float</span></dt><dd><p>The Courant number to be achieved by the calculated element size</p>
 </dd>
-<dt><strong>characteristic_velocity_magnitude</strong><span class="classifier">float or array of floats</span></dt><dd><p>Magnitude of total velocity used for element size calculation (<span class="math notranslate nohighlight">\(\frac{m}{sec}\)</span>)</p>
+<dt><strong>characteristic_velocity_magnitude</strong><span class="classifier">float or array of floats</span></dt><dd><p>Magnitude of total velocity used for element size calculation
+(<span class="math notranslate nohighlight">\(\frac{m}{sec}\)</span>)</p>
 </dd>
 <dt><strong>timestep</strong><span class="classifier">float</span></dt><dd><p>Timestep size (<span class="math notranslate nohighlight">\(seconds\)</span>) to</p>
 </dd>
@@ -1876,7 +1882,8 @@ be approximated from the linear wave theory</p>
 <dd class="field-odd"><dl class="simple">
 <dt><strong>depth</strong><span class="classifier">float or array of float</span></dt><dd><p>Depth of the point for which the approximation validation is checked</p>
 </dd>
-<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference (i.e. wave height)</p>
+<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>)
+from the reference (i.e. wave height)</p>
 </dd>
 </dl>
 </dd>
@@ -1892,7 +1899,8 @@ be approximated from the linear wave theory</p>
 overland. So this method just returns whether depth is below or over
 depth of <cite>wave_amplitude</cite> magnitude.</p>
 <p class="rubric">References</p>
-<p>Based on OceanMesh2D approximation method <a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
+<p>Based on OceanMesh2D approximation method
+<a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -1921,7 +1929,8 @@ where <span class="math notranslate nohighlight">\(\nu \sim h\)</span> so instea
 </dd>
 </dl>
 <p class="rubric">References</p>
-<p>Based on OceanMesh2D approximation method <a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
+<p>Based on OceanMesh2D approximation method 
+<a class="reference external" href="https://doi.org/10.13140/RG.2.2.21840.61446/2">https://doi.org/10.13140/RG.2.2.21840.61446/2</a>.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -1940,7 +1949,8 @@ the input depth.</p>
 <dt><strong>element_size</strong><span class="classifier">float or array of floats</span></dt><dd><p>Element size(s) to use for Courant number calculation. Must
 be scalar otherwise match the dimension of depth</p>
 </dd>
-<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the reference (i.e. wave height)</p>
+<dt><strong>wave_amplitude</strong><span class="classifier">float, default=2</span></dt><dd><p>Free surface elevation (<span class="math notranslate nohighlight">\(meters\)</span>) from the
+reference (i.e. wave height)</p>
 </dd>
 </dl>
 </dd>
@@ -2042,7 +2052,7 @@ be calculated</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.triangulate_polygon">
-<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">triangulate_polygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoDataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoSeries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_pts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Point</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPoint</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoDataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoSeries</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">opts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'p'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.utils.triangulate_polygon" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">triangulate_polygon</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoDataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoSeries</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">aux_pts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Point</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPoint</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoDataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">GeoSeries</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">opts</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'p'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type_t</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.utils.triangulate_polygon" title="Permalink to this definition"></a></dt>
 <dd><p>Triangulate the input shape, with additional points provided</p>
 <p>Use <cite>triangle</cite> package to triangulate the input shape. If provided,
 use the input additional points as well. The input <cite>opts</cite> controls
@@ -2056,6 +2066,8 @@ See the documentation for <cite>triangle</cite> more information</p>
 <dt><strong>aux_pts</strong><span class="classifier">numpy array or Point or MultiPoint or GeoDataFrame or GeoSeries</span></dt><dd><p>Extra points to be used in the triangulation</p>
 </dd>
 <dt><strong>opts</strong><span class="classifier">string, default=’p’</span></dt><dd><p>Options for controlling <cite>triangle</cite> package</p>
+</dd>
+<dt><strong>type_t</strong><span class="classifier">int, default=2</span></dt><dd><p>Options for controlling the workflow of the triangulation (see Notes)</p>
 </dd>
 </dl>
 </dd>
@@ -2073,6 +2085,15 @@ to generate point shape</p>
 </dl>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>type_t was added to encompass polygons that fail to be triangulated
+the default type_t = 2 is equal to the standard triangulate_polygon
+prior to the implementation of the type_t variable.
+type_t = 1 uses shape_to_msh_t instead of shape_to_msh_t_2
+type_t = 3 places the point for the hole at the corned of the polygon</p>
+<blockquote>
+<div><p>it should never be used in case there are multiple holes</p>
+</div></blockquote>
 </dd></dl>
 
 <dl class="py function">
@@ -2184,7 +2205,8 @@ for the extent defined by “mesh_for_domain”</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>domain</strong><span class="classifier">jigsawpy.msh_t or Polygon or MultiPolygon or GeoDataFrame or GeoSeries</span></dt><dd><p>extent of entire domain (mesh_1+mesh_2+gap)</p>
+<dt><strong>domain</strong><span class="classifier">jigsawpy.msh_t or Polygon or</span></dt><dd><p>MultiPolygon or GeoDataFrame or GeoSeries
+extent of entire domain (mesh_1+mesh_2+gap)</p>
 </dd>
 <dt><strong>mesh_1</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh_1</p>
 </dd>
@@ -2208,9 +2230,11 @@ recommended = 30</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.merge_neighboring_meshes">
 <span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">merge_neighboring_meshes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">all_msht</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.merge_neighboring_meshes" title="Permalink to this definition"></a></dt>
-<dd><p>Combine meshes whose boundaries match
-Adapted from:
-<a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py">https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh.py</a></p>
+<dd><blockquote>
+<div><p>Combine meshes whose boundaries match
+Adapted from:</p>
+</div></blockquote>
+<p><a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh">https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh</a></p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -2276,11 +2300,13 @@ high priority mesh when carving out the low priority mesh
 (sometimes this necessary if the mesh is too narrow)</p>
 </dd>
 <dt><strong>buffer_domain</strong><span class="classifier">float</span></dt><dd><p>size of the buffer that will be added
-around the entire mesh domain. 
-This is necessary for preventing slivers at the mesh boundary intersections</p>
+around the entire mesh domain.
+This is necessary for preventing slivers at
+the mesh boundary intersections</p>
 </dd>
 <dt><strong>min_int_ang</strong><span class="classifier">int</span></dt><dd><p>Minimal internal angle for triangulation
-default = 30, i.e. triangles will have internal angles of at least 30 deg
+default = 30, i.e. triangles will have internal angles of
+at least 30 deg
 For no smoothness min_int_ang = None</p>
 </dd>
 </dl>
@@ -2297,8 +2323,10 @@ For no smoothness min_int_ang = None</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.calc_el_angles">
 <span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">calc_el_angles</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.calc_el_angles" title="Permalink to this definition"></a></dt>
-<dd><p>Adapted from: <a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh">https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh</a></p>
-<p>Calculates the internal angle of each node for element (triangular or quadrangular)</p>
+<dd><p>Adapted from:
+<a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh">https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh</a></p>
+<p>Calculates the internal angle of each node
+for element (triangular or quadrangular)</p>
 <dl class="field-list">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -2346,10 +2374,14 @@ based on the coordinates</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.quads_from_tri">
 <span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">quads_from_tri</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.quads_from_tri" title="Permalink to this definition"></a></dt>
-<dd><p>Partially adapted from:
-<a class="reference external" href="https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list">https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list</a></p>
-<p>Combines all triangles that share vertices that are not right angles.
+<dd><blockquote>
+<div><p>Partially adapted from:</p>
+</div></blockquote>
+<p><a class="reference external" href="https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list">https://stackoverflow.com/questions/69605766/find-position-of-duplicate-elements-in-list</a></p>
+<blockquote>
+<div><p>Combines all triangles that share vertices that are not right angles.
 right angles is defined as the internal angle closest to 90deg</p>
+</div></blockquote>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
@@ -2364,6 +2396,112 @@ right angles is defined as the internal angle closest to 90deg</p>
 </dl>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.clip_elements_by_index">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">clip_elements_by_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tria</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quad</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">inverse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.clip_elements_by_index" title="Permalink to this definition"></a></dt>
+<dd><blockquote>
+<div><p>Adapted from:</p>
+</div></blockquote>
+<p><a class="reference external" href="https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh/utils">https://github.com/SorooshMani-NOAA/river-in-mesh/tree/main/river_in_mesh/utils</a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd><p>mesh to beclipped</p>
+</dd>
+<dt><strong>tria or quad: array with the element ids to be removed</strong></dt><dd></dd>
+<dt><strong>inverse = default:False</strong></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>mesh without skewed elements</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.cleanup_skewed_el">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_skewed_el</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lw_bound_tri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">up_bound_tri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">175.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lw_bound_quad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">up_bound_quad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">179.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.cleanup_skewed_el" title="Permalink to this definition"></a></dt>
+<dd><p>Removes elements based on their internal angles</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd></dd>
+<dt><strong>lw_bound_tri</strong><span class="classifier">default=1</span></dt><dd></dd>
+<dt><strong>up_bound_tri</strong><span class="classifier">default=175</span></dt><dd></dd>
+<dt><strong>lw_bound_quad</strong><span class="classifier">default=10</span></dt><dd></dd>
+<dt><strong>up_bound_quad</strong><span class="classifier">default=179</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>np.array</dt><dd><p>internal angles of each element</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.cleanup_concave_quads">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">cleanup_concave_quads</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.cleanup_concave_quads" title="Permalink to this definition"></a></dt>
+<dd><p>Removes concave quads that might have been wrongly created
+during the quadrangulation process</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>np.array</dt><dd><p>internal angles of each element</p>
+</dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.quadrangulate_rivermapper_arcs">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">quadrangulate_rivermapper_arcs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arcs_shp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_buffer_1:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_buffer_2:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">_batch_size:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.quadrangulate_rivermapper_arcs" title="Permalink to this definition"></a></dt>
+<dd><p>Creates quads using the RiverMapper diagnostic outputs
+removes quads with repetitive coords
+removes all elements that intersect
+merges all individual quads for each stream into a single mesh
+removes intersecting quads at junctions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>arcs_shp</strong><span class="classifier">.shp file with the RiverMapper diagnostic arcs</span></dt><dd></dd>
+<dt><strong>_buffer_1</strong><span class="classifier">default(0.001), controls the the removal of</span></dt><dd><p>overlaping quads within a given stream</p>
+</dd>
+<dt><strong>_buffer_2</strong><span class="classifier">default(0.0001), controls the the removal of</span></dt><dd><p>overlaping quads at the river junctions</p>
+</dd>
+<dt><strong>_batch_size</strong><span class="classifier">default(1000), batch size for merging stream quads</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>quad mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>Future versions of this function should be parallelized for efficiency</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.batched">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">batched</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">iterable</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.batched" title="Permalink to this definition"></a></dt>
+<dd><p>This function is part of itertools for python 3.12+
+This function was added to utils.py to ensure
+OCSMesh can run on older with python&lt;3.12</p>
 </dd></dl>
 
 </section>
