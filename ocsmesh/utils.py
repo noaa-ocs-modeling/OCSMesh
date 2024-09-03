@@ -3638,7 +3638,6 @@ def triangulate_shp(gdf):
     shape_diff = shape_diff[~shape_diff.is_empty].dropna()#.explode()
     shape_diff_len = len(shape_diff)
     while shape_diff_len>0:
-        print(shape_diff_len)
         shape_diff_tri = delaunay_within(shape_diff)
         shape_tri.append(shape_diff_tri)
         shape_diff = gpd.GeoDataFrame(geometry=
