@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.5.9 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.6.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -197,6 +197,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.cleanup_concave_quads"><code class="docutils literal notranslate"><span class="pre">cleanup_concave_quads()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.quadrangulate_rivermapper_arcs"><code class="docutils literal notranslate"><span class="pre">quadrangulate_rivermapper_arcs()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.batched"><code class="docutils literal notranslate"><span class="pre">batched()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.delaunay_within"><code class="docutils literal notranslate"><span class="pre">delaunay_within()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triangulate_shp"><code class="docutils literal notranslate"><span class="pre">triangulate_shp()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.shptri_to_msht"><code class="docutils literal notranslate"><span class="pre">shptri_to_msht()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triangulate_rivermapper_poly"><code class="docutils literal notranslate"><span class="pre">triangulate_rivermapper_poly()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -2502,6 +2506,81 @@ removes intersecting quads at junctions</p>
 <dd><p>This function is part of itertools for python 3.12+
 This function was added to utils.py to ensure
 OCSMesh can run on older with python&lt;3.12</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.delaunay_within">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">delaunay_within</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.delaunay_within" title="Permalink to this definition"></a></dt>
+<dd><p>Creates  the initial delaunay triangules for 
+a gpd composed of polygons (only).
+Selects those delaunay triangules that fall within domain.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>gdf</strong><span class="classifier">gpd of polygons</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>gdf</strong><span class="classifier">gpd of triangulated polygons</span></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.triangulate_shp">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">triangulate_shp</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gdf</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.triangulate_shp" title="Permalink to this definition"></a></dt>
+<dd><p>Fills out the gaps left by the delaunay_within</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>gdf</strong><span class="classifier">gpd of polygons</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt><strong>gdf</strong><span class="classifier">gpd of triangulated polygons</span></dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.shptri_to_msht">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">shptri_to_msht</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">triangulated_shp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.shptri_to_msht" title="Permalink to this definition"></a></dt>
+<dd><p>Converts a triangulated shapefile to msh_t</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>triangulated_shp</strong><span class="classifier">triangulated gpd</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd></dd>
+</dl>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.triangulate_rivermapper_poly">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">triangulate_rivermapper_poly</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rm_poly</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.triangulate_rivermapper_poly" title="Permalink to this definition"></a></dt>
+<dd><p>Creates triangulated mesh using the RiverMapperoutputs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>rm_poly</strong><span class="classifier">.shp (gpd) file with the RiverMapper outputs</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>River Mesh</p>
+</dd>
+</dl>
+</dd>
+</dl>
 </dd></dl>
 
 </section>
