@@ -60,7 +60,7 @@ jobs:
 
 
     - name: 'Upload test dem'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: test-dem-${{ matrix.python-version }}
         path: /tmp/test_dem.tif
@@ -71,7 +71,7 @@ jobs:
       run: source tests/cli/build_geom.sh
 
     - name: 'Upload Geom build results'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: geom-build-results-${{ matrix.python-version }}
         path: test_shape
@@ -82,7 +82,7 @@ jobs:
       run: source tests/cli/build_hfun.sh
 
     - name: 'Upload Hfun build results'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: hfun-build-results-${{ matrix.python-version }}
         path: test.2dm
@@ -93,7 +93,7 @@ jobs:
       run: source tests/cli/remesh_by_dem.sh
 
     - name: 'Upload remesh results'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: remesh-bydem-results-${{ matrix.python-version }}
         path: remeshed.2dm
