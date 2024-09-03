@@ -21,11 +21,12 @@ from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse, constants
 from scipy.spatial import cKDTree
+from shapely import difference 
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
         LineString, LinearRing)
-from shapely.ops import polygonize, linemerge, unary_union
+from shapely.ops import polygonize, linemerge, unary_union, triangulate
 import geopandas as gpd
 import pandas as pd
 import utm
@@ -3579,3 +3580,138 @@ def batched(iterable, n):
     iterator = iter(iterable)
     while batch := tuple(islice(iterator, n)):
         yield batch
+
+
+def delaunay_within(gdf):
+    '''
+    Creates  the initial delaunay triangules for 
+    a gpd composed of polygons (only).
+    Selects those delaunay triangules that fall within domain.
+
+    Parameters
+    ----------
+    gdf : gpd of polygons
+
+    Returns
+    -------
+    gdf : gpd of triangulated polygons
+    
+    Notes
+    -----
+
+    '''
+
+    tt=[]
+    for polygon in gdf['geometry']:
+        try:
+            tri = [triangle for triangle in \
+                   triangulate(polygon) if triangle.within(polygon)]
+            tt.append(MultiPolygon(tri))
+        except:
+            pass
+    shape_tri = gpd.GeoDataFrame(geometry=gpd.GeoSeries(tt)).set_crs(crs=4326)
+    shape_tri = shape_tri[~shape_tri.is_empty].dropna()
+    return shape_tri
+
+
+def triangulate_shp(gdf):
+    '''
+    Fills out the gaps left by the delaunay_within
+
+    Parameters
+    ----------
+    gdf : gpd of polygons
+
+    Returns
+    -------
+    gdf : gpd of triangulated polygons
+    
+    Notes
+    -----
+
+    '''
+
+    shape_tri = [delaunay_within(gdf)]
+    shape_diff = gpd.GeoDataFrame(geometry =
+                                  gpd.GeoSeries(
+                                      gdf.difference(shape_tri[0])))
+    shape_diff = shape_diff[~shape_diff.is_empty].dropna()#.explode()
+    shape_diff_len = len(shape_diff)
+    while shape_diff_len>0:
+        print(shape_diff_len)
+        shape_diff_tri = delaunay_within(shape_diff)
+        shape_tri.append(shape_diff_tri)
+        shape_diff = gpd.GeoDataFrame(geometry=
+                                      gpd.GeoSeries(difference(
+                                          shape_diff.union_all(),
+                                          shape_diff_tri.union_all()
+                                      )))
+        shape_diff = shape_diff[~shape_diff.is_empty].dropna().explode()
+        if len(shape_diff) == shape_diff_len:
+            break
+        shape_diff_len = len(shape_diff)
+
+    shape_final = gpd.GeoDataFrame(pd.concat(
+                                    shape_tri, ignore_index=True)).explode()
+    shape_final = shape_final[shape_final.geometry.type == 'Polygon']
+    shape_final.reset_index(drop=True, inplace=True)
+
+    return shape_final
+
+
+def shptri_to_msht(triangulated_shp):
+    '''
+    Converts a triangulated shapefile to msh_t
+
+    Parameters
+    ----------
+    triangulated_shp : triangulated gpd
+
+    Returns
+    -------
+    jigsaw_msh_t
+    
+    Notes
+    -----
+
+    '''
+
+    coords = []
+    verts = []
+    for t in enumerate(triangulated_shp['geometry']):
+        if len(np.array(t[-1].boundary.xy).T) == 4:
+            coords.append(np.array(t[-1].boundary.xy).T[:-1])
+            verts.append(np.array([0,1,2])+3*t[0])
+
+    msht = msht_from_numpy(coordinates = np.vstack(coords),
+                           triangles = verts,
+                            )
+    cleanup_duplicates(msht)
+    cleanup_isolates(msht)
+    put_id_tags(msht)
+    
+    return msht
+
+
+def triangulate_rivermapper_poly(rm_poly):
+    '''
+    Creates triangulated mesh using the RiverMapperoutputs
+
+    Parameters
+    ----------
+    rm_poly : .shp (gpd) file with the RiverMapper outputs
+
+    Returns
+    -------
+    jigsaw_msh_t
+        River Mesh
+
+    Notes
+    -----
+
+    '''
+
+    rm_poly = triangulate_shp(rm_poly)
+    rm_mesh = shptri_to_msht(rm_poly)
+
+    return rm_mesh

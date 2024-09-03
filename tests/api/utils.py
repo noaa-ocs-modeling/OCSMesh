@@ -116,6 +116,13 @@ class QuadCleanup(unittest.TestCase):
 
 
 class RiverMapper(unittest.TestCase):
+    def test_triangulate_rivermapper_poly(self):
+        p = Path(__file__).parents[1] / "data" / "rm_poly.shp"
+        rm_poly = gpd.read_file(p)
+        trias =  utils.triangulate_rivermapper_poly(rm_poly)
+
+        self.assertEqual(len(trias.tria3), 56)
+
     def test_quadrangulate_rivermapper_arcs(self):
         p = Path(__file__).parents[1] / "data" / "diag_arcs_clipped.shp"
         arcs_shp = gpd.read_file(p)
