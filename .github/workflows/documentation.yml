@@ -38,7 +38,7 @@ jobs:
           cd docs
           make html
     - name: Upload documentation
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: documentation_built
         path: docs/build/html
@@ -54,7 +54,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
     - name: Download documentation for deployment
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: documentation_built
         path: docs/build/html
