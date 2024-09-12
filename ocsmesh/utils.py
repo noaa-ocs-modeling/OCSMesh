@@ -3051,7 +3051,7 @@ def merge_overlapping_meshes(all_msht: list,
     Notes
     -----
     '''
-    import ocsmesh
+
     msht_combined = all_msht[0]
     for msht in all_msht[1:]:
         carved_mesh = clip_mesh_by_mesh(msht_combined,
@@ -3741,7 +3741,7 @@ def shptri_to_msht(triangulated_shp):
     cleanup_duplicates(msht)
     cleanup_isolates(msht)
     put_id_tags(msht)
-    
+
     return msht
 
 
@@ -3767,4 +3767,3 @@ def triangulate_rivermapper_poly(rm_poly):
     rm_mesh = shptri_to_msht(rm_poly)
 
     return rm_mesh
-
