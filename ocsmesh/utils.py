@@ -21,7 +21,7 @@ from scipy.interpolate import (  # type: ignore[import]
     RectBivariateSpline, griddata)
 from scipy import sparse, constants
 from scipy.spatial import cKDTree
-from shapely import difference 
+from shapely import intersection,difference
 from shapely.geometry import ( # type: ignore[import]
         Polygon, MultiPolygon,
         box, GeometryCollection, Point, MultiPoint,
@@ -2524,7 +2524,9 @@ def triangulate_polygon(
 
 def triangulate_polygon_s(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries],
-    min_int_ang=30
+    aux_pts:Union[np.array,Point,MultiPoint,
+                  gpd.GeoDataFrame,gpd.GeoSeries]=None,
+    min_int_ang=30,
 ) -> None:
     '''Triangulate the input shape smoothly
     
@@ -2541,8 +2543,20 @@ def triangulate_polygon_s(
         Generated triangulation
     '''
     #First triangulation. Smooth but adds extra nodes at boundary
+    if aux_pts is not None:
+        if isinstance(aux_pts, (np.ndarray, list, tuple)):
+            aux_pts = MultiPoint(aux_pts)
+        if isinstance(aux_pts, (Point, MultiPoint)):
+            aux_pts = gpd.GeoSeries(aux_pts)
+        elif isinstance(aux_pts, gpd.GeoDataFrame):
+            aux_pts = aux_pts.geometry
+        elif not isinstance(aux_pts, gpd.GeoSeries):
+            raise ValueError("Wrong input type_t for <aux_pts>!")
+
+        aux_pts = aux_pts.get_coordinates().values
+
     min_int_ang = 'q'+str(min_int_ang)
-    mesh1 = triangulate_polygon(shape,opts=['p',min_int_ang])
+    mesh1 = triangulate_polygon(shape,opts=['p',min_int_ang],aux_pts=aux_pts)
     #Find all boundary modes
     nb = get_boundary_edges(mesh1)
     nb = np.sort(list(set(nb.ravel())))
@@ -2720,7 +2734,8 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
                                mesh_2: jigsaw_msh_t,
                                crs=CRS.from_epsg(4326),
                                min_int_ang=None,
-                               buffer_domain = 0.001
+                               buffer_domain = 0.001,
+                               hfun_mesh = None
 ) -> jigsaw_msh_t:
     '''
     Create a triangulation for the area correspondent to
@@ -2763,22 +2778,30 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     if isinstance(domain, (list)):
         domain = pd.concat([gpd.GeoDataFrame\
                             (geometry=[get_mesh_polygons(i)\
-                                       .buffer(buffer_domain,join_style=2)],\
+                                    #    .buffer(buffer_domain,join_style=2)
+                                       ],
                                         crs=crs) for i in domain])
     if not isinstance(domain, (gpd.GeoDataFrame)):
         raise ValueError("Input shape must be a gpd.GeoDataFrame!")
 
-    domain = domain.dissolve().explode(index_parts=True)
-    domain.crs = domain.estimate_utm_crs()
-    domain =domain.loc[domain['geometry'].area == max(domain['geometry'].area)]
-    domain.crs = crs
-    domain = gpd.GeoDataFrame(geometry=[domain.union_all()],crs=crs)
+    domain_buffer = gpd.GeoDataFrame(geometry=[i[-1].geometry.buffer(\
+        buffer_domain,join_style=2) for i in domain.iterrows()],crs=crs)
+    domain_buffer = domain_buffer.dissolve().explode(index_parts=True)
+    domain_buffer.crs = domain_buffer.estimate_utm_crs()
+    domain_buffer =domain_buffer.loc[domain_buffer['geometry'].area == \
+                                    max(domain_buffer['geometry'].area)]
+    domain_buffer.crs = crs
+    domain_buffer = gpd.GeoDataFrame(geometry=[domain_buffer.union_all()],
+                                    crs=crs)
 
-    poly_buffer = domain.union_all().difference(
+    mesh_1_poly = get_mesh_polygons(mesh_1)
+    mesh_2_poly = get_mesh_polygons(mesh_2)
+
+    poly_buffer = domain_buffer.union_all().difference(
         gpd.GeoDataFrame(
             geometry=[
-                get_mesh_polygons(mesh_1),
-                get_mesh_polygons(mesh_2),
+                mesh_1_poly,
+                mesh_2_poly,
             ],
             crs = crs
         ).union_all()
@@ -2786,12 +2809,33 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     gdf_full_buffer = gpd.GeoDataFrame(
         geometry = [poly_buffer],crs=crs)
 
+    gap_poly = domain.union_all().\
+        difference(mesh_1_poly).\
+            difference(mesh_2_poly)
+
+    if hfun_mesh is not None:
+        hfun_mesh = clip_mesh_by_shape(hfun_mesh,gap_poly,fit_inside=True)
+        boundary = np.unique(get_boundary_edges(hfun_mesh))
+        all_nodes = hfun_mesh.vert2['coord']
+        hfun_nodes = np.delete(all_nodes, boundary, axis=0)
+        hfun_nodes = MultiPoint(hfun_nodes)
+        hfun_nodes = gpd.GeoDataFrame(geometry=
+                                gpd.GeoSeries(intersection(
+                                hfun_nodes,
+                                gap_poly.buffer(-0.0001),
+                                )))
+    if hfun_mesh is None:
+        hfun_nodes=None
+
     if min_int_ang is None:
-        msht_buffer = triangulate_polygon(gdf_full_buffer)
+        msht_buffer = triangulate_polygon(gdf_full_buffer,
+                                          aux_pts=hfun_nodes)
     else:
         msht_buffer = triangulate_polygon_s(gdf_full_buffer,
-                                            min_int_ang=min_int_ang)
+                                            min_int_ang=min_int_ang,
+                                            aux_pts=hfun_nodes)
     msht_buffer.crs = crs
+    msht_buffer=clip_mesh_by_shape(msht_buffer,gap_poly.buffer(buffer_domain))
 
     return msht_buffer
 
@@ -2948,7 +2992,8 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
                               buffer_size=buffer_size)
 
     fixed_mesh = merge_overlapping_meshes([mesh_w_problem.msh_t,patch],
-                                          adjacent_layers=adjacent_layers
+                                          adjacent_layers=adjacent_layers,
+                                          min_int_ang=30
                                           )
 
     #cleaning up mesh:
@@ -2969,6 +3014,7 @@ def merge_overlapping_meshes(all_msht: list,
                              buffer_size: float = 0.005,
                              buffer_domain: float = 0.01,
                              min_int_ang: int = 30,
+                             hfun_mesh = None,
                              crs=CRS.from_epsg(4326)
 ) -> jigsaw_msh_t:
     '''
@@ -3005,7 +3051,7 @@ def merge_overlapping_meshes(all_msht: list,
     Notes
     -----
     '''
-
+    import ocsmesh
     msht_combined = all_msht[0]
     for msht in all_msht[1:]:
         carved_mesh = clip_mesh_by_mesh(msht_combined,
@@ -3013,15 +3059,19 @@ def merge_overlapping_meshes(all_msht: list,
                                         adjacent_layers=adjacent_layers,
                                         buffer_size=buffer_size
                                         )
-        buff_mesh = create_mesh_from_mesh_diff([msht_combined,msht],
-                                               carved_mesh,msht,
-                                               min_int_ang=min_int_ang,
-                                               buffer_domain=buffer_domain
-                                               )
         domain = pd.concat([gpd.GeoDataFrame(geometry=\
                                         [get_mesh_polygons(i)],crs=crs) for \
                                          i in [msht_combined,msht]])
 
+        if hfun_mesh is None:
+            hfun_mesh = msht_combined
+
+        buff_mesh = create_mesh_from_mesh_diff([msht_combined,msht],
+                                               carved_mesh,msht,
+                                               min_int_ang=min_int_ang,
+                                               buffer_domain=buffer_domain,
+                                               hfun_mesh = hfun_mesh
+                                               )
         msht_combined = merge_neighboring_meshes(buff_mesh,
                                                  carved_mesh,
                                                  msht
@@ -3031,7 +3081,10 @@ def merge_overlapping_meshes(all_msht: list,
                                            )
         del carved_mesh,buff_mesh,domain,msht
 
-    msht_combined = cleanup_folded_bound_el(msht_combined)
+    # msht_combined = cleanup_folded_bound_el(msht_combined)
+    cleanup_duplicates(msht_combined)
+    cleanup_isolates(msht_combined)
+    put_id_tags(msht_combined)
 
     return msht_combined
 
@@ -3714,3 +3767,70 @@ def triangulate_rivermapper_poly(rm_poly):
     rm_mesh = shptri_to_msht(rm_poly)
 
     return rm_mesh
+
+
+def _calculate_mesh_size_function(
+        buffer_domain,
+        hires_mesh_clip,
+        lores_mesh_clip,
+        buffer_crs
+    ):
+
+    assert buffer_crs == hires_mesh_clip.crs == lores_mesh_clip.crs
+
+    # HARDCODED FOR NOW
+    approx_elem_per_width = 3
+
+    msht_hi = deepcopy(hires_mesh_clip)
+    msht_lo = deepcopy(lores_mesh_clip)
+
+    crs = buffer_crs
+    assert(not buffer_crs.is_geographic)
+
+    # calculate mesh size for clipped bits
+    hfun_hi = Hfun(Mesh(msht_hi))
+    hfun_hi.size_from_mesh()
+
+    hfun_lo = Hfun(Mesh(msht_lo))
+    hfun_lo.size_from_mesh()
+
+    msht_cdt = ocsmesh.utils.triangulate_polygon(
+        buffer_domain, None, opts='p'
+    )
+    msht_cdt.crs = crs
+
+    hfun_cdt = Hfun(Mesh(msht_cdt))
+    hfun_cdt.size_from_mesh()
+
+    hfun_cdt_sz = deepcopy(hfun_cdt.msh_t().value) / approx_elem_per_width
+    msht_cdt.value[:] = hfun_cdt_sz
+    hfun_rep = Hfun(Mesh(msht_cdt))
+
+    mesh_domain_rep = JigsawDriver(
+        geom=Geom(buffer_domain, crs=crs),
+        hfun=hfun_rep,
+        initial_mesh=False
+    ).run(sieve=0)
+
+    msht_domain_rep = deepcopy(mesh_domain_rep.msh_t)
+#        utils.reproject(msht_domain_rep, crs)
+
+    pts_2mesh = np.vstack(
+        (hfun_hi.msh_t().vert2['coord'], hfun_lo.msh_t().vert2['coord'])
+    )
+    val_2mesh = np.vstack(
+        (hfun_hi.msh_t().value, hfun_lo.msh_t().value)
+    )
+    domain_sz_1 = griddata(
+        pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='linear'
+    )
+    domain_sz_2 = griddata(
+        pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='nearest'
+    )
+    domain_sz = domain_sz_1.copy()
+    domain_sz[np.isnan(domain_sz_1)] = domain_sz_2[np.isnan(domain_sz_1)]
+
+    msht_domain_rep.value[:] = domain_sz
+    hfun_interp = Mesh(msht_domain_rep)
+
+    return hfun_interp
