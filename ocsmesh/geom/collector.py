@@ -225,7 +225,7 @@ class GeomCollector(BaseGeom):
                             clip_shape = ops.transform(
                                     transformer.transform, clip_shape)
                         try:
-                            in_item.clip(clip_shape)
+                            raster.clip(clip_shape)
                         except ValueError as err:
                             # This raster does not intersect shape
                             _logger.debug(err)
