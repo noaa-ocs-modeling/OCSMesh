@@ -77,7 +77,7 @@ class JigsawDriver:
         self._crs = CRS.from_user_input(crs) if crs is not None else crs
         self._opts.verbosity = verbosity
 
-    def run(self, sieve=None, quality_metric=1.05):
+    def run(self, sieve=None, quality_metric=1.05, remesh_tiny_elements=False):
 
         hfun_msh_t = self.hfun.msh_t()
 
@@ -116,12 +116,12 @@ class JigsawDriver:
             utils.reproject(output_mesh, self._crs)
 
         _logger.info('Finalizing mesh...')
-        # Don't need to use ad-hoc fix since Jigsaw tiny element
-        # issue is resolve. In case needed add a flag for remesh
-        # since it's computationally expensive
-#        if self.opts.hfun_hmin > 0:
-#            output_mesh = utils.remesh_small_elements(
-#                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
+        if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
+            # Jigsaw creates tiny elements on high gradients. Run the driver with the remesh_tiny_elements key
+            # set to True once you find that your mesh has tiny elements. Default is False as it is an expensive
+            # operation
+            output_mesh = utils.remesh_small_elements(
+                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
         utils.finalize_mesh(output_mesh, sieve)
 
         _logger.info('done!')
