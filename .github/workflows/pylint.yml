@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Setup Mamba environment for Python
-      uses: mamba-org/provision-with-micromamba@main
+      uses: mamba-org/setup-micromamba@v1
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
@@ -38,4 +38,4 @@ jobs:
     - name: Analysing the code with pylint
       shell: bash -l {0}
       run: |
-        pylint ocsmesh
+        pylint --disable=too-many-positional-arguments ocsmesh

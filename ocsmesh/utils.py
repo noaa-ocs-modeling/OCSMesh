@@ -27,6 +27,7 @@ from shapely.geometry import ( # type: ignore[import]
         box, GeometryCollection, Point, MultiPoint,
         LineString, LinearRing)
 from shapely.ops import polygonize, linemerge, unary_union, triangulate
+from shapely.validation import make_valid
 import geopandas as gpd
 import pandas as pd
 import utm
@@ -3745,13 +3746,13 @@ def shptri_to_msht(triangulated_shp):
     return msht
 
 
-def triangulate_rivermapper_poly(rm_poly):
+def triangulate_poly(rm_poly):
     '''
-    Creates triangulated mesh using the RiverMapperoutputs
+    Creates triangulated meshes from gpf with poly and multipoly
 
     Parameters
     ----------
-    rm_poly : .shp (gpd) file with the RiverMapper outputs
+    rm_poly : .shp (gpd) (e.g.file with the RiverMapper outputs)
 
     Returns
     -------
@@ -3767,3 +3768,150 @@ def triangulate_rivermapper_poly(rm_poly):
     rm_mesh = shptri_to_msht(rm_poly)
 
     return rm_mesh
+
+def validate_poly(gdf):
+    '''
+    Goes over all polygons in a gpf and applied the make_valid func
+
+    Parameters
+    ----------
+    gdf : .shp (gpd) (e.g.file with the RiverMapper outputs)
+
+    Returns
+    -------
+    gdf_valid, gdf_invalid: valid and invalid polygon in the gpdf
+
+    Notes
+    -----
+
+    '''
+    gdf = [make_valid(p) for p in gdf['geometry'].to_list()]
+    gdf = gpd.GeoDataFrame(geometry =
+                              gpd.GeoSeries(gdf),
+                                crs=4326).explode()
+    gdf_valid = gdf[gdf.geometry.geom_type.isin(['Polygon',
+                                                 'MultiPolygon']
+                                               )].drop_duplicates()
+    gdf_invalid = gdf[~gdf.geometry.geom_type.isin(['Polygon',
+                                                    'MultiPolygon']
+                                                  )].drop_duplicates()
+
+    return gdf_valid, gdf_invalid
+
+def find_polyneighbors(target_gdf, ref_gdf):
+    '''
+    Finds all polygons in target_gdf that
+    border polygons in ref_gdf
+
+    Parameters
+    ----------
+    target_gdf: .shp (gpd) 
+    ref_gdf: .shp (gpd) 
+
+    Returns
+    -------
+    sjoin: .shp (gpd) with all target_gdf that
+            border polygons in ref_gdf
+    Notes
+    -----
+    '''
+    intersects = gpd.sjoin(
+        target_gdf, ref_gdf,how='inner', predicate='intersects'
+        )
+    crosses = gpd.sjoin(
+        target_gdf, ref_gdf, how='inner', predicate='crosses'
+        )
+    touches = gpd.sjoin(
+        target_gdf, ref_gdf, how='inner', predicate='touches'
+        )
+    overlaps = gpd.sjoin(
+        target_gdf, ref_gdf, how='inner', predicate='overlaps'
+        )
+    sjoin = pd.concat([intersects,crosses,touches,overlaps])
+    sjoin = sjoin.drop_duplicates()
+
+    return sjoin
+
+def validate_RMmesh(RMmesh):
+    '''
+    Takes a mesh triangulated from a polygon and
+    removes invalid elements (and their neighbors)
+
+    Parameters
+    ----------
+    RMmesh: triangualed msh_t
+
+    Returns
+    -------
+    jigsaw_msh_t
+        River Mesh
+
+    Notes
+    -----
+    '''
+
+    tri = RMmesh.tria3['index']
+    xy = RMmesh.vert2['coord']
+    poly=[]
+    for t in tri:
+        p=[xy[t][0], xy[t][1], xy[t][2], xy[t][0],
+          ]
+        poly.append(p)
+
+    RMmesh_poly = gpd.GeoDataFrame(gpd.GeoSeries(
+                    [Polygon(p) for p in poly]),
+                                        columns=['geometry'],
+                                        crs=4326)
+    RMmesh_invalid = RMmesh_poly.loc[RMmesh_poly['geometry'].area < 1e-15]
+
+    polyneighbors = find_polyneighbors(RMmesh_poly, RMmesh_invalid)
+
+    el2remove_idx = np.concatenate((RMmesh_invalid.index.to_numpy(),
+                                    polyneighbors.index.to_numpy()))
+    new_tri = np.delete(tri, el2remove_idx, axis=0)
+
+    msht_valid = msht_from_numpy(
+                           coordinates = xy,
+                           triangles = new_tri,
+                            )
+    cleanup_duplicates(msht_valid)
+    cleanup_isolates(msht_valid)
+    put_id_tags(msht_valid)
+
+    return msht_valid
+
+def triangulate_rivermapper_poly(rm_poly):
+    '''
+    Creates triangulated mesh using the RiverMapperoutputs
+    1) Finds slivers (gdf_invalid) on RM shapefile
+    2) Finds all polygons next to slivers
+    3) Removes all polygons next to slivers
+    4) Triangulate the slivers-free RM shapefile
+    5) Finds/Removes non-matching vertices and their neighbor el
+
+    Parameters
+    ----------
+    rm_poly: .shp (gpd) file with the RiverMapper outputs
+
+    Returns
+    -------
+    jigsaw_msh_t
+        River Mesh
+
+    Notes
+    -----
+
+    '''
+
+    # Finds slivers (gdf_invalid) on RM shapefile:
+    gdf_valid, gdf_invalid = validate_poly(rm_poly)
+    # Finds all polygons next to slivers:
+    polyneighbors = find_polyneighbors(gdf_valid, gdf_invalid)
+    # Removes all polygons next to slivers:
+    fixed_rm = gdf_valid[~gdf_valid.index.isin(polyneighbors.index)]
+    # Triangulate the slivers-free RM shapefile:
+    RMmesh = triangulate_poly(fixed_rm)
+    # Finds/Removes non-matching vertices and their neighbor el:
+    validated_RMmesh = validate_RMmesh(RMmesh)
+
+    return validated_RMmesh
