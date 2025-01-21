@@ -2808,11 +2808,12 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
         ).union_all()
     )
     gdf_full_buffer = gpd.GeoDataFrame(
-        geometry = [poly_buffer],crs=crs)
+        geometry = [poly_buffer],crs=crs).explode()
 
     gap_poly = domain.union_all().\
         difference(mesh_1_poly).\
             difference(mesh_2_poly)
+
 
     if hfun_mesh is not None:
         hfun_mesh = clip_mesh_by_shape(hfun_mesh,gap_poly,fit_inside=True)
@@ -2832,11 +2833,20 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
         msht_buffer = triangulate_polygon(gdf_full_buffer,
                                           aux_pts=hfun_nodes)
     else:
+        area_threshold = 1.0e-15 #to remove slivers
+        gdf_full_buffer['area'] = gdf_full_buffer.geometry.area
+        gdf_full_buffer = gdf_full_buffer[gdf_full_buffer['area'] >= area_threshold]
         msht_buffer = triangulate_polygon_s(gdf_full_buffer,
                                             min_int_ang=min_int_ang,
                                             aux_pts=hfun_nodes)
     msht_buffer.crs = crs
-    msht_buffer=clip_mesh_by_shape(msht_buffer,gap_poly.buffer(buffer_domain))
+    gap_poly = gpd.GeoDataFrame(geometry=
+                                gpd.GeoSeries(
+                                gap_poly.buffer(buffer_domain),
+                                ))
+    gap_poly = gap_poly.explode().dissolve()
+
+    msht_buffer=clip_mesh_by_shape(msht_buffer,gap_poly.union_all())
 
     return msht_buffer
 
@@ -3065,7 +3075,7 @@ def merge_overlapping_meshes(all_msht: list,
                                          i in [msht_combined,msht]])
 
         if hfun_mesh is None:
-            hfun_mesh = msht_combined
+            hfun_mesh = deepcopy(msht_combined)
 
         buff_mesh = create_mesh_from_mesh_diff([msht_combined,msht],
                                                carved_mesh,msht,
