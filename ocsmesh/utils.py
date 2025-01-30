@@ -3022,7 +3022,7 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
 
 def merge_overlapping_meshes(all_msht: list,
                              adjacent_layers: int = 0,
-                             buffer_size: float = 0.005,
+                             buffer_size: float = 0.0075,
                              buffer_domain: float = 0.01,
                              min_int_ang: int = 30,
                              hfun_mesh = None,
