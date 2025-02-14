@@ -3022,7 +3022,7 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
 
 def merge_overlapping_meshes(all_msht: list,
                              adjacent_layers: int = 0,
-                             buffer_size: float = 0.005,
+                             buffer_size: float = 0.0075,
                              buffer_domain: float = 0.01,
                              min_int_ang: int = 30,
                              hfun_mesh = None,
@@ -3088,7 +3088,9 @@ def merge_overlapping_meshes(all_msht: list,
                                                  msht
                                                  )
         msht_combined = clip_mesh_by_shape(msht_combined,
-                                           domain.union_all()
+                                           domain.union_all(),
+                                           fit_inside=False,
+                                           check_cross_edges=True
                                            )
         del carved_mesh,buff_mesh,domain,msht
 
@@ -3925,3 +3927,12 @@ def triangulate_rivermapper_poly(rm_poly):
     validated_RMmesh = validate_RMmesh(RMmesh)
 
     return validated_RMmesh
+
+def remove_islands():
+    '''
+    '''
+
+def remesh_slivers():
+    '''
+    '''
+    
