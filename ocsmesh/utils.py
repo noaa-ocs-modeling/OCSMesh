@@ -4005,4 +4005,3 @@ def remesh_holes(msht: jigsaw_msh_t,
     put_id_tags(mesh_filled)
 
     return mesh_filled
-
