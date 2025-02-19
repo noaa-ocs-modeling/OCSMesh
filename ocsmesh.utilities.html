@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 1.6.3 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 1.6.4 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -203,6 +203,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.find_polyneighbors"><code class="docutils literal notranslate"><span class="pre">find_polyneighbors()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.validate_RMmesh"><code class="docutils literal notranslate"><span class="pre">validate_RMmesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.triangulate_rivermapper_poly"><code class="docutils literal notranslate"><span class="pre">triangulate_rivermapper_poly()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.remesh_holes"><code class="docutils literal notranslate"><span class="pre">remesh_holes()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -2290,7 +2291,7 @@ adjacent_layers=2</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.merge_overlapping_meshes">
-<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">merge_overlapping_meshes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">all_msht:</span> <span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacent_layers:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.005</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_domain:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_int_ang:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hfun_mesh=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.merge_overlapping_meshes" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">merge_overlapping_meshes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">all_msht:</span> <span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adjacent_layers:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_size:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.0075</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">buffer_domain:</span> <span class="pre">float</span> <span class="pre">=</span> <span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_int_ang:</span> <span class="pre">int</span> <span class="pre">=</span> <span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hfun_mesh=None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crs=&lt;Geographic</span> <span class="pre">2D</span> <span class="pre">CRS:</span> <span class="pre">EPSG:4326&gt;</span> <span class="pre">Name:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">Axis</span> <span class="pre">Info</span> <span class="pre">[ellipsoidal]:</span> <span class="pre">-</span> <span class="pre">Lat[north]:</span> <span class="pre">Geodetic</span> <span class="pre">latitude</span> <span class="pre">(degree)</span> <span class="pre">-</span> <span class="pre">Lon[east]:</span> <span class="pre">Geodetic</span> <span class="pre">longitude</span> <span class="pre">(degree)</span> <span class="pre">Area</span> <span class="pre">of</span> <span class="pre">Use:</span> <span class="pre">-</span> <span class="pre">name:</span> <span class="pre">World.</span> <span class="pre">-</span> <span class="pre">bounds:</span> <span class="pre">(-180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">-90.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">180.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">90.0)</span> <span class="pre">Datum:</span> <span class="pre">World</span> <span class="pre">Geodetic</span> <span class="pre">System</span> <span class="pre">1984</span> <span class="pre">ensemble</span> <span class="pre">-</span> <span class="pre">Ellipsoid:</span> <span class="pre">WGS</span> <span class="pre">84</span> <span class="pre">-</span> <span class="pre">Prime</span> <span class="pre">Meridian:</span> <span class="pre">Greenwich</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.merge_overlapping_meshes" title="Permalink to this definition"></a></dt>
 <dd><p>Combine meshes whose boundaries match</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -2669,6 +2670,29 @@ removes invalid elements (and their neighbors)</p>
 </dl>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.remesh_holes">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">remesh_holes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">msht</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_threshold_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">area_threshold_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.002</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">jigsaw_msh_t</span></span></span><a class="headerlink" href="#ocsmesh.utils.remesh_holes" title="Permalink to this definition"></a></dt>
+<dd><p>Remove undesirable island and slivers based on area</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><dl class="simple">
+<dt><strong>msht</strong><span class="classifier">jigsawpy.msh_t.jigsaw_msh_t</span></dt><dd></dd>
+<dt><strong>area_threshold_min</strong><span class="classifier">default=.0</span></dt><dd></dd>
+<dt><strong>area_threshold_max</strong><span class="classifier">default=.002</span></dt><dd></dd>
+</dl>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><dl class="simple">
+<dt>jigsaw_msh_t</dt><dd><p>mesh holes remeshed</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<p>1.0e-15 is usually ideal for removing slivers</p>
 </dd></dl>
 
 </section>
