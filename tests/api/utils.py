@@ -278,7 +278,7 @@ class SmallAreaElements(unittest.TestCase):
 
         fixed_mesh = utils.fix_small_el(mesh,mesh_for_patch)
 
-        self.assertEqual(len(fixed_mesh.tria3), 1130233)
+        self.assertEqual(len(fixed_mesh.tria3), 1130268)#1130233)
 
     def test_merge_overlapping_meshes(self):
         p = Path(__file__).parents[1] / "data" / "test_mesh_1.2dm"
@@ -288,7 +288,7 @@ class SmallAreaElements(unittest.TestCase):
 
         smooth = utils.merge_overlapping_meshes([mesh.msh_t,patch.msh_t])
 
-        self.assertEqual(len(smooth.tria3), 1130295)
+        self.assertEqual(len(smooth.tria3), 1130323)#1130295)
 
 
 class FinalizeMesh(unittest.TestCase):

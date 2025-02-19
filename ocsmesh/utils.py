@@ -3022,7 +3022,7 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
 
 def merge_overlapping_meshes(all_msht: list,
                              adjacent_layers: int = 0,
-                             buffer_size: float = 0.005,
+                             buffer_size: float = 0.0075,
                              buffer_domain: float = 0.01,
                              min_int_ang: int = 30,
                              hfun_mesh = None,
@@ -3088,7 +3088,9 @@ def merge_overlapping_meshes(all_msht: list,
                                                  msht
                                                  )
         msht_combined = clip_mesh_by_shape(msht_combined,
-                                           domain.union_all()
+                                           domain.union_all(),
+                                           fit_inside=False,
+                                           check_cross_edges=True
                                            )
         del carved_mesh,buff_mesh,domain,msht
 
@@ -3779,6 +3781,7 @@ def triangulate_poly(rm_poly):
 
     return rm_mesh
 
+
 def validate_poly(gdf):
     '''
     Goes over all polygons in a gpf and applied the make_valid func
@@ -3807,6 +3810,7 @@ def validate_poly(gdf):
                                                   )].drop_duplicates()
 
     return gdf_valid, gdf_invalid
+
 
 def find_polyneighbors(target_gdf, ref_gdf):
     '''
@@ -3841,6 +3845,7 @@ def find_polyneighbors(target_gdf, ref_gdf):
     sjoin = sjoin.drop_duplicates()
 
     return sjoin
+
 
 def validate_RMmesh(RMmesh):
     '''
@@ -3925,3 +3930,78 @@ def triangulate_rivermapper_poly(rm_poly):
     validated_RMmesh = validate_RMmesh(RMmesh)
 
     return validated_RMmesh
+
+
+def remesh_holes(msht: jigsaw_msh_t,
+                 area_threshold_min: float = .0,
+                 area_threshold_max: float =.002
+                ) -> jigsaw_msh_t:#1.0e-15
+    '''
+    Remove undesirable island and slivers based on area
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+    area_threshold_min : default=.0
+    area_threshold_max : default=.002
+
+    Returns
+    -------
+    jigsaw_msh_t
+        mesh holes remeshed
+
+    Notes
+    -----
+    1.0e-15 is usually ideal for removing slivers
+    '''
+
+    mesh_poly = get_mesh_polygons(msht)
+    mesh_gdf = gpd.GeoDataFrame(geometry =
+                                gpd.GeoSeries(mesh_poly),
+                                crs=4326).dissolve().explode()
+    mesh_noholes_poly = remove_holes(
+        mesh_gdf.union_all())
+
+    mesh_holes_poly = mesh_noholes_poly.difference(mesh_poly)
+    mesh_holes_gdf = gpd.GeoDataFrame(geometry=
+                                      gpd.GeoSeries(mesh_holes_poly),
+                                      crs=4326).dissolve().explode()
+    mesh_holes_gdf['area'] = mesh_holes_gdf.geometry.area
+    selected_holes = mesh_holes_gdf[
+                    (mesh_holes_gdf['area'] >= area_threshold_min) & \
+                    (mesh_holes_gdf['area'] <= area_threshold_max)]
+
+    carved_holes = clip_mesh_by_shape(msht,
+                                        selected_holes.union_all(),
+                                        adjacent_layers=2,
+                                        inverse=True,
+                                        )
+    carved_poly = get_mesh_polygons(carved_holes)
+    patch_poly = mesh_noholes_poly.difference(carved_poly)
+    patch_gdf = gpd.GeoDataFrame(geometry=
+                                 gpd.GeoSeries(patch_poly),
+                                 crs=4326).dissolve().explode()
+    patch_gdf = patch_gdf[~patch_gdf.geometry.is_empty]
+
+    #aux_pts:
+    aux_pts_mesh = clip_mesh_by_shape(msht,
+                                      patch_gdf.union_all(),
+                                      fit_inside=True)
+    all_nodes = aux_pts_mesh.vert2['coord']
+    aux_pts = MultiPoint(all_nodes)
+
+    aux_pts = gpd.GeoDataFrame(geometry=
+                            gpd.GeoSeries(intersection(
+                            aux_pts,
+                            patch_poly.buffer(-0.00001),
+                            )))
+    msht_patch = triangulate_polygon_s(patch_gdf,
+                                        aux_pts=aux_pts)
+
+    mesh_filled = merge_neighboring_meshes(carved_holes,
+                                            msht_patch)
+    cleanup_duplicates(mesh_filled)
+    cleanup_isolates(mesh_filled)
+    put_id_tags(mesh_filled)
+
+    return mesh_filled
