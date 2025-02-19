@@ -3781,6 +3781,7 @@ def triangulate_poly(rm_poly):
 
     return rm_mesh
 
+
 def validate_poly(gdf):
     '''
     Goes over all polygons in a gpf and applied the make_valid func
@@ -3809,6 +3810,7 @@ def validate_poly(gdf):
                                                   )].drop_duplicates()
 
     return gdf_valid, gdf_invalid
+
 
 def find_polyneighbors(target_gdf, ref_gdf):
     '''
@@ -3843,6 +3845,7 @@ def find_polyneighbors(target_gdf, ref_gdf):
     sjoin = sjoin.drop_duplicates()
 
     return sjoin
+
 
 def validate_RMmesh(RMmesh):
     '''
@@ -3928,11 +3931,79 @@ def triangulate_rivermapper_poly(rm_poly):
 
     return validated_RMmesh
 
-def remove_islands():
-    '''
-    '''
 
-def remesh_slivers():
+def remesh_holes(msht: jigsaw_msh_t,
+                 area_threshold_min: float = .0,
+                 area_threshold_max: float =.002
+                ) -> jigsaw_msh_t:   #1.0e-15
     '''
+    Remove undesirable island and slivers based on area
+
+    Parameters
+    ----------
+    msht : jigsawpy.msh_t.jigsaw_msh_t
+    area_threshold_min : default=.0
+    area_threshold_max : default=.002
+
+    Returns
+    -------
+    jigsaw_msh_t
+        mesh holes remeshed
+
+    Notes
+    -----
+    1.0e-15 is usually ideal for removing slivers
     '''
-    
+       
+    mesh_poly = ocsmesh.utils.get_mesh_polygons(msht)
+    mesh_gdf = gpd.GeoDataFrame(geometry = 
+                                gpd.GeoSeries(mesh_poly),
+                                crs=4326).dissolve().explode()
+    mesh_noholes_poly = ocsmesh.utils.remove_holes(
+        mesh_gdf.union_all())
+
+    mesh_holes_poly = mesh_noholes_poly.difference(mesh_poly)
+    mesh_holes_gdf = gpd.GeoDataFrame(geometry=
+                                      gpd.GeoSeries(mesh_holes_poly),
+                                      crs=4326).dissolve().explode()
+    mesh_holes_gdf['area'] = mesh_holes_gdf.geometry.area
+    selected_holes = mesh_holes_gdf[
+                    (mesh_holes_gdf['area'] >= area_threshold_min) & \
+                    (mesh_holes_gdf['area'] <= area_threshold_max)]
+
+    carved_holes = ocsmesh.utils.clip_mesh_by_shape(msht,
+                                        selected_holes.union_all(),
+                                        adjacent_layers=2,
+                                        inverse=True,
+                                        )
+    carved_poly = ocsmesh.utils.get_mesh_polygons(carved_holes)
+    patch_poly = mesh_noholes_poly.difference(carved_poly)
+    patch_gdf = gpd.GeoDataFrame(geometry=
+                                 gpd.GeoSeries(patch_poly),
+                                 crs=4326).dissolve().explode()
+    patch_gdf = patch_gdf[~patch_gdf.geometry.is_empty]
+
+    #aux_pts:
+    aux_pts_mesh = ocsmesh.utils.clip_mesh_by_shape(msht,
+                                                    patch_gdf.union_all(),
+                                                    fit_inside=True)
+    all_nodes = aux_pts_mesh.vert2['coord']
+    aux_pts = MultiPoint(all_nodes)
+
+    aux_pts = gpd.GeoDataFrame(geometry=
+                            gpd.GeoSeries(intersection(
+                            aux_pts,
+                            patch_poly.buffer(-0.00001),
+                            )))
+    msht_patch = ocsmesh.utils.triangulate_polygon_s(patch_gdf,
+                                                     aux_pts=aux_pts)
+
+    mesh_filled = ocsmesh.utils.merge_neighboring_meshes(carved_holes,
+                                                         msht_patch)
+    ocsmesh.utils.cleanup_duplicates(mesh_filled)
+    ocsmesh.utils.cleanup_isolates(mesh_filled)
+    ocsmesh.utils.put_id_tags(mesh_filled)
+
+    return mesh_filled
+
+
