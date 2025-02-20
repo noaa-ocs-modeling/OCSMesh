@@ -3956,14 +3956,12 @@ def remesh_holes(msht: jigsaw_msh_t,
     '''
 
     mesh_poly = get_mesh_polygons(msht)
-    mesh_gdf = gpd.GeoDataFrame(geometry =
-                                gpd.GeoSeries(mesh_poly),
+    mesh_gdf = gpd.GeoDataFrame(geometry=gpd.GeoSeries(mesh_poly),
                                 crs=4326).dissolve().explode()
-    mesh_noholes_poly = remove_holes(
-        mesh_gdf.union_all())
+    mesh_noholes_poly = remove_holes(mesh_gdf.union_all())
 
     mesh_holes_poly = mesh_noholes_poly.difference(mesh_poly)
-    mesh_holes_gdf = gpd.GeoDataFrame(geometry=
+    mesh_holes_gdf = gpd.GeoDataFrame(geometry =
                                       gpd.GeoSeries(mesh_holes_poly),
                                       crs=4326).dissolve().explode()
     mesh_holes_gdf['area'] = mesh_holes_gdf.geometry.area
@@ -3971,37 +3969,46 @@ def remesh_holes(msht: jigsaw_msh_t,
                     (mesh_holes_gdf['area'] >= area_threshold_min) & \
                     (mesh_holes_gdf['area'] <= area_threshold_max)]
 
-    carved_holes = clip_mesh_by_shape(msht,
-                                        selected_holes.union_all(),
-                                        adjacent_layers=2,
-                                        inverse=True,
+    if len(selected_holes) > 0:
+        carved_holes = clip_mesh_by_shape(msht,
+                                          selected_holes.union_all(),
+                                          adjacent_layers=2,
+                                          inverse=True,
+                                          )
+        carved_poly = get_mesh_polygons(carved_holes)
+        mesh_poly_w_selec_holes = gpd.GeoDataFrame(
+                                pd.concat([mesh_gdf,selected_holes],
+                                                ignore_index=True
                                         )
-    carved_poly = get_mesh_polygons(carved_holes)
-    patch_poly = mesh_noholes_poly.difference(carved_poly)
-    patch_gdf = gpd.GeoDataFrame(geometry=
-                                 gpd.GeoSeries(patch_poly),
-                                 crs=4326).dissolve().explode()
-    patch_gdf = patch_gdf[~patch_gdf.geometry.is_empty]
+                                            ).dissolve().explode()
+        patch_poly = mesh_poly_w_selec_holes.difference(carved_poly)
 
-    #aux_pts:
-    aux_pts_mesh = clip_mesh_by_shape(msht,
-                                      patch_gdf.union_all(),
-                                      fit_inside=True)
-    all_nodes = aux_pts_mesh.vert2['coord']
-    aux_pts = MultiPoint(all_nodes)
+        patch_gdf = gpd.GeoDataFrame(geometry=
+                                     gpd.GeoSeries(patch_poly),
+                                     crs=4326).dissolve().explode()
+        patch_gdf = patch_gdf[~patch_gdf.geometry.is_empty]
 
-    aux_pts = gpd.GeoDataFrame(geometry=
-                            gpd.GeoSeries(intersection(
-                            aux_pts,
-                            patch_poly.buffer(-0.00001),
-                            )))
-    msht_patch = triangulate_polygon_s(patch_gdf,
-                                        aux_pts=aux_pts)
+        #aux_pts
+        aux_pts_mesh = clip_mesh_by_shape(msht,
+                                          patch_gdf.union_all(),
+                                          fit_inside=True)
+        all_nodes = aux_pts_mesh.vert2['coord']
+        aux_pts = MultiPoint(all_nodes)
+        aux_pts = gpd.GeoDataFrame(geometry=
+                                gpd.GeoSeries(intersection(
+                                aux_pts,
+                                patch_poly.buffer(-0.00001),
+                                )))    
+        msht_patch = triangulate_polygon_s(patch_gdf,
+                                           aux_pts=aux_pts)
 
-    mesh_filled = merge_neighboring_meshes(carved_holes,
-                                            msht_patch)
-    cleanup_duplicates(mesh_filled)
-    cleanup_isolates(mesh_filled)
-    put_id_tags(mesh_filled)
+        mesh_filled = merge_neighboring_meshes(carved_holes,
+                                               msht_patch)
+        cleanup_duplicates(mesh_filled)
+        cleanup_isolates(mesh_filled)
+        put_id_tags(mesh_filled)
 
-    return mesh_filled
+        return mesh_filled
+
+    else:
+        return msht
