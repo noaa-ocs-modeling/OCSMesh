@@ -344,29 +344,26 @@ class HfunRaster(BaseHfun, Raster):
                 dim2 = win.height
 
                 tria3 = np.empty(
-                    ((dim1 - 1), (dim2  - 1)),
-                    dtype=jigsaw_msh_t.TRIA3_t)
+                    (dim1 - 1, dim2 - 1),
+                    dtype=jigsaw_msh_t.TRIA3_t,
+                )
                 index = tria3["index"]
-                helper_ary = np.ones(
-                        ((dim1 - 1), (dim2  - 1)),
-                        dtype=jigsaw_msh_t.INDEX_t).cumsum(1) - 1
-                index[:, :, 0] = np.arange(
-                        0, dim1 - 1,
-                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
-                index[:, :, 0] += (helper_ary + 0) * dim1
 
-                index[:, :, 1] = np.arange(
-                        1, dim1 - 0,
-                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
-                index[:, :, 1] += (helper_ary + 0) * dim1
+                i = np.arange(
+                    dim1 - 1,
+                    dtype=jigsaw_msh_t.INDEX_t,
+                )[:, None]
+                j = np.arange(
+                    dim2 - 1,
+                    dtype=jigsaw_msh_t.INDEX_t,
+                )[None, :]
 
-                index[:, :, 2] = np.arange(
-                        1, dim1 - 0,
-                        dtype=jigsaw_msh_t.INDEX_t).reshape(dim1 - 1, 1)
-                index[:, :, 2] += (helper_ary + 1) * dim1
+                index[:, :, 0] = i     + j * dim1
+                index[:, :, 1] = (i+1) + j * dim1
+                index[:, :, 2] = (i+1) + (j+1) * dim1
 
                 hfun.tria3 = tria3.ravel()
-                del tria3, helper_ary
+
                 gc.collect()
                 _logger.info('Done building hfun.tria3...')
 
