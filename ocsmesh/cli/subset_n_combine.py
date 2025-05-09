@@ -167,6 +167,9 @@ class SubsetAndCombine:
                 base_shape_crs=crs)
         clip_poly_draft = geom_cutoff.get_multipolygon()
 
+        t = Transformer.from_crs(4326, crs, always_xy=True)
+        clip_poly_draft = transform(t.transform, clip_poly_draft)
+
         # Add back upstream
         poly_upstreams = []
         if upstream_poly_list is not None:
@@ -179,9 +182,6 @@ class SubsetAndCombine:
         # Islands are not of intereset when clipping high and low-res meshes
         clip_poly = utils.remove_holes(unary_union([
             clip_poly_draft, *poly_upstreams]))
-
-        t = Transformer.from_crs(4326, crs, always_xy=True)
-        clip_poly = transform(t.transform, clip_poly)
 
         return clip_poly
 
