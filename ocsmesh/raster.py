@@ -367,16 +367,16 @@ class Raster:
     def __getstate__(self):
         my_dict=super().__getstate__()
         if 'source' in my_dict and hasattr(my_dict['source'], 'name'):
-             my_dict['source_path'] = my_dict['source'].name
+            my_dict['source_path'] = my_dict['source'].name
         my_dict.pop('source', None)
         return my_dict
-    
+
     def __setstate__(self, state):
         if 'source_path' in state:
             state['source'] = rasterio.open(state['source_path'])
             del state['source_path']
         self.__dict__.update(state)
-        
+
     @contextmanager
     def modifying_raster(
             self,

@@ -1,3 +1,4 @@
+'''Test pickling and unpickling of Raster objects using unittest framework.'''
 import unittest
 import tempfile
 import shutil
@@ -13,13 +14,14 @@ import numpy.testing as npt
 from ocsmesh import Raster
 from ocsmesh.utils import raster_from_numpy
 
+# pylint: disable=c-extension-no-member, invalid-name
 try:
     from mpi4py import MPI
     MPI_AVAILABLE = True
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
-    
+
 except ImportError:
     MPI_AVAILABLE = False
     comm = None
@@ -38,15 +40,17 @@ MPI_CONFIG = {
 
 
 def get_value(rast_obj):
+    """Return values from a raster object."""
     return rast_obj.get_values()
 
 
 def is_running_with_mpi():
+    """Check if the code is running with MPI and more than one process."""
     return MPI_AVAILABLE and size > 1
 
 
 def run_mpi_tests():
-
+    """Run tests that require MPI parallel execution."""
     if IS_WINDOWS:
         print("Skipping MPI tests on Windows due to I/O issues")
         return
@@ -66,7 +70,7 @@ def run_mpi_tests():
     ]
 
     try:
-        result = subprocess.run(mpi_cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(mpi_cmd, capture_output=True, text=True, timeout=60, check=False)
 
         if result.returncode == 0:
             print("MPI tests passed successfully!")
@@ -83,12 +87,12 @@ def run_mpi_tests():
         print("MPI tests timed out!")
     except FileNotFoundError:
         print(f"MPI executable '{MPI_CONFIG['mpi_executable']}' not found!")
-    except Exception as e:
-        print(f"Error running MPI tests: {e}")
 
 
 class TestRasterPickling(unittest.TestCase):
+    """Test pickling and unpickling of Raster objects."""
     def setUp(self):
+        """Set up temporary directory and raster files for testing."""
         self.tdir = Path(tempfile.mkdtemp())
         self.rast1 = self.tdir / 'rast_1.tif'
         self.rast2 = self.tdir / 'rast_2.tif'
@@ -113,12 +117,13 @@ class TestRasterPickling(unittest.TestCase):
 
 
     def tearDown(self):
-            shutil.rmtree(self.tdir)
+        shutil.rmtree(self.tdir)
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
     def test_pickle_and_unpickle(self):
+        """Test pickling and unpickling of Raster objects."""
         try:
             original = Raster(self.rast1)
             _ = original.get_values()
@@ -133,46 +138,47 @@ class TestRasterPickling(unittest.TestCase):
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
     def test_pickle_with_multiprocessing(self):
+        '''Test pickling with multiprocessing to ensure compatibility across processes.'''
         try:
-            Raster_path = [str(self.rast1), str(self.rast2)]
-            N_PROCS = len(Raster_path)
+            raster_path = [str(self.rast1), str(self.rast2)]
+            n_procs = len(raster_path)
             rast0 = []
             data0 = []
-   
-            for r in Raster_path:
-               rast = Raster(r)
-               rast0.append(rast)
-               data0.append(rast.values)
 
-            with multiprocessing.Pool(N_PROCS) as p:
-               value_list = p.map(get_value, rast0)
+            for r in raster_path:
+                rast = Raster(r)
+                rast0.append(rast)
+                data0.append(rast.values)
+
+            with multiprocessing.Pool(n_procs) as p:
+                value_list = p.map(get_value, rast0)
 
             for data, process_data in zip(data0, value_list):
-               npt.assert_array_equal(data, process_data)
+                npt.assert_array_equal(data, process_data)
         finally:
-            for rast in rast0:
-                del rast
+            del rast0
 
 
-    @unittest.skipUnless(is_running_with_mpi(), "This test must be run with mpiexec and multiple ranks")
+    @unittest.skipUnless(is_running_with_mpi(), "Test must be run with mpiexec and multiple ranks")
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_pickle_with_mpi4py(self):
+        '''Test pickling with mpi4py across multiple processes.'''
         try:
             rast0 = None
             data0 = None
             if rank == 0:
-                Raster_path = [str(self.rast1), str(self.rast2), str(self.rast3)]
+                raster_path = [str(self.rast1), str(self.rast2), str(self.rast3)]
 
-                if size != len(Raster_path):
-                     raise ValueError("Number of processes must match the number of raster files.")
+                if size != len(raster_path):
+                    raise ValueError("Number of processes must match the number of raster files.")
 
                 rast0 = []
                 data0 = []
-                for r in Raster_path:
-                     rast = Raster(r)
-                     rast0.append(rast)
-                     data0.append(rast.values)
-  
+                for r in raster_path:
+                    rast = Raster(r)
+                    rast0.append(rast)
+                    data0.append(rast.values)
+
             my_rast = comm.scatter(rast0, root=0)
             my_value = get_value(my_rast)
             all_values = comm.gather(my_value, root=0)
@@ -182,28 +188,29 @@ class TestRasterPickling(unittest.TestCase):
                     npt.assert_array_equal(data, process_data)
                     print("MPI test passed")
         finally:
-            if rast0 is not None:
-                for rast in rast0:
-                    del rast
-            if my_rast is not None:
-                del my_rast
+            del rast0
+            del my_rast
 
 
-#  Automatically launch MPI tests when running via unittest discover
+# Automatically launch MPI tests when running via unittest discover
 class TestMPILauncher(unittest.TestCase):
+    """Unit test class that auto-triggers MPI tests when needed."""
+
     @classmethod
     def setUpClass(cls):
+        """Run MPI tests automatically if not already under MPI."""
         if not is_running_with_mpi() and MPI_CONFIG['auto_run_mpi'] and rank == 0:
-            print("\nAuto-triggering MPI tests from TestMPILauncher...\n")
+            print("\nAuto-triggering MPI tests from TestMPILauncher\n")
             run_mpi_tests()
+
+
 
     def test_dummy(self):
         """Dummy test to trigger setUpClass"""
-        self.assertTrue(True) 
+        self.assertTrue(True)
 
 
 if __name__ == '__main__':
     if '--mpi-mode' in sys.argv:
         sys.argv.remove('--mpi-mode')
         unittest.main(verbosity=2)
-    
