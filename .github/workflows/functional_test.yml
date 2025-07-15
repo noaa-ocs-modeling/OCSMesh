@@ -49,7 +49,8 @@ jobs:
       if: runner.os != 'Windows'
       shell: bash -l {0}
       run: |
-        wget https://chs.coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif
+        wget https://chs.coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O /tmp/fullsize_dem.tif
+        gdalwarp -tr 0.0005 0.0005 -r average -overwrite /tmp/fullsize_dem.tif /tmp/test_dem.tif
 
     - name: Export Conda environment
       if: runner.os != 'Windows'
