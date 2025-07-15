@@ -365,16 +365,20 @@ class Raster:
             yield window, self.get_window_bounds(window)
 
     def __getstate__(self):
-        my_dict=super().__getstate__()
-        if 'source' in my_dict and hasattr(my_dict['source'], 'name'):
-            my_dict['source_path'] = my_dict['source'].name
-        my_dict.pop('source', None)
-        return my_dict
+        state=super().__getstate__()
+        if 'source' in state and hasattr(state['source'], 'name'):
+            state['source_path'] = state['source'].name
+        state.pop('source', None)
+        return state
 
     def __setstate__(self, state):
-        if 'source_path' in state:
+        if 'source_path' not in state:
+            raise KeyError("Deserialization state is not valid: 'source_path' is missing.")
+        try:
             state['source'] = rasterio.open(state['source_path'])
             del state['source_path']
+        except Exception as e:
+            raise IOError(f"Failed to open raster file at '{state['source_path']}': {e}") from e
         self.__dict__.update(state)
 
     @contextmanager
