@@ -364,6 +364,23 @@ class Raster:
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
 
+    def __getstate__(self):
+        state=super().__getstate__()
+        if 'source' in state and hasattr(state['source'], 'name'):
+            state['source_path'] = state['source'].name
+        state.pop('source', None)
+        return state
+
+    def __setstate__(self, state):
+        if 'source_path' not in state:
+            raise KeyError("Deserialization state is not valid: 'source_path' is missing.")
+        try:
+            state['source'] = rasterio.open(state['source_path'])
+            del state['source_path']
+        except Exception as e:
+            raise IOError(f"Failed to open raster file at '{state['source_path']}': {e}") from e
+        self.__dict__.update(state)
+
     @contextmanager
     def modifying_raster(
             self,
