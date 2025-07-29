@@ -4,7 +4,7 @@ This module implements wrapper for basic functionalities of handling
 raster files such as CRS transformations, resampling, clipping,
 extracting & overriding data, plotting, etc.
 """
-
+import shutil
 import math
 import hashlib
 import logging
@@ -365,20 +365,24 @@ class Raster:
             yield window, self.get_window_bounds(window)
 
     def __getstate__(self):
-        state=super().__getstate__()
+        state = self.__dict__.copy()
         if 'source' in state and hasattr(state['source'], 'name'):
             state['source_path'] = state['source'].name
-        state.pop('source', None)
+            state.pop('source', None)
         return state
 
     def __setstate__(self, state):
-        if 'source_path' not in state:
-            raise KeyError("Deserialization state is not valid: 'source_path' is missing.")
-        try:
-            state['source'] = rasterio.open(state['source_path'])
-            del state['source_path']
-        except Exception as e:
-            raise IOError(f"Failed to open raster file at '{state['source_path']}': {e}") from e
+        if 'source_path' in state:
+            src_path = state['source_path']
+            # Copy to a *new* temp file with safe suffix
+            fd, copy_path = tempfile.mkstemp(suffix=os.path.splitext(src_path)
+            [1],dir="/tmp/ocsmesh")
+            os.close(fd)
+            shutil.copy2(src_path, copy_path)
+            state['tmpfile']=copy_path
+            state['source_path']=copy_path
+            state['source']=rasterio.open(state["source_path"])
+            del state["source_path"]
         self.__dict__.update(state)
 
     @contextmanager
