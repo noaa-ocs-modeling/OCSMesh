@@ -137,6 +137,79 @@ class TestRasterPickling(unittest.TestCase):
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_crs(self):
+        """Test pickling and unpickling of Raster objects."""
+        try:
+            original = Raster(self.rast1)
+            pickled = pickle.loads(pickle.dumps(original))
+
+            self.assertEqual(original.crs, pickled.crs)
+            self.assertEqual(original.transform, pickled.transform)
+        finally:
+            del original
+            del pickled
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_values_nofilldata(self):
+        """Test pickling and unpickling of Raster objects."""
+        try:
+            original = Raster(self.rast2)
+            pickled_raster=pickle.loads(pickle.dumps(original))
+            #fill_nodata has been used to fill in missing raster values
+            original.fill_nodata()
+            values1=original.get_values()
+
+            pickled_raster.fill_nodata()
+            values2=pickled_raster.get_values()
+
+            for data1,data2 in zip(values1,values2):
+                npt.assert_array_equal(data2,data1)
+        finally:
+            del original
+            del pickled_raster
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_paths(self):
+        """Test pickling and unpickling of Raster objects."""
+        try:
+            original = Raster(self.rast2)
+            #fill_nodata has been used to fill in missing raster values
+            original.fill_nodata()
+            original.get_values()
+
+            pickled = pickle.loads(pickle.dumps(original))
+            self.assertNotEqual(str(pickled.tmpfile),str(original.tmpfile))
+
+        finally:
+            del original
+            del pickled
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_paths_exists(self):
+        """Test pickling and unpickling of Raster objects."""
+        try:
+            original = Raster(self.rast2)
+            #fill_nodata has been used to fill in missing raster values
+            original.fill_nodata()
+            original.get_values()
+
+            pickled = pickle.loads(pickle.dumps(original))
+            self.assertTrue(Path(original.tmpfile).exists())
+            self.assertTrue(Path(pickled.tmpfile).exists())
+
+        finally:
+            del original
+            del pickled
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
     def test_pickle_with_multiprocessing(self):
         '''Test pickling with multiprocessing to ensure compatibility across processes.'''
         try:
