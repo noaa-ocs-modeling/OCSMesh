@@ -156,12 +156,11 @@ class TestRasterPickling(unittest.TestCase):
         """Test pickling and unpickling of Raster objects."""
         try:
             original = Raster(self.rast2)
-            pickled_raster=pickle.loads(pickle.dumps(original))
             #fill_nodata has been used to fill in missing raster values
             original.fill_nodata()
             values1=original.get_values()
 
-            pickled_raster.fill_nodata()
+            pickled_raster=pickle.loads(pickle.dumps(original))
             values2=pickled_raster.get_values()
 
             for data1,data2 in zip(values1,values2):
@@ -183,25 +182,11 @@ class TestRasterPickling(unittest.TestCase):
 
             pickled = pickle.loads(pickle.dumps(original))
             self.assertNotEqual(str(pickled.tmpfile),str(original.tmpfile))
-
-        finally:
-            del original
-            del pickled
-
-
-    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
-    def test_paths_exists(self):
-        """Test pickling and unpickling of Raster objects."""
-        try:
-            original = Raster(self.rast2)
-            #fill_nodata has been used to fill in missing raster values
-            original.fill_nodata()
-            original.get_values()
-
-            pickled = pickle.loads(pickle.dumps(original))
+            self.assertNotEqual(str(original.tmpfile),str(original.path))
+            self.assertNotEqual(str(pickled.tmpfile),str(pickled.path))
             self.assertTrue(Path(original.tmpfile).exists())
             self.assertTrue(Path(pickled.tmpfile).exists())
+            self.assertTrue(str(pickled.path),str(original.path))
 
         finally:
             del original

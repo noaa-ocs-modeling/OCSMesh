@@ -4,6 +4,7 @@ This module implements wrapper for basic functionalities of handling
 raster files such as CRS transformations, resampling, clipping,
 extracting & overriding data, plotting, etc.
 """
+from pathlib import Path
 import shutil
 import math
 import hashlib
@@ -373,16 +374,15 @@ class Raster:
 
     def __setstate__(self, state):
         if 'source_path' in state:
+            tmpdir = str(Path(tempfile.gettempdir()) / 'ocsmesh') + '/'
+            os.makedirs(tmpdir, exist_ok=True)
             src_path = state['source_path']
-            # Copy to a *new* temp file with safe suffix
-            fd, copy_path = tempfile.mkstemp(suffix=os.path.splitext(src_path)
-            [1],dir="/tmp/ocsmesh")
+            fd, copy_path = tempfile.mkstemp(prefix=tmpdir, suffix=Path(src_path).suffix)
             os.close(fd)
             shutil.copy2(src_path, copy_path)
             state['tmpfile']=copy_path
-            state['source_path']=copy_path
-            state['source']=rasterio.open(state["source_path"])
-            del state["source_path"]
+            state['source']=rasterio.open(copy_path)
+            state.pop('source_path',None)
         self.__dict__.update(state)
 
     @contextmanager

@@ -14,7 +14,7 @@ dependencies:
   - fiona
   - geopandas>=1.0.0
   - utm
-  - scipy>=1.10,<1.13
+  - scipy
   - numba
   - numpy>=1.21 # numpy.typing
   - matplotlib>=3.8
