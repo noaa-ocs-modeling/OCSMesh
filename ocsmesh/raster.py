@@ -374,8 +374,6 @@ class Raster:
 
     def __setstate__(self, state):
         if 'source_path' in state:
-            tmpdir = str(Path(tempfile.gettempdir()) / 'ocsmesh') + '/'
-            os.makedirs(tmpdir, exist_ok=True)
             src_path = state['source_path']
             fd, copy_path = tempfile.mkstemp(prefix=tmpdir, suffix=Path(src_path).suffix)
             os.close(fd)
