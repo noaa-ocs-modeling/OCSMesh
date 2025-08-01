@@ -43,6 +43,10 @@ def get_value(rast_obj):
     """Return values from a raster object."""
     return rast_obj.get_values()
 
+def fill_values(rast_obj):
+    """returns data after filling missing values."""
+    rast_obj.fill_nodata()
+    return rast_obj.get_values()
 
 def is_running_with_mpi():
     """Check if the code is running with MPI and more than one process."""
@@ -191,6 +195,32 @@ class TestRasterPickling(unittest.TestCase):
         finally:
             del original
             del pickled
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_nofilldata_multiprocessing(self):
+        '''Test pickling with multiprocessing to ensure compatibility across processes.'''
+        try:
+            raster_path = [str(self.rast2), str(self.rast3)]
+            n_procs = len(raster_path)
+            data0 = []
+
+            for r in raster_path:
+                rast = Raster(r)
+                rast.fill_nodata()
+                data0.append(rast.get_values())
+
+            rast_obj=[Raster(path) for path in raster_path]
+
+            with multiprocessing.Pool(n_procs) as p:
+                value_list = p.map(fill_values, rast_obj)
+
+            for data, process_data in zip(data0, value_list):
+                npt.assert_array_equal(data, process_data)
+        finally:
+            del rast_obj
+            del data0
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
