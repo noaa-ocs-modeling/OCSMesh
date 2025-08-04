@@ -195,6 +195,29 @@ class TestRasterPickling(unittest.TestCase):
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
+    def test_nofilldata_multiprocessing(self):
+        '''Test pickling with multiprocessing to ensure compatibility across processes.'''
+        try:
+            raster_path = [str(self.rast2), str(self.rast3)]
+            n_procs = len(raster_path)
+            data0 = []
+            rast_obj=[Raster(path) for path in raster_path]
+            for r in rast_obj:
+                r.fill_nodata()
+                data0.append(r.get_values())
+
+            with multiprocessing.Pool(n_procs) as p:
+                value_list = p.map(get_value, rast_obj)
+
+            for data, process_data in zip(data0, value_list):
+                npt.assert_array_equal(data, process_data)
+        finally:
+            del rast_obj
+            del data0
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    @unittest.skipUnless(rank == 0, 'This test runs only on rank 0')
     def test_pickle_with_multiprocessing(self):
         '''Test pickling with multiprocessing to ensure compatibility across processes.'''
         try:
