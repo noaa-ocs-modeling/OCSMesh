@@ -238,6 +238,23 @@ class HfunRaster(BaseHfun, Raster):
         self._hold_const_hit = 0
 
 
+    def __getstate__(self):
+            state=self.__dict__.copy()
+            if 'source' in state and hasattr(state['source'], 'name'):
+                # Save the file path
+                state['source_path'] = state['source'].name
+                # Remove the unpicklable source object
+            state.pop('source', None)
+            return state
+
+
+    def __setstate__(self, state):
+       if 'source_path' in state:
+            state['source'] = rasterio.open(state['source_path'])
+            del state['source_path']
+       self.__dict__.update(state)
+
+
     def __del__(self):
         for _, memfile_path in self._xy_cache.items():
             pathlib.Path(memfile_path).unlink()
