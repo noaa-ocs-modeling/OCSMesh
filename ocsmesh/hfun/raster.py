@@ -239,20 +239,20 @@ class HfunRaster(BaseHfun, Raster):
 
 
     def __getstate__(self):
-            state=self.__dict__.copy()
-            if 'source' in state and hasattr(state['source'], 'name'):
-                # Save the file path
-                state['source_path'] = state['source'].name
-                # Remove the unpicklable source object
-            state.pop('source', None)
-            return state
+        state=self.__dict__.copy()
+        if 'source' in state and hasattr(state['source'], 'name'):
+            # Save the file path
+            state['source_path'] = state['source'].name
+        # Remove the unpicklable source object
+        state.pop('source', None)
+        return state
 
 
     def __setstate__(self, state):
-       if 'source_path' in state:
+        if 'source_path' in state:
             state['source'] = rasterio.open(state['source_path'])
             del state['source_path']
-       self.__dict__.update(state)
+        self.__dict__.update(state)
 
 
     def __del__(self):
