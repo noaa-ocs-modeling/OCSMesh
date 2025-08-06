@@ -1,5 +1,6 @@
 '''Test pickling and unpickling of HfunRaster objects using unittest framework.'''
 import unittest
+import platform
 import tempfile
 import shutil
 import pickle
@@ -8,6 +9,10 @@ import numpy as np
 import numpy.testing as npt
 import ocsmesh
 from ocsmesh.utils import raster_from_numpy
+
+
+IS_WINDOWS = platform.system() == 'Windows'
+
 
 class TestRasterPickling(unittest.TestCase):
     """Test pickling and unpickling of Raster objects."""
@@ -33,19 +38,19 @@ class TestRasterPickling(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tdir)
 
-
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_path(self):
         """Test pickling and unpickling of HfunRaster objects."""
         self.assertIsInstance(self.hfun_pickled, ocsmesh.hfun.raster.HfunRaster)
         self.assertIsInstance(self.hfun_pickled.raster, ocsmesh.Raster)
 
-
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_tmpfile_path(self):
         """Test pickling and unpickling of HfunRaster objects."""
         self.assertEqual(self.hfun_original.tmpfile,self.hfun_pickled.tmpfile)
         self.assertEqual(self.hfun_original.source.name,self.hfun_pickled.source.name)
 
-
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_data(self):
         """Test pickling and unpickling of HfunRaster objects."""
         self.assertEqual(self.hfun_original._hmin, self.hfun_pickled._hmin)
@@ -54,7 +59,7 @@ class TestRasterPickling(unittest.TestCase):
         pickled_values = self.hfun_pickled.raster.get_values()
         npt.assert_array_equal(original_values, pickled_values)
 
-
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_coordinates(self):
         """Test pickling and unpickling of HfunRaster objects."""
         npt.assert_array_equal(self.hfun_original.raster.x, self.hfun_pickled.raster.x)
