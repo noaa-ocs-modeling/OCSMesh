@@ -1,7 +1,8 @@
 """This module define class for raster based size function
 """
-
+from pathlib import Path
 import functools
+import shutil
 import gc
 import logging
 import os
@@ -51,6 +52,8 @@ warnings.filterwarnings(
 
 _logger = logging.getLogger(__name__)
 
+tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+os.makedirs(tmpdir, exist_ok=True)
 
 class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
@@ -239,9 +242,9 @@ class HfunRaster(BaseHfun, Raster):
 
 
     def __getstate__(self):
-        state=self.__dict__.copy()
+        state = super().__getstate__()
+        # Store source path instead of open DatasetReader
         if 'source' in state and hasattr(state['source'], 'name'):
-            # Save the file path
             state['source_path'] = state['source'].name
         # Remove the unpicklable source object
         state.pop('source', None)
@@ -249,13 +252,29 @@ class HfunRaster(BaseHfun, Raster):
 
 
     def __setstate__(self, state):
+        # Restore source file
         if 'source_path' in state:
-            state['source'] = rasterio.open(state['source_path'])
-            del state['source_path']
+            src_path = state['source_path']
+            fd, copy_path = tempfile.mkstemp(prefix=tmpdir, suffix=Path(src_path).suffix)
+            os.close(fd)
+            shutil.copy2(src_path, copy_path)
+            # print("copied main tmpfile to", copy_path)
+            state['tmpfile'] = copy_path
+            state['source'] = rasterio.open(copy_path)
+            state.pop('source_path', None)
+        if '_xy_cache' in state:
+            _xy_cache_paths= dict(state['_xy_cache'])
+            for key, old_path in _xy_cache_paths.items():
+                if os.path.exists(old_path):
+                    fd, new_path = tempfile.mkstemp(prefix=tmpdir, suffix=Path(old_path).suffix)
+                    os.close(fd)
+                    shutil.copy2(old_path, new_path)
+                    state['_xy_cache'][key]=new_path
         self.__dict__.update(state)
 
 
     def __del__(self):
+        super().__del__()
         for _, memfile_path in self._xy_cache.items():
             pathlib.Path(memfile_path).unlink()
 
