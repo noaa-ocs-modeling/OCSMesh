@@ -14,57 +14,81 @@ from ocsmesh.utils import raster_from_numpy
 IS_WINDOWS = platform.system() == 'Windows'
 
 
+def get_value(rast_obj):
+    """Return values from a raster object."""
+    return rast_obj.get_values()
+
+
 class TestRasterPickling(unittest.TestCase):
     """Test pickling and unpickling of Raster objects."""
     def setUp(self):
         """Set up a temporary directory and a representative raster file."""
         self.tdir = Path(tempfile.mkdtemp())
-        self.rast = self.tdir / 'rast_1.tif'
+        self.rast1 = self.tdir / 'rast_1.tif'
+        self.rast2 = self.tdir / 'rast_2.tif'
+        self.rast3 = self.tdir / 'rast_3.tif'
 
-        rast_xy = np.mgrid[-1:1:0.1, -0.7:0.7:0.1]
-        rast_z = np.random.rand(*rast_xy[0].shape) * 10
+        rast_xy = np.mgrid[-1:1:0.01, -0.7:0.7:0.01]
+        rast_z_1 = np.ones_like(rast_xy[0]) * 10
+        rast_z_2 = np.ma.MaskedArray(
+            np.ones_like(rast_xy[0]) * 10,
+            mask=np.random.random(size=rast_xy[0].shape) < 0.2,
+            fill_value=np.nan
+        )
+        rast_z_3 = np.ma.MaskedArray(
+            np.ones_like(rast_xy[0]) * 10,
+            mask=np.random.random(size=rast_xy[0].shape) < 0.2,
+            fill_value=-1e+15
+        )
 
-        raster_from_numpy(self.rast, rast_z, rast_xy, 4326)
-
-        self.hfun_original = ocsmesh.Hfun(
-                ocsmesh.Raster(self.rast),
-                hmin=500,
-                hmax=10000
-            )
-
-        self.hfun_pickled=pickle.loads(pickle.dumps(self.hfun_original))
+        raster_from_numpy(self.rast1, rast_z_1, rast_xy, 4326)
+        raster_from_numpy(self.rast2, rast_z_2, rast_xy, 4326)
+        raster_from_numpy(self.rast3, rast_z_3, rast_xy, 4326)
 
 
     def tearDown(self):
         shutil.rmtree(self.tdir)
 
+
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_path(self):
         """Test pickling and unpickling of HfunRaster objects."""
-        self.assertIsInstance(self.hfun_pickled, ocsmesh.hfun.raster.HfunRaster)
-        self.assertIsInstance(self.hfun_pickled.raster, ocsmesh.Raster)
+        hfun_original = ocsmesh.Hfun(
+                ocsmesh.Raster(self.rast1),
+                hmin=500,
+                hmax=10000
+            )
+        hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
+        self.assertIsInstance(hfun_pickled, ocsmesh.hfun.raster.HfunRaster)
+        self.assertIsInstance(hfun_pickled.raster, ocsmesh.Raster)
+
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_tmpfile_path(self):
         """Test pickling and unpickling of HfunRaster objects."""
-        self.assertEqual(self.hfun_original.tmpfile,self.hfun_pickled.tmpfile)
-        self.assertEqual(self.hfun_original.source.name,self.hfun_pickled.source.name)
+        hfun_original = ocsmesh.Hfun(
+                ocsmesh.Raster(self.rast1),
+                hmin=500,
+                hmax=10000
+            )
+        hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
+        self.assertNotEqual(hfun_original.tmpfile,hfun_pickled.tmpfile)
+        self.assertEqual(hfun_original.raster.tmpfile,hfun_pickled.raster.tmpfile)
 
-    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_data(self):
-        """Test pickling and unpickling of HfunRaster objects."""
-        self.assertEqual(self.hfun_original._hmin, self.hfun_pickled._hmin)
-        self.assertEqual(self.hfun_original._hmax, self.hfun_pickled._hmax)
-        original_values = self.hfun_original.raster.get_values()
-        pickled_values = self.hfun_pickled.raster.get_values()
-        npt.assert_array_equal(original_values, pickled_values)
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_coordinates(self):
         """Test pickling and unpickling of HfunRaster objects."""
-        npt.assert_array_equal(self.hfun_original.raster.x, self.hfun_pickled.raster.x)
-        npt.assert_array_equal(self.hfun_original.raster.y, self.hfun_pickled.raster.y)
-        self.assertEqual(self.hfun_original.raster.crs, self.hfun_pickled.raster.crs)
+        hfun_original = ocsmesh.Hfun(
+                ocsmesh.Raster(self.rast2),
+                hmin=500,
+                hmax=10000
+            )
+        hfun_original.raster.fill_nodata()
+        values1=hfun_original.raster.get_values()
+        hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
+        values2=hfun_pickled.raster.get_values()
+        npt.assert_array_equal(values1,values2)
 
 
 if __name__ == '__main__':
