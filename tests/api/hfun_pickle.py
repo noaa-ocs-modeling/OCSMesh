@@ -51,7 +51,7 @@ class TestRasterPickling(unittest.TestCase):
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_path(self):
+    def test_hfunRaster_type(self):
         """Test pickling and unpickling of HfunRaster objects."""
         hfun_original = ocsmesh.Hfun(
                 ocsmesh.Raster(self.rast1),
@@ -77,7 +77,7 @@ class TestRasterPickling(unittest.TestCase):
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_coordinates(self):
+    def test_values_nofilldata(self):
         """Test pickling and unpickling of HfunRaster objects."""
         hfun_original = ocsmesh.Hfun(
                 ocsmesh.Raster(self.rast2),
