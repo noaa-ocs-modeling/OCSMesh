@@ -77,19 +77,51 @@ class TestRasterPickling(unittest.TestCase):
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_values_nofilldata(self):
-        """Test pickling and unpickling of HfunRaster objects."""
+    def test_memcache_(self):
         hfun_original = ocsmesh.Hfun(
                 ocsmesh.Raster(self.rast2),
                 hmin=500,
                 hmax=10000
             )
-        hfun_original.raster.fill_nodata()
-        values1=hfun_original.raster.get_values()
+        hfun_original.add_contour(0, 1000, 0.5)
+        key1=hfun_original._xy_cache.keys()
+        path1=hfun_original._xy_cache.values()
         hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
-        values2=hfun_pickled.raster.get_values()
-        npt.assert_array_equal(values1,values2)
+        key2=hfun_pickled._xy_cache.keys()
+        path2=hfun_pickled._xy_cache.values()
+        
+        self.assertNotEqual(path1,path2)
+        self.assertEqual(key1,key2)
 
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_hfunraster_values_(self):
+        hfun_original = ocsmesh.Hfun(
+                ocsmesh.Raster(self.rast2),
+                hmin=500,
+                hmax=10000
+            )
+        hfun_original.add_contour(0, 1000, 0.5)
+        hfun_value1=hfun_original.get_values()
+        hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
+        hfun_value2=hfun_pickled.get_values()
+        npt.assert_array_equal(hfun_value1,hfun_value2)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_hfr_values_(self):
+        hfun_original = ocsmesh.Hfun(
+                ocsmesh.Raster(self.rast2),
+                hmin=500,
+                hmax=10000
+            )
+        hfun_original.add_topo_bound_constraint(value=500, lower_bound=50, upper_bound=300)
+        hfun_pickled=pickle.loads(pickle.dumps(hfun_original))
+        hfun_original.add_constant_value(500, lower_bound=0, upper_bound=1000)
+        hfun_pickled.add_constant_value(500, lower_bound=0, upper_bound=1000)
+        value1=hfun_pickled.get_values()
+        value2=hfun_original.get_values()
+        npt.assert_array_equal(value1,value2)
 
 if __name__ == '__main__':
     unittest.main()

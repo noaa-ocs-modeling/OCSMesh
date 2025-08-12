@@ -242,7 +242,7 @@ class HfunRaster(BaseHfun, Raster):
 
 
     def __getstate__(self):
-        state = super().__getstate__()
+        state = super().__getstate__().copy()
         # Store source path instead of open DatasetReader
         if 'source' in state and hasattr(state['source'], 'name'):
             state['source_path'] = state['source'].name

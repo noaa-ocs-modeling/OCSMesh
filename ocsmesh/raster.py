@@ -366,7 +366,7 @@ class Raster:
             yield window, self.get_window_bounds(window)
 
     def __getstate__(self):
-        state = super().__getstate__()
+        state = super().__getstate__().copy()
         if 'source' in state and hasattr(state['source'], 'name'):
             state['source_path'] = state['source'].name
             state.pop('source', None)
