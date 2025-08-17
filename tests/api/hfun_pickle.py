@@ -8,10 +8,16 @@ from pathlib import Path
 import numpy as np
 import numpy.testing as npt
 import ocsmesh
+import multiprocessing
 from ocsmesh.utils import raster_from_numpy
 
 
 IS_WINDOWS = platform.system() == 'Windows'
+
+
+def get_value_from_hfun(hfun_obj):
+    """Helper function to get values from an Hfun object."""
+    return hfun_obj.get_values()
 
 
 def get_value(rast_obj):
@@ -122,6 +128,34 @@ class TestRasterPickling(unittest.TestCase):
         value1=hfun_pickled.get_values()
         value2=hfun_original.get_values()
         npt.assert_array_equal(value1,value2)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_hfun_with_multiprocessing(self):
+        '''Test pickling of Hfun objects with multiprocessing.'''
+        try:
+            hfun_list = [
+                ocsmesh.Hfun(ocsmesh.Raster(self.rast1), hmin=500, hmax=10000),
+                ocsmesh.Hfun(ocsmesh.Raster(self.rast2), hmin=500, hmax=10000)
+            ]
+
+            hfun_list[0].add_constant_value(500, lower_bound=0, upper_bound=1000)
+            hfun_list[1].add_constant_value(0, lower_bound=1000, upper_bound=0.5)
+
+            data_original = [h.get_values() for h in hfun_list]
+
+            n_procs = len(hfun_list)
+
+            with multiprocessing.Pool(n_procs) as p:
+                values_from_pool = p.map(get_value_from_hfun, hfun_list)
+
+            for original, from_pool in zip(data_original, values_from_pool):
+                npt.assert_array_equal(original, from_pool)
+
+        finally:
+            del hfun_list
+            del data_original
+
 
 if __name__ == '__main__':
     unittest.main()
