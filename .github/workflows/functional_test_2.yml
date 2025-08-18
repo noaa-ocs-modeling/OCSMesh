@@ -78,8 +78,11 @@ jobs:
 
     - name: Run geom build test
       shell: bash -l {0}
-      run: source tests/cli/build_geom.sh
-
+      run: |
+        export JIGSAW_LIB_PATH=$(python -c "from pathlib import Path; import jigsawpy; print(Path(jigsawpy.__file__).parent / '_lib')")
+        export LD_LIBRARY_PATH=$JIGSAW_LIB_PATH:$LD_LIBRARY_PATH
+        source tests/cli/build_geom.sh
+    
     - name: 'Upload Geom build results'
       uses: actions/upload-artifact@v4
       with:
