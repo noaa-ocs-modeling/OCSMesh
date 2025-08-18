@@ -40,7 +40,7 @@ jobs:
       shell: bash -l {0}
       run: |
         sudo apt-get update
-        sudo apt-get install -y gdal-bin cmake
+        sudo apt-get install -y gdal-bin cmake build-essential
 
     - name: Install Python
       uses: actions/setup-python@v4
@@ -79,19 +79,19 @@ jobs:
     - name: Run geom build test
       shell: bash -l {0}
       run: |
-        # 1. Find the site-packages directory
+        # Find the site-packages directory
         SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-        # 2. Search for the library file within site-packages to get its full path
+
+        # Search for the library file to get its full path
         LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
-        # 3. Get the parent directory of the found file
+
+        # Get the parent directory of the found file
         JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
-        # 4. Export the correct library path
+
+        # Export the correct library path
         export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
-        # --- You can leave this debug block in to confirm the fix ---
-        echo "Found library file at: ${LIB_FILE_PATH}"
-        echo "Setting LD_LIBRARY_PATH with: ${JIGSAW_LIB_PATH}"
-        # ---
-        # 5. Run the actual test
+
+        # Run the actual test
         source tests/cli/build_geom.sh
     
     - name: 'Upload Geom build results'
