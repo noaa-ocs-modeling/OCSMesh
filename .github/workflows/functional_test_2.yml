@@ -79,8 +79,21 @@ jobs:
     - name: Run geom build test
       shell: bash -l {0}
       run: |
+        # 1. Set the library path using the site-packages directory
         export JIGSAW_LIB_PATH=$(python -c "import site; print(site.getsitepackages()[0])")/jigsawpy/_lib
         export LD_LIBRARY_PATH=$JIGSAW_LIB_PATH:$LD_LIBRARY_PATH
+    
+        # --- DEBUGGING COMMANDS ---
+        echo "----------------------------------------"
+        echo "DEBUGGING LIBRARY PATHS"
+        echo "Generated JIGSAW_LIB_PATH: ${JIGSAW_LIB_PATH}"
+        echo "Full LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
+        echo "Listing contents of generated path:"
+        ls -l "${JIGSAW_LIB_PATH}"
+        echo "----------------------------------------"
+        # --- END DEBUGGING ---
+    
+        # 3. Run the actual test
         source tests/cli/build_geom.sh
     
     - name: 'Upload Geom build results'
