@@ -36,7 +36,11 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: 'true'
-
+    - name: Verify submodule checkout
+      run: |
+        echo "Listing contents of the submodule directory:"
+        ls -lR ./submodules/jigsaw-python
+  
     # STEP 2: Install all OS-level dependencies, including build tools
     - name: Install OS dependencies
       run: |
@@ -63,20 +67,67 @@ jobs:
         wget https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif -O /tmp/fullsize_dem.tif
         gdalwarp -tr 0.0005 0.0005 -r average -overwrite /tmp/fullsize_dem.tif /tmp/test_dem.tif
 
-    # STEP 6: Run tests with the corrected library path logic
-    - name: Run all tests
-      run: |
-        # Find the site-packages directory
-        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-        # Search for the library file to get its full path
-        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
-        # Get the parent directory of the found file
-        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
-        # Export the correct library path so the OS can find libjigsaw.so
-        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
+    - name: 'Upload test dem'
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-dem-${{ matrix.python-version }}
+        path: /tmp/test_dem.tif
+        retention-days: 7
 
-        # Run all test scripts in the correctly configured environment
+    # STEP 6: Run tests with the corrected library path logic and upload artifacts
+    - name: Run geom build test
+      shell: bash -l {0}
+      run: |
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
+        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
+        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
         source tests/cli/build_geom.sh
+
+    - name: 'Upload Geom build results'
+      uses: actions/upload-artifact@v4
+      with:
+        name: geom-build-results-${{ matrix.python-version }}
+        path: test_shape
+        retention-days: 7
+
+    - name: Run hfun build test
+      shell: bash -l {0}
+      run: |
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
+        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
+        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
         source tests/cli/build_hfun.sh
+
+    - name: 'Upload Hfun build results'
+      uses: actions/upload-artifact@v4
+      with:
+        name: hfun-build-results-${{ matrix.python-version }}
+        path: test.2dm
+        retention-days: 7
+
+    - name: Run remesh test
+      shell: bash -l {0}
+      run: |
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
+        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
+        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
         source tests/cli/remesh_by_dem.sh
+
+    - name: 'Upload remesh results'
+      uses: actions/upload-artifact@v4
+      with:
+        name: remesh-bydem-results-${{ matrix.python-version }}
+        path: remeshed.2dm
+        retention-days: 7
+
+    - name: Run Python API tests
+      shell: bash -l {0}
+      run: |
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
+        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
+        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
         python -m unittest discover tests/api -p "*.py"
