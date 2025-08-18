@@ -79,21 +79,19 @@ jobs:
     - name: Run geom build test
       shell: bash -l {0}
       run: |
-        # 1. Set the library path using the site-packages directory
-        export JIGSAW_LIB_PATH=$(python -c "import site; print(site.getsitepackages()[0])")/jigsawpy/_lib
-        export LD_LIBRARY_PATH=$JIGSAW_LIB_PATH:$LD_LIBRARY_PATH
-    
-        # --- DEBUGGING COMMANDS ---
-        echo "----------------------------------------"
-        echo "DEBUGGING LIBRARY PATHS"
-        echo "Generated JIGSAW_LIB_PATH: ${JIGSAW_LIB_PATH}"
-        echo "Full LD_LIBRARY_PATH: ${LD_LIBRARY_PATH}"
-        echo "Listing contents of generated path:"
-        ls -l "${JIGSAW_LIB_PATH}"
-        echo "----------------------------------------"
-        # --- END DEBUGGING ---
-    
-        # 3. Run the actual test
+        # 1. Find the site-packages directory
+        SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+        # 2. Search for the library file within site-packages to get its full path
+        LIB_FILE_PATH=$(find "${SITE_PACKAGES}" -name "libjigsaw.so")
+        # 3. Get the parent directory of the found file
+        JIGSAW_LIB_PATH=$(dirname "${LIB_FILE_PATH}")
+        # 4. Export the correct library path
+        export LD_LIBRARY_PATH="${JIGSAW_LIB_PATH}:${LD_LIBRARY_PATH}"
+        # --- You can leave this debug block in to confirm the fix ---
+        echo "Found library file at: ${LIB_FILE_PATH}"
+        echo "Setting LD_LIBRARY_PATH with: ${JIGSAW_LIB_PATH}"
+        # ---
+        # 5. Run the actual test
         source tests/cli/build_geom.sh
     
     - name: 'Upload Geom build results'
