@@ -560,6 +560,11 @@ class _ConstraintInfoCollector:
                 hfun.apply_constraints(constraint_list)
 
 
+def _apply_flow_limiter_task(args):
+    hfun, hmin, hmax, zmin, zmax = args
+    hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
+
+
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
 
@@ -1644,6 +1649,7 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
+        tasks = []
         raster_hfun_list = [
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
@@ -1655,8 +1661,10 @@ class HfunCollector(BaseHfun):
                     hmin = self._size_info['hmin']
                 if hmax is None:
                     hmax = self._size_info['hmax']
-                hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
+                tasks.append((hfun, hmin, hmax, zmin, zmax))
 
+        with Pool(processes=self._nprocs) as p:
+           p.map(_apply_flow_limiter_task, tasks)
 
     def _apply_const_val(self):
         """Internal: apply specified constant value refinements.
