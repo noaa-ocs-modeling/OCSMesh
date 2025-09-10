@@ -55,39 +55,6 @@ _logger = logging.getLogger(__name__)
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
-class HfunInputRaster:
-    """Descriptor class for holding reference to the input raster"""
-
-    def __set__(self, obj, raster: Raster) -> None:
-        if not isinstance(raster, Raster):
-            raise TypeError(f'Argument raster must be of type {Raster}, not '
-                            f'type {type(raster)}.')
-        # init output raster file
-        with ExitStack() as stack:
-
-            src = stack.enter_context(rasterio.open(raster.tmpfile))
-            if raster.chunk_size is not None:
-                windows = get_iter_windows(
-                    src.width, src.height, chunk_size=raster.chunk_size)
-            else:
-                windows = [rasterio.windows.Window(
-                    0, 0, src.width, src.height)]
-
-            meta = src.meta.copy()
-            meta.update({'driver': 'GTiff', 'dtype': np.float32})
-            dst = stack.enter_context(
-                    obj.modifying_raster(use_src_meta=False, **meta))
-            for window in windows:
-                values = src.read(window=window).astype(np.float32)
-                values[:] = np.finfo(np.float32).max
-                dst.write(values, window=window)
-
-        obj.__dict__['raster'] = raster
-        obj._chunk_size = raster.chunk_size
-        obj._overlap = raster.overlap
-
-    def __get__(self, obj, objtype=None) -> Raster:
-        return obj.__dict__['raster']
 
 
 class HfunRaster(BaseHfun, Raster):
@@ -193,13 +160,15 @@ class HfunRaster(BaseHfun, Raster):
     else.
     """
 
-    _raster = HfunInputRaster()
+
 
     def __init__(self,
                  raster: Raster,
+                 original_topo_path: str = None,
                  hmin: Optional[float] = None,
                  hmax: Optional[float] = None,
-                 verbosity: int = 0
+                 verbosity: int = 0,
+                 _init_empty: bool = True # Add this new flag to let newly created HfunRaster object has access to _init_empty
                  ) -> None:
         """Initialize a raster based size function object
 
@@ -233,14 +202,55 @@ class HfunRaster(BaseHfun, Raster):
         self._raster = raster
         # TODO: Store max and min as two separate constraints instead
         # of private attributes
+        # The 'raster' argument is the file we will be modifying.
+        # So, the Raster parent class should be initialized with its path.
+        super().__init__(raster.path, crs=raster.crs)
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
         self._constraints = []
         self._hold_const = False
         self._hold_const_hit = 0
+        
+
+        if _init_empty:
+                # This is the "Create New" mode, run only for the user.
+                # It creates the initial blank "max float" hfun file.
+                print("we are in init empty")
+                with ExitStack() as stack:
+                    src = stack.enter_context(rasterio.open(raster.tmpfile))
+                    meta = src.meta.copy()
+                    meta.update({'driver': 'GTiff', 'dtype': np.float32})
+                    dst = stack.enter_context(
+                            self.modifying_raster(use_src_meta=False, **meta))
+                    
+                    if raster.chunk_size is not None:
+                        windows = get_iter_windows(
+                            src.width, src.height, chunk_size=raster.chunk_size)
+                    else:
+                        windows = [rasterio.windows.Window(0, 0, src.width, src.height)]
+                    
+                    for window in windows:
+                        blank_values = np.full(
+                            (src.count, window.height, window.width),
+                            np.finfo(np.float32).max,
+                            dtype=np.float32
+                        )
+                        dst.write(blank_values, window=window)
+
+    # Now, handle the original topography raster.
+        if original_topo_path:
+            # The worker will provide the path to the original DEM.
+            # We create a new Raster object for it here. This object
+            # is ONLY used for reading elevation data.
+            self._raster = Raster(original_topo_path)
+        else:
+            # If no separate topo path is given, assume the input
+            # raster is both the hfun raster and the topography source.
+            self._raster = raster
 
 
+    # there is no use of __getstate__ and __setstate__ in the parallelization of hfun for subtidal flow limitar
     def __getstate__(self):
         state = super().__getstate__().copy()
         # Store source path instead of open DatasetReader

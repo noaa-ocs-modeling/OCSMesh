@@ -365,6 +365,7 @@ class Raster:
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
 
+# there is no use of __getstate__ and __setstate__ in my parallelization of hfun for subtidal flow limitar
     def __getstate__(self):
         state = super().__getstate__().copy()
         if 'source' in state and hasattr(state['source'], 'name'):
