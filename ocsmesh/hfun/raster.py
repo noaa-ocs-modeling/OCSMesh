@@ -55,7 +55,6 @@ _logger = logging.getLogger(__name__)
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
-
 class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
 
@@ -198,12 +197,10 @@ class HfunRaster(BaseHfun, Raster):
 
     def __init__(self,
                  raster: Raster,
-                #  original_topo_path: str = None,
                  hmin: Optional[float] = None,
                  hmax: Optional[float] = None,
                  verbosity: int = 0,
-                #  _init_empty: bool = True # Add this new flag to let newly created HfunRaster object has access to _init_empty
-                 initial_hfun_path: Optional[str] = None  # The ONLY new argument
+                 initial_hfun_path: Optional[str] = None
                  ) -> None:
         """Initialize a raster based size function object
 
@@ -234,12 +231,9 @@ class HfunRaster(BaseHfun, Raster):
 
         self._xy_cache = {}
         # NOTE: unlike Raster, HfunRaster has no "path" set
-        super().__init__(raster.path, crs=raster.crs)
         self._raster = raster
         # TODO: Store max and min as two separate constraints instead
         # of private attributes
-        # The 'raster' argument is the file we will be modifying.
-        # So, the Raster parent class should be initialized with its path.
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
@@ -259,7 +253,6 @@ class HfunRaster(BaseHfun, Raster):
             self.source = rasterio.open(self.tmpfile, 'r+')
 
 
-    # there is no use of __getstate__ and __setstate__ in the parallelization of hfun for subtidal flow limitar
     def __getstate__(self):
         state = super().__getstate__().copy()
         # Store source path instead of open DatasetReader
