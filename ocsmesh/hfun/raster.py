@@ -200,7 +200,7 @@ class HfunRaster(BaseHfun, Raster):
                  hmin: Optional[float] = None,
                  hmax: Optional[float] = None,
                  verbosity: int = 0,
-                 initial_hfun_path: Optional[str] = None
+                 initial_value: Optional[str] = None
                  ) -> None:
         """Initialize a raster based size function object
 
@@ -242,15 +242,13 @@ class HfunRaster(BaseHfun, Raster):
         self._hold_const_hit = 0
 
 
-        if initial_hfun_path:
+        if initial_value is not None:
             # This is the "Wrap Existing" mode for workers.
             # The descriptor has already created a blank file for us at self.tmpfile.
             # Now, we overwrite that blank file with the contents from the previous step.
-            shutil.copy2(initial_hfun_path, self.tmpfile)
+            shutil.copy2(initial_value, self.tmpfile)
             # We must re-open the source to reflect the copied content
-            # pylint: disable=E0203
-            self.source.close()
-            self.source = rasterio.open(self.tmpfile, 'r+')
+            self._src = rasterio.open(self.tmpfile, 'r+')
 
 
     def __getstate__(self):

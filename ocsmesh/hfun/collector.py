@@ -11,6 +11,7 @@ without having to worry about the details of merging the output size
 functions defined on each DEM or mesh.
 """
 import os
+import shutil
 import gc
 import logging
 import warnings
@@ -581,7 +582,7 @@ def _flow_limiter_task_worker(task: dict):
         hmin=global_hmin,
         hmax=global_hmax,
         verbosity=0,
-        initial_hfun_path=hfun_input_path
+        initial_value=hfun_input_path
     )
 
     # 3. Apply all the required flow limiter refinements.
@@ -630,7 +631,7 @@ def _const_val_task_worker(task: dict):
         hmin=global_hmin,
         hmax=global_hmax,
         verbosity=0,
-        initial_hfun_path=hfun_input_path
+        initial_value=hfun_input_path
     )
 
     # 3. Apply all the required constant value refinements for this raster.
@@ -766,7 +767,6 @@ class HfunCollector(BaseHfun):
 
          # Add a persistent working directory for this instance's outputs
         self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
-        self._applied_rasters = {} # To keep track of processed raster paths
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -883,6 +883,11 @@ class HfunCollector(BaseHfun):
                     raise TypeError("Input file extension not supported!")
 
             self._hfun_list.append(hfun) # pylint: disable=E0606
+
+
+    def __del__(self):
+        if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
+            shutil.rmtree(self._work_dir, ignore_errors=True)
 
 
     def msh_t(self) -> jigsaw_msh_t:
@@ -1658,12 +1663,6 @@ class HfunCollector(BaseHfun):
                             })
             p.join()
 
-            for i, hfun in enumerate(self._hfun_list):
-                if isinstance(hfun, HfunRaster):
-                    # After modification, the latest data is in hfun.tmpfile.
-                    # We record this path in our official tracker.
-                    self._applied_rasters[i] = hfun.tmpfile
-
             # hfun objects cause issue with pickling
             # -> cannot be passed to pool
 #            with Pool(processes=self._nprocs) as p:
@@ -1725,7 +1724,91 @@ class HfunCollector(BaseHfun):
                         })
 
 
+    @property
+    def execution_mode(self) -> str:
+        """
+        Gets the current execution mode for refinements ('serial' or 'parallel').
+        Defaults to 'serial' if not previously set.
+        """
+        # Lazy Initialization: If the attribute doesn't exist yet,
+        # create it here with the default value.
+        if not hasattr(self, '_execution_mode'):
+            self._execution_mode = 'serial'
+        return self._execution_mode
+
+
+    @execution_mode.setter
+    def execution_mode(self, mode: str) -> None:
+        """
+        Sets the execution mode for refinements.
+
+        Parameters
+        ----------
+        mode : str
+            The desired mode. Must be either 'serial' or 'parallel'.
+        """
+        if mode not in ['serial', 'parallel']:
+            raise ValueError("Execution mode must be either 'serial' or 'parallel'")
+
+        if mode == 'parallel' and (self._nprocs is None or self._nprocs <= 1):
+            warnings.warn(
+                f"Execution mode set to 'parallel' but nprocs is {self._nprocs}. "
+                "Execution will fall back to serial. Set nprocs > 1 for parallel execution."
+            )
+
+        self._execution_mode = mode
+
+
     def _apply_flow_limiters(self) -> None:
+        """
+        Dispatches to either the serial or parallel implementation based on
+        the current execution mode.
+        """
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Applying flow limiters using PARALLEL method.")
+            self._apply_flow_limiters_parallel()
+        else:
+            _logger.info("Applying flow limiters using SERIAL method.")
+            self._apply_flow_limiters_serial()
+
+
+    def _apply_flow_limiters_serial(self) -> None:
+        """Internal: apply specified sub tidal flow limiter refinements
+
+        Applies specified subtidal flow limiter refinements for
+        the exact algorithm.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_flow_limiters_fast :
+        """
+
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
+            for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+                if src_idx is not None and in_idx not in src_idx:
+                    continue
+                if hmin is None:
+                    hmin = self._size_info['hmin']
+                if hmax is None:
+                    hmax = self._size_info['hmax']
+                hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
+
+
+    def _apply_flow_limiters_parallel(self) -> None:
         """
         Applies specified subtidal flow limiter refinements in parallel using a
         robust file-based worker pattern.
@@ -1752,10 +1835,10 @@ class HfunCollector(BaseHfun):
         # First, group all applicable refinement rules by the HfunRaster they apply to.
         # This is more efficient than creating a separate task for every single rule.
 
-        for in_idx, hfun in enumerate(self._hfun_list):
-            if not isinstance(hfun, HfunRaster):
-                continue
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
+        for in_idx, hfun in enumerate(raster_hfun_list):
             limiter_rules_for_this_hfun = []
             for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
                 # Check if the rule applies to this specific hfun instance
@@ -1781,7 +1864,7 @@ class HfunCollector(BaseHfun):
             # Determine the correct input file. If this raster was already processed
             # by another step (e.g., _apply_constraints), use that output file.
             # Otherwise, use the original hfun path.
-            hfun_input_path = self._applied_rasters.get(in_idx, hfun.tmpfile)
+            hfun_input_path = hfun.tmpfile
 
 
             # The path to the original, unmodified topography/DEM data.
@@ -1832,22 +1915,14 @@ class HfunCollector(BaseHfun):
             idx = result['original_index']
             output_path = result['output_path']
             original_hfun = self._hfun_list[idx]
-
-            # Create a new Raster object pointing to the processed file.
-            new_hfun_values_raster = Raster(output_path)
-
             # Create a new, updated HfunRaster instance to replace the old one.
             new_hfun_objects[idx] = HfunRaster(
                 raster=original_hfun.raster,      # Pass the original topography Raster object
                 hmin=original_hfun.hmin,
                 hmax=original_hfun.hmax,
                 verbosity=original_hfun.verbosity,
-                initial_hfun_path=output_path     # Pass the path to the file created by the worker
+                initial_value=output_path     # Pass the path to the file created by the worker
             )
-
-            # IMPORTANT: Update the tracking dictionary so that the next processing
-            # step (e.g., _apply_const_val) uses the output of this step as its input.
-            self._applied_rasters[idx] = output_path
 
         # Finally, update the main list with the new objects.
         for idx, new_hfun in new_hfun_objects.items():
@@ -1855,7 +1930,55 @@ class HfunCollector(BaseHfun):
             # The old hfun object at this index will be replaced and eventually garbage collected.
             self._hfun_list[idx] = new_hfun
 
-    def _apply_const_val(self):
+
+    def _apply_const_val(self) -> None:
+        """
+        Dispatches to either the serial or parallel implementation based on
+        the current execution mode.
+        """
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Applying constant values using PARALLEL method.")
+            self._apply_const_val_parallel()
+        else:
+            _logger.info("Applying constant values using SERIAL method.")
+            self._apply_const_val_serial()
+
+
+    def _apply_const_val_serial(self):
+        """Internal: apply specified constant value refinements.
+
+        Applies constant value refinements for the exact algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_const_val_fast :
+        """
+
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
+            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+                if src_idx is not None and in_idx not in src_idx:
+                    continue
+                level0 = None
+                level1 =  None
+                if ctr0 is not None:
+                    level0 = ctr0.level
+                if ctr1 is not None:
+                    level1 = ctr1.level
+                hfun.add_constant_value(const_val, level0, level1)
+
+
+    def _apply_const_val_parallel(self):
         """Internal: apply specified constant value refinements.
 
         Applies constant value refinements for the exact algorithm.
@@ -1878,10 +2001,11 @@ class HfunCollector(BaseHfun):
         hfuns_to_process = {}
 
         # Group all applicable constant value rules by the HfunRaster they apply to.
-        for in_idx, hfun in enumerate(self._hfun_list):
-            if not isinstance(hfun, HfunRaster):
-                continue
 
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
             rules_for_this_hfun = []
             for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
                 if src_idx is None or in_idx in src_idx:
@@ -1897,10 +2021,8 @@ class HfunCollector(BaseHfun):
         # Now, create the simple task dictionaries for the pool.
         for in_idx, data in hfuns_to_process.items():
             hfun = data['hfun']
-
-            # CRITICAL: Get the input path from the LATEST known state, which
-            # could be the result from the flow limiter step.
-            hfun_input_path = self._applied_rasters.get(in_idx, hfun.tmpfile)
+            # Determine the correct input file. If this raster was already processed
+            hfun_input_path = hfun.tmpfile
             topo_input_path = hfun._raster.path # pylint: disable=W0212
 
             output_path = os.path.join(self._work_dir, f"const_val_result_{in_idx}.tif")
@@ -1937,7 +2059,6 @@ class HfunCollector(BaseHfun):
             idx = result['original_index']
             output_path = result['output_path']
             original_hfun = self._hfun_list[idx]
-            new_hfun_values_raster = Raster(output_path)
 
             # Create the new HfunRaster, ensuring we don't wipe the worker's data.
             new_hfun_objects[idx] = HfunRaster(
@@ -1945,11 +2066,8 @@ class HfunCollector(BaseHfun):
             hmin=original_hfun.hmin,
             hmax=original_hfun.hmax,
             verbosity=original_hfun.verbosity,
-            initial_hfun_path=output_path       # Pass the path to the file created by the worker
+            initial_value=output_path       # Pass the path to the file created by the worker
             )
-
-            # CRITICAL: Update the state tracker for the *next* step in the chain.
-            self._applied_rasters[idx] = output_path
 
         # Finally, update the main list with the newly created objects.
         for idx, new_hfun in new_hfun_objects.items():
