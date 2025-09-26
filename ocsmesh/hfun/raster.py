@@ -246,9 +246,10 @@ class HfunRaster(BaseHfun, Raster):
             # This is the "Wrap Existing" mode for workers.
             # The descriptor has already created a blank file for us at self.tmpfile.
             # Now, we overwrite that blank file with the contents from the previous step.
-            shutil.copy2(initial_value, self.tmpfile)
-            # We must re-open the source to reflect the copied content
-            self._src = rasterio.open(self.tmpfile, 'r+')
+            if isinstance(initial_value, (str, pathlib.Path)):
+                shutil.copy2(initial_value, self.tmpfile)
+                # We must re-open the source to reflect the copied content
+                self._src = rasterio.open(self.tmpfile, 'r+')
 
 
     def __getstate__(self):
