@@ -365,24 +365,6 @@ class Raster:
         for window in self.iter_windows(chunk_size, overlap):
             yield window, self.get_window_bounds(window)
 
-    def __getstate__(self):
-        state = super().__getstate__().copy()
-        if 'source' in state and hasattr(state['source'], 'name'):
-            state['source_path'] = state['source'].name
-            state.pop('source', None)
-        return state
-
-    def __setstate__(self, state):
-        if 'source_path' in state:
-            src_path = state['source_path']
-            fd, copy_path = tempfile.mkstemp(prefix=tmpdir, suffix=Path(src_path).suffix)
-            os.close(fd)
-            shutil.copy2(src_path, copy_path)
-            state['tmpfile']=copy_path
-            state['source']=rasterio.open(copy_path)
-            state.pop('source_path',None)
-        self.__dict__.update(state)
-
     @contextmanager
     def modifying_raster(
             self,
