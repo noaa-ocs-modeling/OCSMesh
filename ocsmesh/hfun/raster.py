@@ -251,7 +251,6 @@ class HfunRaster(BaseHfun, Raster):
                 # We must re-open the source to reflect the copied content
                 self._src = rasterio.open(self.tmpfile, 'r+')
 
-
     def __getstate__(self):
         state = super().__getstate__().copy()
         # Store source path instead of open DatasetReader
