@@ -362,14 +362,32 @@ class RegionConstraint(Constraint):
 
         if crs is None:
             crs = self._crs
-        gdf_pts = gpd.points_from_xy(locations[:, 0], locations[:, 1], crs=crs).to_crs(self._crs)
+
+        # Create a gdf for the input points and Reproject points if necessary
+        points_gdf = gpd.GeoDataFrame(
+            geometry=gpd.points_from_xy(locations[:, 0], locations[:, 1], crs=crs)
+        )
+        if points_gdf.crs != self._crs:
+            points_gdf = points_gdf.to_crs(self._crs)
+
+        # Create a gdf for the constraint region
+        region_gdf = gpd.GeoDataFrame(
+            {'geometry': [self._region]}, crs=self._crs
+        )
+
+        # Spatial join to find points within the region
+        points_within_gdf = gpd.sjoin(points_gdf, region_gdf, predicate='within')
+        within_mask_flat = np.zeros(len(locations), dtype=bool)
+        within_mask_flat[points_within_gdf.index] = True
+        within_mask = within_mask_flat.reshape(old_values.shape)
 
         return_values = old_values.copy()
 
         mask = (
-            gdf_pts.within(self._region).reshape(return_values.shape)
+            within_mask
             & np.logical_not(self.satisfies(return_values, self.value))
         )
+
         return_values[mask] = self.value
 
         return_values = self._apply_rate(ref_values, return_values, locations, mask)
