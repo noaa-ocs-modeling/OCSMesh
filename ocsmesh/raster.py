@@ -4,7 +4,8 @@ This module implements wrapper for basic functionalities of handling
 raster files such as CRS transformations, resampling, clipping,
 extracting & overriding data, plotting, etc.
 """
-
+from pathlib import Path
+import shutil
 import math
 import hashlib
 import logging

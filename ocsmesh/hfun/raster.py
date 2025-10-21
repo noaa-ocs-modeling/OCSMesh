@@ -1,7 +1,8 @@
 """This module define class for raster based size function
 """
-
+from pathlib import Path
 import functools
+import shutil
 import gc
 import logging
 import os
@@ -51,6 +52,8 @@ warnings.filterwarnings(
 
 _logger = logging.getLogger(__name__)
 
+tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+os.makedirs(tmpdir, exist_ok=True)
 
 class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
@@ -196,7 +199,8 @@ class HfunRaster(BaseHfun, Raster):
                  raster: Raster,
                  hmin: Optional[float] = None,
                  hmax: Optional[float] = None,
-                 verbosity: int = 0
+                 verbosity: int = 0,
+                 initial_value: Optional[str] = None
                  ) -> None:
         """Initialize a raster based size function object
 
@@ -238,7 +242,18 @@ class HfunRaster(BaseHfun, Raster):
         self._hold_const_hit = 0
 
 
+        if initial_value is not None:
+            # This is the "Wrap Existing" mode for workers.
+            # The descriptor has already created a blank file for us at self.tmpfile.
+            # Now, we overwrite that blank file with the contents from the previous step.
+            if isinstance(initial_value, (str, pathlib.Path)):
+                shutil.copy2(initial_value, self.tmpfile)
+                # We must re-open the source to reflect the copied content
+                self._src = rasterio.open(self.tmpfile, 'r+')
+
+
     def __del__(self):
+        super().__del__()
         for _, memfile_path in self._xy_cache.items():
             pathlib.Path(memfile_path).unlink()
 

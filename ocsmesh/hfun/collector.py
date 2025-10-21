@@ -10,8 +10,8 @@ This enables the user to define size on multiple DEM and mesh
 without having to worry about the details of merging the output size
 functions defined on each DEM or mesh.
 """
-
 import os
+import shutil
 import gc
 import logging
 import warnings
@@ -37,7 +37,6 @@ from shapely.geometry import (
     MultiPolygon,
     Polygon,
     GeometryCollection,
-    box
 )
 from shapely import ops
 from jigsawpy import jigsaw_msh_t
@@ -560,6 +559,101 @@ class _ConstraintInfoCollector:
                 hfun.apply_constraints(constraint_list)
 
 
+def _flow_limiter_task_worker(task: dict):
+    """
+    A self-contained worker that operates ONLY on file paths.
+    """
+
+    # 1. Unpack the simple, pickleable task description
+    original_index = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path = task['output_path']
+    global_hmin = task['global_hmin']
+    global_hmax = task['global_hmax']
+    limiter_params_list = task['limiter_params']
+
+    # Let's initialize directly from the input path.
+
+    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+    topo_raster = Raster(topo_input_path)
+    worker_hfun = HfunRaster(
+        raster=topo_raster,
+        hmin=global_hmin,
+        hmax=global_hmax,
+        verbosity=0,
+        initial_value=hfun_input_path
+    )
+
+    # 3. Apply all the required flow limiter refinements.
+    #    Each call will modify the worker_hfun's internal state (_tmpfile).
+    for params in limiter_params_list:
+        worker_hfun.add_subtidal_flow_limiter(
+            hmin=params['hmin'],
+            hmax=params['hmax'],
+            lower_bound=params['zmin'],
+            upper_bound=params['zmax']
+        )
+
+    # 4. CRITICAL FIX: Explicitly save the final state of the worker's
+    #    object to the designated output path.
+    worker_hfun.save(output_path)
+
+    # 5. The work is done. Return the simple result dictionary.
+    return {
+        'status': 'success',
+        'original_index': original_index,
+        'output_path': output_path
+    }
+
+
+def _const_val_task_worker(task: dict):
+    """
+    A self-contained worker for applying constant value refinements.
+    It reads the state from the previous step, applies its rules, and saves
+    a new file with the result.
+    """
+
+    # 1. Unpack the simple, pickleable task description
+    original_index = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path = task['output_path']
+    global_hmin = task['global_hmin']
+    global_hmax = task['global_hmax']
+    const_val_rules = task['const_val_rules']
+
+    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+    #    This is the "Wrap Existing Painting" mode.
+    topo_raster = Raster(topo_input_path)
+    worker_hfun = HfunRaster(
+        raster=topo_raster,
+        hmin=global_hmin,
+        hmax=global_hmax,
+        verbosity=0,
+        initial_value=hfun_input_path
+    )
+
+    # 3. Apply all the required constant value refinements for this raster.
+    for rule in const_val_rules:
+        worker_hfun.add_constant_value(
+            value=rule['value'],
+            lower_bound=rule['lower_bound'],
+            upper_bound=rule['upper_bound']
+        )
+
+    # 4. Explicitly save the final state of the worker's object to the
+    #    designated output path.
+    worker_hfun.save(output_path)
+
+    # 5. The work is done. Return a simple result dictionary.
+    return {
+        'status': 'success',
+        'original_index': original_index,
+        'output_path': output_path
+    }
+
+
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
 
@@ -671,6 +765,8 @@ class HfunCollector(BaseHfun):
 
         # NOTE: Input Hfuns and their Rasters can get modified
 
+         # Add a persistent working directory for this instance's outputs
+        self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -787,6 +883,11 @@ class HfunCollector(BaseHfun):
                     raise TypeError("Input file extension not supported!")
 
             self._hfun_list.append(hfun) # pylint: disable=E0606
+
+
+    def __del__(self):
+        if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
+            shutil.rmtree(self._work_dir, ignore_errors=True)
 
 
     def msh_t(self) -> jigsaw_msh_t:
@@ -1561,6 +1662,7 @@ class HfunCollector(BaseHfun):
                                 'pool': p
                             })
             p.join()
+
             # hfun objects cause issue with pickling
             # -> cannot be passed to pool
 #            with Pool(processes=self._nprocs) as p:
@@ -1622,7 +1724,55 @@ class HfunCollector(BaseHfun):
                         })
 
 
+    @property
+    def execution_mode(self) -> str:
+        """
+        Gets the current execution mode for refinements ('serial' or 'parallel').
+        Defaults to 'serial' if not previously set.
+        """
+        # Lazy Initialization: If the attribute doesn't exist yet,
+        # create it here with the default value.
+        if not hasattr(self, '_execution_mode'):
+            self._execution_mode = 'serial'
+        return self._execution_mode
+
+
+    @execution_mode.setter
+    def execution_mode(self, mode: str) -> None:
+        """
+        Sets the execution mode for refinements.
+
+        Parameters
+        ----------
+        mode : str
+            The desired mode. Must be either 'serial' or 'parallel'.
+        """
+        if mode not in ['serial', 'parallel']:
+            raise ValueError("Execution mode must be either 'serial' or 'parallel'")
+
+        if mode == 'parallel' and (self._nprocs is None or self._nprocs <= 1):
+            warnings.warn(
+                f"Execution mode set to 'parallel' but nprocs is {self._nprocs}. "
+                "Execution will fall back to serial. Set nprocs > 1 for parallel execution."
+            )
+
+        self._execution_mode = mode
+
+
     def _apply_flow_limiters(self) -> None:
+        """
+        Dispatches to either the serial or parallel implementation based on
+        the current execution mode.
+        """
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Applying flow limiters using PARALLEL method.")
+            self._apply_flow_limiters_parallel()
+        else:
+            _logger.info("Applying flow limiters using SERIAL method.")
+            self._apply_flow_limiters_serial()
+
+
+    def _apply_flow_limiters_serial(self) -> None:
         """Internal: apply specified sub tidal flow limiter refinements
 
         Applies specified subtidal flow limiter refinements for
@@ -1658,7 +1808,143 @@ class HfunCollector(BaseHfun):
                 hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
 
 
-    def _apply_const_val(self):
+    def _apply_flow_limiters_parallel(self) -> None:
+        """
+        Applies specified subtidal flow limiter refinements in parallel using a
+        robust file-based worker pattern.
+
+        This method coordinates the parallel processing by:
+        1.  Preparing simple, pickleable 'task' dictionaries for each HfunRaster
+            that needs modification.
+        2.  Distributing these tasks to a pool of worker processes.
+        3.  Integrating the results by creating new HfunRaster objects from the
+            output files generated by the workers.
+        """
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function is part of the 'exact' method and does not support 'fast' mode."
+            )
+
+        # --- Phase 1: PREPARATION (Coordinator) ---
+        # This phase gathers all the work that needs to be done and packages it
+        # into a list of simple, pickleable tasks for the worker processes.
+
+        tasks = []
+        hfuns_to_process = {}
+
+        # First, group all applicable refinement rules by the HfunRaster they apply to.
+        # This is more efficient than creating a separate task for every single rule.
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
+            limiter_rules_for_this_hfun = []
+            for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+                # Check if the rule applies to this specific hfun instance
+                if src_idx is None or in_idx in src_idx:
+                    limiter_rules_for_this_hfun.append({
+                        'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
+                        'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
+                        'zmin': zmin,
+                        'zmax': zmax
+                    })
+
+            # If any rules were found, mark this HfunRaster for processing.
+            if limiter_rules_for_this_hfun:
+                hfuns_to_process[in_idx] = {
+                    'hfun': hfun,
+                    'rules': limiter_rules_for_this_hfun
+                }
+
+        # Now, create the simple task dictionaries that can be sent to the pool.
+        for in_idx, data in hfuns_to_process.items():
+            hfun = data['hfun']
+
+            # Determine the correct input file. If this raster was already processed
+            # by another step (e.g., _apply_constraints), use that output file.
+            # Otherwise, use the original hfun path.
+            hfun_input_path = hfun.tmpfile
+
+
+            # The path to the original, unmodified topography/DEM data.
+            topo_input_path = hfun._raster.path # pylint: disable=W0212
+
+            # Define a unique output path in our persistent working directory.
+            output_path = os.path.join(self._work_dir, f"flow_limiter_result_{in_idx}.tif")
+
+            task = {
+                'original_index': in_idx,
+                'hfun_input_path': hfun_input_path,
+                'topo_input_path': topo_input_path,
+                'output_path': output_path,
+                'global_hmin': hfun._hmin, # pylint: disable=W0212
+                'global_hmax': hfun._hmax, # pylint: disable=W0212
+                'limiter_params': data['rules']
+            }
+            tasks.append(task)
+
+
+        # If no tasks were generated, there's nothing to do.
+        if not tasks:
+            _logger.info("No flow limiter tasks to execute.")
+            return
+
+        # --- Phase 2: EXECUTION (Distribute to Laborers) ---
+        # This phase sends the prepared tasks to a pool of worker processes
+        # and waits for them to complete the heavy computational work.
+
+        _logger.info(f"Starting parallel execution for {len(tasks)} flow limiter tasks...")
+        with Pool(processes=self._nprocs) as p:
+            results = p.map(_flow_limiter_task_worker, tasks)
+        _logger.info("Parallel execution finished.")
+
+        # --- Phase 3: INTEGRATION (Process Results) ---
+        # This phase takes the results from the workers (which are just file paths)
+        # and updates the main HfunCollector's state with the new, processed data.
+
+        new_hfun_objects = {}
+        for result in results:
+            if result['status'] == 'error':
+                _logger.error(
+                    f"Worker failed for HfunRaster at index "
+                    f"{result['original_index']}: {result['error']}"
+                )
+                continue
+
+            idx = result['original_index']
+            output_path = result['output_path']
+            original_hfun = self._hfun_list[idx]
+            # Create a new, updated HfunRaster instance to replace the old one.
+            new_hfun_objects[idx] = HfunRaster(
+                raster=original_hfun.raster,      # Pass the original topography Raster object
+                hmin=original_hfun.hmin,
+                hmax=original_hfun.hmax,
+                verbosity=original_hfun.verbosity,
+                initial_value=output_path     # Pass the path to the file created by the worker
+            )
+
+        # Finally, update the main list with the new objects.
+        for idx, new_hfun in new_hfun_objects.items():
+            _logger.info(f"Updating HfunCollector state with processed raster for index {idx}.")
+            # The old hfun object at this index will be replaced and eventually garbage collected.
+            self._hfun_list[idx] = new_hfun
+
+
+    def _apply_const_val(self) -> None:
+        """
+        Dispatches to either the serial or parallel implementation based on
+        the current execution mode.
+        """
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Applying constant values using PARALLEL method.")
+            self._apply_const_val_parallel()
+        else:
+            _logger.info("Applying constant values using SERIAL method.")
+            self._apply_const_val_serial()
+
+
+    def _apply_const_val_serial(self):
         """Internal: apply specified constant value refinements.
 
         Applies constant value refinements for the exact algorithm.
@@ -1690,6 +1976,103 @@ class HfunCollector(BaseHfun):
                 if ctr1 is not None:
                     level1 = ctr1.level
                 hfun.add_constant_value(const_val, level0, level1)
+
+
+    def _apply_const_val_parallel(self):
+        """Internal: apply specified constant value refinements.
+
+        Applies constant value refinements for the exact algorithm.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_const_val_fast :
+        """
+
+        if self._method == 'fast':
+            raise NotImplementedError(
+                "This function does not suuport fast hfun method")
+
+       # --- Phase 1: PREPARATION (Coordinator) ---
+        tasks = []
+        hfuns_to_process = {}
+
+        # Group all applicable constant value rules by the HfunRaster they apply to.
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+
+        for in_idx, hfun in enumerate(raster_hfun_list):
+            rules_for_this_hfun = []
+            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+                if src_idx is None or in_idx in src_idx:
+                    rules_for_this_hfun.append({
+                        'value': const_val,
+                        'lower_bound': ctr0.level if ctr0 else None,
+                        'upper_bound': ctr1.level if ctr1 else None
+                    })
+
+            if rules_for_this_hfun:
+                hfuns_to_process[in_idx] = { 'hfun': hfun, 'rules': rules_for_this_hfun }
+
+        # Now, create the simple task dictionaries for the pool.
+        for in_idx, data in hfuns_to_process.items():
+            hfun = data['hfun']
+            # Determine the correct input file. If this raster was already processed
+            hfun_input_path = hfun.tmpfile
+            topo_input_path = hfun._raster.path # pylint: disable=W0212
+
+            output_path = os.path.join(self._work_dir, f"const_val_result_{in_idx}.tif")
+
+            task = {
+                'original_index': in_idx,
+                'hfun_input_path': hfun_input_path,
+                'topo_input_path': topo_input_path,
+                'output_path': output_path,
+                'global_hmin': hfun._hmin, # pylint: disable=W0212
+                'global_hmax': hfun._hmax, # pylint: disable=W0212
+                'const_val_rules': data['rules']
+            }
+            tasks.append(task)
+
+        if not tasks:
+            _logger.info("No constant value tasks to execute.")
+            return
+
+
+            # --- Phase 2: EXECUTION ---
+        _logger.info(f"Starting parallel execution for {len(tasks)} constant value tasks...")
+        with Pool(processes=self._nprocs) as p:
+            results = p.map(_const_val_task_worker, tasks)
+        _logger.info("Parallel execution finished.")
+
+        # --- Phase 3: INTEGRATION ---
+        new_hfun_objects = {}
+        for result in results:
+            if result['status'] == 'error':
+                _logger.error("Val worker %s failed: %s", result['original_index'], result['error'])
+                continue
+
+            idx = result['original_index']
+            output_path = result['output_path']
+            original_hfun = self._hfun_list[idx]
+
+            # Create the new HfunRaster, ensuring we don't wipe the worker's data.
+            new_hfun_objects[idx] = HfunRaster(
+            raster=original_hfun.raster,        # Pass the original topography Raster object
+            hmin=original_hfun.hmin,
+            hmax=original_hfun.hmax,
+            verbosity=original_hfun.verbosity,
+            initial_value=output_path       # Pass the path to the file created by the worker
+            )
+
+        # Finally, update the main list with the newly created objects.
+        for idx, new_hfun in new_hfun_objects.items():
+            _logger.info(f"Updating HfunCollector with const_val raster at index {idx}.")
+            self._hfun_list[idx] = new_hfun
 
 
     def _apply_patch(self, apply_to: Optional[SizeFuncList] = None) -> None:

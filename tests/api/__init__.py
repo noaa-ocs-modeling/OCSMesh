@@ -10,7 +10,7 @@ from ocsmesh.raster import Raster
 
 # Find a better way!
 tif_url = (
-    'https://coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif'
+    'https://chs.coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif'
 )
 TEST_FILE = os.path.join(tempfile.gettempdir(), 'test_dem.tif')
 if not Path(TEST_FILE).exists():
