@@ -145,6 +145,29 @@ class TestMeshData(unittest.TestCase):
         # Values should remain [99, 100]
         np.testing.assert_array_equal(mesh.values, [99, 100])
 
+    def test_element_integer_validation(self):
+        """Test that elements are rejected if they contain decimals."""
+        mesh = MeshData(coords=self.coords_2d)
+
+        # 1. Triangles
+        # Valid floats (e.g. 1.0) should pass and convert to int
+        mesh.tria = [[0.0, 1.0, 2.0]]
+        self.assertTrue(np.issubdtype(mesh.tria.dtype, np.integer))
+        self.assertEqual(mesh.tria[0, 0], 0)
+
+        # Invalid floats (e.g. 0.5) should raise ValueError
+        with self.assertRaisesRegex(ValueError, "Triangle elements must be integers"):
+            mesh.tria = [[0.5, 1.0, 2.0]]
+
+        # 2. Quads
+        # Valid floats
+        mesh.quad = [[0.0, 1.0, 2.0, 3.0]]
+        self.assertTrue(np.issubdtype(mesh.quad.dtype, np.integer))
+
+        # Invalid floats
+        with self.assertRaisesRegex(ValueError, "Quad elements must be integers"):
+            mesh.quad = [[0.1, 1.0, 2.0, 3.0]]
+
     def test_list_input_compatibility(self):
         """Test that Python lists are correctly converted to numpy arrays."""
         mesh = MeshData(

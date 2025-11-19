@@ -158,18 +158,25 @@ class MeshData:
         Raises
         ------
         ValueError
-            If assigned array does not have 3 columns.
+            If assigned array does not have 3 columns or contains non-integers.
         """
         return self._tria
 
     @tria.setter
     def tria(self, new_tria: Union[np.ndarray, List]):
-        arr = np.array(new_tria, dtype=int)
+        # Create array without forcing dtype=int yet to check for decimals
+        arr = np.array(new_tria)
 
         # Allow empty assignment
         if arr.size == 0:
             self._tria = np.empty((0, 3), dtype=int)
             return
+
+        # Check for non-integer values (e.g. 1.5)
+        if np.issubdtype(arr.dtype, np.floating) and not np.all(arr == arr.astype(int)):
+            raise ValueError("Triangle elements must be integers.")
+        # Safe to cast now
+        arr = arr.astype(int)
 
         # Validation: Must have 3 columns
         if arr.ndim != 2 or arr.shape[1] != 3:
@@ -195,18 +202,25 @@ class MeshData:
         Raises
         ------
         ValueError
-            If assigned array does not have 4 columns.
+            If assigned array does not have 4 columns or contains non-integers.
         """
         return self._quad
 
     @quad.setter
     def quad(self, new_quad: Union[np.ndarray, List]):
-        arr = np.array(new_quad, dtype=int)
+        # Create array without forcing dtype=int yet to check for decimals
+        arr = np.array(new_quad)
 
         # Allow empty assignment
         if arr.size == 0:
             self._quad = np.empty((0, 4), dtype=int)
             return
+
+        # Check for non-integer values (e.g. 1.5)
+        if np.issubdtype(arr.dtype, np.floating) and not np.all(arr == arr.astype(int)):
+            raise ValueError("Quad elements must be integers.")
+        # Safe to cast now
+        arr = arr.astype(int)
 
         # Validation: Must have 4 columns
         if arr.ndim != 2 or arr.shape[1] != 4:
