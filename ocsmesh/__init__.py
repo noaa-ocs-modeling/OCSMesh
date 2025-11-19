@@ -24,6 +24,7 @@ except OSError as e:
     os.symlink(src_libpath, tgt_libpath)
 
 
+from .internal import MeshData
 from .raster import Raster
 from .mesh import Mesh
 from .geom import Geom
