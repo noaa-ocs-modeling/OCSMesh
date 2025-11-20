@@ -1,6 +1,7 @@
 from typing import List, Optional, Union
 
 import numpy as np
+from pyproj import CRS
 
 
 class MeshData:
@@ -20,6 +21,9 @@ class MeshData:
     values : array_like, optional
         Nodal values/attributes with shape (K,) for scalars or (K, D) for
         vectors. If None, initialized to (K,) zeros (scalar default).
+    crs : Union[str, CRS], optional
+        Coordinate Reference System. Can be a string (e.g., "EPSG:4326") or
+        a pyproj.CRS object. Defaults to None.
 
     Attributes
     ----------
@@ -31,6 +35,8 @@ class MeshData:
         Quad connectivity array with shape (M, 4).
     values : ndarray
         Nodal values/attributes with shape (K,) or (K, D).
+    crs : CRS
+        The coordinate reference system of the mesh.
     num_nodes : int
         Number of nodes in the mesh.
     """
@@ -40,13 +46,15 @@ class MeshData:
         coords: Union[np.ndarray, List],
         tria: Optional[Union[np.ndarray, List]] = None,
         quad: Optional[Union[np.ndarray, List]] = None,
-        values: Optional[Union[np.ndarray, List]] = None
+        values: Optional[Union[np.ndarray, List]] = None,
+        crs: Optional[Union[str, CRS]] = None
     ):
         # Initialize internal storage variables
         self._coords = None
         self._tria = None
         self._quad = None
         self._values = None
+        self._crs = None
 
         # Set Coordinates (Required)
         # Uses the setter defined below to handle validation immediately
@@ -70,15 +78,20 @@ class MeshData:
         if values is not None:
             self.values = values
 
+        # Initialize CRS (Optional)
+        self.crs = crs
+
     def __repr__(self):
         # Improve repr to show vector dimension if applicable
         val_shape = self.values.shape if self.values is not None else (0,)
+        crs_info = self.crs.to_string() if self.crs else "None"
         return (
             f"<MeshData: "
             f"{self.num_nodes} Nodes, "
             f"{self.tria.shape[0]} Triangles, "
             f"{self.quad.shape[0]} Quads, "
-            f"Values Shape: {val_shape}>"
+            f"Values Shape: {val_shape}, "
+            f"CRS: {crs_info}>"
         )
 
     @property
@@ -263,3 +276,25 @@ class MeshData:
             )
 
         self._values = arr
+
+    # ==========================
+    # CRS Property
+    # ==========================
+    @property
+    def crs(self) -> Optional[CRS]:
+        """
+        Coordinate Reference System.
+
+        Returns
+        -------
+        pyproj.CRS or None
+        """
+        return self._crs
+
+    @crs.setter
+    def crs(self, new_crs: Optional[Union[str, CRS]]):
+        if new_crs is None:
+            self._crs = None
+        else:
+            # Validate and convert using pyproj
+            self._crs = CRS.from_user_input(new_crs)

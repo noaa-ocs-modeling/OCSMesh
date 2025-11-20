@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+from pyproj import CRS, CRSError
 
 from ocsmesh import MeshData
 
@@ -176,6 +177,38 @@ class TestMeshData(unittest.TestCase):
         )
         self.assertIsInstance(mesh.coords, np.ndarray)
         self.assertIsInstance(mesh.tria, np.ndarray)
+
+    def test_crs_assignment(self):
+        """Test valid and invalid CRS assignments."""
+        mesh = MeshData(coords=self.coords_2d)
+
+        # 1. Default None
+        self.assertIsNone(mesh.crs)
+
+        # 2. Assign Valid String
+        mesh.crs = "EPSG:4326"
+        self.assertIsInstance(mesh.crs, CRS)
+        self.assertEqual(mesh.crs.to_string(), "EPSG:4326")
+
+        # 3. Assign Valid CRS Object
+        proj_crs = CRS.from_epsg(32610) # UTM Zone 10N
+        mesh.crs = proj_crs
+        self.assertIsInstance(mesh.crs, CRS)
+        self.assertEqual(mesh.crs, proj_crs)
+
+        # 4. Assign None
+        mesh.crs = None
+        self.assertIsNone(mesh.crs)
+
+        # 5. Assign Invalid
+        with self.assertRaises(CRSError):
+            mesh.crs = "INVALID:12345"
+            
+    def test_crs_init(self):
+        """Test CRS initialization via constructor."""
+        mesh = MeshData(coords=self.coords_2d, crs="EPSG:3857")
+        self.assertIsInstance(mesh.crs, CRS)
+        self.assertEqual(mesh.crs.to_string(), "EPSG:3857")
 
 
 if __name__ == '__main__':
