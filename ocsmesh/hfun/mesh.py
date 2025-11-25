@@ -13,7 +13,6 @@ from time import time
 
 from matplotlib.transforms import Bbox
 from scipy.spatial import cKDTree
-from jigsawpy import jigsaw_msh_t
 import numpy as np
 import numpy.typing as npt
 from pyproj import CRS, Transformer
@@ -21,6 +20,7 @@ from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, Polygon, MultiPolygon)
 
+from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import Mesh
@@ -48,7 +48,7 @@ class HfunMesh(BaseHfun):
 
     Methods
     -------
-    msh_t()
+    meshdata()
         Return mesh sizes specified on the points of the  underlying
         mesh.
     size_from_mesh()
@@ -115,7 +115,7 @@ class HfunMesh(BaseHfun):
         self._hold_const = False
         self._hold_const_hit = 0
 
-    def msh_t(self) -> jigsaw_msh_t:
+    def meshdata(self) -> MeshData:
         """Return the size function specified on the underlying mesh
 
         Return the size function values stored on the underlying mesh.
@@ -128,7 +128,7 @@ class HfunMesh(BaseHfun):
 
         Returns
         -------
-        jigsaw_msh_t
+        MeshData
             The size function specified on the points of input mesh.
 
         Notes
@@ -139,27 +139,27 @@ class HfunMesh(BaseHfun):
         copied in the contructor.
         """
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            # TODO: This modifies the underlying mesh, is this
-            # intended?
-            self.mesh.msh_t.vert2['coord'] = np.vstack(
+            # Since the coord length remains the same values are not
+            # refreshed in `meshdata`
+            self.mesh.meshdata.coords = np.vstack(
                 transformer.transform(
-                    self.mesh.msh_t.vert2['coord'][:, 0],
-                    self.mesh.msh_t.vert2['coord'][:, 1]
+                    self.mesh.meshdata.coords[:, 0],
+                    self.mesh.meshdata.coords[:, 1]
                     )).T
-            self.mesh.msh_t.crs = utm_crs
+            self.mesh.meshdata.crs = utm_crs
             self._crs = utm_crs
 
-        return self.mesh.msh_t
+        return self.mesh.meshdata
 
     def size_from_mesh(self) -> None:
         """Calculates sizes based on the underlying mesh edge lengths.
 
         Get size function values based on the underlying input mesh
-        This method overwrites the values in underlying `msh_t`.
+        This method overwrites the values in underlying `meshdata`.
 
         Parameters
         ----------
@@ -179,8 +179,8 @@ class HfunMesh(BaseHfun):
         """
 
         # Make sure it's in utm so that sizes are in meters
-        hfun_msh = self.mesh.msh_t
-        coord = hfun_msh.vert2['coord']
+        hfun_msh = self.mesh.meshdata
+        coord = hfun_msh.coords
 
         transformer = None
         utm_crs = utils.estimate_mesh_utm(hfun_msh)
@@ -209,7 +209,7 @@ class HfunMesh(BaseHfun):
              for i in range(coord.shape[0])])
 
         # NOTE: Modifying values of underlying mesh
-        hfun_msh.value = vert_value.reshape(len(vert_value), 1)
+        hfun_msh.values = vert_value.reshape(len(vert_value), 1)
 
 
     @apply_constraints_wrap
@@ -292,11 +292,11 @@ class HfunMesh(BaseHfun):
                 target_size=target_size,
                 nprocs=nprocs)
 
-        coords = self.mesh.msh_t.vert2['coord']
-        values = self.mesh.msh_t.value
+        coords = self.mesh.meshdata.coords
+        values = self.mesh.meshdata.values
 
         verts_in = utils.get_verts_in_shape(
-            self.mesh.msh_t, shape=multipolygon, from_box=False)
+            self.mesh.meshdata, shape=multipolygon, from_box=False)
 
         if len(verts_in):
             # NOTE: Don't continue, otherwise the final
@@ -310,10 +310,10 @@ class HfunMesh(BaseHfun):
 #            values[np.where(values < self.hmin)] = self.hmin
         if self.hmax is not None:
             values[np.where(values > self.hmax)] = self.hmax
-        values = np.minimum(self.mesh.msh_t.value, values)
-        values = values.reshape(self.mesh.msh_t.value.shape)
+        values = np.minimum(self.mesh.meshdata.values, values)
+        values = values.reshape(self.mesh.meshdata.values.shape)
 
-        self.mesh.msh_t.value = values
+        self.mesh.meshdata.values = values
 
     @apply_constraints_wrap
     @utils.add_pool_args
@@ -393,7 +393,7 @@ class HfunMesh(BaseHfun):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
 
         _logger.info('Repartitioning features...')
         start = time()
@@ -445,9 +445,9 @@ class HfunMesh(BaseHfun):
         tree = cKDTree(np.array(points))
         _logger.info(f'Generating KDTree took {time()-start}.')
 
-        # We call msh_t() so that it also takes care of utm
+        # We call meshdata() so that it also takes care of utm
         # transformation
-        xy = self.msh_t().vert2['coord']
+        xy = self.meshdata().coords
 
         _logger.info(f'transforming points took {time()-start}.')
         _logger.info('querying kdtree...')
@@ -470,10 +470,10 @@ class HfunMesh(BaseHfun):
 #            values[np.where(values < self.hmin)] = self.hmin
         if self.hmax is not None:
             values[np.where(values > self.hmax)] = self.hmax
-        values = np.minimum(self.mesh.msh_t.value.ravel(), values)
-        values = values.reshape(self.mesh.msh_t.value.shape)
+        values = np.minimum(self.mesh.meshdata.values.ravel(), values)
+        values = values.reshape(self.mesh.meshdata.values.shape)
 
-        self.mesh.msh_t.value = values
+        self.mesh.meshdata.values = values
 
 
     @contextmanager
@@ -531,10 +531,10 @@ class HfunMesh(BaseHfun):
         """
         # TODO:
 
-        hfun_values = self.mesh.msh_t.value.copy()
-        xy = self.mesh.msh_t.vert2['coord'].copy()
+        hfun_values = self.mesh.meshdata.values.copy()
+        xy = self.mesh.meshdata.coords.copy()
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.msh_t)
+        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
@@ -546,7 +546,7 @@ class HfunMesh(BaseHfun):
             hfun_values = constraint.apply(
                     None, hfun_values, locations=xy, crs=utm_crs)
 
-        self.mesh.msh_t.value = hfun_values
+        self.mesh.meshdata.values = hfun_values
 
 
     @apply_constraints_wrap
@@ -615,13 +615,13 @@ class HfunMesh(BaseHfun):
     def hmin(self):
         """Read-only attribute for the minimum mesh size constraint"""
 
-        return np.min(self.mesh.msh_t.value)
+        return np.min(self.mesh.meshdata.values)
 
     @property
     def hmax(self):
         """Read-only attribute for the maximum mesh size constraint"""
 
-        return np.max(self.mesh.msh_t.value)
+        return np.max(self.mesh.meshdata.values)
 
     @property
     def mesh(self):

@@ -21,8 +21,6 @@ except ImportError:
     # pylint: disable=C0412
     from typing_extensions import Literal
 
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
-from jigsawpy import libsaw
 import numpy as np
 import numpy.typing as npt
 from pyproj import CRS, Transformer
@@ -33,6 +31,8 @@ from shapely.geometry import (
     LineString, MultiLineString, box, GeometryCollection,
     Polygon, MultiPolygon)
 
+from ocsmesh.internal import MeshData
+from ocsmesh.driver import mesh
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.geom.shapely import PolygonGeom
@@ -106,7 +106,7 @@ class HfunRaster(BaseHfun, Raster):
 
     Methods
     -------
-    msh_t()
+    meshdata()
         Return mesh sizes interpolated on an size-optimized
         unstructured mesh
     apply_added_constraints()
@@ -258,12 +258,14 @@ class HfunRaster(BaseHfun, Raster):
             pathlib.Path(memfile_path).unlink()
 
 
-    def msh_t(
+    def meshdata(
             self,
             window: Optional[rasterio.windows.Window] = None,
             marche: bool = False,
-            verbosity : Optional[bool] = None
-            ) -> jigsaw_msh_t:
+            verbosity : Optional[bool] = None,
+            engine: str = 'jigsaw',
+            **mesh_options
+            ) -> MeshData:
         """Interpolates mesh size function on an unstructred mesh
 
         Interpolate the calculated mesh sizes from the raster grid
@@ -284,10 +286,14 @@ class HfunRaster(BaseHfun, Raster):
             and interpolate values on it.
         verbosity : bool or None, default=None
             The verbosity of the output.
+        engine: str, default='jigsaw'
+            Engine to use for generating background mesh
+        mesh_options: 
+            Arguments for meshing options
 
         Returns
         -------
-        jigsaw_msh_t
+        MeshData
             Size function calculated and interpolated on an
             unstructured mesh.
 
@@ -322,195 +328,141 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = [window]
 
 
-        output_mesh = jigsaw_msh_t()
-        output_mesh.ndims = +2
-        output_mesh.mshID = "euclidean-mesh"
-        output_mesh.crs = self.crs
+        tria_list = []
+        coords_list = []
+        values_list = []
+        idx_offset = 0
         for win in iter_windows:
-
-            hfun = jigsaw_msh_t()
-            hfun.ndims = +2
 
             x0, y0, x1, y1 = self.get_window_bounds(win)
 
-            utm_crs = utils.estimate_bounds_utm(
+            win_utm_crs = utils.estimate_bounds_utm(
                     (x0, y0, x1, y1), self.crs)
 
-            if utm_crs is not None:
-                hfun.mshID = 'euclidean-mesh'
-                # If these 3 objects (vert2, tria3, value) don't fit into
-                # memroy, then the raster needs to be chunked. We need to
-                # implement auto-chunking.
-                start = time()
-                # get bbox data
-                xgrid = self.get_x(window=win)
-                ygrid = np.flip(self.get_y(window=win))
-                xgrid, ygrid = np.meshgrid(xgrid, ygrid)
-                bottom = xgrid[0, :]
-                top = xgrid[1, :]
-                del xgrid
-                left = ygrid[:, 0]
-                right = ygrid[:, 1]
-                del ygrid
+            # If these 3 objects (vert2, tria3, value) don't fit into
+            # memroy, then the raster needs to be chunked. We need to
+            # implement auto-chunking.
+            start = time()
+            # get bbox data
+            xgrid = self.get_x(window=win)
+            ygrid = np.flip(self.get_y(window=win))
+            xgrid, ygrid = np.meshgrid(xgrid, ygrid)
+            bottom = xgrid[0, :]
+            top = xgrid[1, :]
+            del xgrid
+            left = ygrid[:, 0]
+            right = ygrid[:, 1]
+            del ygrid
 
-                _logger.info('Building hfun.tria3...')
+            _logger.info('Building hfun triangulation...')
 
-                dim1 = win.width
-                dim2 = win.height
+            dim1 = win.width
+            dim2 = win.height
 
-                tria3 = np.empty(
-                    (dim1 - 1, dim2 - 1),
-                    dtype=jigsaw_msh_t.TRIA3_t,
-                )
-                index = tria3["index"]
+            rast_tria = np.empty((dim1 - 1, dim2 - 1), dtype=int)
 
-                i = np.arange(
-                    dim1 - 1,
-                    dtype=jigsaw_msh_t.INDEX_t,
-                )[:, None]
-                j = np.arange(
-                    dim2 - 1,
-                    dtype=jigsaw_msh_t.INDEX_t,
-                )[None, :]
+            i = np.arange(dim1 - 1, dtype=int)[:, None]
+            j = np.arange(dim2 - 1, dtype=int)[None, :]
 
-                index[:, :, 0] = i     + j * dim1
-                index[:, :, 1] = (i+1) + j * dim1
-                index[:, :, 2] = (i+1) + (j+1) * dim1
+            rast_tria[:, :, 0] = i     + j * dim1
+            rast_tria[:, :, 1] = (i+1) + j * dim1
+            rast_tria[:, :, 2] = (i+1) + (j+1) * dim1
 
-                hfun.tria3 = tria3.ravel()
+            rast_tria = rast_tria.ravel()
 
-                gc.collect()
-                _logger.info('Done building hfun.tria3...')
+            gc.collect()
+            _logger.info('Done with triangulation.')
 
-                # BUILD VERT2_t. this one comes from the memcache array
-                _logger.info('Building hfun.vert2...')
-                hfun.vert2 = np.empty(
-                    win.width*win.height,
-                    dtype=jigsaw_msh_t.VERT2_t)
-                hfun.vert2['coord'] = np.array(
-                    self.get_xy_memcache(win, utm_crs))
-                _logger.info('Done building hfun.vert2...')
+            # BUILD VERT2_t. this one comes from the memcache array
+            _logger.info('Building hfun coords...')
+            rast_coords = np.array(self.get_xy_memcache(win, win_utm_crs))
+            _logger.info('Done with coords.')
 
-                # Build REALS_t: this one comes from hfun raster
-                _logger.info('Building hfun.value...')
-                hfun.value = np.array(
-                    self.get_values(window=win, band=1).flatten().reshape(
-                        (win.width*win.height, 1)),
-                    dtype=jigsaw_msh_t.REALS_t)
-                _logger.info('Done building hfun.value...')
+            # Build REALS_t: this one comes from hfun raster
+            _logger.info('Building sizing values...')
+            rast_values = np.array(
+                self.get_values(window=win, band=1).flatten().reshape(
+                    (win.width*win.height, 1)
+                ),
+                dtype=float
+            )
+            _logger.info('Done with values.')
 
-                # Build Geom
-                _logger.info('Building initial geom...')
+            # Build Geom
+            _logger.info('Building initial geom...')
+            bbox_poly = Polygon([
+                *[(x, left[0]) for x in bottom][:-1],
+                *[(bottom[-1], y) for y in right][:-1],
+                *[(x, right[-1]) for x in reversed(top)][:-1],
+                *[(bottom[0], y) for y in reversed(left)][:-1]
+            ])
+            if win_utm_crs is not None:
                 transformer = Transformer.from_crs(
-                    self.crs, utm_crs, always_xy=True)
-                bbox = [
-                    *[(x, left[0]) for x in bottom][:-1],
-                    *[(bottom[-1], y) for y in right][:-1],
-                    *[(x, right[-1]) for x in reversed(top)][:-1],
-                    *[(bottom[0], y) for y in reversed(left)][:-1]
-                ]
-                geom = PolygonGeom(
-                    ops.transform(transformer.transform, Polygon(bbox)),
-                    utm_crs
-                ).msh_t()
-                _logger.info('Building initial geom done.')
-                kwargs = {'method': 'nearest'}
+                    self.crs, win_utm_crs, always_xy=True)
+                bbox_poly = ops.transform(transformer.transform, bbox_poly)
+            geom = PolygonGeom(bbox_poly, win_utm_crs)
+            _logger.info('Building initial geom done.')
+            kwargs = {'method': 'nearest'}
 
-            else:
-                _logger.info('Forming initial hmat (euclidean-grid).')
-                start = time()
-                hfun.mshID = 'euclidean-grid'
-                hfun.xgrid = np.array(
-                    np.array(self.get_x(window=win)),
-                    dtype=jigsaw_msh_t.REALS_t)
-                hfun.ygrid = np.array(
-                    np.flip(self.get_y(window=win)),
-                    dtype=jigsaw_msh_t.REALS_t)
-                hfun.value = np.array(
-                    np.flipud(self.get_values(window=win, band=1)),
-                    dtype=jigsaw_msh_t.REALS_t)
-                kwargs = {'kx': 1, 'ky': 1}  # type: ignore[dict-item]
-                geom = PolygonGeom(box(x0, y1, x1, y0), self.crs).msh_t()
+            _logger.info(f'Hfun-raster generation-prep took {time()-start}.')
 
-            _logger.info(f'Initial hfun generation took {time()-start}.')
+            _logger.info('Configuring engine...')
 
-            _logger.info('Configuring jigsaw...')
+            win_hfun = MeshData(
+                coords=rast_coords,
+                tria=rast_tria,
+                values=rast_values,
+                crs=win_utm_crs
+            )
 
-            opts = jigsaw_jig_t()
-
-            # additional configuration options
-            opts.mesh_dims = +2
-            opts.hfun_scal = 'absolute'
-            # no need to optimize for size function generation
-            opts.optm_tria = False
-
-            opts.hfun_hmin = np.min(hfun.value) if self.hmin is None else \
-                self.hmin
-            opts.hfun_hmax = np.max(hfun.value) if self.hmax is None else \
-                self.hmax
-            opts.verbosity = self.verbosity if verbosity is None else \
-                verbosity
-
-            # mesh of hfun window
-            window_mesh = jigsaw_msh_t()
-            window_mesh.mshID = 'euclidean-mesh'
-            window_mesh.ndims = +2
-
-            if marche is True:
-                libsaw.marche(opts, hfun)
-
-            libsaw.jigsaw(opts, geom, window_mesh, hfun=hfun)
-
+            shape = geom.get_multipolygon()
             del geom
+
+            win_optimized_hfun = mesh(
+                shape=shape,
+                engine=engine,
+                sizing=win_hfun,
+                pre=True,
+                **mesh_options
+            )
+
             # do post processing
-            hfun.crs = utm_crs
-            utils.interpolate(hfun, window_mesh, **kwargs)
+            utils.interpolate(win_hfun, win_optimized_hfun, **kwargs)
 
             # reproject to combine with other windows
-            if utm_crs is not None:
-                window_mesh.crs = utm_crs
-                utils.reproject(window_mesh, self.crs)
-
+            if win_utm_crs is not None:
+                win_optimized_hfun.crs = win_utm_crs
+                utils.reproject(win_optimized_hfun, self.crs)
 
             # combine with results from previous windows
-            output_mesh.tria3 = np.append(
-                output_mesh.tria3,
-                np.array([((idx + len(output_mesh.vert2)), tag)
-                          for idx, tag in window_mesh.tria3],
-                         dtype=jigsaw_msh_t.TRIA3_t),
-                axis=0)
-            output_mesh.vert2 = np.append(
-                output_mesh.vert2,
-                np.array(list(window_mesh.vert2),
-                         dtype=jigsaw_msh_t.VERT2_t),
-                axis=0)
-            if output_mesh.value.size:
-                output_mesh.value = np.append(
-                    output_mesh.value,
-                    np.array(list(window_mesh.value),
-                             dtype=jigsaw_msh_t.REALS_t),
-                    axis=0)
-            else:
-                output_mesh.value = np.array(
-                        list(window_mesh.value),
-                        dtype=jigsaw_msh_t.REALS_t)
+            tria_list.append(win_optimized_hfun.tria + idx_offset)
+            coords_list.append(win_optimized_hfun.coords)
+            idx_offset += len(coords_list[-1])
+            values_list.append(win_optimized_hfun.values)
 
+        output_coords = np.concatenate(coords_list)
+        output_crs = self.crs
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
         utm_crs = utils.estimate_bounds_utm(
                 self.get_bbox().bounds, self.crs)
+        # TODO: Raise if None?
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
-            output_mesh.vert2['coord'] = np.vstack(
-                transformer.transform(
-                    output_mesh.vert2['coord'][:, 0],
-                    output_mesh.vert2['coord'][:, 1]
-                    )).T
-            output_mesh.crs = utm_crs
+            output_coords = np.vstack(
+                transformer.transform(output_coords[:, 0], output_coords[:, 1])
+            ).T
+            output_crs = utm_crs
 
-        return output_mesh
+        output_hfun = MeshData(
+            coords=output_coords,
+            tria=np.concatenate(tria_list),
+            values=np.concatenate(values_list),
+            crs=output_crs
+        )
+        return output_hfun
 
 
     @contextmanager

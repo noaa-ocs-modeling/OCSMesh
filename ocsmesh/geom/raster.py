@@ -46,8 +46,6 @@ class RasterGeom(BaseGeom):
 
     Methods
     -------
-    msh_t(**kwargs)
-        Returns the `jigsawpy` vertex-edge representation of the geometry
     get_multipolygon(zmin=None, zmax=None)
         Returns `shapely` object representation of the geometry
 

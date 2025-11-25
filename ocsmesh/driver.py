@@ -1,128 +1,107 @@
-import logging
-from typing import Union
+from typing import Any, Optional, Dict
 
-from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
-from jigsawpy import libsaw
-import numpy as np
-from pyproj import CRS
-
+import shapely
 
 from ocsmesh import utils
-from ocsmesh.mesh import Mesh
-from ocsmesh.hfun import Hfun
-from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.geom import Geom
-from ocsmesh.geom.base import BaseGeom
+from ocsmesh.internal import MeshData
+from ocsmesh.engines.base import BaseMeshEngine
+from ocsmesh.engines.jigsaw import (
+    JigsawEngine, JigsawOptions
+)
+# from ocsmesh.engines.triangle_wrapper import ...
+
 
 _logger = logging.getLogger(__name__)
 
 
-class GeomDescriptor:
+class MeshDriver:
+    """
+    High-level API for running meshing jobs.
+    """
 
-    def __set__(self, obj, val):
-        if not isinstance(val, BaseGeom):
-            raise TypeError(f'Argument geom must be of type {Geom}, '
-                            f'not type {type(val)}.')
-        obj.__dict__['geom'] = val
-
-    def __get__(self, obj, val):
-        return obj.__dict__['geom']
-
-
-class HfunDescriptor:
-
-    def __set__(self, obj, val):
-        if not isinstance(val, BaseHfun):
-            raise TypeError(f'Argument hfun must be of type {Hfun}, '
-                            f'not type {type(val)}.')
-        obj.__dict__['hfun'] = val
-
-    def __get__(self, obj, val):
-        return obj.__dict__['hfun']
-
-
-class OptsDescriptor:
-
-    def __get__(self, obj, val):
-        opts = obj.__dict__.get('opts')
-        if opts is None:
-            opts = jigsaw_jig_t()
-            opts.mesh_dims = +2
-            opts.optm_tria = True
-            opts.hfun_scal = 'absolute'
-            obj.__dict__['opts'] = opts
-        return opts
-
-
-class JigsawDriver:
-
-    _geom = GeomDescriptor()
-    _hfun = HfunDescriptor()
-    _opts = OptsDescriptor()
+    _ENGINES = {
+        'jigsaw': (JigsawEngine, JigsawOptions),
+        # 'triangle': (TriangleEngine, TriangleOptions),
+    }
 
     def __init__(
-            self,
-            geom: Geom,
-            hfun: Hfun,
-            initial_mesh: bool = False,
-            crs: Union[str, CRS] = None,
-            verbosity: int = 0,
+        self,
+        engine_name: str,
+        **engine_kwargs
     ):
         """
-        geom can be SizeFunction or PlanarStraightLineGraph instance.
+        Initialize the driver with a specific engine.
+
+        Parameters
+        ----------
+        engine_name : str
+            Name of the engine ('jigsaw', 'triangle', etc).
+        **engine_kwargs : dict
+            Options to pass to the engine's Option class.
         """
-        self._geom = geom
-        self._hfun = hfun
-        self._init = initial_mesh
-        self._crs = CRS.from_user_input(crs) if crs is not None else crs
-        self._opts.verbosity = verbosity
+        if engine_name not in self._ENGINES:
+            raise ValueError(
+                f"Engine '{engine_name}' not supported. "
+                f"Available: {list(self._ENGINES.keys())}"
+            )
 
-    def run(self, sieve=None, quality_metric=1.05, remesh_tiny_elements=False):
+        engine_cls, opts_cls = self._ENGINES[engine_name]
 
-        hfun_msh_t = self.hfun.msh_t()
+        # 1. Create Options Object
+        self._options = opts_cls(**engine_kwargs)
 
-        output_mesh = jigsaw_msh_t()
-        output_mesh.mshID = 'euclidean-mesh'
-        output_mesh.ndims = 2
+        # 2. Instantiate Engine
+        self._engine: BaseMeshEngine = engine_cls(self._options)
 
-        self.opts.hfun_hmin = np.min(hfun_msh_t.value)
-        self.opts.hfun_hmax = np.max(hfun_msh_t.value)
-        self.opts.mesh_rad2 = float(quality_metric)
 
-        geom_msh_t = self.geom.msh_t()
+    def run_generation(
+        self,
+        shape: shapely.Geometry,
+        sizing: Optional[Any] = None
+    ) -> MeshData:
+        """
+        Run a mesh generation job.
+        """
+        return self._engine.generate(shape, sizing)
 
-        # When the center of geom and hfun are NOT the same, utm
-        # zones would be different for resulting msh_t.
-        if geom_msh_t.crs != hfun_msh_t.crs:
-            utils.reproject(hfun_msh_t, geom_msh_t.crs)
-        output_mesh.crs = hfun_msh_t.crs
+    def run_remeshing(
+        self,
+        mesh: MeshData,
+        shape: Optional[shapely.Geometry] = None,
+        sizing: Optional[Any] = None
+    ) -> MeshData:
+        """
+        Run a mesh refinement/optimization job.
 
-        _logger.info('Calling libsaw.jigsaw() ...')
-        libsaw.jigsaw(
-            self.opts,
-            geom_msh_t,
-            output_mesh,
-            init=hfun_msh_t if self._init is True else None,
-            hfun=hfun_msh_t
-        )
+        Parameters
+        ----------
+        mesh : MeshData
+            Input mesh.
+        shape : Any, optional
+            Constraint shape or region for remeshing.
+        sizing : Any, optional
+            Sizing field.
+        """
+        return self._engine.remesh(mesh, shape, sizing)
 
-        # post process
-        if output_mesh.tria3['index'].shape[0] == 0:
-            _err = 'ERROR: Jigsaw returned empty mesh.'
-            _logger.error(_err)
-            raise RuntimeError(_err)
 
-        if self._crs is not None:
-            utils.reproject(output_mesh, self._crs)
+# --- Helper Function for Quick Usage ---
 
-        _logger.info('Finalizing mesh...')
-        if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
-            # Jigsaw creates tiny elements on high gradients. Run the driver with the remesh_tiny_elements key
-            # set to True once you find that your mesh has tiny elements. Default is False as it is an expensive
-            # operation
-            output_mesh = utils.remesh_small_elements(
-                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
-        utils.finalize_mesh(output_mesh, sieve)
+def mesh(
+    shape: Any,
+    engine: str = 'jigsaw',
+    sizing: Optional[Any] = None,
+    pre: bool = True,
+    **kwargs
+) -> MeshData:
+    """
+    One-shot function to generate a mesh.
+    """
+    driver = MeshDriver(engine, **kwargs)
+    meshdata = driver.run_generation(shape, sizing)
+    if not pre:
+        utils.finalize_mesh(meshdata, sieve)
+        mesh = Mesh(meshdata)
+        return mesh
 
-        _logger.info('done!')
-        return Mesh(output_mesh)
+    return meshdata
