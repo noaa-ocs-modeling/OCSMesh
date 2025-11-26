@@ -13,7 +13,7 @@ from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.features.contour import Contour
 from ocsmesh.mesh.parsers import sms2dm
-from ocsmesh.utils import msh_t_to_2dm
+from ocsmesh.utils import meshdata_to_2dm
 
 
 logging.basicConfig(
@@ -108,13 +108,13 @@ class MeshUpgrader:
         del geom_mp
 
         # Calculate hfun
-        hfun_msh_t = hfun.msh_t()
+        hfun_meshdata = hfun.meshdata()
         # Write to disk
         sms2dm.writer(
-                msh_t_to_2dm(hfun_msh_t),
+                meshdata_to_2dm(hfun_meshdata),
                 str(out_path) + '.hfun.2dm',
                 True)
-        del hfun_msh_t
+        del hfun_meshdata
 
 
         # Read back stored values to pass to mesh driver

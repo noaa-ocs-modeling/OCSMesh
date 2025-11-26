@@ -125,7 +125,7 @@ class HfunCombine:
         _logger.info(f"Writing for file ({out_format}) ...")
 
         # NOTE: Combined mesh from collector is always in EPSG:4326
-        jig_hfun = hfun_collector.msh_t()
+        jig_hfun = hfun_collector.meshdata()
         dst_crs = CRS.from_user_input(crs)
         if jig_hfun.crs != dst_crs:
             _logger.info(f"Reprojecting hfun to ({crs}) ...")

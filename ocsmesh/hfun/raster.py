@@ -21,6 +21,7 @@ except ImportError:
     # pylint: disable=C0412
     from typing_extensions import Literal
 
+import geopandas as gpd
 import numpy as np
 import numpy.typing as npt
 from pyproj import CRS, Transformer
@@ -32,10 +33,9 @@ from shapely.geometry import (
     Polygon, MultiPolygon)
 
 from ocsmesh.internal import MeshData
-from ocsmesh.driver import mesh
+from ocsmesh.engine.factory import get_mesh_engine
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
-from ocsmesh.geom.shapely import PolygonGeom
 from ocsmesh.features.constraint import (
     Constraint,
     TopoConstConstraint,
@@ -263,7 +263,7 @@ class HfunRaster(BaseHfun, Raster):
             window: Optional[rasterio.windows.Window] = None,
             marche: bool = False,
             verbosity : Optional[bool] = None,
-            engine: str = 'jigsaw',
+            mesh_engine: str = 'jigsaw',
             **mesh_options
             ) -> MeshData:
         """Interpolates mesh size function on an unstructred mesh
@@ -286,7 +286,7 @@ class HfunRaster(BaseHfun, Raster):
             and interpolate values on it.
         verbosity : bool or None, default=None
             The verbosity of the output.
-        engine: str, default='jigsaw'
+        mesh_engine: str, default='jigsaw'
             Engine to use for generating background mesh
         mesh_options: 
             Arguments for meshing options
@@ -390,17 +390,17 @@ class HfunRaster(BaseHfun, Raster):
 
             # Build Geom
             _logger.info('Building initial geom...')
-            bbox_poly = Polygon([
-                *[(x, left[0]) for x in bottom][:-1],
-                *[(bottom[-1], y) for y in right][:-1],
-                *[(x, right[-1]) for x in reversed(top)][:-1],
-                *[(bottom[0], y) for y in reversed(left)][:-1]
-            ])
+            bbox_poly = gpd.GeoSeries(
+                GeoPolygon([
+                    *[(x, left[0]) for x in bottom][:-1],
+                    *[(bottom[-1], y) for y in right][:-1],
+                    *[(x, right[-1]) for x in reversed(top)][:-1],
+                    *[(bottom[0], y) for y in reversed(left)][:-1]
+                ]),
+                crs=self.crs
+            )
             if win_utm_crs is not None:
-                transformer = Transformer.from_crs(
-                    self.crs, win_utm_crs, always_xy=True)
-                bbox_poly = ops.transform(transformer.transform, bbox_poly)
-            geom = PolygonGeom(bbox_poly, win_utm_crs)
+                bbox_poly = bbox_poly.to_crs(win_utm_crs)
             _logger.info('Building initial geom done.')
             kwargs = {'method': 'nearest'}
 
@@ -408,37 +408,29 @@ class HfunRaster(BaseHfun, Raster):
 
             _logger.info('Configuring engine...')
 
-            win_hfun = MeshData(
+            win_sizes = MeshData(
                 coords=rast_coords,
                 tria=rast_tria,
                 values=rast_values,
                 crs=win_utm_crs
             )
 
-            shape = geom.get_multipolygon()
-            del geom
-
-            win_optimized_hfun = mesh(
-                shape=shape,
-                engine=engine,
-                sizing=win_hfun,
-                pre=True,
-                **mesh_options
-            )
+            engine = get_mesh_engine(mesh_engine, **mesh_options)
+            win_optim_sizes = engine.generate(bbox_poly, win_sizes)
 
             # do post processing
-            utils.interpolate(win_hfun, win_optimized_hfun, **kwargs)
+            utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
 
             # reproject to combine with other windows
             if win_utm_crs is not None:
-                win_optimized_hfun.crs = win_utm_crs
-                utils.reproject(win_optimized_hfun, self.crs)
+                win_optim_sizes.crs = win_utm_crs
+                utils.reproject(win_optim_sizes, self.crs)
 
             # combine with results from previous windows
-            tria_list.append(win_optimized_hfun.tria + idx_offset)
-            coords_list.append(win_optimized_hfun.coords)
+            tria_list.append(win_optim_sizes.tria + idx_offset)
+            coords_list.append(win_optim_sizes.coords)
             idx_offset += len(coords_list[-1])
-            values_list.append(win_optimized_hfun.values)
+            values_list.append(win_optim_sizes.values)
 
         output_coords = np.concatenate(coords_list)
         output_crs = self.crs

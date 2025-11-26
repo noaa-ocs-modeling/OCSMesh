@@ -4,8 +4,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Union
 
+import geopandas as gpd
 from pyproj import CRS, Transformer
-from shapely import ops
 from shapely.geometry import MultiPolygon
 
 from ocsmesh.crs import CRS as CRSDescriptor
@@ -57,6 +57,15 @@ class BaseGeom(ABC):
         raise NotImplementedError(
             "Deprecated for new internal mesh structure and multiple mesh engine support!"
         )
+
+
+    def geoseries(self, **kwargs: Any) -> 'jigsaw_msh_t':
+        gs = gpd.GeoSeries(get_multipolygon(**kwargs), crs=self.crs)
+        utm_crs = utils.estimate_bounds_utm(gs.total_bounds, gs.crs)
+        if utm_crs is not None:
+            gs = gs.to_crs(utm_crs)
+
+        return gs
 
 
     @abstractmethod

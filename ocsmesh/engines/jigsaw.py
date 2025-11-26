@@ -1,6 +1,7 @@
 from typing import Any, Optional
 import logging
 
+import geopandas as gpd
 try:
     import jigsawpy
     _HAS_JIGSAW = True
@@ -30,7 +31,13 @@ class JigsawOptions(BaseMeshOptions):
             opts.optm_tria = True
             opts.hfun_scal = 'absolute'
             obj.__dict__['opts'] = opts
+            ############ ALSO
+            self.opts.hfun_hmin = np.min(hfun_msh_t.value)
+            self.opts.hfun_hmax = np.max(hfun_msh_t.value)
+            self.opts.mesh_rad2 = float(quality_metric)
         ################
+        quality_metric=1.05, remesh_tiny_elements=False
+        ###########
 
         ############ FROM HFUN
             opts = jigsaw_jig_t()
@@ -79,8 +86,8 @@ class JigsawEngine(BaseMeshEngine):
 
     def generate(
         self,
-        shape: Any,
-        sizing: Optional[Any] = None
+        shape: gpd.GeoSeries,
+        sizing: Optional[MeshData] = None
     ) -> MeshData:
 
         ################## FROM HFUN
@@ -160,25 +167,65 @@ class JigsawEngine(BaseMeshEngine):
         if self._crs is not None:
             utils.reproject(output_mesh, self._crs)
 
-        _logger.info('Finalizing mesh...')
+        _logger.info('Cleanup jigsaw mesh...')
         if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
             output_mesh = remesh_small_elements(
                 self.opts, geom_msh_t, output_mesh, hfun_msh_t)
 
         _logger.info('done!')
-        return Mesh(output_mesh)
+        return output_mesh
         ##############################
 
     def remesh(
         self,
         mesh: MeshData,
-        shape: Optional[Any] = None,
-        sizing: Optional[Any] = None
+        shape: Optional[gpd.GeoSeries] = None,
+        sizing: Optional[MeshData] = None
     ) -> MeshData:
 
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
 
+        ###############################
+#        vert_idx_to_refin = utils.get_verts_in_shape(
+#            meshdata_hfun, region_of_interest)
+#
+#        fixed_mesh_w_hole.point['IDtag'][:] = -1
+#        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
+#
+#        refine_opts = jigsawpy.jigsaw_jig_t()
+#        refine_opts.hfun_scal = "absolute"
+#        refine_opts.hfun_hmin = np.min(jig_hfun.value)
+#        refine_opts.hfun_hmax = np.max(jig_hfun.value)
+#        refine_opts.mesh_dims = +2
+#        # Mesh becomes TOO refined on exact boundaries from DEM
+##    refine_opts.mesh_top1 = True
+##    refine_opts.geom_feat = True
+#
+#        jig_remeshed = jigsawpy.jigsaw_msh_t()
+#        jig_remeshed.ndims = +2
+#
+#        _logger.info("Remeshing...")
+#        # Remeshing
+#        jigsawpy.lib.jigsaw(
+#                refine_opts,
+#                jig_geom,
+#                jig_remeshed,
+#                init=fixed_mesh_w_hole,
+#                hfun=jig_hfun)
+#        jig_remeshed.crs = fixed_mesh_w_hole.crs
+#        _logger.info("Done")
+#
+#        if jig_remeshed.tria3['index'].shape[0] == 0:
+#            _err = 'ERROR: Jigsaw returned empty mesh.'
+#            _logger.error(_err)
+#            raise ValueError(_err)
+
+        # TODO: This is irrelevant right now since output file is
+        # always is EPSG:4326, enable when APIs for remeshing is added
+#    if out_crs is not None:
+#        utils.reproject(jig_remeshed, out_crs)
+        ###############################
         # 1. Convert MeshData to Jigsaw format (Initial Mesh)
         init_mesh = meshdata_to_jigsaw(mesh)
 

@@ -21,7 +21,6 @@ except ImportError:
 
 import pandas as pd
 import geopandas as gpd
-from jigsawpy import jigsaw_msh_t, savemsh, loadmsh, savevtk
 from matplotlib.path import Path
 from matplotlib.transforms import Bbox
 from matplotlib.tri import Triangulation
@@ -38,6 +37,7 @@ from shapely.ops import polygonize, linemerge
 
 
 from ocsmesh import utils
+from ocsmesh.internal import MeshData
 from ocsmesh.raster import Raster
 from ocsmesh.mesh.base import BaseMesh
 from ocsmesh.mesh.parsers import grd, sms2dm
@@ -54,14 +54,8 @@ class EuclideanMesh(BaseMesh):
 
     Attributes
     ----------
-    tria3 : npt.NDArray[jigsaw_msh_t.TRIA3_t]
-        Reference to underlying jigsaw mesh's triangle element
-        structure.
     triangles : npt.NDArray[np.float32]
         Array of node index for triangular elements.
-    quad4 : npt.NDArray[jigsaw_msh_t.QUAD4_t]
-        Reference to underlying jigsaw mesh's quadrangle element
-        structure.
     quads : npt.NDArray[np.float32]
         Array of node index for quadrangular elements.
     crs : CRS
@@ -79,25 +73,25 @@ class EuclideanMesh(BaseMesh):
         Export mesh object to the disk in the specified format.
     """
 
-    def __init__(self, mesh: jigsaw_msh_t) -> None:
+    def __init__(self, mesh: MeshData) -> None:
         """Initialize Euclidean mesh object.
 
         Parameters
         ----------
-        mesh : jigsaw_msh_t
-            The underlying jigsaw_msh_t object to hold onto mesh data.
+        mesh : MeshData
+            The underlying MeshData object to hold onto mesh data.
 
         Raises
         ------
         TypeError
-            If input mesh is not of `jigsaw_msh_t` type.
+            If input mesh is not of `MeshData` type.
         ValueError
             If input mesh's `mshID` is not equal to ``euclidean-mesh``.
             If input mesh has `crs` property which is not of `CRS` type.
         """
 
-        if not isinstance(mesh, jigsaw_msh_t):
-            raise TypeError(f'Argument mesh must be of type {jigsaw_msh_t}, '
+        if not isinstance(mesh, MeshData):
+            raise TypeError(f'Argument mesh must be of type {MeshData}, '
                             f'not type {type(mesh)}.')
         if mesh.mshID != 'euclidean-mesh':
             raise ValueError(f'Argument mesh has property mshID={mesh.mshID}, '
@@ -113,7 +107,7 @@ class EuclideanMesh(BaseMesh):
         self._hull = None
         self._nodes = None
         self._elements = None
-        self._msh_t = mesh
+        self._meshdata = mesh
 
     def write(
             self,
@@ -147,52 +141,35 @@ class EuclideanMesh(BaseMesh):
             raise IOError(
                 f'File {str(path)} exists and overwrite is not True.')
         if format == 'grd':
-            grd_dict = utils.msh_t_to_grd(self.msh_t)
+            grd_dict = utils.meshdata_to_grd(self.meshdata)
             if self._boundaries and self._boundaries.data:
                 grd_dict.update(boundaries=self._boundaries.data)
             grd.write(grd_dict, path, overwrite)
 
         elif format == '2dm':
-            sms2dm.writer(utils.msh_t_to_2dm(self.msh_t), path, overwrite)
-
-        elif format == 'msh':
-            savemsh(str(path), self.msh_t)
-
-        elif format == 'vtk':
-            savevtk(str(path), self.msh_t)
+            sms2dm.writer(utils.meshdata_to_2dm(self.meshdata), path, overwrite)
 
         else:
             raise ValueError(f'Unhandled format {format}.')
 
-    @property
-    def tria3(self):
-        """Reference to underlying mesh tirangle element structure"""
-
-        return self.msh_t.tria3
 
     @property
     def triangles(self):
         """Reference to underlying mesh triangle element index array"""
 
-        return self.msh_t.tria3['index']
-
-    @property
-    def quad4(self):
-        """Reference to underlying mesh quadrangle element structure"""
-
-        return self.msh_t.quad4
+        return self.meshdata.tria
 
     @property
     def quads(self):
         """Reference to underlying mesh quadrangle element index array"""
 
-        return self.msh_t.quad4['index']
+        return self.meshdata.quad
 
     @property
     def crs(self):
         """Reference to underlying mesh crs"""
 
-        return self.msh_t.crs
+        return self.meshdata.crs
 
     @property
     def hull(self):
@@ -244,13 +221,13 @@ class EuclideanMesh2D(EuclideanMesh):
         Get multipolygon of the mesh hull.
     """
 
-    def __init__(self, mesh: jigsaw_msh_t, boundaries=None) -> None:
+    def __init__(self, mesh: MeshData, boundaries=None) -> None:
         """Initialize Euclidean 2D mesh object.
 
         Parameters
         ----------
-        mesh : jigsaw_msh_t
-            The underlying jigsaw_msh_t object to hold onto mesh data.
+        mesh : MeshData
+            The underlying MeshData object to hold onto mesh data.
         boundaries : dict or None, default = None
             Dictionary of boundaries assignment
 
@@ -267,8 +244,8 @@ class EuclideanMesh2D(EuclideanMesh):
             raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
                              "but expected ndims=2.")
 
-        if len(self.msh_t.value) == 0:
-            self.msh_t.value = np.array(
+        if len(self.meshdata.value) == 0:
+            self.meshdata.values = np.array(
                 np.full((self.vert2['coord'].shape[0], 1), np.nan))
 
     def get_bbox(
@@ -336,7 +313,7 @@ class EuclideanMesh2D(EuclideanMesh):
             Axes on which the filled contour is drawn.
         """
 
-        return utils.tricontourf(self.msh_t, **kwargs)
+        return utils.tricontourf(self.meshdata, **kwargs)
 
     def interpolate(
             self,
@@ -396,7 +373,7 @@ class EuclideanMesh2D(EuclideanMesh):
                         method, filter_by_shape, band)
                    for _raster in raster]
 
-        values = self.msh_t.value.flatten()
+        values = self.meshdata.values.flatten()
 
         interp_info_map = {}
         for (mask, _values), rast in zip(res, raster):
@@ -424,7 +401,7 @@ class EuclideanMesh2D(EuclideanMesh):
                     for idx in idxs})
 
         if info_out_path is not None:
-            coords = self.msh_t.vert2['coord'].copy()
+            coords = self.meshdata.coords.copy()
             geo_coords = coords.copy()
             if not self.crs.is_geographic:
                 transformer = Transformer.from_crs(
@@ -449,8 +426,7 @@ class EuclideanMesh2D(EuclideanMesh):
                 info_out_path, header=False, index=True)
 
 
-        self.msh_t.value = np.array(values.reshape((values.shape[0], 1)),
-                                    dtype=jigsaw_msh_t.REALS_t)
+        self.meshdata.values = values.reshape((values.shape[0], 1))
 
 
     def get_contour(self, level: float) -> LineString:
@@ -473,14 +449,14 @@ class EuclideanMesh2D(EuclideanMesh):
         """
 
         # ONLY SUPPORTS TRIANGLES
-        for attr in ['quad4', 'hexa8']:
-            if len(getattr(self.msh_t, attr)) > 0:
+        for attr in ['quad']:
+            if len(getattr(self.meshdata, attr)) > 0:
                 warnings.warn(
                     'Mesh contour extraction only supports triangles')
 
-        coords = self.msh_t.vert2['coord']
-        values = self.msh_t.value
-        trias = self.msh_t.tria3['index']
+        coords = self.meshdata.coords
+        values = self.meshdata.values
+        trias = self.meshdata.tria
         if np.any(np.isnan(values)):
             raise ValueError(
                 "Mesh contains invalid values. Raster values must"
@@ -526,7 +502,7 @@ class EuclideanMesh2D(EuclideanMesh):
             Calculated multipolygon shape
         """
 
-        values = self.msh_t.value
+        values = self.meshdata.values
         mask = np.ones(values.shape)
         if zmin is not None:
             mask = np.logical_and(mask, values > zmin)
@@ -538,7 +514,7 @@ class EuclideanMesh2D(EuclideanMesh):
         verts_in = np.argwhere(mask).ravel()
 
         clipped_mesh = utils.clip_mesh_by_vertex(
-            self.msh_t, verts_in,
+            self.meshdata, verts_in,
             can_use_other_verts=True)
 
         boundary_edges = utils.get_boundary_edges(clipped_mesh)
@@ -568,12 +544,12 @@ class EuclideanMesh2D(EuclideanMesh):
     @property
     def vert2(self):
         """Reference to underlying mesh 2D vertices structure"""
-        return self.msh_t.vert2
+        return self.meshdata.coords
 
     @property
     def value(self):
         """Reference to underlying mesh values"""
-        return self.msh_t.value
+        return self.meshdata.values
 
     @property
     def bbox(self):
@@ -599,12 +575,12 @@ class Mesh(BaseMesh):
         Read mesh data from a file on disk.
     """
 
-    def __new__(cls, mesh: jigsaw_msh_t, **kwargs) -> MeshType:
+    def __new__(cls, mesh: MeshData, **kwargs) -> MeshType:
         """Construct a concrete mesh object.
 
         Parameters
         ----------
-        mesh : jigsaw_msh_t
+        mesh : MeshData
             Input jigsaw mesh object
 
         Returns
@@ -615,13 +591,13 @@ class Mesh(BaseMesh):
         Raises
         ------
         TypeError
-            Input `mesh` is not a `jigsaw_msh_t` object.
+            Input `mesh` is not a `MeshData` object.
         NotImplementedError
             Input `mesh` object cannot be used to create a EuclideanMesh2D
         """
 
-        if not isinstance(mesh, jigsaw_msh_t):
-            raise TypeError(f'Argument mesh must be of type {jigsaw_msh_t}, '
+        if not isinstance(mesh, MeshData):
+            raise TypeError(f'Argument mesh must be of type {MeshData}, '
                             f'not type {type(mesh)}.')
 
         if mesh.mshID == 'euclidean-mesh':
@@ -664,11 +640,11 @@ class Mesh(BaseMesh):
 
         try:
             grd_info = grd.read(path, crs=crs, boundaries=True)
-            msh_t = utils.grd_to_msh_t(grd_info)
-            msh_t.value = np.negative(msh_t.value)
+            meshdata = utils.grd_to_meshdata(grd_info)
+            meshdata.values = np.negative(meshdata.values)
             bdry = grd_info.get('boundaries')
             bdry = None if bdry is not None and len(bdry) == 0 else bdry
-            return Mesh(msh_t, boundaries=bdry)
+            return Mesh(meshdata, boundaries=bdry)
         except Exception as e: #pylint: disable=W0703
             if 'not a valid grd file' in str(e):
                 pass
@@ -676,17 +652,10 @@ class Mesh(BaseMesh):
                 raise e
 
         try:
-            return Mesh(utils.sms2dm_to_msh_t(sms2dm.read(path, crs=crs)))
+            return Mesh(utils.sms2dm_to_meshdata(sms2dm.read(path, crs=crs)))
         except ValueError:
             pass
 
-        try:
-            msh_t = jigsaw_msh_t()
-            loadmsh(msh_t, path)
-            msh_t.crs = crs
-            return Mesh(msh_t)
-        except Exception as e: #pylint: disable=W0703
-            pass
 
         raise TypeError(
             f'Unable to automatically determine file type for {str(path)}.')
@@ -743,7 +712,7 @@ class Rings:
         to this method can result in invalid return values.
         """
 
-        polys = utils.get_mesh_polygons(self.mesh.msh_t)
+        polys = utils.get_mesh_polygons(self.mesh.meshdata)
 
         data = []
         bnd_id = 0
@@ -1091,8 +1060,8 @@ class Hull:
         Currently only tria3 and quad4 elements are considered.
         """
 
-        triangles = self.mesh.msh_t.tria3['index'].tolist()
-        for quad in self.mesh.msh_t.quad4['index']:
+        triangles = self.mesh.meshdata.tria.tolist()
+        for quad in self.mesh.meshdata.quad:
             triangles.extend([
                 [quad[0], quad[1], quad[3]],
                 [quad[1], quad[2], quad[3]]
@@ -1360,9 +1329,9 @@ class Elements:
         """
 
         elements = {i+1: index+1 for i, index
-                    in enumerate(self.mesh.msh_t.tria3['index'])}
+                    in enumerate(self.mesh.meshdata.tria)}
         elements.update({i+len(elements)+1: index+1 for i, index
-                         in enumerate(self.mesh.msh_t.quad4['index'])})
+                         in enumerate(self.mesh.meshdata.quad)})
         return elements
 
     @lru_cache(maxsize=1)
@@ -1629,7 +1598,7 @@ class Boundaries:
     @lru_cache(maxsize=1)
     def nodeidxlist(self):
         # NOTE: It returns lists of node indices, NOT IDs
-        coords = self.mesh.msh_t.vert2['coord']
+        coords = self.mesh.meshdata.coords
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
@@ -1984,7 +1953,7 @@ class Boundaries:
     def _set_region(self, region: Union[Polygon, MultiPolygon], type_id, merge):
         boundaries = deepcopy(self._data)
 
-        coords = self.mesh.msh_t.vert2['coord']
+        coords = self.mesh.meshdata.coords
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
@@ -2135,7 +2104,7 @@ class Boundaries:
         new_bnds = [edge_list_idx]
         if not no_segment:
             # Assign connected segments together
-            coords = self.mesh.msh_t.vert2['coord']
+            coords = self.mesh.meshdata.coords
             coo_to_idx = {
                 tuple(coo): idx
                 for idx, coo in enumerate(coords)}

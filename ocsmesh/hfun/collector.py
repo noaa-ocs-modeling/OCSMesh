@@ -39,12 +39,12 @@ from shapely.geometry import (
     GeometryCollection,
 )
 from shapely import ops
-from jigsawpy import jigsaw_msh_t
 from rasterio.transform import from_origin
 from rasterio.warp import reproject, Resampling
 import rasterio
 
 from ocsmesh import utils
+from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.hfun.mesh import HfunMesh
@@ -662,7 +662,7 @@ class HfunCollector(BaseHfun):
 
     Methods
     -------
-    msh_t()
+    meshdata()
         Return mesh sizes interpolated on an size-optimized
         unstructured mesh
     add_topo_bound_constraint(...)
@@ -714,7 +714,7 @@ class HfunCollector(BaseHfun):
     function are applied lazily. That means the size values are **not**
     evaluated at the time they are called. Instead the effect of
     all these refinements and constraints on the size is calculated
-    when `msh_t()` method is called.
+    when `meshdata()` method is called.
 
     Two distinct algorithms are implemented for storing the size
     function values during evaluation and before creating the
@@ -890,7 +890,7 @@ class HfunCollector(BaseHfun):
             shutil.rmtree(self._work_dir, ignore_errors=True)
 
 
-    def msh_t(self) -> jigsaw_msh_t:
+    def meshdata(self) -> MeshData:
         """Interpolates mesh size functions on an unstructred mesh
 
         Calculates and the interpolate the mesh sizes from all inputs
@@ -905,7 +905,7 @@ class HfunCollector(BaseHfun):
 
         Returns
         -------
-        jigsaw_msh_t
+        MeshData
             Size function calculated and interpolated on an
             unstructured mesh.
 
@@ -917,7 +917,8 @@ class HfunCollector(BaseHfun):
         not cached for 'fast' algorithm.
         """
 
-        composite_hfun = jigsaw_msh_t()
+        # Just dummy object
+        composite_hfun = MeshData([0,0])
 
         if self._method == 'exact':
             self._apply_features()
@@ -2189,11 +2190,11 @@ class HfunCollector(BaseHfun):
         # Last user input item has the highest priority (its trias
         # are not dropped) so process in reverse order
         for hfun in hfun_list:
-            # TODO: Calling msh_t() on HfunMesh more than once causes
+            # TODO: Calling meshdata() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
 
             # To avoid removing verts and trias from mesh hfuns
-            hfun_mesh = deepcopy(hfun.msh_t())
+            hfun_mesh = deepcopy(hfun.meshdata())
             # If no CRS info, we assume EPSG:4326
             if hasattr(hfun_mesh, "crs"):
                 dst_crs = CRS.from_user_input("EPSG:4326")
@@ -2241,7 +2242,7 @@ class HfunCollector(BaseHfun):
     def _get_hfun_composite(
             self,
             hfun_path_list: List[Union[str, Path]]
-            ) -> jigsaw_msh_t:
+            ) -> MeshData:
         """Internal: combine the size functions written to disk
 
         Combine the size functions written to disk from the list of
@@ -2253,7 +2254,7 @@ class HfunCollector(BaseHfun):
 
         Retruns
         -------
-        jigsaw_msh_t
+        MeshData
             The combined size function interpolated on an optimized
             mesh.
 
@@ -2281,27 +2282,18 @@ class HfunCollector(BaseHfun):
             value.append(hfun.value)
             offset += hfun.coord.shape[0]
 
-        composite_hfun = jigsaw_msh_t()
-        composite_hfun.mshID = 'euclidean-mesh'
-        composite_hfun.ndims = 2
-
-        composite_hfun.vert2 = np.array(
-                [(coo, 0) for coo in np.vstack(coord)],
-                dtype=jigsaw_msh_t.VERT2_t)
-        composite_hfun.tria3 = np.array(
-                [(idx, 0) for idx in np.vstack(index)],
-                dtype=jigsaw_msh_t.TRIA3_t)
-        composite_hfun.value = np.array(
-                np.vstack(value),
-                dtype=jigsaw_msh_t.REALS_t)
-
-        composite_hfun.crs = CRS.from_user_input("EPSG:4326")
+        composite_hfun = MeshData(
+                coords=np.vstack(coord),
+                tria=np.vstack(index),
+                values=np.vstack(value),
+                crs=CRS.from_user_input("EPSG:4326")
+        )
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
         # Up until now all calculation was in EPSG:4326
-        utils.msh_t_to_utm(composite_hfun)
+        utils.project_to_utm(composite_hfun)
 
         return composite_hfun
 
@@ -2589,7 +2581,7 @@ class HfunCollector(BaseHfun):
         self._constraint_info_coll.apply([big_hfun], per_hfun=False)
 
 
-    def _get_hfun_composite_fast(self, big_hfun):
+    def _get_hfun_composite_fast(self, big_hfun) -> MeshData:
         """Internal: combine the size function functions for fast method
 
         Combine the size functions of the large raster with non-raster
@@ -2603,7 +2595,7 @@ class HfunCollector(BaseHfun):
 
         Retruns
         -------
-        jigsaw_msh_t
+        MeshData
             The combined size function interpolated on an optimized
             mesh.
 
@@ -2636,21 +2628,21 @@ class HfunCollector(BaseHfun):
             dem_gdf = gpd.GeoDataFrame(
                     geometry=dem_box_list, crs=epsg4326)
             big_cut_shape = dem_gdf.union_all()
-            big_msh_t = big_hfun.msh_t()
-            if hasattr(big_msh_t, "crs"):
-                if not epsg4326.equals(big_msh_t.crs):
-                    utils.reproject(big_msh_t, epsg4326)
+            big_meshdata = big_hfun.meshdata()
+            if hasattr(big_meshdata, "crs"):
+                if not epsg4326.equals(big_meshdata.crs):
+                    utils.reproject(big_meshdata, epsg4326)
 
-            big_msh_t = utils.clip_mesh_by_shape(
-                big_msh_t,
+            big_meshdata = utils.clip_mesh_by_shape(
+                big_meshdata,
                 big_cut_shape,
                 use_box_only=False,
                 fit_inside=False)
 
 
-            index.append(big_msh_t.tria3['index'] + offset)
-            coord.append(big_msh_t.vert2['coord'])
-            value.append(big_msh_t.value)
+            index.append(big_meshdata.tria + offset)
+            coord.append(big_meshdata.coords)
+            value.append(big_meshdata.values)
             offset = offset + coord[-1].shape[0]
 
         hfun_list = nondem_hfun_list[::-1]
@@ -2659,12 +2651,12 @@ class HfunCollector(BaseHfun):
 
         nondem_shape_list = []
         for hfun in hfun_list:
-            nondem_msh_t = deepcopy(hfun.msh_t())
-            if hasattr(nondem_msh_t, "crs"):
-                if not epsg4326.equals(nondem_msh_t.crs):
-                    utils.reproject(nondem_msh_t, epsg4326)
+            nondem_meshdata = deepcopy(hfun.meshdata())
+            if hasattr(nondem_meshdata, "crs"):
+                if not epsg4326.equals(nondem_meshdata.crs):
+                    utils.reproject(nondem_meshdata, epsg4326)
 
-            nondem_shape = utils.get_mesh_polygons(hfun.mesh.msh_t)
+            nondem_shape = utils.get_mesh_polygons(hfun.mesh.meshdata)
             if not epsg4326.equals(hfun.crs):
                 transformer = Transformer.from_crs(
                     hfun.crs, epsg4326, always_xy=True)
@@ -2674,16 +2666,16 @@ class HfunCollector(BaseHfun):
             # In fast method all DEM hfuns have more priority than all
             # other inputs
             if big_cut_shape:
-                nondem_msh_t = utils.clip_mesh_by_shape(
-                    nondem_msh_t,
+                nondem_meshdata = utils.clip_mesh_by_shape(
+                    nondem_meshdata,
                     big_cut_shape,
                     use_box_only=False,
                     fit_inside=True,
                     inverse=True)
 
             for ishp in nondem_shape_list:
-                nondem_msh_t = utils.clip_mesh_by_shape(
-                    nondem_msh_t,
+                nondem_meshdata = utils.clip_mesh_by_shape(
+                    nondem_meshdata,
                     ishp,
                     use_box_only=False,
                     fit_inside=True,
@@ -2691,40 +2683,30 @@ class HfunCollector(BaseHfun):
 
             nondem_shape_list.append(nondem_shape)
 
-            index.append(nondem_msh_t.tria3['index'] + offset)
-            coord.append(nondem_msh_t.vert2['coord'])
-            value.append(nondem_msh_t.value)
+            index.append(nondem_meshdata.tria + offset)
+            coord.append(nondem_meshdata.coords)
+            value.append(nondem_meshdata.values)
             offset += coord[-1].shape[0]
 
-        composite_hfun = jigsaw_msh_t()
-        composite_hfun.mshID = 'euclidean-mesh'
-        composite_hfun.ndims = 2
-
-        composite_hfun.vert2 = np.array(
-                [(coord, 0) for coord in np.vstack(coord)],
-                dtype=jigsaw_msh_t.VERT2_t)
-        composite_hfun.tria3 = np.array(
-                [(index, 0) for index in np.vstack(index)],
-                dtype=jigsaw_msh_t.TRIA3_t)
-        composite_hfun.value = np.array(
-                np.vstack(value),
-                dtype=jigsaw_msh_t.REALS_t)
+        composite_hfun = MeshData(
+                coords=np.vstack(coord),
+                tria=np.vstack(index),
+                values=np.vstack(value),
+                crs=epsg4326
 
         # TODO: Get user input for wether to force hmin and hmax on
         # final hfun (which includes non-raster and basemesh sizes)
         hmin = self._size_info['hmin']
         hmax = self._size_info['hmax']
         if hmin:
-            composite_hfun.value[composite_hfun.value < hmin] = hmin
+            composite_hfun.values[composite_hfun.value < hmin] = hmin
         if hmax:
-            composite_hfun.value[composite_hfun.value > hmax] = hmax
-
-        composite_hfun.crs = epsg4326
+            composite_hfun.values[composite_hfun.value > hmax] = hmax
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of
         # the bounding box of the hfun is used
         # Up until now all calculation was in EPSG:4326
-        utils.msh_t_to_utm(composite_hfun)
+        utils.project_to_utm(composite_hfun)
 
         return composite_hfun

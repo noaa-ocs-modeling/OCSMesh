@@ -12,6 +12,8 @@ from shapely.geometry import Polygon, MultiPolygon
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
+from ocsmesh.internal import MeshData
+from ocsmesh.engine.factory import get_mesh_engine
 
 
 logging.basicConfig(
@@ -217,7 +219,7 @@ class RemeshByDEM:
             hfun = Hfun(
                 [hfun_base_mesh, *hfun_rast_list],
                 hmin=hmin,
-                hmax=np.max(hfun_base_mesh.msh_t().value),
+                hmax=np.max(hfun_base_mesh.meshdata().values),
                 nprocs=nprocs)
 
             for level, expansion_rate, target_size in contour_defns:
@@ -248,14 +250,14 @@ class RemeshByDEM:
                 gc.collect()
 
                 _logger.info("Calculating final size function")
-                jig_hfun = hfun.msh_t()
+                meshdata_hfun = hfun.meshdata()
 
                 _logger.info("Writing hfun to disk")
                 # This writes in EPSG:4326
-                Mesh(jig_hfun).write(
+                Mesh(meshdata_hfun).write(
                     str(out_path)+'.hfun.2dm',
                     format='2dm', overwrite=True)
-                del jig_hfun
+                del meshdata_hfun
                 gc.collect()
 
                 # Read back from file to avoid recalculation of hfun
@@ -275,25 +277,25 @@ class RemeshByDEM:
             # NOTE: If intermediate files are written then we calculated
             # this in previous section
             _logger.info("Calculating final geometry")
-        jig_geom = geom.msh_t()
+        shape_geom = geom.geoseries()
         if log_calculation:
             # NOTE: If intermediate files are written then we calculated
             # this in previous section
             _logger.info("Calculating final size function")
-        jig_hfun = hfun.msh_t()
+        meshdata_hfun = hfun.meshdata()
 
-        jig_init = init_mesh.msh_t
+        meshdata_init = init_mesh.meshdata
 
         _logger.info("Projecting geometry to be in meters unit")
         utils.msh_t_to_utm(jig_geom)
         _logger.info("Projecting size function to be in meters unit")
-        utils.msh_t_to_utm(jig_hfun)
+        utils.project_to_utm(meshdata_hfun)
         _logger.info("Projecting initial mesh to be in meters unit")
-        utils.msh_t_to_utm(jig_init)
+        utils.project_to_utm(meshdata_init)
 
 
         # pylint: disable=C0325
-        if not (jig_geom.crs == jig_hfun.crs == jig_init.crs):
+        if not (shape_geom.crs == meshdata_hfun.crs == meshdata_init.crs):
             raise ValueError(
                 "Converted UTM CRS for geometry, hfun and init mesh"
                 "is not equivalent")
@@ -301,14 +303,14 @@ class RemeshByDEM:
 
         _logger.info("Calculate remeshing region of interest")
         # Prep for Remeshing
-        boxes = [i.get_bbox(crs=jig_geom.crs) for i in geom_rast_list]
+        boxes = [i.get_bbox(crs=shape_geom.crs) for i in geom_rast_list]
         region_of_interest = MultiPolygon(boxes)
         roi_bnds = region_of_interest.bounds
         roi_s = max(roi_bnds[2] - roi_bnds[0], roi_bnds[3] - roi_bnds[1])
 
         _logger.info("Clip mesh by inverse of region of interest")
         fixed_mesh_w_hole = utils.clip_mesh_by_shape(
-            jig_init, region_of_interest, fit_inside=True, inverse=True)
+            meshdata_init, region_of_interest, fit_inside=True, inverse=True)
 
         _logger.info(
                 "Get all initial mesh vertices in the region of interest")

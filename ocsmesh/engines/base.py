@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union
 
+import geopandas as gpd
+
 from ocsmesh.internal import MeshData
 
 
@@ -32,8 +34,8 @@ class BaseMeshEngine(ABC):
     @abstractmethod
     def generate(
         self,
-        shape: Any,
-        sizing: Optional[Any] = None
+        shape: gpd.GeoSeries,
+        sizing: Optional[MeshData] = None
     ) -> MeshData:
         """
         Generate a new mesh from a geometric shape.
@@ -56,8 +58,8 @@ class BaseMeshEngine(ABC):
     def remesh(
         self,
         mesh: MeshData,
-        shape: Optional[Any] = None,
-        sizing: Optional[Any] = None
+        shape: Optional[gpd.GeoSeries] = None,
+        sizing: Optional[MeshData] = None
     ) -> MeshData:
         """
         Refine or optimize an existing mesh.
