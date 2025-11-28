@@ -29,7 +29,7 @@ from .raster import Raster
 from .mesh import Mesh
 from .geom import Geom
 from .hfun import Hfun
-from .driver import JigsawDriver
+from .driver import MeshDriver
 
 if util.find_spec("colored_traceback") is not None:
     import colored_traceback
@@ -43,7 +43,7 @@ __all__ = [
     "Hfun",
     "Raster",
     "Mesh",
-    "JigsawDriver",
+    "MeshDriver",
 ]
 
 # mpl.rcParams['agg.path.chunksize'] = 10000

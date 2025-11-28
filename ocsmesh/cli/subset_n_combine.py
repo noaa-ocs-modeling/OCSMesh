@@ -6,7 +6,6 @@ import sys
 from time import time
 
 import geopandas as gpd
-from jigsawpy.msh_t import jigsaw_msh_t
 import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
@@ -14,7 +13,9 @@ from scipy.spatial import cKDTree
 from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, MultiPoint
 from shapely.ops import polygonize, unary_union, transform
 
-from ocsmesh import Raster, Geom, Mesh, Hfun, utils, JigsawDriver
+from ocsmesh import Raster, Geom, Mesh, Hfun, utils
+from ocsmesh.internal import MeshData
+from ocsmesh.engine.factory import get_mesh_engine
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -274,32 +275,46 @@ class SubsetAndCombine:
         hfun_lo = Hfun(Mesh(msht_lo))
         hfun_lo.size_from_mesh()
 
-        msht_cdt = utils.triangulate_polygon(
-            buffer_domain, None, opts='p'
-        )
+        # TODO: Uncomment after implementing triangle driver
+        engine = get_mesh_engine('triangle', **mesh_options)
+#        meshdata = engine.generate(
+#            meshdata_init,
+#            gpd.GeoSeries(region_of_interest, crs=...),
+#            meshdata_hfun
+#        )
+#        msht_cdt = utils.triangulate_polygon(
+#            buffer_domain, None, opts='p'
+#        )
         msht_cdt.crs = crs
 
         hfun_cdt = Hfun(Mesh(msht_cdt))
         hfun_cdt.size_from_mesh()
 
-        hfun_cdt_sz = deepcopy(hfun_cdt.msh_t().value) / approx_elem_per_width
+        hfun_cdt_sz = deepcopy(hfun_cdt.meshdata().values) / approx_elem_per_width
         msht_cdt.value[:] = hfun_cdt_sz
         hfun_rep = Hfun(Mesh(msht_cdt))
 
-        mesh_domain_rep = JigsawDriver(
-            geom=Geom(buffer_domain, crs=crs),
-            hfun=hfun_rep,
-            initial_mesh=False
-        ).run(sieve=0)
+        # TODO: Uncomment after implementing adding engine options
+        engine = get_mesh_engine('jigsaw', **mesh_options)
+#        meshdata = engine.generate(
+#            meshdata_init,
+#            gpd.GeoSeries(region_of_interest, crs=...),
+#            meshdata_hfun
+#        )
+#        mesh_domain_rep = JigsawDriver(
+#            geom=Geom(buffer_domain, crs=crs),
+#            hfun=hfun_rep,
+#            initial_mesh=False
+#        ).run(sieve=0)
 
-        msht_domain_rep = deepcopy(mesh_domain_rep.msh_t)
+        msht_domain_rep = deepcopy(mesh_domain_rep.meshdata)
 #        utils.reproject(msht_domain_rep, crs)
 
         pts_2mesh = np.vstack(
-            (hfun_hi.msh_t().vert2['coord'], hfun_lo.msh_t().vert2['coord'])
+            (hfun_hi.meshdata().vert2['coord'], hfun_lo.meshdata().vert2['coord'])
         )
         val_2mesh = np.vstack(
-            (hfun_hi.msh_t().value, hfun_lo.msh_t().value)
+            (hfun_hi.meshdata().values, hfun_lo.meshdata().values)
         )
         domain_sz_1 = griddata(
             pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='linear'
@@ -323,13 +338,20 @@ class SubsetAndCombine:
         assert(not buffer_crs.is_geographic)
         assert(buffer_crs == hfun_buffer.crs)
 
-        mesh_buf_apprx = JigsawDriver(
-            geom=Geom(buffer_polygon, crs=crs),
-            hfun=hfun_buffer,
-            initial_mesh=False
-        ).run(sieve=0)
+        # TODO: Uncomment after implementing adding engine options
+        engine = get_mesh_engine('jigsaw', **mesh_options)
+#        meshdata = engine.generate(
+#            meshdata_init,
+#            gpd.GeoSeries(region_of_interest, crs=...),
+#            meshdata_hfun
+#        )
+#        mesh_buf_apprx = JigsawDriver(
+#            geom=Geom(buffer_polygon, crs=crs),
+#            hfun=hfun_buffer,
+#            initial_mesh=False
+#        ).run(sieve=0)
 
-        msht_buf_apprx = deepcopy(mesh_buf_apprx.msh_t)
+        msht_buf_apprx = deepcopy(mesh_buf_apprx.meshdata)
         # If vertices are too close to buffer geom boundary,
         # it's going to cause issues (thin elements)
 #        if msht_buf_apprx.crs != hfun_buffer.crs:
@@ -345,9 +367,16 @@ class SubsetAndCombine:
         ]
 
 #        utils.reproject(msht_buf_apprx, buffer_crs)
-        msht_buffer = utils.triangulate_polygon(
-            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
-        )
+        # TODO: Uncomment after implementing triangle driver
+#        engine = get_mesh_engine('triangle', **mesh_options)
+#        meshdata = engine.generate(
+#            meshdata_init,
+#            gpd.GeoSeries(region_of_interest, crs=...),
+#            meshdata_hfun
+#        )
+#        msht_buffer = utils.triangulate_polygon(
+#            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
+#        )
         msht_buffer.crs = crs
 
 #        utils.reproject(msht_buffer, buffer_crs)
@@ -373,7 +402,7 @@ class SubsetAndCombine:
 
         # Combine mesh
         # 1. combine hires and low-res
-        jig_old = utils.merge_msh_t(
+        jig_old = utils.merge_meshdata(
             jig_clip_lowres, jig_clip_hires,
             drop_by_bbox=False, out_crs=crs)
 
@@ -448,6 +477,7 @@ class SubsetAndCombine:
         value.append(jig_mesh.value[mesh_renum_idx])
 
         # Putting it all together
+        composite_mesh = MeshData( ...)
         composite_mesh = jigsaw_msh_t()
         composite_mesh.mshID = 'euclidean-mesh'
         composite_mesh.ndims = 2

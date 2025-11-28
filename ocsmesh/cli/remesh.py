@@ -287,7 +287,8 @@ class RemeshByDEM:
         meshdata_init = init_mesh.meshdata
 
         _logger.info("Projecting geometry to be in meters unit")
-        utils.msh_t_to_utm(jig_geom)
+        # TODO:
+        shape_geom.to_crs(...)
         _logger.info("Projecting size function to be in meters unit")
         utils.project_to_utm(meshdata_hfun)
         _logger.info("Projecting initial mesh to be in meters unit")
@@ -314,39 +315,47 @@ class RemeshByDEM:
 
         _logger.info(
                 "Get all initial mesh vertices in the region of interest")
-        vert_idx_to_refin = utils.get_verts_in_shape(
-            jig_hfun, region_of_interest)
+        # TODO: Fix after engine remesh implementation
+#        engine = get_mesh_engine(mesh_engine, **mesh_options)
+        meshdata_remeshed = engine.remesh(
+            meshdata_init,
+            gpd.GeoSeries(region_of_interest, crs=...),
+            meshdata_hfun
+        )
 
-        fixed_mesh_w_hole.point['IDtag'][:] = -1
-        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
-
-        refine_opts = jigsawpy.jigsaw_jig_t()
-        refine_opts.hfun_scal = "absolute"
-        refine_opts.hfun_hmin = np.min(jig_hfun.value)
-        refine_opts.hfun_hmax = np.max(jig_hfun.value)
-        refine_opts.mesh_dims = +2
-        # Mesh becomes TOO refined on exact boundaries from DEM
-#    refine_opts.mesh_top1 = True
-#    refine_opts.geom_feat = True
-
-        jig_remeshed = jigsawpy.jigsaw_msh_t()
-        jig_remeshed.ndims = +2
-
-        _logger.info("Remeshing...")
-        # Remeshing
-        jigsawpy.lib.jigsaw(
-                refine_opts,
-                jig_geom,
-                jig_remeshed,
-                init=fixed_mesh_w_hole,
-                hfun=jig_hfun)
-        jig_remeshed.crs = fixed_mesh_w_hole.crs
-        _logger.info("Done")
-
-        if jig_remeshed.tria3['index'].shape[0] == 0:
-            _err = 'ERROR: Jigsaw returned empty mesh.'
-            _logger.error(_err)
-            raise ValueError(_err)
+#        vert_idx_to_refin = utils.get_verts_in_shape(
+#            meshdata_hfun, region_of_interest)
+#
+#        fixed_mesh_w_hole.point['IDtag'][:] = -1
+#        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
+#
+#        refine_opts = jigsawpy.jigsaw_jig_t()
+#        refine_opts.hfun_scal = "absolute"
+#        refine_opts.hfun_hmin = np.min(jig_hfun.value)
+#        refine_opts.hfun_hmax = np.max(jig_hfun.value)
+#        refine_opts.mesh_dims = +2
+#        # Mesh becomes TOO refined on exact boundaries from DEM
+##    refine_opts.mesh_top1 = True
+##    refine_opts.geom_feat = True
+#
+#        jig_remeshed = jigsawpy.jigsaw_msh_t()
+#        jig_remeshed.ndims = +2
+#
+#        _logger.info("Remeshing...")
+#        # Remeshing
+#        jigsawpy.lib.jigsaw(
+#                refine_opts,
+#                jig_geom,
+#                jig_remeshed,
+#                init=fixed_mesh_w_hole,
+#                hfun=jig_hfun)
+#        jig_remeshed.crs = fixed_mesh_w_hole.crs
+#        _logger.info("Done")
+#
+#        if jig_remeshed.tria3['index'].shape[0] == 0:
+#            _err = 'ERROR: Jigsaw returned empty mesh.'
+#            _logger.error(_err)
+#            raise ValueError(_err)
 
         # TODO: This is irrelevant right now since output file is
         # always is EPSG:4326, enable when APIs for remeshing is added

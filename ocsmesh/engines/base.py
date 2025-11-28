@@ -1,3 +1,4 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union
 
@@ -35,7 +36,8 @@ class BaseMeshEngine(ABC):
     def generate(
         self,
         shape: gpd.GeoSeries,
-        sizing: Optional[MeshData] = None
+        sizing: Optional[MeshData | int | float] = None,
+        seed: Optional[MeshData] = None,
     ) -> MeshData:
         """
         Generate a new mesh from a geometric shape.
@@ -59,7 +61,8 @@ class BaseMeshEngine(ABC):
         self,
         mesh: MeshData,
         shape: Optional[gpd.GeoSeries] = None,
-        sizing: Optional[MeshData] = None
+        sizing: Optional[MeshData | int | float] = None,
+        seed: Optional[MeshData] = None,
     ) -> MeshData:
         """
         Refine or optimize an existing mesh.

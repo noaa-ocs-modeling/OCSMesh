@@ -14,6 +14,7 @@ from pyproj import Transformer
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
+from ocsmesh.engine.factory import get_mesh_engine
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -135,18 +136,18 @@ class RemeshByShape:
         mesh = Mesh.open(mesh_file, crs=mesh_crs)
 
         geom = Geom(deepcopy(mesh))
-        geom_jig = geom.msh_t()
+        geom_shape = geom.geoseries()
 
         initial_hfun = Hfun(deepcopy(mesh))
         initial_hfun.size_from_mesh()
 
         # DO NOT DEEPCOPY
-        initial_hfun_jig = initial_hfun.msh_t()
-        ref_crs = initial_hfun_jig.crs
+        initial_hfun_meshdata = initial_hfun.meshdata()
+        ref_crs = initial_hfun_meshdata.crs
 
-        utils.reproject(geom_jig, ref_crs)
+        utils.reproject(geom_shape, ref_crs)
 
-        init_jig = None
+        init_meshdata = None
 
         # If there's an input shape, refine in the shape, otherwise
         # refine the whole domain by the factor
@@ -205,10 +206,10 @@ class RemeshByShape:
             refine_polys = gdf_to_refine.union_all()
 
             # Initial mesh for the refinement (all except refinement area)
-            init_jig = deepcopy(mesh.msh_t)
-            utils.reproject(init_jig, ref_crs)
+            init_meshdata = deepcopy(mesh.meshdata)
+            utils.reproject(init_meshdata, ref_crs)
             utils.clip_mesh_by_shape(
-                    init_jig,
+                    init_meshdata,
                     refine_polys,
                     fit_inside=True,
                     inverse=True,
@@ -216,28 +217,28 @@ class RemeshByShape:
 
             # Fix elements in the inital mesh that are NOT clipped by refine
             # polygon
-            init_jig.vert2['IDtag'][:] = -1
+            init_meshdata.vert2['IDtag'][:] = -1
 
             # Preparing refinement size function
-            vert_in = utils.get_verts_in_shape(initial_hfun_jig, refine_polys)
+            vert_in = utils.get_verts_in_shape(initial_hfun_meshdata, refine_polys)
             # Reduce hfun by factor in refinement area; modifying in-place
 
-            refine_hfun_jig = utils.clip_mesh_by_shape(
-                initial_hfun_jig, refine_polys, fit_inside=False)
+            refine_hfun_meshdata = utils.clip_mesh_by_shape(
+                initial_hfun_meshdata, refine_polys, fit_inside=False)
 
             utils.clip_mesh_by_shape(
-                initial_hfun_jig, refine_polys,
+                initial_hfun_meshdata, refine_polys,
                 fit_inside=True, inverse=True, in_place=True)
 
 
         else:
             # Refine the whole domain by factor
-            refine_hfun_jig = deepcopy(initial_hfun_jig)
+            refine_hfun_meshdata = deepcopy(initial_hfun_meshdata)
 
         # Prepare refinement size function with additional criteria
-        refine_hfun_jig.value[:] = refine_hfun_jig.value / refine_factor
+        refine_hfun_meshdata.values = refine_hfun_meshdata.values / refine_factor
 
-        hfun_refine = Hfun(Mesh(deepcopy(refine_hfun_jig)))
+        hfun_refine = Hfun(Mesh(deepcopy(refine_hfun_meshdata)))
 
         transformer = Transformer.from_crs(
                 mesh.crs, ref_crs, always_xy=True)
@@ -245,7 +246,7 @@ class RemeshByShape:
             if expansion_rate is None:
                 expansion_rate = 0.1
             if target_size is None:
-                target_size = np.min(refine_hfun_jig.value)
+                target_size = np.min(refine_hfun_meshdata.values)
 
             refine_ctr = mesh.get_contour(level=level)
             refine_ctr = transform(transformer.transform, refine_ctr)
@@ -268,41 +269,48 @@ class RemeshByShape:
             hfun_refine.add_patch(
                     refine_mp, None, target_size, nprocs)
 
-        refine_hfun_jig = hfun_refine.msh_t()
-        utils.reproject(refine_hfun_jig, ref_crs)
+        refine_hfun_meshdata = hfun_refine.meshdata()
+        utils.reproject(refine_hfun_meshdata, ref_crs)
 
-        final_hfun_jig = utils.merge_msh_t(
-                initial_hfun_jig, refine_hfun_jig,
+        final_hfun_meshdata = utils.merge_meshdata(
+                initial_hfun_meshdata, refine_hfun_meshdata,
                 out_crs=ref_crs,
                 drop_by_bbox=False)
 
-        if not (geom_jig.crs == ref_crs
-                and (init_jig and init_jig.crs == ref_crs)):
+        if not (geom_shape.crs == ref_crs
+                and (init_meshdata and init_meshdata.crs == ref_crs)):
             raise ValueError(
                 "CRS for geometry, hfun and init mesh is not the same")
 
-        opts = jigsawpy.jigsaw_jig_t()
-        opts.hfun_scal = "absolute"
-        opts.hfun_hmin = np.min(final_hfun_jig.value)
-        opts.hfun_hmax = np.max(final_hfun_jig.value)
-        opts.mesh_dims = +2
-
-        remesh_jig = jigsawpy.jigsaw_msh_t()
-        remesh_jig.mshID = 'euclidean-mesh'
-        remesh_jig.ndims = 2
-        remesh_jig.crs = init_jig.crs
-
-        jigsawpy.lib.jigsaw(
-                opts, geom_jig, remesh_jig,
-                init=init_jig,
-                hfun=final_hfun_jig)
+        # TODO: Redo after imlementing remesh
+#        engine = get_mesh_engine(mesh_engine, **mesh_options)
+        meshdata_remeshed = engine.remesh(
+            meshdata_init,
+            gpd.GeoSeries(region_of_interest, crs=...),
+            meshdata_hfun
+        )
+#        opts = jigsawpy.jigsaw_jig_t()
+#        opts.hfun_scal = "absolute"
+#        opts.hfun_hmin = np.min(final_hfun_jig.value)
+#        opts.hfun_hmax = np.max(final_hfun_jig.value)
+#        opts.mesh_dims = +2
+#
+#        remesh_jig = jigsawpy.jigsaw_msh_t()
+#        remesh_jig.mshID = 'euclidean-mesh'
+#        remesh_jig.ndims = 2
+#        remesh_jig.crs = init_jig.crs
+#
+#        jigsawpy.lib.jigsaw(
+#                opts, geom_jig, remesh_jig,
+#                init=init_jig,
+#                hfun=final_hfun_jig)
 
         utils.finalize_mesh(remesh_jig, sieve)
 
         # Interpolate from inpu mesh and DEM if any
         utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-                mesh.msh_t, remesh_jig)
-        final_mesh = Mesh(remesh_jig)
+                mesh.meshdata, remesh_meshdata)
+        final_mesh = Mesh(remesh_meshdata)
         if interp_rast_list:
             final_mesh.interpolate(interp_rast_list, nprocs=nprocs)
 

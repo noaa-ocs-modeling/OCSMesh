@@ -2,6 +2,7 @@ from typing import Any, Optional
 import logging
 
 import geopandas as gpd
+import numpy as np
 try:
     import jigsawpy
     _HAS_JIGSAW = True
@@ -20,54 +21,34 @@ class JigsawOptions(BaseMeshOptions):
     Wraps jigsaw_opts_t options.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+            self,
+            hfun_marche=False,
+            remesh_tiny_elements=False,
+            quality_metric=1.05,
+            **other_options
+    ):
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
-        ############# OLD CODE FROM DRIVER
-        opts = obj.__dict__.get('opts')
-        if opts is None:
-            opts = jigsaw_jig_t()
-            opts.mesh_dims = +2
-            opts.optm_tria = True
-            opts.hfun_scal = 'absolute'
-            obj.__dict__['opts'] = opts
-            ############ ALSO
-            self.opts.hfun_hmin = np.min(hfun_msh_t.value)
-            self.opts.hfun_hmax = np.max(hfun_msh_t.value)
-            self.opts.mesh_rad2 = float(quality_metric)
-        ################
-        quality_metric=1.05, remesh_tiny_elements=False
-        ###########
 
-        ############ FROM HFUN
-            opts = jigsaw_jig_t()
-            # additional configuration options
-            opts.mesh_dims = +2
-            opts.hfun_scal = 'absolute'
-            # no need to optimize for size function generation
-            opts.optm_tria = False
-
-            opts.hfun_hmin = np.min(hfun.value) if self.hmin is None else \
-                self.hmin
-            opts.hfun_hmax = np.max(hfun.value) if self.hmax is None else \
-                self.hmax
-            opts.verbosity = self.verbosity if verbosity is None else \
-                verbosity
-        #####################
+        self._hfun_marche = hfun_marche
+        self._remesh_tiny = remesh_tiny_elements
 
         # internal storage for options
         self._opts = jigsawpy.jigsaw_opts_t()
 
         # Set defaults
         self._opts.hfun_scal = "absolute"
+        self._opts.mesh_dims = +2
         self._opts.hfun_hmax = float("inf")
         self._opts.hfun_hmin = 0.0
-        self._opts.mesh_dims = +2
         self._opts.mesh_top1 = True
         self._opts.geom_feat = True
 
+        self._opts.mesh_rad2 = float(quality_metric)
+
         # Apply user overrides
-        for key, value in kwargs.items():
+        for key, value in other_options.items():
             if hasattr(self._opts, key):
                 setattr(self._opts, key, value)
             else:
@@ -76,7 +57,7 @@ class JigsawOptions(BaseMeshOptions):
                 )
 
     def get_config(self) -> Any:
-        return self._opts
+        return {'opts': self._opts, 'marche': self._hfun_marche, 'tiny_elem': self._remesh_tiny}
 
 
 class JigsawEngine(BaseMeshEngine):
@@ -87,221 +68,162 @@ class JigsawEngine(BaseMeshEngine):
     def generate(
         self,
         shape: gpd.GeoSeries,
-        sizing: Optional[MeshData] = None
+        sizing: Optional[MeshData | int | float] = None,
+        seed: Optional[MeshData] = None,
     ) -> MeshData:
-
-        ################## FROM HFUN
-        if marche is True:
-            libsaw.marche(opts, hfun)
-        ###########################
 
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
 
-        # 1. Prepare Geometry
+        # Prepare Geometry
         geom = shape_to_msh_t(shape)
 
-        # 2. Prepare Sizing
-        hfun = jigsawpy.jigsaw_msh_t()
-        if sizing is not None:
-            # Assuming sizing is convertible to msh_t or
-            # is already a MeshData/msh_t.
-            # Logic depends on input type of sizing.
-            if isinstance(sizing, MeshData):
-                hfun = meshdata_to_jigsaw(sizing)
-            # If sizing is function/raster, extra logic needed here
-            # For now, we assume MeshData-like input for Hfun
-            pass
-
-        # 3. Prepare Output Container
-        mesh = jigsawpy.jigsaw_msh_t()
-
-        # 4. Run Engine
-        opts = self._options.get_config()
-        jigsawpy.lib.jigsaw(
-            opts,
-            geom,
-            mesh,
-            init=hfun,
-            hfun=hfun
+        seed_msh = meshdata_to_jigsaw(seed)
+        seed_msh.vert2['IDtag'][:] = -1
+        seed_edges = utils.get_mesh_edges(seed, unique=true)
+        seed_msh.edge2 = np.array(
+            [(e, -1) for e in seed_edges],
+            dtype=jigsawpy.jigsaw_msh_t.edge2_t
         )
 
-        # 5. Convert back to MeshData
-        return jigsaw_to_meshdata(mesh)
-        ############################### OLD CODE 
-        sieve=None, quality_metric=1.05, remesh_tiny_elements=False):
+        # Convert back to MeshData
+        return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, seed_msh))
 
-        hfun_msh_t = self.hfun.msh_t()
-
-        output_mesh = jigsaw_msh_t()
-        output_mesh.mshID = 'euclidean-mesh'
-        output_mesh.ndims = 2
-
-        self.opts.hfun_hmin = np.min(hfun_msh_t.value)
-        self.opts.hfun_hmax = np.max(hfun_msh_t.value)
-        self.opts.mesh_rad2 = float(quality_metric)
-
-        geom_msh_t = self.geom.msh_t()
-
-        # When the center of geom and hfun are NOT the same, utm
-        # zones would be different for resulting msh_t.
-        if geom_msh_t.crs != hfun_msh_t.crs:
-            utils.reproject(hfun_msh_t, geom_msh_t.crs)
-        output_mesh.crs = hfun_msh_t.crs
-
-        _logger.info('Calling libsaw.jigsaw() ...')
-        libsaw.jigsaw(
-            self.opts,
-            geom_msh_t,
-            output_mesh,
-            init=hfun_msh_t if self._init is True else None,
-            hfun=hfun_msh_t
-        )
-
-        # post process
-        if output_mesh.tria3['index'].shape[0] == 0:
-            _err = 'ERROR: Jigsaw returned empty mesh.'
-            _logger.error(_err)
-            raise RuntimeError(_err)
-
-        if self._crs is not None:
-            utils.reproject(output_mesh, self._crs)
-
-        _logger.info('Cleanup jigsaw mesh...')
-        if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
-            output_mesh = remesh_small_elements(
-                self.opts, geom_msh_t, output_mesh, hfun_msh_t)
-
-        _logger.info('done!')
-        return output_mesh
-        ##############################
 
     def remesh(
         self,
         mesh: MeshData,
         shape: Optional[gpd.GeoSeries] = None,
-        sizing: Optional[MeshData] = None
+        sizing: Optional[MeshData | int | float] = None,
+        seed: Optional[MeshData] = None,
     ) -> MeshData:
 
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
 
-        ###############################
-#        vert_idx_to_refin = utils.get_verts_in_shape(
-#            meshdata_hfun, region_of_interest)
-#
-#        fixed_mesh_w_hole.point['IDtag'][:] = -1
-#        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
-#
-#        refine_opts = jigsawpy.jigsaw_jig_t()
-#        refine_opts.hfun_scal = "absolute"
-#        refine_opts.hfun_hmin = np.min(jig_hfun.value)
-#        refine_opts.hfun_hmax = np.max(jig_hfun.value)
-#        refine_opts.mesh_dims = +2
-#        # Mesh becomes TOO refined on exact boundaries from DEM
-##    refine_opts.mesh_top1 = True
-##    refine_opts.geom_feat = True
-#
-#        jig_remeshed = jigsawpy.jigsaw_msh_t()
-#        jig_remeshed.ndims = +2
-#
-#        _logger.info("Remeshing...")
-#        # Remeshing
-#        jigsawpy.lib.jigsaw(
-#                refine_opts,
-#                jig_geom,
-#                jig_remeshed,
-#                init=fixed_mesh_w_hole,
-#                hfun=jig_hfun)
-#        jig_remeshed.crs = fixed_mesh_w_hole.crs
-#        _logger.info("Done")
-#
-#        if jig_remeshed.tria3['index'].shape[0] == 0:
-#            _err = 'ERROR: Jigsaw returned empty mesh.'
-#            _logger.error(_err)
-#            raise ValueError(_err)
+        # NOTE: User should make sure seed mesh is compatible with the 
+        # input mesh and refinement shape!
+        seed_msh = meshdata_to_jigsaw(seed)
+        seed_msh.vert2['IDtag'][:] = -1
+        seed_edges = utils.get_mesh_edges(seed, unique=true)
+        seed_msh.edge2 = np.array(
+            [(e, -1) for e in seed_edges],
+            dtype=jigsawpy.jigsaw_msh_t.edge2_t
+        )
 
-        # TODO: This is irrelevant right now since output file is
-        # always is EPSG:4326, enable when APIs for remeshing is added
-#    if out_crs is not None:
-#        utils.reproject(jig_remeshed, out_crs)
-        ###############################
-        # 1. Convert MeshData to Jigsaw format (Initial Mesh)
-        init_mesh = meshdata_to_jigsaw(mesh)
+        init_msh = meshdata_to_jigsaw(mesh)
+        is shape is not None:
+            seed_in_roi = utils.clip_mesh_by_shape(
+                seed, shape.union_all(), fit_inside=True, inverse=False)
+            seed_msh = meshdata_to_jigsaw(seed_in_roi)
+            seed_msh.vert2['IDtag'][:] = -1
+            # note: add edge2 from elements
+            seed_edges = utils.get_mesh_edges(seed_in_roi, unique=true)
+            seed_msh.edge2 = np.array(
+                [(e, -1) for e in seed_edges],
+                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+            )
 
-        # 2. Prepare Geometry (if a region/shape is provided)
-        geom = None
-        if shape is not None:
-            geom = shape_to_msh_t(shape)
+            mesh_w_hole = utils.clip_mesh_by_shape(
+                mesh, shape.union_all(), fit_inside=True, inverse=True)
 
-        # 3. Setup Sizing (Hfun)
-        hfun = jigsawpy.jigsaw_msh_t()
+            if mesh_w_hole.num_nodes == 0:
+                err = 'ERROR: refinement shape covers the whole input mesh!'
+                _logger.error(err)
+                raise RuntimeError(err)
+
+            # Convert MeshData to Jigsaw format (Initial Mesh)
+            init_msh = meshdata_to_jigsaw(mesh_w_hole)
+            init_msh.vert2['IDtag'][:] = -1
+            # note: add edge2 from elements
+            init_edges = utils.get_mesh_edges(mesh_w_hole, unique=true)
+            init_msh.edge2 = np.array(
+                [(e, -1) for e in init_edges],
+                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+            )
+
+        seed_idx_offset = len(init_msh.vert2)
+        init_msh.vert2 = np.concatenate((init_msh.vert2, seed_msh.vert2))
+        init_msh.edge2 = np.concatenate(
+            (init_msh.edge2, seed_msh.edge2 + seed_idx_offset)
+        )
+
+        # Prepare Geometry from the input mesh
+        bdry_edges = utils.get_boundary_edges(mesh)
+        bdry_vert_idx = np.unique(mesh_edges.ravel())
+        mapping = np.full(mesh.num_nodes, -1)
+        mapping[bdry_vert_idx] = np.range(len(bdry_vert_idx))
+        geom_coords = mesh.coords[bdry_vert_idx, :]
+        geom_edges = mapping[bdry_edges]
+
+        geom = jigsawpy.jigsaw_msh_t()
+        geom.mshID = 'euclidean-mesh'
+        geom.ndims = +2
+        geom.vert2 = np.array(
+            [(c, 0) for c in ],
+            dtype=jigsawpy.jigsaw_msh_t.VERT2_t
+        )
+        geom.edge2 = np.array(
+            [(e, 0) for e in geom_edges],
+            dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
+        )
+
+        return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, init_msh))
+
+
+    def _jigsaw_mesh(self, geom, sizing, init_mesh=None)
+
+        # Prepare config
+        opt_dict = self._options.get_config()
+
+        opts = opt_dict['opts']
+        marche = opt_dict['marche']
+        tiny_elem = opt_dict['tiny_elem']
+
+        # Prepare Sizing
+        hfun = None
         if sizing is not None:
-             if isinstance(sizing, MeshData):
+            if isinstance(sizing, MeshData):
                 hfun = meshdata_to_jigsaw(sizing)
 
-        # 4. Output Container
-        out_mesh = jigsawpy.jigsaw_msh_t()
+                opts.hfun_hmin = np.min(hfun.value)
+                opts.hfun_hmax = np.max(hfun.value)
 
-        # 5. Run Engine
-        # Jigsaw uses 'geom' to constrain the remeshing if provided
-        opts = self._options.get_config()
+                if marche is True:
+                    jigsawpy.lib.marche(opts, hfun)
+            elif isinstance(sizing, (int, float)):
+                opts.hfun_hmin = float(sizing)
+                opts.hfun_hmax = float(sizing)
 
-        # If no geom provided for remesh, Jigsaw might behave
-        # differently depending on opts.
-        # Usually it needs a geom definition or relies on init mesh
-        # boundary if geom is missing.
+        # Prepare Output Container
+        mesh = jigsawpy.jigsaw_msh_t()
+        mesh.mshID = 'euclidean-mesh'
+        mesh.ndims = +2
+
+        # Run Engine
         jigsawpy.lib.jigsaw(
             opts,
             geom,
-            out_mesh,
+            mesh,
             init=init_mesh,
             hfun=hfun
         )
 
-        # 6. Return Result
-        return jigsaw_to_meshdata(out_mesh)
+        # Post process
+        if mesh.tria3['index'].shape[0] == 0:
+            err = 'ERROR: Jigsaw returned empty mesh.'
+            _logger.error(err)
+            raise RuntimeError(err)
 
 
-def multipolygon_to_jigsaw_msh_t(
-        multipolygon: MultiPolygon,
-        crs: CRS
-    ) -> jigsawpy.jigsaw_msh_t:
-    """Calculate vertex-edge representation of multipolygon
+        _logger.info('Cleanup jigsaw mesh...')
+        if opts.hfun_hmin > 0 and tiny_elem:
+            mesh = remesh_small_elements(opts, geom, mesh, hfun)
 
-    Calculate `jigsawpy` vertex-edge representation of the input
-    `shapely` multipolygon. The resulting object is in a projected or
-    local UTM CRS
+        _logger.info('done!')
 
-    Parameters
-    ----------
-    multipolygon : MultiPolygon
-        Input polygon for which the vertex-edge representation is to
-        be calculated
-    crs : CRS
-        CRS of the input polygon
+        return mesh
 
-    Returns
-    -------
-    jigsawpy.jigsaw_msh_t
-        Vertex-edge representation of the input multipolygon
-
-    Raises
-    ------
-    NotImplementedError
-    """
-
-    utm_crs = utils.estimate_bounds_utm(
-            multipolygon.bounds, crs)
-    if utm_crs is not None:
-        transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
-        multipolygon = ops.transform(transformer.transform, multipolygon)
-
-    msht = utils.shape_to_msh_t(multipolygon)
-    msht.crs = crs
-    if utm_crs is not None:
-        msht.crs = utm_crs
-    return msht
 
 
 def meshdata_to_jigsaw(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
@@ -342,10 +264,6 @@ def meshdata_to_jigsaw(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
             vals, dtype=jigsawpy.jigsaw_msh_t.REALS_t
         )
 
-    # CRS
-    if mesh.crs is not None:
-        msh.crs = mesh.crs
-
     return msh
 
 
@@ -364,17 +282,11 @@ def jigsaw_to_meshdata(msh: 'jigsawpy.jigsaw_msh_t') -> MeshData:
     if msh.value.size > 0:
         values = msh.value
 
-    # Extract CRS if available in the Jigsaw object
-    # (Note: jigsawpy doesn't strictly enforce .crs field standard,
-    # but we assume it might exist if we put it there)
-    crs = getattr(msh, 'crs', None)
-
     return MeshData(
         coords=coords,
         tria=tria,
         quad=quad,
         values=values,
-        crs=crs
     )
 
 
@@ -436,3 +348,41 @@ def shape_to_msh_t(
         )
 
     return msh
+
+
+def remesh_small_elements(opts, geom, mesh, hfun):
+
+
+    """
+    This function uses all the inputs for a given jigsaw meshing
+    process and based on that finds and fixes tiny elements that
+    might occur during initial meshing by iteratively remeshing
+    """
+
+
+    # TODO: Implement for quad
+
+    hmin = np.min(hfun.value)
+    equilat_area = np.sqrt(3)/4 * hmin**2
+    # List of arbitrary coef of equilateral triangle area for a given
+    # minimum mesh size to come up with a decent cut off.
+    coeffs = [0.5, 0.2, 0.1, 0.05]
+
+
+    fixed_mesh = mesh
+    for coef in coeffs:
+        tria_areas = calculate_tria_areas(fixed_mesh)
+        tiny_sz = coef * equilat_area
+        tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas<tiny_sz,:].ravel())
+        if len(tiny_verts) == 0:
+            break
+        mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
+
+        fixed_mesh = jigsawpy.jigsaw_msh_t()
+        fixed_mesh.mshID = 'euclidean-mesh'
+        fixed_mesh.ndims = +2
+
+        jigsawpy.lib.jigsaw(
+            opts, geom, fixed_mesh, init=mesh_clip, hfun=hfun)
+
+    return fixed_mesh

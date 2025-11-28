@@ -7,7 +7,8 @@ import logging
 import geopandas as gpd
 from shapely.geometry import MultiPolygon
 
-from ocsmesh import Raster, Geom, Hfun, JigsawDriver
+from ocsmesh import Raster, Geom, Hfun
+from ocsmesh.engine.factory import get_mesh_engine
 from ocsmesh.mesh.mesh import Mesh
 from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
@@ -126,11 +127,18 @@ class MeshUpgrader:
         read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
         hfun_from_disk = HfunMesh(read_hfun)
 
-        jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
-        jigsaw.verbosity = 1
-
-        ## Execute mesher (processing of geom and hfun happens here)
-        mesh = jigsaw.run()
+        # TODO: Uncomment after implementing triangle driver
+        engine = get_mesh_engine('triangle', **mesh_options)
+#        meshdata = engine.generate(
+#            meshdata_init,
+#            gpd.GeoSeries(region_of_interest, crs=...),
+#            meshdata_hfun
+#        )
+#        jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
+#        jigsaw.verbosity = 1
+#
+#        ## Execute mesher (processing of geom and hfun happens here)
+#        mesh = jigsaw.run()
 
         ## Free-up memory
         del read_gdf

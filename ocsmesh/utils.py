@@ -190,7 +190,7 @@ def geom_to_multipolygon(mesh):
     return MultiPolygon(polygon_collection)
 
 
-def get_boundary_segments(mesh):
+def get_boundary_segments(mesh) -> List[LineString]:
 
     coords = mesh.coords
     boundary_edges = get_boundary_edges(mesh)
@@ -718,14 +718,15 @@ def get_lone_element_verts(mesh):
 # Flook   Find face with given vertices
 def get_verts_in_shape(
         mesh: MeshData,
-        shape: Union[box, Polygon, MultiPolygon],
+        shape: Union[box, Polygon, MultiPolygon, gpd.GeoSeries],
         from_box: bool = False,
         num_adjacent: int = 0
         ) -> Sequence[int]:
 
+    shp_series = gpd.GeoSeries(shape)
     if from_box:
         crd = mesh.coords
-        xmin, ymin, xmax, ymax = shape.bounds
+        xmin, ymin, xmax, ymax = shp_series.total_bounds
 
         in_box_idx_1 = np.arange(len(crd))[crd[:, 0] > xmin]
         in_box_idx_2 = np.arange(len(crd))[crd[:, 0] < xmax]
@@ -738,7 +739,6 @@ def get_verts_in_shape(
 
     pt_series = gpd.GeoSeries(gpd.points_from_xy(
         mesh.coords[:,0], mesh.coords[:,1]))
-    shp_series = gpd.GeoSeries(shape)
 
     # We need point indices in the shapes, not the shape indices
     # query bulk returns all combination of intersections in case
