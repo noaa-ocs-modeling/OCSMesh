@@ -12,7 +12,7 @@ class BaseMesh:
     Attributes
     ----------
     meshdata : MeshData
-        Refernece to underlying jigsaw mesh object.
+        Refernece to underlying mesh object.
     coord : array-like
         Coordinates of mesh nodes.
 
@@ -28,7 +28,7 @@ class BaseMesh:
 
     @property
     def meshdata(self) -> MeshData:
-        """Read-only property returning reference to the jigsawpy mesh object
+        """Read-only property returning reference to the mesh data
 
         Notes
         -----

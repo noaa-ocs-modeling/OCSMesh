@@ -581,7 +581,7 @@ class Mesh(BaseMesh):
         Parameters
         ----------
         mesh : MeshData
-            Input jigsaw mesh object
+            Input mesh object
 
         Returns
         -------

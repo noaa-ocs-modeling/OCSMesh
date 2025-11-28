@@ -262,103 +262,83 @@ class SubsetAndCombine:
         # HARDCODED FOR NOW
         approx_elem_per_width = 3
 
-        msht_hi = deepcopy(hires_mesh_clip)
-        msht_lo = deepcopy(lores_mesh_clip)
+        meshdata_hi = deepcopy(hires_mesh_clip)
+        meshdata_lo = deepcopy(lores_mesh_clip)
 
         crs = buffer_crs
         assert(not buffer_crs.is_geographic)
 
         # calculate mesh size for clipped bits
-        hfun_hi = Hfun(Mesh(msht_hi))
+        hfun_hi = Hfun(Mesh(meshdata_hi))
         hfun_hi.size_from_mesh()
 
-        hfun_lo = Hfun(Mesh(msht_lo))
+        hfun_lo = Hfun(Mesh(meshdata_lo))
         hfun_lo.size_from_mesh()
 
-        # TODO: Uncomment after implementing triangle driver
-        engine = get_mesh_engine('triangle', **mesh_options)
-#        meshdata = engine.generate(
-#            meshdata_init,
-#            gpd.GeoSeries(region_of_interest, crs=...),
-#            meshdata_hfun
-#        )
-#        msht_cdt = utils.triangulate_polygon(
-#            buffer_domain, None, opts='p'
-#        )
-        msht_cdt.crs = crs
+        engine = get_mesh_engine('triangle', opts='p')
+        meshdata_cdt = engine.generate(gpd.GeoSeries(buffer_domain))
+        meshdata_cdt.crs = crs
 
-        hfun_cdt = Hfun(Mesh(msht_cdt))
+        hfun_cdt = Hfun(Mesh(meshdata_cdt))
         hfun_cdt.size_from_mesh()
 
         hfun_cdt_sz = deepcopy(hfun_cdt.meshdata().values) / approx_elem_per_width
-        msht_cdt.value[:] = hfun_cdt_sz
-        hfun_rep = Hfun(Mesh(msht_cdt))
+        meshdata_cdt.values = hfun_cdt_sz
 
-        # TODO: Uncomment after implementing adding engine options
-        engine = get_mesh_engine('jigsaw', **mesh_options)
-#        meshdata = engine.generate(
-#            meshdata_init,
-#            gpd.GeoSeries(region_of_interest, crs=...),
-#            meshdata_hfun
-#        )
-#        mesh_domain_rep = JigsawDriver(
-#            geom=Geom(buffer_domain, crs=crs),
-#            hfun=hfun_rep,
-#            initial_mesh=False
-#        ).run(sieve=0)
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw')
+        utm_crs = utils.estimate_bounds_utm(buffer_domain.bounds, crs=crs):
+        meshdata_domain_rep = engine.generate(
+            gpd.GeoSeries(buffer_domain, crs=crs).to_crs(utm_crs),
+            meshdata_cdt,
+        )
+        utils.final_mesh(meshdata_domain_rep)
 
-        msht_domain_rep = deepcopy(mesh_domain_rep.meshdata)
-#        utils.reproject(msht_domain_rep, crs)
+#        utils.reproject(meshdata_domain_rep, crs)
 
         pts_2mesh = np.vstack(
-            (hfun_hi.meshdata().vert2['coord'], hfun_lo.meshdata().vert2['coord'])
+            (hfun_hi.meshdata().coords, hfun_lo.meshdata().coords)
         )
         val_2mesh = np.vstack(
             (hfun_hi.meshdata().values, hfun_lo.meshdata().values)
         )
         domain_sz_1 = griddata(
-            pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='linear'
+            pts_2mesh, val_2mesh, meshdata_domain_rep.coords, method='linear'
         )
         domain_sz_2 = griddata(
-            pts_2mesh, val_2mesh, msht_domain_rep.vert2['coord'], method='nearest'
+            pts_2mesh, val_2mesh, meshdata_domain_rep.coords, method='nearest'
         )
         domain_sz = domain_sz_1.copy()
         domain_sz[np.isnan(domain_sz_1)] = domain_sz_2[np.isnan(domain_sz_1)]
 
-        msht_domain_rep.value[:] = domain_sz
-        hfun_interp = Hfun(Mesh(msht_domain_rep))
+        meshdata_domain_rep.values = domain_sz
 
-        return hfun_interp
+        return meshdata_domain_rep
 
 
     def _generate_mesh_for_buffer_region(
-            self, buffer_polygon, hfun_buffer, buffer_crs):
+            self, buffer_polygon, meshdata_hfun_buffer, buffer_crs):
 
         crs = buffer_crs
         assert(not buffer_crs.is_geographic)
-        assert(buffer_crs == hfun_buffer.crs)
+        assert(buffer_crs == meshdata_hfun_buffer.crs)
 
-        # TODO: Uncomment after implementing adding engine options
-        engine = get_mesh_engine('jigsaw', **mesh_options)
-#        meshdata = engine.generate(
-#            meshdata_init,
-#            gpd.GeoSeries(region_of_interest, crs=...),
-#            meshdata_hfun
-#        )
-#        mesh_buf_apprx = JigsawDriver(
-#            geom=Geom(buffer_polygon, crs=crs),
-#            hfun=hfun_buffer,
-#            initial_mesh=False
-#        ).run(sieve=0)
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw')
+        utm_crs = utils.estimate_bounds_utm(buffer_polygon.bounds, crs=crs):
+        meshdata_buf_apprx = engine.generate(
+            gpd.GeoSeries(buffer_polygon, crs=crs).to_crs(utm_crs),
+            meshdata_hfun_buffer,
+        )
+        utils.final_mesh(meshdata_buf_apprx)
 
-        msht_buf_apprx = deepcopy(mesh_buf_apprx.meshdata)
         # If vertices are too close to buffer geom boundary,
         # it's going to cause issues (thin elements)
-#        if msht_buf_apprx.crs != hfun_buffer.crs:
-#            utils.reproject(msht_buf_apprx, hfun_buffer.crs)
+#        if meshdata_buf_apprx.crs != hfun_buffer.crs:
+#            utils.reproject(meshdata_buf_apprx, hfun_buffer.crs)
         gdf_pts = gpd.GeoDataFrame(
-            geometry=[MultiPoint(msht_buf_apprx.vert2['coord'])],
-            crs=msht_buf_apprx.crs
+            geometry=[MultiPoint(meshdata_buf_apprx.coords)],
+            crs=meshdata_buf_apprx.crs
         ).explode()
         gdf_aux_pts = gdf_pts[
             (~gdf_pts.intersects(
@@ -366,22 +346,21 @@ class SubsetAndCombine:
             ) & (gdf_pts.within(buffer_polygon))
         ]
 
-#        utils.reproject(msht_buf_apprx, buffer_crs)
+#        utils.reproject(meshdata_buf_apprx, buffer_crs)
         # TODO: Uncomment after implementing triangle driver
-#        engine = get_mesh_engine('triangle', **mesh_options)
-#        meshdata = engine.generate(
-#            meshdata_init,
-#            gpd.GeoSeries(region_of_interest, crs=...),
-#            meshdata_hfun
-#        )
-#        msht_buffer = utils.triangulate_polygon(
+        engine = get_mesh_engine('triangle', opts='p')
+        meshdata = engine.generate(
+            gpd.GeoSeries(buffer_polygon),
+            seed=gdf_aux_pts...
+        )
+#        meshdata_buffer = utils.triangulate_polygon(
 #            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
 #        )
-        msht_buffer.crs = crs
+        meshdata_buffer.crs = crs
 
-#        utils.reproject(msht_buffer, buffer_crs)
+#        utils.reproject(meshdata_buffer, buffer_crs)
 
-        return msht_buffer
+        return meshdata_buffer
 
 
     def _transform_mesh(self, mesh, out_crs):
@@ -389,34 +368,34 @@ class SubsetAndCombine:
         transformer = Transformer.from_crs(
             mesh.crs, out_crs, always_xy=True)
 
-        coords = mesh.vert2['coord']
+        coords = mesh.coords
 
         # pylint: disable=E0633
         coords[:, 0], coords[:, 1] = transformer.transform(
                 coords[:, 0], coords[:, 1])
-        mesh.vert2['coord'][:] = coords
+        mesh.coords[:] = coords
         mesh.crs = out_crs
 
 
-    def _merge_all_meshes(self, crs, jig_mesh, jig_clip_lowres, jig_clip_hires):
+    def _merge_all_meshes(self, crs, meshdata_mesh, meshdata_clip_lowres, meshdata_clip_hires):
 
         # Combine mesh
         # 1. combine hires and low-res
-        jig_old = utils.merge_meshdata(
-            jig_clip_lowres, jig_clip_hires,
+        meshdata_old = utils.merge_meshdata(
+            meshdata_clip_lowres, meshdata_clip_hires,
             drop_by_bbox=False, out_crs=crs)
 
         # 2. Create kdtree for boundary of combined mesh
-        old_mesh_bdry_edges = utils.get_boundary_edges(jig_old)
+        old_mesh_bdry_edges = utils.get_boundary_edges(meshdata_old)
         old_mesh_bdry_verts = np.unique(old_mesh_bdry_edges)
-        old_mesh_bdry_coords = jig_old.vert2['coord'][old_mesh_bdry_verts]
+        old_mesh_bdry_coords = meshdata_old.coords[old_mesh_bdry_verts]
 
         tree_old = cKDTree(old_mesh_bdry_coords)
 
         # 3. Find shared boundary nodes from the tree and bdry nodes
-        new_mesh_bdry_edges = utils.get_boundary_edges(jig_mesh)
+        new_mesh_bdry_edges = utils.get_boundary_edges(meshdata_mesh)
         new_mesh_bdry_verts = np.unique(new_mesh_bdry_edges)
-        new_mesh_bdry_coords = jig_mesh.vert2['coord'][new_mesh_bdry_verts]
+        new_mesh_bdry_coords = meshdata_mesh.coords[new_mesh_bdry_verts]
 
         tree_new = cKDTree(new_mesh_bdry_coords)
 
@@ -438,9 +417,8 @@ class SubsetAndCombine:
         # 5. Combine seam into the rest replacing the index for shared nodes
         #    with the ones from tree
         mesh_types = {
-            'tria3': 'TRIA3_t',
-            'quad4': 'QUAD4_t',
-            'hexa8': 'HEXA8_t'
+            'tria': int,
+            'quad': int
         }
 
         coord = []
@@ -449,13 +427,13 @@ class SubsetAndCombine:
         offset = 0
 
         for k in mesh_types:
-            elems[k].append(getattr(jig_old, k)['index'] + offset)
-        coord.append(jig_old.vert2['coord'])
-        value.append(jig_old.value)
+            elems[k].append(getattr(meshdata_old, k) + offset)
+        coord.append(meshdata_old.coords)
+        value.append(meshdata_old.values)
         offset += coord[-1].shape[0]
 
         # Drop shared vertices and update element cnn based on map and dropped offset
-        mesh_orig_idx = np.arange(len(jig_mesh.vert2))
+        mesh_orig_idx = np.arange(len(meshdata_mesh.coords))
         mesh_shrd_idx = np.unique(list(map_idx_shared.keys()))
         mesh_renum_idx = np.setdiff1d(mesh_orig_idx, mesh_shrd_idx)
         map_to_combined_idx = {
@@ -463,7 +441,7 @@ class SubsetAndCombine:
         map_to_combined_idx.update(map_idx_shared)
 
         for k in mesh_types:
-            cnn = getattr(jig_mesh, k)['index']
+            cnn = getattr(meshdata_mesh, k)
             # If it's empty executing list comprehension results in a
             # (0,) shape instead of (0, 4)
             if cnn.shape[0] == 0:
@@ -473,27 +451,16 @@ class SubsetAndCombine:
             elems[k].append(np.array([[map_to_combined_idx[x]
                                       for x in  elm] for elm in cnn]))
 
-        coord.append(jig_mesh.vert2['coord'][mesh_renum_idx, :])
-        value.append(jig_mesh.value[mesh_renum_idx])
+        coord.append(meshdata_mesh.coords[mesh_renum_idx, :])
+        value.append(meshdata_mesh.values[mesh_renum_idx])
 
         # Putting it all together
-        composite_mesh = MeshData( ...)
-        composite_mesh = jigsaw_msh_t()
-        composite_mesh.mshID = 'euclidean-mesh'
-        composite_mesh.ndims = 2
-
-        composite_mesh.vert2 = np.array(
-                [(crd, 0) for crd in np.vstack(coord)],
-                dtype=jigsaw_msh_t.VERT2_t)
-        composite_mesh.value = np.array(
-                np.vstack(value),
-                dtype=jigsaw_msh_t.REALS_t)
-        for k, v in mesh_types.items():
-            setattr(composite_mesh, k, np.array(
-                [(cnn, 0) for cnn in np.vstack(elems[k])],
-                dtype=getattr(jigsaw_msh_t, v)))
-
-        composite_mesh.crs = crs
+        composite_mesh = MeshData(
+            coords=np.vstack(coord),
+            values=np.vstack(value),
+            crs=crs,
+            **elems,
+        )
 
         return composite_mesh, mesh_shrd_idx
 
@@ -502,8 +469,8 @@ class SubsetAndCombine:
         gdf  = gpd.GeoDataFrame(geometry=gpd.GeoSeries(polygon), crs=crs)
         gdf.to_file(path)
 
-    def _write_jigsaw(self, jigsaw_mesh, path):
-        mesh_obj = Mesh(jigsaw_mesh)
+    def _write_meshdata(self, meshdata_mesh, path):
+        mesh_obj = Mesh(meshdata_mesh)
         mesh_obj.write(path, format="2dm", overwrite=True)
 
     def _write_outputs(
@@ -517,10 +484,10 @@ class SubsetAndCombine:
             poly_clipper,
             mesh_fine,
             mesh_coarse,
-            jig_buffer_mesh,
-            jig_clip_hires,
-            jig_clip_lowres,
-            jig_combined_mesh,
+            meshdata_buffer_mesh,
+            meshdata_clip_hires,
+            meshdata_clip_lowres,
+            meshdata_combined_mesh,
             buffer_shrd_idx
             ):
 
@@ -541,36 +508,36 @@ class SubsetAndCombine:
 
             _logger.info("Writing mesh...")
             start = time()
-            self._write_jigsaw(jig_buffer_mesh, out_dir/"seam_mesh.2dm")
-            self._write_jigsaw(jig_clip_hires, out_dir/"hires_mesh.2dm")
-            self._write_jigsaw(jig_clip_lowres, out_dir/"lowres_mesh.2dm")
+            self._write_meshdata(meshdata_buffer_mesh, out_dir/"seam_mesh.2dm")
+            self._write_meshdata(meshdata_clip_hires, out_dir/"hires_mesh.2dm")
+            self._write_meshdata(meshdata_clip_lowres, out_dir/"lowres_mesh.2dm")
             _logger.info(f"Done in {time() - start} sec")
 
         _logger.info("Writing mesh...")
         start = time()
-        self._write_jigsaw(jig_combined_mesh, out_dir/"final_mesh.2dm")
+        self._write_meshdata(meshdata_combined_mesh, out_dir/"final_mesh.2dm")
         _logger.info(f"Done in {time() - start} sec")
 
 
-    def _interpolate_values(self, jig_combined_mesh, mesh_fine, mesh_coarse):
-        interp_1_msh_t = deepcopy(jig_combined_mesh)
+    def _interpolate_values(self, meshdata_combined_mesh, mesh_fine, mesh_coarse):
+        interp_1_meshdata = deepcopy(meshdata_combined_mesh)
         utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-            mesh_fine.msh_t, interp_1_msh_t,
+            mesh_fine.meshdata, interp_1_meshdata,
             method='linear', fill_value=np.nan)
 
-        interp_2_msh_t = deepcopy(jig_combined_mesh)
+        interp_2_meshdata = deepcopy(meshdata_combined_mesh)
         utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-            mesh_coarse.msh_t, interp_2_msh_t,
+            mesh_coarse.meshdata, interp_2_meshdata,
             method='linear', fill_value=np.nan)
 
 
         # Manually get the nan values and only overwrite them!
-        mask_1 = np.isnan(interp_1_msh_t.value)
-        mask_2 = np.logical_not(np.isnan(interp_2_msh_t.value))
+        mask_1 = np.isnan(interp_1_meshdata.values)
+        mask_2 = np.logical_not(np.isnan(interp_2_meshdata.values))
         mask = np.logical_and(mask_1, mask_2)
 
-        jig_combined_mesh.value = interp_1_msh_t.value
-        jig_combined_mesh.value[mask] = interp_2_msh_t.value[mask]
+        meshdata_combined_mesh.values = interp_1_meshdata.values
+        meshdata_combined_mesh.values[mask] = interp_2_meshdata.values[mask]
 
 
     def _main(
@@ -600,8 +567,8 @@ class SubsetAndCombine:
         # Transform all inputs to UTM:
         t1 = Transformer.from_crs(4326, utm, always_xy=True)
         poly_isotach = transform(t1.transform, poly_isotach)
-        utils.reproject(mesh_fine.msh_t, utm)
-        utils.reproject(mesh_coarse.msh_t, utm)
+        utils.reproject(mesh_fine.meshdata, utm)
+        utils.reproject(mesh_coarse.meshdata, utm)
 
 
         _logger.info("Calculate mesh polygons...")
@@ -623,11 +590,11 @@ class SubsetAndCombine:
 
 
         _logger.info("Calculate clipped polygons...")
-        jig_clip_hires_0 = utils.clip_mesh_by_shape(
-                mesh_fine.msh_t, poly_clipper,
+        meshdata_clip_hires_0 = utils.clip_mesh_by_shape(
+                mesh_fine.meshdata, poly_clipper,
                 fit_inside=False)
-        jig_clip_lowres_0 = utils.clip_mesh_by_shape(
-                mesh_coarse.msh_t, poly_clipper,
+        meshdata_clip_lowres_0 = utils.clip_mesh_by_shape(
+                mesh_coarse.meshdata, poly_clipper,
                 fit_inside=True,
                 inverse=True,
                 adjacent_layers=num_buffer_layers)
@@ -636,8 +603,8 @@ class SubsetAndCombine:
         _logger.info("Calculate clipped polygons...")
         start = time()
         poly_clip_hires_0 = utils.remove_holes(
-                utils.get_mesh_polygons(jig_clip_hires_0))
-        poly_clip_lowres_0 = utils.get_mesh_polygons(jig_clip_lowres_0)
+                utils.get_mesh_polygons(meshdata_clip_hires_0))
+        poly_clip_lowres_0 = utils.get_mesh_polygons(meshdata_clip_lowres_0)
         _logger.info(f"Done in {time() - start} sec")
 
         _logger.info("Calculating buffer region...")
@@ -657,13 +624,13 @@ class SubsetAndCombine:
         # Get one layer on each mesh
         poly_seam_3 = self._add_one_mesh_layer_to_polygon(
                 poly_seam_2,
-                mesh_fine.msh_t, poly_clip_hires_0,
-                mesh_coarse.msh_t, poly_clip_lowres_0)
+                mesh_fine.meshdata, poly_clip_hires_0,
+                mesh_coarse.meshdata, poly_clip_lowres_0)
 
 
         # Attach overlaps to buffer region (due to 1 layer and upstream)
-        poly_seam_4, jig_clip_hires_1 = self._add_overlap_to_polygon(jig_clip_hires_0, poly_seam_3)
-        poly_seam_5, jig_clip_lowres_1 = self._add_overlap_to_polygon(jig_clip_lowres_0, poly_seam_4)
+        poly_seam_4, meshdata_clip_hires_1 = self._add_overlap_to_polygon(meshdata_clip_hires_0, poly_seam_3)
+        poly_seam_5, meshdata_clip_lowres_1 = self._add_overlap_to_polygon(meshdata_clip_lowres_0, poly_seam_4)
 
         # Cleanup buffer shape
         poly_seam_6 = utils.remove_holes_by_relative_size(
@@ -675,14 +642,14 @@ class SubsetAndCombine:
 
         _logger.info("Calculate reclipped polygons...")
         start = time()
-        jig_clip_hires = jig_clip_hires_1
+        meshdata_clip_hires = meshdata_clip_hires_1
         poly_clip_hires = utils.remove_holes(
-                utils.get_mesh_polygons(jig_clip_hires))
+                utils.get_mesh_polygons(meshdata_clip_hires))
 
-        jig_clip_lowres = utils.clip_mesh_by_shape(
-            jig_clip_lowres_1, poly_clip_hires,
+        meshdata_clip_lowres = utils.clip_mesh_by_shape(
+            meshdata_clip_lowres_1, poly_clip_hires,
             fit_inside=False, inverse=True)
-        poly_clip_lowres = utils.get_mesh_polygons(jig_clip_lowres)
+        poly_clip_lowres = utils.get_mesh_polygons(meshdata_clip_lowres)
         _logger.info(f"Done in {time() - start} sec")
 
         poly_seam_8 = poly_seam_7.difference(
@@ -691,23 +658,23 @@ class SubsetAndCombine:
 
         poly_seam = poly_seam_8
 
-        hfun_buffer = self._calculate_mesh_size_function(
-            poly_seam, jig_clip_hires, jig_clip_lowres, utm
+        meshdata_hfun_buffer = self._calculate_mesh_size_function(
+            poly_seam, meshdata_clip_hires, meshdata_clip_lowres, utm
         )
-        jig_buffer_mesh = self._generate_mesh_for_buffer_region(
-            poly_seam, hfun_buffer, utm
+        meshdata_buffer_mesh = self._generate_mesh_for_buffer_region(
+            poly_seam, meshdata_hfun_buffer, utm
         )
 
         _logger.info("Combining meshes...")
         start = time()
-        jig_combined_mesh, buffer_shrd_idx = self._merge_all_meshes(
-                utm, jig_buffer_mesh, jig_clip_lowres, jig_clip_hires)
+        meshdata_combined_mesh, buffer_shrd_idx = self._merge_all_meshes(
+                utm, meshdata_buffer_mesh, meshdata_clip_lowres, meshdata_clip_hires)
         _logger.info(f"Done in {time() - start} sec")
 
         # NOTE: This call also detects overlap issues
-        utils.finalize_mesh(jig_combined_mesh)
+        utils.finalize_mesh(meshdata_combined_mesh)
 
-        self._interpolate_values(jig_combined_mesh, mesh_fine, mesh_coarse)
+        self._interpolate_values(meshdata_combined_mesh, mesh_fine, mesh_coarse)
 
         # TODO: Interpolate DEM?
 
@@ -721,9 +688,9 @@ class SubsetAndCombine:
             poly_clipper,
             mesh_fine,
             mesh_coarse,
-            jig_buffer_mesh,
-            jig_clip_hires,
-            jig_clip_lowres,
-            jig_combined_mesh,
+            meshdata_buffer_mesh,
+            meshdata_clip_hires,
+            meshdata_clip_lowres,
+            meshdata_combined_mesh,
             buffer_shrd_idx
         )
