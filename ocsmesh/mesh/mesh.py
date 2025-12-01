@@ -94,7 +94,7 @@ class EuclideanMesh(BaseMesh):
             raise TypeError(f'Argument mesh must be of type {MeshData}, '
                             f'not type {type(mesh)}.')
         # We assume always euclidean mesh now with meshdata!
-        if not hasattr(mesh, 'crs'):
+        if not hasattr(mesh, 'crs') or mesh.crs is None:
             warnings.warn('Input mesh has no CRS information.')
             mesh.crs = None
         else:

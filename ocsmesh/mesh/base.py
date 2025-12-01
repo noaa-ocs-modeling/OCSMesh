@@ -1,5 +1,6 @@
 """This module defines a base type for mesh objects.
 """
+import warnings
 
 import numpy as np
 import numpy.typing as npt

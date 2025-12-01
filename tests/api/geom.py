@@ -5,7 +5,6 @@ import shutil
 import tempfile
 import warnings
 
-from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
@@ -33,14 +32,15 @@ class GeomType(unittest.TestCase):
             self.rast, rast_z, rast_xy, 4326
         )
 
-        msh_t = ocsmesh.utils.create_rectangle_mesh(
+        meshdata = ocsmesh.utils.create_rectangle_mesh(
             nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
+        meshdata.crs = 4326
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 'ignore', category=UserWarning, message='Input mesh has no CRS information'
             )
-            mesh = ocsmesh.Mesh(msh_t)
+            mesh = ocsmesh.Mesh(meshdata)
             mesh.write(str(self.mesh), format='grd', overwrite=False)
 
 
@@ -116,15 +116,15 @@ class GeomRaster(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_rast.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_rast.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
 
 class GeomCollector(unittest.TestCase):
     # NOTE: Testing a mixed collector geom indirectly tests almost
     # all the other types as it is currently calling all the underlying
-    # geoms to calculate msh_t or polygons
+    # geoms to calculate MeshData or polygons
 
     def setUp(self):
         self.tdir = Path(tempfile.mkdtemp())
@@ -151,8 +151,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_multi_str_input(self):
@@ -167,8 +167,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_multi_raster_input(self):
@@ -186,8 +186,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_multi_mix_input(self):
@@ -206,8 +206,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_mesh_input(self):
@@ -223,8 +223,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     # TODO: Note supported yet
@@ -241,8 +241,8 @@ class GeomCollector(unittest.TestCase):
 #            isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
 #        )
 #
-#        geom_msht = geom_coll.msh_t()
-#        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+#        geom_gs = geom_coll.geoseries()
+#        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_add_patch(self):
@@ -266,8 +266,8 @@ class GeomCollector(unittest.TestCase):
             isinstance(geom_poly, (geometry.Polygon, geometry.MultiPolygon))
         )
 
-        geom_msht = geom_coll.msh_t()
-        self.assertTrue(isinstance(geom_msht, jigsaw_msh_t))
+        geom_gs = geom_coll.geoseries()
+        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
 
     def test_add_patch_shape_should_overlap_all_rasters(self):

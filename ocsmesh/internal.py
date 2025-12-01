@@ -265,8 +265,10 @@ class MeshData:
         return self._values
 
     @values.setter
-    def values(self, new_values: Union[np.ndarray, List]):
+    def values(self, new_values: Union[np.ndarray, List, float]):
         arr = np.array(new_values, dtype=float)
+        if arr.size == 1:
+            arr = np.full(self.num_nodes, new_values, dtype=float)
 
         # Validation: Check length against number of nodes
         if self._coords is not None and arr.shape[0] != self.num_nodes:
