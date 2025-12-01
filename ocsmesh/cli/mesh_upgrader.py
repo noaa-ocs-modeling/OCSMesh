@@ -120,25 +120,17 @@ class MeshUpgrader:
 
         # Read back stored values to pass to mesh driver
         read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
-        geom_from_disk = MultiPolygonGeom(
-            MultiPolygon(list(read_gdf.geometry)),
-            crs=read_gdf.crs)
 
         read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
         hfun_from_disk = HfunMesh(read_hfun)
 
-        # TODO: Uncomment after implementing triangle driver
-        engine = get_mesh_engine('triangle', **mesh_options)
-#        meshdata = engine.generate(
-#            meshdata_init,
-#            gpd.GeoSeries(region_of_interest, crs=...),
-#            meshdata_hfun
-#        )
-#        jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
-#        jigsaw.verbosity = 1
-#
-#        ## Execute mesher (processing of geom and hfun happens here)
-#        mesh = jigsaw.run()
+        meshdata_hfun = hfun_from_disk.meshdata()
+
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw', verbose=1)
+        meshdata = engine.generate(
+            read_gdf.to_crs(meshdata_hfun), meshdata_hfun,
+        )
 
         ## Free-up memory
         del read_gdf

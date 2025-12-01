@@ -336,26 +336,17 @@ class SubsetAndCombine:
         # it's going to cause issues (thin elements)
 #        if meshdata_buf_apprx.crs != hfun_buffer.crs:
 #            utils.reproject(meshdata_buf_apprx, hfun_buffer.crs)
-        gdf_pts = gpd.GeoDataFrame(
-            geometry=[MultiPoint(meshdata_buf_apprx.coords)],
-            crs=meshdata_buf_apprx.crs
-        ).explode()
-        gdf_aux_pts = gdf_pts[
-            (~gdf_pts.intersects(
-                buffer_polygon.boundary.buffer(hfun_buffer.hmin))
-            ) & (gdf_pts.within(buffer_polygon))
-        ]
+        seed_mesh = utils.clip_mesh_by_shape(
+            meshdata_buf_apprx, 
+            buffer_polygon.buffer(-min(meshdata_hfun_buffer)))
+        )
 
 #        utils.reproject(meshdata_buf_apprx, buffer_crs)
-        # TODO: Uncomment after implementing triangle driver
         engine = get_mesh_engine('triangle', opts='p')
         meshdata = engine.generate(
             gpd.GeoSeries(buffer_polygon),
-            seed=gdf_aux_pts...
+            seed=seed_mesh
         )
-#        meshdata_buffer = utils.triangulate_polygon(
-#            shape=buffer_polygon, aux_pts=gdf_aux_pts, opts='p'
-#        )
         meshdata_buffer.crs = crs
 
 #        utils.reproject(meshdata_buffer, buffer_crs)

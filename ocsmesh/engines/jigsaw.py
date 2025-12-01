@@ -186,8 +186,8 @@ class JigsawEngine(BaseMeshEngine):
             if isinstance(sizing, MeshData):
                 hfun = meshdata_to_jigsaw(sizing)
 
-                opts.hfun_hmin = np.min(hfun.value)
-                opts.hfun_hmax = np.max(hfun.value)
+                opts.hfun_hmin = np.min(sizing.values)
+                opts.hfun_hmax = np.max(sizing.values)
 
                 if marche is True:
                     jigsawpy.lib.marche(opts, hfun)

@@ -9,7 +9,6 @@ import geopandas as gpd
 import numpy as np
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import transform
-import jigsawpy
 from pyproj import Transformer
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
@@ -147,15 +146,16 @@ class RemeshByShape:
 
         utils.reproject(geom_shape, ref_crs)
 
+        refine_polys = None
         init_meshdata = None
+
+        mesh_poly = mesh.hull.multipolygon()
+        gdf_mesh_poly = gpd.GeoDataFrame(
+                geometry=gpd.GeoSeries(mesh_poly), crs=mesh.crs)
 
         # If there's an input shape, refine in the shape, otherwise
         # refine the whole domain by the factor
         if shape_path or refine_cutoff is not None:
-
-            mesh_poly = mesh.hull.multipolygon()
-            gdf_mesh_poly = gpd.GeoDataFrame(
-                    geometry=gpd.GeoSeries(mesh_poly), crs=mesh.crs)
 
             if shape_path:
                 gdf_shape = gpd.read_file(shape_path)
@@ -215,10 +215,6 @@ class RemeshByShape:
                     inverse=True,
                     in_place=True)
 
-            # Fix elements in the inital mesh that are NOT clipped by refine
-            # polygon
-            init_meshdata.vert2['IDtag'][:] = -1
-
             # Preparing refinement size function
             vert_in = utils.get_verts_in_shape(initial_hfun_meshdata, refine_polys)
             # Reduce hfun by factor in refinement area; modifying in-place
@@ -272,6 +268,7 @@ class RemeshByShape:
         refine_hfun_meshdata = hfun_refine.meshdata()
         utils.reproject(refine_hfun_meshdata, ref_crs)
 
+        # NOTE: Order dictates priority (last is highest)
         final_hfun_meshdata = utils.merge_meshdata(
                 initial_hfun_meshdata, refine_hfun_meshdata,
                 out_crs=ref_crs,
@@ -282,35 +279,27 @@ class RemeshByShape:
             raise ValueError(
                 "CRS for geometry, hfun and init mesh is not the same")
 
-        # TODO: Redo after imlementing remesh
-#        engine = get_mesh_engine(mesh_engine, **mesh_options)
-        meshdata_remeshed = engine.remesh(
-            meshdata_init,
-            gpd.GeoSeries(region_of_interest, crs=...),
-            meshdata_hfun
-        )
-#        opts = jigsawpy.jigsaw_jig_t()
-#        opts.hfun_scal = "absolute"
-#        opts.hfun_hmin = np.min(final_hfun_jig.value)
-#        opts.hfun_hmax = np.max(final_hfun_jig.value)
-#        opts.mesh_dims = +2
-#
-#        remesh_jig = jigsawpy.jigsaw_msh_t()
-#        remesh_jig.mshID = 'euclidean-mesh'
-#        remesh_jig.ndims = 2
-#        remesh_jig.crs = init_jig.crs
-#
-#        jigsawpy.lib.jigsaw(
-#                opts, geom_jig, remesh_jig,
-#                init=init_jig,
-#                hfun=final_hfun_jig)
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw')
+        if all(obj is not None for obj in [init_meshdata, refine_polys]):
+            meshdata_remeshed = engine.remesh(
+                init_meshdata,
+                gpd.GeoSeries(refine_polys, crs=ref_crs),
+                final_hfun_meshdata
+            )
+        else:
+            mesh_shape = utils.get_mesh_polygons(mesh)
+            meshdata_remeshed = engine.generate(
+                gdf_mesh_poly.geometry,
+                final_hfun_meshdata
+            )
 
-        utils.finalize_mesh(remesh_jig, sieve)
+        utils.finalize_mesh(meshdata_remeshed, sieve)
 
         # Interpolate from inpu mesh and DEM if any
         utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-                mesh.meshdata, remesh_meshdata)
-        final_mesh = Mesh(remesh_meshdata)
+                mesh.meshdata, meshdata_remeshed)
+        final_mesh = Mesh(meshdata_remeshed)
         if interp_rast_list:
             final_mesh.interpolate(interp_rast_list, nprocs=nprocs)
 
