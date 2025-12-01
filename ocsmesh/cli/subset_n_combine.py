@@ -15,7 +15,7 @@ from shapely.ops import polygonize, unary_union, transform
 
 from ocsmesh import Raster, Geom, Mesh, Hfun, utils
 from ocsmesh.internal import MeshData
-from ocsmesh.engine.factory import get_mesh_engine
+from ocsmesh.engines.factory import get_mesh_engine
 
 logging.basicConfig(
     stream=sys.stdout,

@@ -13,7 +13,7 @@ from pyproj import Transformer
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
-from ocsmesh.engine.factory import get_mesh_engine
+from ocsmesh.engines.factory import get_mesh_engine
 
 logging.basicConfig(
     stream=sys.stdout,

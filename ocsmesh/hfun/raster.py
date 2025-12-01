@@ -33,7 +33,7 @@ from shapely.geometry import (
     Polygon, MultiPolygon)
 
 from ocsmesh.internal import MeshData
-from ocsmesh.engine.factory import get_mesh_engine
+from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
 from ocsmesh.features.constraint import (

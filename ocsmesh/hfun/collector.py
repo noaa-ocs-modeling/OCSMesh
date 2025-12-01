@@ -2689,10 +2689,11 @@ class HfunCollector(BaseHfun):
             offset += coord[-1].shape[0]
 
         composite_hfun = MeshData(
-                coords=np.vstack(coord),
-                tria=np.vstack(index),
-                values=np.vstack(value),
-                crs=epsg4326
+            coords=np.vstack(coord),
+            tria=np.vstack(index),
+            values=np.vstack(value),
+            crs=epsg4326
+        )
 
         # TODO: Get user input for wether to force hmin and hmax on
         # final hfun (which includes non-raster and basemesh sizes)

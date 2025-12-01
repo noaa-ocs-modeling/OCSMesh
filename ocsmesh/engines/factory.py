@@ -1,4 +1,5 @@
 from typing import Any, Optional, Dict
+import logging
 
 import shapely
 
@@ -16,7 +17,7 @@ _ENGINES = {
 
 _logger = logging.getLogger(__name__)
 
-def get_mesh_engine(engine_name: str, **engine_kwargs: Any) -> EngineBase:
+def get_mesh_engine(engine_name: str, **engine_kwargs: Any) -> BaseMeshEngine:
     """
     Initialize the driver with a specific engine.
 

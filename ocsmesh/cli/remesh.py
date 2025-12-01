@@ -12,7 +12,7 @@ from shapely.geometry import Polygon, MultiPolygon
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
 from ocsmesh.internal import MeshData
-from ocsmesh.engine.factory import get_mesh_engine
+from ocsmesh.engines.factory import get_mesh_engine
 
 
 logging.basicConfig(

@@ -5,7 +5,6 @@ import shutil
 import tempfile
 import warnings
 
-from jigsawpy import jigsaw_msh_t
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
@@ -56,7 +55,7 @@ class Driver(unittest.TestCase):
         mesh = driver.run()
 
         self.assertTrue(isinstance(mesh, ocsmesh.mesh.base.BaseMesh))
-        self.assertTrue(len(mesh.msh_t.vert2['coord']) > 0)
+        self.assertTrue(len(mesh.meshdata.coords) > 0)
 
 if __name__ == '__main__':
     unittest.main()

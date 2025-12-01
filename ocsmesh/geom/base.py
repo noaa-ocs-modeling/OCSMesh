@@ -59,7 +59,7 @@ class BaseGeom(ABC):
         )
 
 
-    def geoseries(self, **kwargs: Any) -> gpd.GeoSeries
+    def geoseries(self, **kwargs: Any) -> gpd.GeoSeries:
         gs = gpd.GeoSeries(get_multipolygon(**kwargs), crs=self.crs)
         utm_crs = utils.estimate_bounds_utm(gs.total_bounds, gs.crs)
         if utm_crs is not None:

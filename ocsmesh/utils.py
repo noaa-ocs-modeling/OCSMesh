@@ -1436,7 +1436,9 @@ def merge_msh_t(
         out_crs="EPSG:4326",
         drop_by_bbox=True,
         can_overlap=True,
-        check_cross_edges=False): warnings.warn("Use merge_meshdata instead!", DeprecationWarning)
+        check_cross_edges=False):
+
+    warnings.warn("Use merge_meshdata instead!", DeprecationWarning)
     return merge_meshdata(
         *mesh_list,
         out_crs=out_crs,

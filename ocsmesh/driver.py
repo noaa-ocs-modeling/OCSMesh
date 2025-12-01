@@ -1,12 +1,14 @@
-from typing import Any, Optional, Dict
+import logging
+from typing import Any, Optional, Dict, Union
 
 import shapely
+from pyproj import CRS
 
 from ocsmesh import utils
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
-from ocsmesh.hfun import BaseHFun
-from ocsmesh.geom import BaseGeom
+from ocsmesh.hfun.base import BaseHfun
+from ocsmesh.geom.base import BaseGeom
 from ocsmesh.mesh import Mesh
 
 

@@ -8,7 +8,7 @@ import geopandas as gpd
 from shapely.geometry import MultiPolygon
 
 from ocsmesh import Raster, Geom, Hfun
-from ocsmesh.engine.factory import get_mesh_engine
+from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.mesh.mesh import Mesh
 from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh

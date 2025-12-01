@@ -1,7 +1,7 @@
 import unittest
 
 import numpy as np
-from pyproj import CRS, CRSError
+from pyproj.crs import CRS, CRSError
 
 from ocsmesh import MeshData
 

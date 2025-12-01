@@ -1,8 +1,9 @@
-from typing import Any, Optional
+from typing import Any, Optional, Union
 import logging
 
 import geopandas as gpd
 import numpy as np
+from shapely import Polygon, MultiPolygon
 try:
     import jigsawpy
     _HAS_JIGSAW = True
@@ -112,7 +113,7 @@ class JigsawEngine(BaseMeshEngine):
         )
 
         init_msh = meshdata_to_jigsaw(mesh)
-        is shape is not None:
+        if shape is not None:
             seed_in_roi = utils.clip_mesh_by_shape(
                 seed, shape.union_all(), fit_inside=True, inverse=False)
             seed_msh = meshdata_to_jigsaw(seed_in_roi)
@@ -160,7 +161,7 @@ class JigsawEngine(BaseMeshEngine):
         geom.mshID = 'euclidean-mesh'
         geom.ndims = +2
         geom.vert2 = np.array(
-            [(c, 0) for c in ],
+            [(c, 0) for c in geom_coords],
             dtype=jigsawpy.jigsaw_msh_t.VERT2_t
         )
         geom.edge2 = np.array(
@@ -171,7 +172,7 @@ class JigsawEngine(BaseMeshEngine):
         return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, init_msh))
 
 
-    def _jigsaw_mesh(self, geom, sizing, init_mesh=None)
+    def _jigsaw_mesh(self, geom, sizing, init_mesh=None):
 
         # Prepare config
         opt_dict = self._options.get_config()
