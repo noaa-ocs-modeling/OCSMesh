@@ -918,7 +918,7 @@ class HfunCollector(BaseHfun):
         """
 
         # Just dummy object
-        composite_hfun = MeshData([0,0])
+        composite_hfun = MeshData([[0,0]])
 
         if self._method == 'exact':
             self._apply_features()
@@ -2194,38 +2194,38 @@ class HfunCollector(BaseHfun):
             # issue right now due to change in crs of internal Mesh
 
             # To avoid removing verts and trias from mesh hfuns
-            hfun_mesh = deepcopy(hfun.meshdata())
+            meshdata_hfun = deepcopy(hfun.meshdata())
             # If no CRS info, we assume EPSG:4326
-            if hasattr(hfun_mesh, "crs"):
+            if hasattr(meshdata_hfun, "crs"):
                 dst_crs = CRS.from_user_input("EPSG:4326")
-                if hfun_mesh.crs != dst_crs:
-                    utils.reproject(hfun_mesh, dst_crs)
+                if meshdata_hfun.crs != dst_crs:
+                    utils.reproject(meshdata_hfun, dst_crs)
 
             # Get all previous bbox and clip to resolve overlaps
             # removing all tria that have NODE in bbox because it's
             # faster and so we can resolve all overlaps
             _logger.info("Removing bounds from hfun mesh...")
             for ibox in bbox_list:
-                hfun_mesh = utils.clip_mesh_by_shape(
-                    hfun_mesh,
+                meshdata_hfun = utils.clip_mesh_by_shape(
+                    meshdata_hfun,
                     ibox,
                     use_box_only=True,
                     fit_inside=True,
                     inverse=True)
 
-            if len(hfun_mesh.vert2) == 0:
+            if len(meshdata_hfun.coords) == 0:
                 _logger.debug("Hfun ignored due to overlap")
                 continue
 
-            # Check hfun_mesh.value against hmin & hmax
+            # Check meshdata_hfun.value against hmin & hmax
             hmin = self._size_info['hmin']
             hmax = self._size_info['hmax']
             if hmin:
-                hfun_mesh.value[hfun_mesh.value < hmin] = hmin
+                meshdata_hfun.values[meshdata_hfun.values < hmin] = hmin
             if hmax:
-                hfun_mesh.value[hfun_mesh.value > hmax] = hmax
+                meshdata_hfun.values[meshdata_hfun.values > hmax] = hmax
 
-            mesh = Mesh(hfun_mesh)
+            mesh = Mesh(meshdata_hfun)
             bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
@@ -2277,9 +2277,9 @@ class HfunCollector(BaseHfun):
         value = []
         offset = 0
         for hfun in collection:
-            index.append(hfun.tria3['index'] + offset)
+            index.append(hfun.triangles + offset)
             coord.append(hfun.coord)
-            value.append(hfun.value)
+            value.append(hfun.value.reshape(-1, 1))
             offset += hfun.coord.shape[0]
 
         composite_hfun = MeshData(

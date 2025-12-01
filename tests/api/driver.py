@@ -51,7 +51,7 @@ class Driver(unittest.TestCase):
         hfun.add_contour(target_size=1200, expansion_rate=0.5, level=0)
         hfun.add_constant_value(value=1200, lower_bound=0)
 
-        driver = ocsmesh.driver.JigsawDriver(geom, hfun)
+        driver = ocsmesh.driver.MeshDriver(geom, hfun)
         mesh = driver.run()
 
         self.assertTrue(isinstance(mesh, ocsmesh.mesh.base.BaseMesh))

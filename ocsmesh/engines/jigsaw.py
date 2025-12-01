@@ -36,7 +36,7 @@ class JigsawOptions(BaseMeshOptions):
         self._remesh_tiny = remesh_tiny_elements
 
         # internal storage for options
-        self._opts = jigsawpy.jigsaw_opts_t()
+        self._opts = jigsawpy.jigsaw_jig_t()
 
         # Set defaults
         self._opts.hfun_scal = "absolute"
@@ -79,13 +79,15 @@ class JigsawEngine(BaseMeshEngine):
         # Prepare Geometry
         geom = shape_to_msh_t(shape)
 
-        seed_msh = meshdata_to_jigsaw(seed)
-        seed_msh.vert2['IDtag'][:] = -1
-        seed_edges = utils.get_mesh_edges(seed, unique=true)
-        seed_msh.edge2 = np.array(
-            [(e, -1) for e in seed_edges],
-            dtype=jigsawpy.jigsaw_msh_t.edge2_t
-        )
+        seed_msh = None
+        if seed is not None:
+            seed_msh = meshdata_to_jigsaw(seed)
+            seed_msh.vert2['IDtag'][:] = -1
+            seed_edges = utils.get_mesh_edges(seed, unique=true)
+            seed_msh.edge2 = np.array(
+                [(e, -1) for e in seed_edges],
+                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+            )
 
         # Convert back to MeshData
         return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, seed_msh))
@@ -102,28 +104,31 @@ class JigsawEngine(BaseMeshEngine):
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
 
-        # NOTE: User should make sure seed mesh is compatible with the 
-        # input mesh and refinement shape!
-        seed_msh = meshdata_to_jigsaw(seed)
-        seed_msh.vert2['IDtag'][:] = -1
-        seed_edges = utils.get_mesh_edges(seed, unique=true)
-        seed_msh.edge2 = np.array(
-            [(e, -1) for e in seed_edges],
-            dtype=jigsawpy.jigsaw_msh_t.edge2_t
-        )
-
-        init_msh = meshdata_to_jigsaw(mesh)
-        if shape is not None:
-            seed_in_roi = utils.clip_mesh_by_shape(
-                seed, shape.union_all(), fit_inside=True, inverse=False)
-            seed_msh = meshdata_to_jigsaw(seed_in_roi)
+        seed_msh = None
+        if seed is not None:
+            # NOTE: User should make sure seed mesh is compatible with the 
+            # input mesh and refinement shape!
+            seed_msh = meshdata_to_jigsaw(seed)
             seed_msh.vert2['IDtag'][:] = -1
-            # note: add edge2 from elements
-            seed_edges = utils.get_mesh_edges(seed_in_roi, unique=true)
+            seed_edges = utils.get_mesh_edges(seed, unique=true)
             seed_msh.edge2 = np.array(
                 [(e, -1) for e in seed_edges],
                 dtype=jigsawpy.jigsaw_msh_t.edge2_t
             )
+
+        init_msh = meshdata_to_jigsaw(mesh)
+        if shape is not None:
+            if seed is not None:
+                seed_in_roi = utils.clip_mesh_by_shape(
+                    seed, shape.union_all(), fit_inside=True, inverse=False)
+                seed_msh = meshdata_to_jigsaw(seed_in_roi)
+                seed_msh.vert2['IDtag'][:] = -1
+                # note: add edge2 from elements
+                seed_edges = utils.get_mesh_edges(seed_in_roi, unique=true)
+                seed_msh.edge2 = np.array(
+                    [(e, -1) for e in seed_edges],
+                    dtype=jigsawpy.jigsaw_msh_t.edge2_t
+                )
 
             mesh_w_hole = utils.clip_mesh_by_shape(
                 mesh, shape.union_all(), fit_inside=True, inverse=True)
@@ -143,11 +148,12 @@ class JigsawEngine(BaseMeshEngine):
                 dtype=jigsawpy.jigsaw_msh_t.edge2_t
             )
 
-        seed_idx_offset = len(init_msh.vert2)
-        init_msh.vert2 = np.concatenate((init_msh.vert2, seed_msh.vert2))
-        init_msh.edge2 = np.concatenate(
-            (init_msh.edge2, seed_msh.edge2 + seed_idx_offset)
-        )
+        if seed_msh is not None:
+            seed_idx_offset = len(init_msh.vert2)
+            init_msh.vert2 = np.concatenate((init_msh.vert2, seed_msh.vert2))
+            init_msh.edge2 = np.concatenate(
+                (init_msh.edge2, seed_msh.edge2 + seed_idx_offset)
+            )
 
         # Prepare Geometry from the input mesh
         bdry_edges = utils.get_boundary_edges(mesh)
@@ -323,7 +329,7 @@ def shape_to_msh_t(
         return n_pts
 
     current_idx = 0
-    for poly in shape.geoms:
+    for idx, poly in shape.explode().geometry.items():
         # Exterior
         n = process_ring(poly.exterior, current_idx)
         current_idx += n

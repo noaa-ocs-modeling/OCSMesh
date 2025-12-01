@@ -44,7 +44,7 @@ class MeshDriver:
         """
 
 
-        self._goem = geom
+        self._geom = geom
         self._hfun = hfun
         self._init_mesh = init_mesh
         self._crs = CRS.from_user_input(crs) if crs is not None else None

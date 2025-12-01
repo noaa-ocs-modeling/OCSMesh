@@ -359,7 +359,7 @@ class HfunRaster(BaseHfun, Raster):
             dim1 = win.width
             dim2 = win.height
 
-            rast_tria = np.empty((dim1 - 1, dim2 - 1), dtype=int)
+            rast_tria = np.empty((dim1 - 1, dim2 - 1, 3), dtype=int)
 
             i = np.arange(dim1 - 1, dtype=int)[:, None]
             j = np.arange(dim2 - 1, dtype=int)[None, :]
@@ -391,7 +391,7 @@ class HfunRaster(BaseHfun, Raster):
             # Build Geom
             _logger.info('Building initial geom...')
             bbox_poly = gpd.GeoSeries(
-                GeoPolygon([
+                Polygon([
                     *[(x, left[0]) for x in bottom][:-1],
                     *[(bottom[-1], y) for y in right][:-1],
                     *[(x, right[-1]) for x in reversed(top)][:-1],
@@ -410,7 +410,7 @@ class HfunRaster(BaseHfun, Raster):
 
             win_sizes = MeshData(
                 coords=rast_coords,
-                tria=rast_tria,
+                tria=rast_tria.reshape(-1, 3),
                 values=rast_values,
                 crs=win_utm_crs
             )

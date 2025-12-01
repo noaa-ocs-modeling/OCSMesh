@@ -93,9 +93,7 @@ class EuclideanMesh(BaseMesh):
         if not isinstance(mesh, MeshData):
             raise TypeError(f'Argument mesh must be of type {MeshData}, '
                             f'not type {type(mesh)}.')
-        if mesh.mshID != 'euclidean-mesh':
-            raise ValueError(f'Argument mesh has property mshID={mesh.mshID}, '
-                             "but expected 'euclidean-mesh'.")
+        # We assume always euclidean mesh now with meshdata!
         if not hasattr(mesh, 'crs'):
             warnings.warn('Input mesh has no CRS information.')
             mesh.crs = None
@@ -240,13 +238,11 @@ class EuclideanMesh2D(EuclideanMesh):
         super().__init__(mesh)
         self._boundaries = boundaries
 
-        if mesh.ndims != +2:
-            raise ValueError(f'Argument mesh has property ndims={mesh.ndims}, '
-                             "but expected ndims=2.")
+        # We assume always 2D euclidean mesh now with meshdata!
 
-        if len(self.meshdata.value) == 0:
+        if len(self.meshdata.values) == 0:
             self.meshdata.values = np.array(
-                np.full((self.vert2['coord'].shape[0], 1), np.nan))
+                np.full((self.vert2.shape[0], 1), np.nan))
 
     def get_bbox(
             self,
@@ -360,7 +356,7 @@ class EuclideanMesh2D(EuclideanMesh):
             with Pool(processes=nprocs) as pool:
                 res = pool.starmap(
                     _mesh_interpolate_worker,
-                    [(self.vert2['coord'], self.crs,
+                    [(self.vert2, self.crs,
                         _raster.tmpfile, _raster.chunk_size,
                         method, filter_by_shape, band)
                      for _raster in raster]
@@ -368,7 +364,7 @@ class EuclideanMesh2D(EuclideanMesh):
             pool.join()
         else:
             res = [_mesh_interpolate_worker(
-                        self.vert2['coord'], self.crs,
+                        self.vert2, self.crs,
                         _raster.tmpfile, _raster.chunk_size,
                         method, filter_by_shape, band)
                    for _raster in raster]
@@ -518,7 +514,7 @@ class EuclideanMesh2D(EuclideanMesh):
             can_use_other_verts=True)
 
         boundary_edges = utils.get_boundary_edges(clipped_mesh)
-        coords = clipped_mesh.vert2['coord']
+        coords = clipped_mesh.vert2
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}
@@ -600,15 +596,9 @@ class Mesh(BaseMesh):
             raise TypeError(f'Argument mesh must be of type {MeshData}, '
                             f'not type {type(mesh)}.')
 
-        if mesh.mshID == 'euclidean-mesh':
-            if mesh.ndims == 2:
-                return EuclideanMesh2D(mesh, **kwargs)
+        # We assume always 2D euclidean mesh now with meshdata!
+        return EuclideanMesh2D(mesh, **kwargs)
 
-            raise NotImplementedError(
-                f'mshID={mesh.mshID} + mesh.ndims={mesh.ndims} not '
-                'handled.')
-
-        raise NotImplementedError(f'mshID={mesh.mshID} not handled.')
 
     @staticmethod
     def open(path: Union[str, Path], crs: Optional[CRS] = None) -> MeshType:

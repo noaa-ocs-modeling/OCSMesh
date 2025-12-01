@@ -172,14 +172,18 @@ class TriangleEngine(BaseMeshEngine):
         # 1. Prepare Input
         shape_dict = _shape_to_triangle_dict(shape)
 
-        seed.tria = []
-        seed.quad = []
-        seed_dict = _meshdata_to_triangle_dict(seed)
+        seed_dict = None
+        if seed is not None:
+            seed.tria = []
+            seed.quad = []
+            seed_dict = _meshdata_to_triangle_dict(seed)
 
         input_dict = {}
-        input_dict['vertices'] = np.concatenate(
-            (shape_dict['vertices'], seed_dict['vertices'])
-        )
+        input_dict['vertices'] = shape_dict['vertices'].copy()
+        if seed_dict is not None:
+            input_dict['vertices'] = np.concatenate(
+                (input_dict['vertices'], seed_dict['vertices'])
+            )
         input_dict['segments'] = shape_dict['segments']
 
         
@@ -235,15 +239,18 @@ class TriangleEngine(BaseMeshEngine):
             'segments': np.array(geom_edges, dtype=int)
         }
 
-        seed.tria = []
-        seed.quad = []
-        seed_dict = _meshdata_to_triangle_dict(seed)
+        seed_dict = None
+        if seed is not None:
+            seed.tria = []
+            seed.quad = []
+            seed_dict = _meshdata_to_triangle_dict(seed)
 
         init_dict = _meshdata_to_triangle_dict(mesh)
         is shape is not None:
-            seed_in_roi = utils.clip_mesh_by_shape(
-                seed, shape.union_all(), fit_inside=True, inverse=False)
-            seed_dict = _meshdata_to_triangle_dict(seed_in_roi)
+            if seed is not None:
+                seed_in_roi = utils.clip_mesh_by_shape(
+                    seed, shape.union_all(), fit_inside=True, inverse=False)
+                seed_dict = _meshdata_to_triangle_dict(seed_in_roi)
 
             mesh_w_hole = utils.clip_mesh_by_shape(
                 mesh, shape.union_all(), fit_inside=True, inverse=True)
@@ -259,8 +266,12 @@ class TriangleEngine(BaseMeshEngine):
 
         input_dict = {}
         input_dict['vertices'] = np.concatenate(
-            (shape_dict['vertices'], init_dict['vertices'], seed_dict['vertices'])
+            (shape_dict['vertices'], init_dict['vertices'])
         )
+        if seed_dict is not None:
+            input_dict['vertices'] = np.concatenate(
+                (input_dict['vertices'], seed_dict['vertices'])
+            )
         input_dict['segments'] = shape_dict['segments']
         input_dict['triangles'] = init_dict['triangles'] + len(shape_dict['vertices'])
 
