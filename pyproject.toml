@@ -45,5 +45,6 @@ testing = ['pylint>=2.14', 'jigsawpy', 'triangle']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',
-    'mistune==0.8.4', 'm2r2', 'numpydoc'
+    'mistune==0.8.4', 'm2r2', 'numpydoc',
+    'jigsawpy', 'triangle'
 ]
