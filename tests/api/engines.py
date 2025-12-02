@@ -17,7 +17,7 @@ from ocsmesh import utils, MeshData
 from ocsmesh.engines.factory import get_mesh_engine
 
 
-class TriangulatePolygon(unittest.TestCase):
+class Triangle(unittest.TestCase):
 
 
     def setUp(self):
@@ -106,14 +106,14 @@ class TriangulatePolygon(unittest.TestCase):
 
         self.assertIsNotNone(
             re.search(
-                'must be convertible to polygon',
+                'input must be polygon or multipolygon',
                 str(exc_1.exception).lower()
             ),
         )
 
         self.assertIsNotNone(
             re.search(
-                'must be convertible to polygon',
+                'input must be polygon or multipolygon',
                 str(exc_2.exception).lower()
             ),
         )

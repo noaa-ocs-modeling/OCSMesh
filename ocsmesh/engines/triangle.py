@@ -213,6 +213,8 @@ class TriangleEngine(BaseMeshEngine):
 
         input_dict = {}
         input_dict['vertices'] = shape_dict['vertices'].copy()
+        if 'holes' in shape_dict:
+            input_dict['holes'] = shape_dict['holes'].copy()
         if seed_dict is not None:
             input_dict['vertices'] = np.concatenate(
                 (input_dict['vertices'], seed_dict['vertices'])
