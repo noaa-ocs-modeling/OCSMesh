@@ -10,23 +10,24 @@ find = {}
 [project]
 name = "ocsmesh"
 authors = [
-    {name = "Jaime R Calzada", email = "jreniel@gmail.com"},
+    {name = "Felicio Cassalho", email = "felicio.cassalho@noaa.gov"}
     {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
+    {name = "Jaime R Calzada", email = "jreniel@gmail.com"},
 ]
 maintainers = [
-    {name = "Soroosh Mani", email = "soroosh.mani@noaa.gov"}
+    {name = "Felicio Cassalho", email = "felicio.cassalho@noaa.gov"}
 ]
-description = "Package to generate computational unstructured meshes from planetary modeling."
+description = "Package to generate computational unstructured meshes for ocean simulation."
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = '>=3.9, <3.14' # 3.8 -> scipy
 dependencies = [
     "colored-traceback<=0.3.0", 
     "fiona", "geopandas>=1.0.0",
-    "jigsawpy", "matplotlib>=3.8", "netCDF4", "numba",
+    "matplotlib>=3.8", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
     "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy",
-    "shapely", "triangle", "typing_extensions", "utm",
+    "shapely", "typing_extensions", "utm",
     ]
 dynamic = ["version"]
 
@@ -38,7 +39,9 @@ Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
 ocsmesh = "ocsmesh.__main__:main"
 
 [project.optional-dependencies]
-testing = ['pylint>=2.14']
+jigsaw = ["jigsawpy"]
+triangle = ["triangle"]
+testing = ['pylint>=2.14', 'jigsawpy', 'triangle']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',
