@@ -8,11 +8,14 @@ from ocsmesh.engines.base import BaseMeshEngine
 from ocsmesh.engines.jigsaw import (
     JigsawEngine, JigsawOptions
 )
+from ocsmesh.engines.triangle import (
+    TriangleEngine, TriangleOptions
+)
 # from ocsmesh.engines.triangle_wrapper import ...
 
 _ENGINES = {
     'jigsaw': (JigsawEngine, JigsawOptions),
-    # 'triangle': (TriangleEngine, TriangleOptions),
+    'triangle': (TriangleEngine, TriangleOptions),
 }
 
 _logger = logging.getLogger(__name__)

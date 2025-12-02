@@ -140,7 +140,7 @@ def cleanup_folded_bound_el(mesh):
     nb = np.sort(list(set(nb.ravel())))
     coords = mesh.coords
     
-    el = {1: index for i, index in enumerate(mesh.tria)}
+    el = {i: index for i, index in enumerate(mesh.tria)}
     
     el_pd = pd.DataFrame.from_dict(el,
                                    orient='index',

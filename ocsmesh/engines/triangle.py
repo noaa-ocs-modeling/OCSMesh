@@ -170,7 +170,7 @@ class TriangleEngine(BaseMeshEngine):
             raise ImportError("Triangle library not installed.")
 
         # 1. Prepare Input
-        shape_dict = _shape_to_triangle_dict(shape)
+        shape_dict = _shape_to_triangle_dict(shape.union_all())
 
         seed_dict = None
         if seed is not None:
@@ -246,7 +246,7 @@ class TriangleEngine(BaseMeshEngine):
             seed_dict = _meshdata_to_triangle_dict(seed)
 
         init_dict = _meshdata_to_triangle_dict(mesh)
-        is shape is not None:
+        if shape is not None:
             if seed is not None:
                 seed_in_roi = utils.clip_mesh_by_shape(
                     seed, shape.union_all(), fit_inside=True, inverse=False)

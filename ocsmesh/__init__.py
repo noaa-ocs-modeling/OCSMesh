@@ -26,6 +26,7 @@ __all__ = [
     "Raster",
     "Mesh",
     "MeshDriver",
+    "MeshData",
 ]
 
 # mpl.rcParams['agg.path.chunksize'] = 10000
