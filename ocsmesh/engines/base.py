@@ -60,7 +60,7 @@ class BaseMeshEngine(ABC):
     def remesh(
         self,
         mesh: MeshData,
-        shape: Optional[gpd.GeoSeries] = None,
+        remesh_region: Optional[gpd.GeoSeries] = None,
         sizing: Optional[MeshData | int | float] = None,
         seed: Optional[MeshData] = None,
     ) -> MeshData:
@@ -71,7 +71,7 @@ class BaseMeshEngine(ABC):
         ----------
         mesh : MeshData
             The input mesh to be modified.
-        shape : Any, optional
+        remesh_region : Any, optional
             The region to remesh. If None, remesh entire mesh.
         sizing : Any, optional
             The sizing function or field.

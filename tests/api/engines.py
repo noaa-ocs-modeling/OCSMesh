@@ -21,8 +21,7 @@ class TriangulatePolygon(unittest.TestCase):
 
 
     def setUp(self):
-        self.tr_noopts = get_mesh_engine('triangle')
-        self.tr_popts = get_mesh_engine('triangle', opts='p')
+        self.triangle_engine = get_mesh_engine('triangle', opts='p')
 
         self.valid_input_1 = box(0, 0, 1, 1)
         self.valid_input_2 = gpd.GeoDataFrame(
@@ -71,18 +70,18 @@ class TriangulatePolygon(unittest.TestCase):
 
 
     def test_io_validity(self):
-        meshdata_1 = self.tr_noopts.generate(gpd.GeoSeries(self.valid_input_1))
-        meshdata_2 = self.tr_noopts.generate(self.valid_input_2.geometry)
-        meshdata_3 = self.tr_noopts.generate(self.valid_input_3)
+        meshdata_1 = self.triangle_engine.generate(gpd.GeoSeries(self.valid_input_1))
+        meshdata_2 = self.triangle_engine.generate(self.valid_input_2.geometry)
+        meshdata_3 = self.triangle_engine.generate(self.valid_input_3)
 
         with self.assertRaises(ValueError) as exc_1:
-            self.tr_noopts.generate(gpd.GeoSeries(self.invalid_input_1))
+            self.triangle_engine.generate(gpd.GeoSeries(self.invalid_input_1))
 
         with self.assertRaises(ValueError) as exc_2:
-            self.tr_noopts.generate(gpd.GeoSeries(self.invalid_input_2))
+            self.triangle_engine.generate(gpd.GeoSeries(self.invalid_input_2))
 
         with self.assertRaises(ValueError) as exc_3:
-            self.tr_noopts.generate(gpd.GeoSeries(self.invalid_input_3))
+            self.triangle_engine.generate(gpd.GeoSeries(self.invalid_input_3))
 
         self.assertIsInstance(meshdata_1, MeshData)
         self.assertIsInstance(meshdata_2, MeshData)
@@ -132,7 +131,7 @@ class TriangulatePolygon(unittest.TestCase):
             ])
             + np.random.random((10, 2)) * 0.49 # to avoid exactness!
         )
-        meshdata = self.tr_noopts.generate(gpd.GeoSeries(bx))
+        meshdata = self.triangle_engine.generate(gpd.GeoSeries(bx))
         bdry_lines = utils.get_boundary_segments(meshdata)
 
         # TODO: Make sure equal means equal in all vertices, not just
@@ -153,8 +152,13 @@ class TriangulatePolygon(unittest.TestCase):
         aux_1 = MeshData(coords=[[1, 0.5], [2, 0.5], [3, 0.5]])
         aux_2 = MeshData(coords=[*aux_1.coords, [10, 0.5]]) # Out of domain points
 
-        meshdata_1 = self.tr_popts.generate(gpd.GeoSeries(bx), seed=aux_1)
-        meshdata_2 = self.tr_popts.generate(gpd.GeoSeries(bx), seed=aux_2)
+        meshdata_1 = self.triangle_engine.generate(gpd.GeoSeries(bx), seed=aux_1)
+        meshdata_2 = self.triangle_engine.generate(gpd.GeoSeries(bx), seed=aux_2)
+
+        # Out of domain points should be cleaned up in post processing!
+        n1_2 = meshdata_2.num_nodes
+        utils.cleanup_isolates(meshdata_2)
+        n2_2 = meshdata_2.num_nodes
 
         self.assertTrue(
             np.all([
@@ -162,10 +166,12 @@ class TriangulatePolygon(unittest.TestCase):
                 for pt in aux_1.coords
             ])
         )
+
         # Out of domain points are discarded
+        self.assertEqual(n1_2, n2_2 + 1)
         self.assertFalse(
             np.all([
-                np.any([pt == v.tolist() for v in meshdata_2.coords])
+                np.any([pt.tolist() == v.tolist() for v in meshdata_2.coords])
                 for pt in aux_2.coords
             ])
         )
@@ -176,7 +182,7 @@ class TriangulatePolygon(unittest.TestCase):
             [[0, 0], [4, 0], [4, 4], [0, 4]],
             [[[1, 1], [2, 0], [2, 2], [1, 2]]]
         )
-        meshdata = self.tr_popts.generate(gpd.GeoSeries(poly))
+        meshdata = self.triangle_engine.generate(gpd.GeoSeries(poly))
         mesh_poly = utils.get_mesh_polygons(meshdata)
 
         self.assertTrue(poly.equals(mesh_poly))
@@ -185,7 +191,7 @@ class TriangulatePolygon(unittest.TestCase):
     def test_multipolygon(self):
         mpoly = MultiPolygon([box(0, 0, 1, 1), box(2, 2, 3, 3)])
 
-        meshdata = self.tr_popts.generate(gpd.GeoSeries(mpoly))
+        meshdata = self.triangle_engine.generate(gpd.GeoSeries(mpoly))
         mesh_poly = utils.get_mesh_polygons(meshdata)
 
         self.assertTrue(mpoly.equals(mesh_poly))
@@ -199,7 +205,7 @@ class TriangulatePolygon(unittest.TestCase):
             [[0, 0], [0, -4], [6, -4], [6, 0], [4, -2], [2, -2], [0, 0]],
         )
         multpoly = MultiPolygon([poly1, poly2])
-        meshdata = self.tr_popts.generate(gpd.GeoSeries(multpoly))
+        meshdata = self.triangle_engine.generate(gpd.GeoSeries(multpoly))
         mesh_poly = utils.get_mesh_polygons(meshdata)
 
         self.assertTrue(multpoly.equals(mesh_poly))

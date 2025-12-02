@@ -2,8 +2,9 @@ from typing import Any, Optional, Union, Dict, List
 import logging
 
 import numpy as np
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon, box
 
+import pandas as pd
 import geopandas as gpd
 try:
     import triangle as tr
@@ -29,57 +30,89 @@ def _shape_to_triangle_dict(
     if not isinstance(shape, MultiPolygon):
         raise ValueError("Input must be Polygon or MultiPolygon")
 
-    vertices = []
-    segments = []
-    holes = []
+    gs_shape = gpd.GeoSeries(shape)
 
-    current_idx = 0
+    if np.sum(gs_shape.area) == 0:
+        raise ValueError("The shape must have an area, such as Polygon!")
 
-    def process_ring(ring, is_hole=False):
-        nonlocal current_idx
-        coords = np.array(ring.coords)
-        if np.all(coords[0] == coords[-1]):
-            coords = coords[:-1]  # Remove duplicate end point
+    if not np.all(gs_shape.is_valid):
+        raise ValueError("Input contains invalid (multi)polygons!")
 
-        n_pts = len(coords)
-        if n_pts < 3:
-            return
+    df_lonlat = (
+        gs_shape
+        .boundary
+        .explode(ignore_index=True)
+        .map(lambda i: i.coords)
+        .explode()
+        .apply(lambda s: pd.Series({'lon': s[0], 'lat': s[1]}))
+        .reset_index() # put polygon index in the dataframe
+        .drop_duplicates() # drop duplicates within polygons
+    )
 
-        # Add vertices
-        for pt in coords:
-            vertices.append(pt)
+    df_seg = (
+        df_lonlat.join(
+            df_lonlat.groupby('index').transform(np.roll, 1, axis=0),
+            lsuffix='_1',
+            rsuffix='_2'
+        ).dropna()
+        .set_index('index')
+    )
 
-        # Add segments (edges)
-        for i in range(n_pts):
-            u = current_idx + i
-            v = current_idx + ((i + 1) % n_pts)
-            segments.append([u, v])
+    df_nodes = (
+        df_lonlat.drop(columns='index') # drop to allow cross poly dupl
+        .drop_duplicates() # drop duplicates across multiple polygons
+        .reset_index(drop=True) # renumber nodes
+        .reset_index() # add node idx as df data column
+        .set_index(['lon','lat'])
+    )
 
-        current_idx += n_pts
-        # TODO: Use is_hole value!
+    # CRD Table
+    df_coo = df_nodes.reset_index().drop(columns='index')
 
-    for poly in shape.geoms:
-        # Process Exterior
-        process_ring(poly.exterior)
+    # CNN Table
+    df_edg = (
+        df_nodes.loc[
+            pd.MultiIndex.from_frame(df_seg[['lon_1', 'lat_1']])
+        ].reset_index(drop=True)
+        .join(
+            df_nodes.loc[
+                pd.MultiIndex.from_frame(df_seg[['lon_2', 'lat_2']])
+            ]
+            .reset_index(drop=True),
+            lsuffix='_1',
+            rsuffix='_2'
+        )
+    )
 
-        # Process Interiors (Holes topology)
-        for interior in poly.interiors:
-            process_ring(interior, True)
+
+    ar_edg = np.sort(df_edg.values, axis=1)
+    df_cnn = (
+        pd.DataFrame.from_records(
+            ar_edg,
+            columns=['index_1', 'index_2'],
+        )
+        .drop_duplicates() # Remove duplicate edges
+        .reset_index(drop=True)
+    )
+
+    vertices = df_coo[['lon', 'lat']].values
+    segments = df_cnn.values
+
         
-        # Identify hole points (geometric holes)
-        # We need a point strictly inside the hole to mark it
-        # Triangle uses representative points to identify holes
-        world = poly.buffer(np.sqrt(poly.area) * 0.01) # Small buffer
-        # A hole in the polygon is 'land' in the negative shape
-        # This logic mimics utils.py logic simplified:
-        # We assume the user provides a shape where holes are actual
-        # empty spaces. Shapely interiors are holes.
-        for interior in poly.interiors:
-            # Create a small polygon for the hole to find a point
-            hole_poly = Polygon(interior)
-            # Find a point inside this hole
-            rep_pt = hole_poly.representative_point()
-            holes.append([rep_pt.x, rep_pt.y])
+    # To make sure islands formed by two polygons touching at multiple
+    # points are also considered as holes, instead of getting interiors,
+    # we get the negative of the domain and calculate points in all
+    # negative polygons!
+
+    # buffer by 1/100 of shape length scale = sqrt(area)/100
+    holes = []
+    world = box(*shape.buffer(np.sqrt(shape.area) / 100).bounds)
+    neg_shape = world.difference(shape)
+    if isinstance(neg_shape, Polygon):
+        neg_shape = MultiPolygon([neg_shape])
+
+    for poly in neg_shape.geoms:
+        holes.append(np.array(poly.representative_point().xy).ravel())
 
     data = {
         'vertices': np.array(vertices, dtype=float),
@@ -215,7 +248,7 @@ class TriangleEngine(BaseMeshEngine):
     def remesh(
         self,
         mesh: MeshData,
-        shape: Optional[gpd.GeoSeries] = None,
+        remesh_region: Optional[gpd.GeoSeries] = None,
         sizing: Optional[MeshData | int | float] = None,
         seed: Optional[MeshData] = None,
     ) -> MeshData:
@@ -246,17 +279,17 @@ class TriangleEngine(BaseMeshEngine):
             seed_dict = _meshdata_to_triangle_dict(seed)
 
         init_dict = _meshdata_to_triangle_dict(mesh)
-        if shape is not None:
+        if remesh_region is not None:
             if seed is not None:
                 seed_in_roi = utils.clip_mesh_by_shape(
-                    seed, shape.union_all(), fit_inside=True, inverse=False)
+                    seed, remesh_region.union_all(), fit_inside=True, inverse=False)
                 seed_dict = _meshdata_to_triangle_dict(seed_in_roi)
 
             mesh_w_hole = utils.clip_mesh_by_shape(
-                mesh, shape.union_all(), fit_inside=True, inverse=True)
+                mesh, remesh_region.union_all(), fit_inside=True, inverse=True)
 
             if mesh_w_hole.num_nodes == 0:
-                err = 'ERROR: refinement shape covers the whole input mesh!'
+                err = 'ERROR: remesh shape covers the whole input mesh!'
                 _logger.error(err)
                 raise RuntimeError(err)
 

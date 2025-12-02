@@ -96,7 +96,7 @@ class JigsawEngine(BaseMeshEngine):
     def remesh(
         self,
         mesh: MeshData,
-        shape: Optional[gpd.GeoSeries] = None,
+        remesh_region: Optional[gpd.GeoSeries] = None,
         sizing: Optional[MeshData | int | float] = None,
         seed: Optional[MeshData] = None,
     ) -> MeshData:
@@ -117,10 +117,10 @@ class JigsawEngine(BaseMeshEngine):
             )
 
         init_msh = meshdata_to_jigsaw(mesh)
-        if shape is not None:
+        if remesh_region is not None:
             if seed is not None:
                 seed_in_roi = utils.clip_mesh_by_shape(
-                    seed, shape.union_all(), fit_inside=True, inverse=False)
+                    seed, remesh_region.union_all(), fit_inside=True, inverse=False)
                 seed_msh = meshdata_to_jigsaw(seed_in_roi)
                 seed_msh.vert2['IDtag'][:] = -1
                 # note: add edge2 from elements
@@ -131,10 +131,10 @@ class JigsawEngine(BaseMeshEngine):
                 )
 
             mesh_w_hole = utils.clip_mesh_by_shape(
-                mesh, shape.union_all(), fit_inside=True, inverse=True)
+                mesh, remesh_region.union_all(), fit_inside=True, inverse=True)
 
             if mesh_w_hole.num_nodes == 0:
-                err = 'ERROR: refinement shape covers the whole input mesh!'
+                err = 'ERROR: remesh shape covers the whole input mesh!'
                 _logger.error(err)
                 raise RuntimeError(err)
 
