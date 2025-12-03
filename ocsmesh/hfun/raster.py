@@ -328,6 +328,9 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = [window]
 
 
+        _logger.info('Configuring engine...')
+        engine = get_mesh_engine(mesh_engine, **mesh_options)
+
         tria_list = []
         coords_list = []
         values_list = []
@@ -336,6 +339,7 @@ class HfunRaster(BaseHfun, Raster):
 
             x0, y0, x1, y1 = self.get_window_bounds(win)
 
+            # NOTE: non-geographic CRS returns None
             win_utm_crs = utils.estimate_bounds_utm(
                     (x0, y0, x1, y1), self.crs)
 
@@ -375,7 +379,10 @@ class HfunRaster(BaseHfun, Raster):
 
             # BUILD VERT2_t. this one comes from the memcache array
             _logger.info('Building hfun coords...')
-            rast_coords = np.array(self.get_xy_memcache(win, win_utm_crs))
+            
+            rast_coords = self.get_xy(win)
+            if win_utm_crs is not None:
+                rast_coords = np.array(self.get_xy_memcache(win, win_utm_crs))
             _logger.info('Done with coords.')
 
             # Build REALS_t: this one comes from hfun raster
@@ -401,27 +408,27 @@ class HfunRaster(BaseHfun, Raster):
             )
             if win_utm_crs is not None:
                 bbox_poly = bbox_poly.to_crs(win_utm_crs)
+
             _logger.info('Building initial geom done.')
             kwargs = {'method': 'nearest'}
 
             _logger.info(f'Hfun-raster generation-prep took {time()-start}.')
 
-            _logger.info('Configuring engine...')
+            _logger.info('Generating sizing mesh...')
 
             win_sizes = MeshData(
                 coords=rast_coords,
                 tria=rast_tria.reshape(-1, 3),
                 values=rast_values,
-                crs=win_utm_crs
+                crs=self.crs if win_utm_crs is None else win_utm_crs
             )
 
-            engine = get_mesh_engine(mesh_engine, **mesh_options)
             win_optim_sizes = engine.generate(bbox_poly, win_sizes)
 
             # do post processing
             utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
 
-            # reproject to combine with other windows
+            # project back to combine with other windows
             if win_utm_crs is not None:
                 win_optim_sizes.crs = win_utm_crs
                 utils.reproject(win_optim_sizes, self.crs)
@@ -439,7 +446,6 @@ class HfunRaster(BaseHfun, Raster):
         # the bounding box of the hfun is used
         utm_crs = utils.estimate_bounds_utm(
                 self.get_bbox().bounds, self.crs)
-        # TODO: Raise if None?
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)

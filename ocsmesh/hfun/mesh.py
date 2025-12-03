@@ -293,7 +293,7 @@ class HfunMesh(BaseHfun):
                 nprocs=nprocs)
 
         coords = self.mesh.meshdata.coords
-        values = self.mesh.meshdata.values
+        values = self.mesh.meshdata.values[:, None]
 
         verts_in = utils.get_verts_in_shape(
             self.mesh.meshdata, shape=multipolygon, from_box=False)

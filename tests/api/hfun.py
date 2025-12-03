@@ -498,19 +498,19 @@ class SizeFromMesh(unittest.TestCase):
 
         hfun_orig = ocsmesh.hfun.hfun.Hfun(rast, hmin=100, hmax=1500)
         hfun_orig.add_contour(level=0, expansion_rate=0.001, target_size=100)
-        hfun_orig_jig = hfun_orig.meshdata()
+        hfun_orig_meshdata = hfun_orig.meshdata()
 
-        self.hfun_orig_val = hfun_orig_jig.value
+        self.hfun_orig_val = hfun_orig_meshdata.values
 
-        hfun_calc_jig = deepcopy(hfun_orig_jig)
-        mesh_calc = ocsmesh.mesh.mesh.Mesh(hfun_calc_jig)
+        hfun_calc_meshdata = deepcopy(hfun_orig_meshdata)
+        mesh_calc = ocsmesh.mesh.mesh.Mesh(hfun_calc_meshdata)
         self.hfun_calc = ocsmesh.hfun.hfun.Hfun(mesh_calc)
         self.hfun_calc.size_from_mesh()
 
     def test_calculated_size(self):
-        hfun_calc_jig = self.hfun_calc.meshdata()
+        hfun_calc_meshdata = self.hfun_calc.meshdata()
 
-        hfun_calc_val = hfun_calc_jig.value
+        hfun_calc_val = hfun_calc_meshdata.values
         hfun_val_diff = self.hfun_orig_val - hfun_calc_val
 
         # TODO: Come up with a more robust criteria!
@@ -561,13 +561,13 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
             )
         )
 
-        hfun_jig = hfun_raster.meshdata()
-        mesh_jig = deepcopy(hfun_jig)
-        mesh = ocsmesh.mesh.mesh.Mesh(mesh_jig)
+        hfun_meshdata = hfun_raster.meshdata()
+        mesh_meshdata = deepcopy(hfun_meshdata)
+        mesh = ocsmesh.mesh.mesh.Mesh(mesh_meshdata)
         mesh.interpolate(rast, nprocs=1)
 
         C_apprx_mesh = ocsmesh.utils.approximate_courant_number_for_depth(
-            mesh.meshdata.values, dt, hfun_jig.value, nu
+            mesh.meshdata.values, dt, hfun_meshdata.values, nu
         )
 
         # Note using higher tolerance for closeness since sizes and
@@ -638,13 +638,13 @@ class SizeFunctionWithCourantNumConstraint(unittest.TestCase):
                 wave_amplitude=nu
             )
 
-            hfun_jig = hfun_coll.meshdata()
-            mesh_jig = deepcopy(hfun_jig)
-            mesh = ocsmesh.mesh.mesh.Mesh(mesh_jig)
+            hfun_meshdata = hfun_coll.meshdata()
+            mesh_meshdata = deepcopy(hfun_meshdata)
+            mesh = ocsmesh.mesh.mesh.Mesh(mesh_meshdata)
             mesh.interpolate([rast1, rast2], method='nearest', nprocs=1)
 
             C_apprx_mesh = ocsmesh.utils.approximate_courant_number_for_depth(
-                mesh.meshdata.values, dt, hfun_jig.value, nu
+                mesh.meshdata.values, dt, hfun_meshdata.values, nu
             )
 
             valid_courant = np.logical_and(
@@ -708,8 +708,8 @@ class SizeFunctionCollectorAddFeature(unittest.TestCase):
             [0, 2, 6],
             [5, 4, 7],
         ])
-        meshdata = ocsmesh.utils.meshdata_from_numpy(
-            crd, triangles=tria, crs=4326
+        meshdata = ocsmesh.internal.MeshData(
+            crd, tria=tria, crs=4326
         )
         mesh = ocsmesh.Mesh(meshdata)
         mesh.write(str(self.mesh1), format='grd', overwrite=False)
@@ -937,16 +937,16 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         # Due to hfun zigzag, some nodes of size 1000 might fall
         # outside the box and viceversa
 
-        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
-        n_in_is500 = np.sum(clipped_hfun.value == 500)
-        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
-        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+        n_in_is1000 = np.sum(clipped_hfun.values == 1000)
+        n_in_is500 = np.sum(clipped_hfun.values == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.values == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.values == 500)
 
         self.assertTrue(n_in_is500 / n_in_is1000 < 0.05)
         self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
 
-        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.025))
-        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.values), 1000, rtol=0.025))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.values), 500, rtol=0.025))
 
 
     def test_hfun_mesh(self):
@@ -972,13 +972,13 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         # Due to hfun zigzag, some nodes of size 1000 might fall
         # outside the box and viceversa
 
-        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
-        n_in_is200 = np.sum(clipped_hfun.value == 200)
-        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
-        n_out_is200 = np.sum(inv_clipped_hfun.value == 200)
+        n_in_is1000 = np.sum(clipped_hfun.values == 1000)
+        n_in_is200 = np.sum(clipped_hfun.values == 200)
+        n_out_is1000 = np.sum(inv_clipped_hfun.values == 1000)
+        n_out_is200 = np.sum(inv_clipped_hfun.values == 200)
 
-        self.assertTrue(np.all(clipped_hfun.value == 1000))
-        self.assertTrue(np.all(inv_clipped_hfun.value == 200))
+        self.assertTrue(np.all(clipped_hfun.values == 1000))
+        self.assertTrue(np.all(inv_clipped_hfun.values == 200))
 
 
     def test_hfun_collector_exact(self):
@@ -1009,16 +1009,16 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         # Due to hfun zigzag, some nodes of size 1000 might fall
         # outside the box and viceversa
 
-        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
-        n_in_is500 = np.sum(clipped_hfun.value == 500)
-        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
-        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+        n_in_is1000 = np.sum(clipped_hfun.values == 1000)
+        n_in_is500 = np.sum(clipped_hfun.values == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.values == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.values == 500)
 
         self.assertTrue(n_in_is500 / n_in_is1000 < 0.1)
         self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
 
-        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.050))
-        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.025))
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.values), 1000, rtol=0.050))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.values), 500, rtol=0.025))
 
 
     def test_hfun_collector_fast(self):
@@ -1054,16 +1054,16 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
         # Due to hfun zigzag, some nodes of size 1000 might fall
         # outside the box and viceversa
 
-        n_in_is1000 = np.sum(clipped_hfun.value == 1000)
-        n_in_is500 = np.sum(clipped_hfun.value == 500)
-        n_out_is1000 = np.sum(inv_clipped_hfun.value == 1000)
-        n_out_is500 = np.sum(inv_clipped_hfun.value == 500)
+        n_in_is1000 = np.sum(clipped_hfun.values == 1000)
+        n_in_is500 = np.sum(clipped_hfun.values == 500)
+        n_out_is1000 = np.sum(inv_clipped_hfun.values == 1000)
+        n_out_is500 = np.sum(inv_clipped_hfun.values == 500)
 
         self.assertTrue(n_in_is500 / n_in_is1000 < 0.1)
         self.assertTrue(n_out_is1000 / n_out_is500 < 0.05)
 
-        self.assertTrue(np.isclose(np.mean(clipped_hfun.value), 1000, rtol=0.25))
-        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.value), 500, rtol=0.1))
+        self.assertTrue(np.isclose(np.mean(clipped_hfun.values), 1000, rtol=0.25))
+        self.assertTrue(np.isclose(np.mean(inv_clipped_hfun.values), 500, rtol=0.1))
 
 
 class HfunConstraintApplyHold(unittest.TestCase):

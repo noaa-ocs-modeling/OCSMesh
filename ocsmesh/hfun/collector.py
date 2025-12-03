@@ -2629,7 +2629,7 @@ class HfunCollector(BaseHfun):
                     geometry=dem_box_list, crs=epsg4326)
             big_cut_shape = dem_gdf.union_all()
             big_meshdata = big_hfun.meshdata()
-            if hasattr(big_meshdata, "crs"):
+            if big_meshdata.crs is not None:
                 if not epsg4326.equals(big_meshdata.crs):
                     utils.reproject(big_meshdata, epsg4326)
 
@@ -2642,7 +2642,7 @@ class HfunCollector(BaseHfun):
 
             index.append(big_meshdata.tria + offset)
             coord.append(big_meshdata.coords)
-            value.append(big_meshdata.values)
+            value.append(big_meshdata.values[:, None])
             offset = offset + coord[-1].shape[0]
 
         hfun_list = nondem_hfun_list[::-1]
@@ -2685,7 +2685,7 @@ class HfunCollector(BaseHfun):
 
             index.append(nondem_meshdata.tria + offset)
             coord.append(nondem_meshdata.coords)
-            value.append(nondem_meshdata.values)
+            value.append(nondem_meshdata.values[:, None])
             offset += coord[-1].shape[0]
 
         composite_hfun = MeshData(
@@ -2700,9 +2700,9 @@ class HfunCollector(BaseHfun):
         hmin = self._size_info['hmin']
         hmax = self._size_info['hmax']
         if hmin:
-            composite_hfun.values[composite_hfun.value < hmin] = hmin
+            composite_hfun.values[composite_hfun.values < hmin] = hmin
         if hmax:
-            composite_hfun.values[composite_hfun.value > hmax] = hmax
+            composite_hfun.values[composite_hfun.values > hmax] = hmax
 
         # NOTE: In the end we need to return in a CRS that
         # uses meters as units. UTM based on the center of

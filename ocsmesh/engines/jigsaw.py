@@ -43,8 +43,8 @@ class JigsawOptions(BaseMeshOptions):
         self._opts.mesh_dims = +2
         self._opts.hfun_hmax = float("inf")
         self._opts.hfun_hmin = 0.0
-        self._opts.mesh_top1 = True
-        self._opts.geom_feat = True
+        self._opts.mesh_top1 = False
+        self._opts.geom_feat = False
 
         self._opts.mesh_rad2 = float(quality_metric)
 
