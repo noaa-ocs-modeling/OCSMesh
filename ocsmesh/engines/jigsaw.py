@@ -190,6 +190,7 @@ class JigsawEngine(BaseMeshEngine):
         # Prepare Sizing
         hfun = None
         if sizing is not None:
+            # TODO: Should sizing override options or options the sizing?
             if isinstance(sizing, MeshData):
                 hfun = meshdata_to_jigsaw(sizing)
 

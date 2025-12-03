@@ -147,13 +147,11 @@ class MeshData:
 
         # Enforce consistency: Ensure values array matches new node count
         if self._values is None or self._values.shape[0] != self.num_nodes:
-            # If values exist and are 2D (vectors), preserve width
-            if self._values is not None and self._values.ndim == 2:
+            # If values exist preserve width
+            width = 1
+            if self._values is not None:
                 width = self._values.shape[1]
-                self._values = np.zeros((self.num_nodes, width), dtype=float)
-            else:
-                # Default scalar case (K,)
-                self._values = np.zeros((self.num_nodes,), dtype=float)
+            self._values = np.zeros((self.num_nodes, width), dtype=float)
 
     # ==========================
     # Triangles Property
@@ -269,6 +267,14 @@ class MeshData:
         arr = np.array(new_values, dtype=float)
         if arr.size == 1:
             arr = np.full(self.num_nodes, new_values, dtype=float)
+
+        # Always a 2D array
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        elif arr.ndim > 2:
+            raise ValueError(
+                f"Values must be shape (N, M), got shape {arr.shape}."
+            )
 
         # Validation: Check length against number of nodes
         if self._coords is not None and arr.shape[0] != self.num_nodes:

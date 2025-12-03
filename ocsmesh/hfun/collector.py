@@ -2642,7 +2642,7 @@ class HfunCollector(BaseHfun):
 
             index.append(big_meshdata.tria + offset)
             coord.append(big_meshdata.coords)
-            value.append(big_meshdata.values[:, None])
+            value.append(big_meshdata.values)
             offset = offset + coord[-1].shape[0]
 
         hfun_list = nondem_hfun_list[::-1]
@@ -2685,7 +2685,7 @@ class HfunCollector(BaseHfun):
 
             index.append(nondem_meshdata.tria + offset)
             coord.append(nondem_meshdata.coords)
-            value.append(nondem_meshdata.values[:, None])
+            value.append(nondem_meshdata.values)
             offset += coord[-1].shape[0]
 
         composite_hfun = MeshData(

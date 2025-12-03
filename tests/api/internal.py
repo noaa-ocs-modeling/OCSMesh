@@ -34,7 +34,7 @@ class TestMeshData(unittest.TestCase):
         np.testing.assert_array_equal(mesh.coords, self.coords_2d)
         np.testing.assert_array_equal(mesh.tria, self.tria)
         np.testing.assert_array_equal(mesh.quad, self.quad)
-        np.testing.assert_array_equal(mesh.values, self.values)
+        np.testing.assert_array_equal(mesh.values, self.values[:, None])
 
     def test_initialization_minimal(self):
         """Test initializing with only coordinates (required)."""
@@ -44,8 +44,8 @@ class TestMeshData(unittest.TestCase):
         # Should default to empty arrays with correct column counts
         self.assertEqual(mesh.tria.shape, (0, 3))
         self.assertEqual(mesh.quad.shape, (0, 4))
-        # Should default to zeros (K,)
-        self.assertEqual(mesh.values.shape, (4,))
+        # Should default to zeros (K, 1)
+        self.assertEqual(mesh.values.shape, (4, 1))
         self.assertTrue(np.all(mesh.values == 0))
 
     def test_vector_values(self):
@@ -63,9 +63,7 @@ class TestMeshData(unittest.TestCase):
 
     def test_explicit_column_vector(self):
         """
-        Test assigning (K, 1) values.
-        Ensure they remain (K, 1) and are not flattened to (K,),
-        allowing explicit distinction between scalar and 1-comp vector.
+        Test assigning (K, 1) values.  Ensure they remain (K, 1) 
         """
         col_vec = np.array([[1], [2], [3], [4]])
         mesh = MeshData(coords=self.coords_2d, values=col_vec)
@@ -88,17 +86,13 @@ class TestMeshData(unittest.TestCase):
         self.assertEqual(mesh.values.shape, (2, 3))
         self.assertTrue(np.all(mesh.values == 0))
 
-    def test_scalar_preservation_on_resize(self):
+    def test_store_scalar_as_column_vector(self):
         """
-        Test that if we have scalar values (K,) and resize,
-        it remains (NewK,).
+        Test that if we pass scalar values (K,) it is stored
+        as (K, 1)
         """
         mesh = MeshData(coords=self.coords_2d)  # Default (4,)
-        self.assertEqual(mesh.values.ndim, 1)
-
-        # Resize
-        mesh.coords = [[0, 0], [1, 1]]
-        self.assertEqual(mesh.values.shape, (2,))
+        self.assertEqual(mesh.values.ndim, 2)
 
     def test_coords_3d_rejected(self):
         """Test that 3D coordinates (x, y, z) are NOT accepted."""
@@ -134,8 +128,8 @@ class TestMeshData(unittest.TestCase):
         # 1. Update coords with DIFFERENT size (2 nodes instead of 4)
         mesh.coords = [[0, 0], [1, 1]]
         self.assertEqual(mesh.num_nodes, 2)
-        # Values should be reset to zeros of length 2
-        self.assertEqual(mesh.values.shape, (2,))
+        # Values should be reset to zeros column vector of length 2
+        self.assertEqual(mesh.values.shape, (2, 1))
         self.assertTrue(np.all(mesh.values == 0))
 
         # 2. Update coords with SAME size (2 nodes)
@@ -144,7 +138,7 @@ class TestMeshData(unittest.TestCase):
         # Update coords
         mesh.coords = [[5, 5], [6, 6]]
         # Values should remain [99, 100]
-        np.testing.assert_array_equal(mesh.values, [99, 100])
+        np.testing.assert_array_equal(mesh.values, [[99], [100]])
 
     def test_element_integer_validation(self):
         """Test that elements are rejected if they contain decimals."""

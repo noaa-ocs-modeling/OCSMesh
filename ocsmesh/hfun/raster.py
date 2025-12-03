@@ -393,6 +393,10 @@ class HfunRaster(BaseHfun, Raster):
                 ),
                 dtype=float
             )
+            if self.hmin is not None:
+                rast_values[rast_values < self.hmin] = self.hmin
+            if self.hmax is not None:
+                rast_values[rast_values > self.hmax] = self.hmax
             _logger.info('Done with values.')
 
             # Build Geom

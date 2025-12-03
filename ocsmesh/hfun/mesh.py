@@ -292,8 +292,8 @@ class HfunMesh(BaseHfun):
                 target_size=target_size,
                 nprocs=nprocs)
 
-        coords = self.mesh.meshdata.coords
-        values = self.mesh.meshdata.values[:, None]
+        mesh_values = self.mesh.meshdata.values
+        values = mesh_values.copy()
 
         verts_in = utils.get_verts_in_shape(
             self.mesh.meshdata, shape=multipolygon, from_box=False)
@@ -310,8 +310,8 @@ class HfunMesh(BaseHfun):
 #            values[np.where(values < self.hmin)] = self.hmin
         if self.hmax is not None:
             values[np.where(values > self.hmax)] = self.hmax
-        values = np.minimum(self.mesh.meshdata.values, values)
-        values = values.reshape(self.mesh.meshdata.values.shape)
+        values = values.reshape(mesh_values.shape)
+        values = np.minimum(mesh_values, values)
 
         self.mesh.meshdata.values = values
 
