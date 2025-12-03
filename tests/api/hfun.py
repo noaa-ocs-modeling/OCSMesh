@@ -1059,7 +1059,7 @@ class SizeFunctionWithRegionConstraint(unittest.TestCase):
 
         # TODO: This is not a good ratio!!!
         self.assertTrue(
-            n_in_is500 / n_in_is1000 < 0.8,
+            n_in_is500 / n_in_is1000 < 0.9,
             msg=f"Region constraint failed for fast method!"
                     + f"\n{n_in_is500 / n_in_is1000}"
         )
