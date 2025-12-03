@@ -1,6 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import geopandas as gpd
 
@@ -18,7 +18,6 @@ class BaseMeshOptions(ABC):
         Returns the configuration object or structure
         required by the specific backend engine.
         """
-        pass
 
 
 class BaseMeshEngine(ABC):
@@ -54,7 +53,6 @@ class BaseMeshEngine(ABC):
         MeshData
             The generated mesh.
         """
-        pass
 
     @abstractmethod
     def remesh(
@@ -81,4 +79,3 @@ class BaseMeshEngine(ABC):
         MeshData
             The resulting mesh.
         """
-        pass

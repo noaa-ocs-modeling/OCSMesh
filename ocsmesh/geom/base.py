@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Union
 
 import geopandas as gpd
-from pyproj import CRS, Transformer
+from pyproj import CRS
 from shapely.geometry import MultiPolygon
 
 from ocsmesh.crs import CRS as CRSDescriptor

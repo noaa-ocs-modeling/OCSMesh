@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import permutations, islice, combinations
+from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
@@ -14,17 +14,14 @@ import numpy as np
 import numpy.typing as npt
 import rasterio as rio
 from pyproj import CRS, Transformer
-from scipy.interpolate import RectBivariateSpline, griddata
+from scipy.interpolate import griddata
 from scipy import sparse, constants
-from scipy.spatial import cKDTree
-from shapely import intersection, difference
 from shapely.geometry import (
     Polygon, MultiPolygon,
-    box, GeometryCollection, Point, MultiPoint,
+    box, GeometryCollection,
     LineString, LinearRing
 )
-from shapely.ops import polygonize, linemerge, unary_union, triangulate
-from shapely.validation import make_valid
+from shapely.ops import polygonize, linemerge, unary_union
 import geopandas as gpd
 import pandas as pd
 import utm
@@ -49,12 +46,12 @@ def mesh_to_tri(mesh):
 
 def cleanup_isolates(mesh):
     used_old_idx = np.array([], dtype='int64')
-    
+
     # Collect all nodes used by elements
     for etype in ELEM_2D_TYPES:
         elem_idx = getattr(mesh, etype).flatten()
         used_old_idx = np.hstack((used_old_idx, elem_idx))
-    
+
     used_old_idx = np.unique(used_old_idx)
 
     # update coords and values
@@ -65,13 +62,13 @@ def cleanup_isolates(mesh):
 
     # Re-map elements
     renum = {old: new for new, old in enumerate(used_old_idx)}
-    
+
     # Update elements
     for etype in ELEM_2D_TYPES:
         elem_idx = getattr(mesh, etype)
         if elem_idx.size == 0:
             continue
-            
+
         elem_new_idx = np.array([renum[i] for i in elem_idx.flatten()])
         elem_new_idx = elem_new_idx.reshape(elem_idx.shape)
         setattr(mesh, etype, elem_new_idx)
@@ -93,26 +90,26 @@ def cleanup_duplicates(mesh):
         return_index=True,
         return_inverse=True
     )
-    
+
     # Save old values before coords update resets them
     old_values = mesh.values
-    
+
     # Update coords (this might reset values to 0 in MeshData)
     mesh.coords = mesh.coords[cooidx]
-    
+
     # Restore values mapped to new unique nodes
     mesh.values = old_values[cooidx]
 
     # 2. Clean Elements (Renumbering)
     nd_map = dict(enumerate(coorev))
-    
+
     for etype in ELEM_2D_TYPES:
         cnn = getattr(mesh, etype)
         if cnn.size == 0:
             continue
 
         n_node = cnn.shape[1]
-        
+
         # Map old indices to new unique indices
         cnn_renu = np.array(
             [nd_map[i] for i in cnn.flatten()]
@@ -124,7 +121,7 @@ def cleanup_duplicates(mesh):
             axis=0,
             return_index=True
         )
-        
+
         # Assign cleaned elements back
         setattr(mesh, etype, cnn_renu[cnnidx])
 
@@ -139,15 +136,15 @@ def cleanup_folded_bound_el(mesh):
     nb = get_boundary_edges(mesh)
     nb = np.sort(list(set(nb.ravel())))
     coords = mesh.coords
-    
-    el = {i: index for i, index in enumerate(mesh.tria)}
-    
+
+    el = dict(enumerate(mesh.tria))
+
     el_pd = pd.DataFrame.from_dict(el,
                                    orient='index',
                                    columns=['one', 'two','tree'])
     selection = el_pd[el_pd.isin(nb)].dropna().astype(int)
     del_tri = selection.values.tolist()
-    
+
     # preparing the geodataframe for the triangles
     all_gdf = []
     for t in del_tri:
@@ -158,12 +155,12 @@ def cleanup_folded_bound_el(mesh):
         polygon_geom = Polygon(zip(x, y))
         all_gdf.append(gpd.GeoDataFrame(crs='epsg:4326',
                                         geometry=[polygon_geom]))
-    
+
     if not all_gdf:
         return mesh
 
     clip_tri = gpd.GeoDataFrame(pd.concat(all_gdf,ignore_index=True))
-    
+
     # removing the erroneous elements using the triangles (clip_tri)
     fixed_mesh = clip_mesh_by_shape(
                 mesh,
@@ -644,18 +641,18 @@ def vertices_around_vertex(mesh):
 def get_surrounding_elem_verts(mesh, in_vert):
     tria = mesh.tria
     quad = mesh.quad
-    
+
     conn_verts = []
-    
+
     # NOTE: np.any is used so that vertices that are not in in_verts
     # triangles but are part of the triangles that include in_verts
     # are considered too
     if tria.size > 0:
-        
+
         mark_tria = np.any(
                 (np.isin(tria.ravel(), in_vert).reshape(tria.shape)), 1)
         conn_verts.append(tria[mark_tria, :].ravel())
-        
+
     if quad.size > 0:
         mark_quad = np.any(
                 (np.isin(quad.ravel(), in_vert).reshape(quad.shape)), 1)
@@ -675,11 +672,13 @@ def get_lone_element_verts(mesh):
     '''
     tria = mesh.tria
     quad = mesh.quad
-    
+
     all_indices = []
-    if tria.size > 0: all_indices.append(tria.ravel())
-    if quad.size > 0: all_indices.append(quad.ravel())
-    
+    if tria.size > 0:
+        all_indices.append(tria.ravel())
+    if quad.size > 0:
+        all_indices.append(quad.ravel())
+
     if not all_indices:
         return np.array([])
 
@@ -691,7 +690,7 @@ def get_lone_element_verts(mesh):
 
     # Find elements composed of only vertices that are used one
     lone_elem_verts_list = []
-    
+
     if tria.size > 0:
         mark_tria = np.all(
                 (np.isin(tria.ravel(), once_verts).reshape(tria.shape)), 1)
@@ -903,8 +902,9 @@ def remove_mesh_by_edge(
 
     for etype in ELEM_2D_TYPES:
         elems = getattr(mesh, etype)
-        if elems.size == 0: continue
-        
+        if elems.size == 0:
+            continue
+
         # If a given element contains two vertices from
         # a crossing edge, it is selected
         test = np.sum(np.isin(elems, edge_verts), axis=1)
@@ -965,7 +965,7 @@ def clip_mesh_by_vertex(
     }
 
     new_coord = coord[list(crd_old_to_new.keys()), :]
-    
+
     # Handle values
     new_values = mesh.values[list(crd_old_to_new.keys())]
 
@@ -988,7 +988,7 @@ def clip_mesh_by_vertex(
 def get_mesh_edges(mesh: MeshData, unique=True):
     trias = mesh.tria
     quads = mesh.quad
-    
+
     # Get unique set of edges by rolling connectivity
     # and joining connectivities in 3rd dimension, then sorting
     # to get all edges with lower index first
@@ -1023,6 +1023,7 @@ def calculate_tria_areas(mesh):
                    axis=2).squeeze())
     perimeter = np.sum(tria_sides, axis=1) / 2
     perimeter = perimeter.reshape(len(perimeter), 1)
+    # pylint: disable=W0632
     a_side, b_side, c_side = np.split(tria_sides, 3, axis=1)
     tria_areas = np.sqrt(
             perimeter*(perimeter-a_side)
@@ -1199,14 +1200,14 @@ def reproject(
 ):
     if mesh.crs is None:
         raise ValueError("Mesh doesn't have a CRS!")
-    
+
     src_crs = mesh.crs
     dst_crs = CRS.from_user_input(dst_crs)
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
     # pylint: disable=E0633
     x, y = transformer.transform(
         mesh.coords[:, 0], mesh.coords[:, 1])
-        
+
     mesh.coords = np.vstack((x, y)).T
     mesh.crs = dst_crs
 
@@ -1234,7 +1235,7 @@ def meshdata_to_grd(msh: MeshData) -> Dict:
     nodes = {
         i + 1: [tuple(p.tolist()), -v] for i, (p, v) in
             enumerate(zip(coords, vals))}
-            
+
     elems = {
         i + 1: v + 1 for i, v in enumerate(msh.tria)}
     offset = len(elems)
@@ -1255,12 +1256,12 @@ def grd_to_msh_t(grd: Dict) -> MeshData:
 def grd_to_meshdata(grd: Dict) -> MeshData:
     id_to_index = {node_id: index for index, node_id
                    in enumerate(grd['nodes'].keys())}
-    
+
     triangles = [list(map(lambda x: id_to_index[x], element)) for element
                  in grd['elements'].values() if len(element) == 3]
     quads = [list(map(lambda x: id_to_index[x], element)) for element
              in grd['elements'].values() if len(element) == 4]
-             
+
     coords = [coord for coord, _ in grd['nodes'].values()]
     values = [value for _, value in grd['nodes'].values()]
 
@@ -1270,7 +1271,7 @@ def grd_to_meshdata(grd: Dict) -> MeshData:
         quad=quads,
         values=values
     )
-    
+
     crs = grd.get('crs')
     if crs is not None:
         msh.crs = CRS.from_user_input(crs)
@@ -1291,7 +1292,7 @@ def meshdata_to_2dm(msh: MeshData):
                 src_crs, epsg_4326, always_xy=True)
             coords = np.vstack(
                 transformer.transform(coords[:, 0], coords[:, 1])).T
-    
+
     vals = msh.values.flatten()
     return {
             'ND': {i+1: (coord, vals[i] if not
@@ -1311,17 +1312,17 @@ def sms2dm_to_msh_t(_sms2dm) -> MeshData:
 def sms2dm_to_meshdata(_sms2dm) -> MeshData:
     id_to_index = {node_id: index for index, node_id
                    in enumerate(_sms2dm['ND'].keys())}
-    
+
     tria = None
     if 'E3T' in _sms2dm:
         tria = [list(map(lambda x: id_to_index[x], element)) for element
                      in _sms2dm['E3T'].values()]
-    
+
     quad = None
     if 'E4Q' in _sms2dm:
         quad = [list(map(lambda x: id_to_index[x], element)) for element
                  in _sms2dm['E4Q'].values()]
-                 
+
     coords = [coord for coord, _ in _sms2dm['ND'].values()]
     values = [value for _, value in _sms2dm['ND'].values()]
 
@@ -1341,7 +1342,7 @@ def sms2dm_to_meshdata(_sms2dm) -> MeshData:
 def msh_t_to_utm(msh: MeshData):
     warnings.warn("Use project_to_utm instead!", DeprecationWarning)
     return project_to_utm(msh)
-    
+
 def project_to_utm(msh: MeshData):
     utm_crs = estimate_mesh_utm(msh)
     if utm_crs is None:
@@ -1491,7 +1492,7 @@ def merge_meshdata(
             cnn = getattr(mesh, k)
             if cnn.size > 0:
                 elems[k].append(cnn + offset)
-        
+
         coord.append(mesh.coords)
         if mesh.values is not None:
             value.append(mesh.values)
@@ -1500,9 +1501,10 @@ def merge_meshdata(
     # Construct composite MeshData
     # Helper to stack if list is not empty, else return empty
     def safe_stack(lst, dim=2):
-        if not lst: return None
+        if not lst:
+            return None
         return np.vstack(lst)
-    
+
     composite_mesh = MeshData(
         coords=safe_stack(coord),
         tria=safe_stack(elems['tria']),
@@ -1534,7 +1536,8 @@ def drop_extra_vertex_from_line(lstr: LineString) -> LineString:
     coords = np.array(lstr.coords)
 
     vecs = coords[1:] - coords[:-1]
-    def isnt_zero(i): return np.logical_not(np.isclose(i, 0))
+    def isnt_zero(i):
+        return np.logical_not(np.isclose(i, 0))
     vec_sizes = np.sqrt(vecs[:, 0] ** 2 + vecs[:, 1] ** 2)
     uvecs = vecs / vec_sizes.reshape(-1, 1)
     uvecs = uvecs[isnt_zero(vec_sizes)]
@@ -1553,7 +1556,8 @@ def drop_extra_vertex_from_line(lstr: LineString) -> LineString:
 
 def drop_extra_vertex_from_polygon(
         mpoly: Union[Polygon, MultiPolygon]) -> MultiPolygon:
-    if isinstance(mpoly, Polygon): mpoly = MultiPolygon([mpoly])
+    if isinstance(mpoly, Polygon):
+        mpoly = MultiPolygon([mpoly])
     poly_seam_list = []
     for poly in mpoly.geoms:
         extr = drop_extra_vertex_from_line(poly.exterior)
@@ -1758,7 +1762,7 @@ def estimate_particle_velocity_from_depth(
 
     References
     ----------
-    Based on OceanMesh2D approximation method 
+    Based on OceanMesh2D approximation method
     https://doi.org/10.13140/RG.2.2.21840.61446/2.
     '''
 
@@ -1913,7 +1917,7 @@ def create_rectangle_mesh(
         quad=quad,
         values=vals
     )
-    
+
     # Drop unused verts (e.g. 4 connected holes)
     cleanup_isolates(mesh) # MeshData might handle this logic if needed
     return mesh
@@ -1991,7 +1995,7 @@ def clip_elements_by_index(
     '''
     adapted from:
 https://github.com/sorooshmani-noaa/river-in-mesh/tree/main/river_in_mesh/utils
-    
+
     parameters
     ----------
     msht : MeshData
@@ -2004,14 +2008,15 @@ https://github.com/sorooshmani-noaa/river-in-mesh/tree/main/river_in_mesh/utils
     -------
     MeshData
         mesh without skewed elements
-    
+
     notes
     -----
     '''
     new_msht = deepcopy(msht)
     rm_dict = {'tria': tria, 'quad': quad}
     for elm_type, idx in rm_dict.items():
-        if idx is None: continue
+        if idx is None:
+            continue
         elems = getattr(new_msht, elm_type)
         mask = np.ones(elems.shape[0], dtype=bool)
         mask[idx] = False

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any, Optional, Union
 import logging
 
@@ -10,6 +11,7 @@ try:
 except ImportError:
     _HAS_JIGSAW = False
 
+from ocsmesh import utils
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 
@@ -83,10 +85,10 @@ class JigsawEngine(BaseMeshEngine):
         if seed is not None:
             seed_msh = meshdata_to_jigsaw(seed)
             seed_msh.vert2['IDtag'][:] = -1
-            seed_edges = utils.get_mesh_edges(seed, unique=true)
+            seed_edges = utils.get_mesh_edges(seed, unique=True)
             seed_msh.edge2 = np.array(
                 [(e, -1) for e in seed_edges],
-                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+                dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
             )
 
         # Convert back to MeshData
@@ -106,14 +108,14 @@ class JigsawEngine(BaseMeshEngine):
 
         seed_msh = None
         if seed is not None:
-            # NOTE: User should make sure seed mesh is compatible with the 
+            # NOTE: User should make sure seed mesh is compatible with the
             # input mesh and refinement shape!
             seed_msh = meshdata_to_jigsaw(seed)
             seed_msh.vert2['IDtag'][:] = -1
-            seed_edges = utils.get_mesh_edges(seed, unique=true)
+            seed_edges = utils.get_mesh_edges(seed, unique=True)
             seed_msh.edge2 = np.array(
                 [(e, -1) for e in seed_edges],
-                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+                dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
             )
 
         init_msh = meshdata_to_jigsaw(mesh)
@@ -124,10 +126,10 @@ class JigsawEngine(BaseMeshEngine):
                 seed_msh = meshdata_to_jigsaw(seed_in_roi)
                 seed_msh.vert2['IDtag'][:] = -1
                 # note: add edge2 from elements
-                seed_edges = utils.get_mesh_edges(seed_in_roi, unique=true)
+                seed_edges = utils.get_mesh_edges(seed_in_roi, unique=True)
                 seed_msh.edge2 = np.array(
                     [(e, -1) for e in seed_edges],
-                    dtype=jigsawpy.jigsaw_msh_t.edge2_t
+                    dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
                 )
 
             mesh_w_hole = utils.clip_mesh_by_shape(
@@ -142,10 +144,10 @@ class JigsawEngine(BaseMeshEngine):
             init_msh = meshdata_to_jigsaw(mesh_w_hole)
             init_msh.vert2['IDtag'][:] = -1
             # note: add edge2 from elements
-            init_edges = utils.get_mesh_edges(mesh_w_hole, unique=true)
+            init_edges = utils.get_mesh_edges(mesh_w_hole, unique=True)
             init_msh.edge2 = np.array(
                 [(e, -1) for e in init_edges],
-                dtype=jigsawpy.jigsaw_msh_t.edge2_t
+                dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
             )
 
         if seed_msh is not None:
@@ -157,7 +159,7 @@ class JigsawEngine(BaseMeshEngine):
 
         # Prepare Geometry from the input mesh
         bdry_edges = utils.get_boundary_edges(mesh)
-        bdry_vert_idx = np.unique(mesh_edges.ravel())
+        bdry_vert_idx = np.unique(bdry_edges.ravel())
         mapping = np.full(mesh.num_nodes, -1)
         mapping[bdry_vert_idx] = np.range(len(bdry_vert_idx))
         geom_coords = mesh.coords[bdry_vert_idx, :]
@@ -379,12 +381,12 @@ def remesh_small_elements(opts, geom, mesh, hfun):
 
     fixed_mesh = mesh
     for coef in coeffs:
-        tria_areas = calculate_tria_areas(fixed_mesh)
+        tria_areas = utils.calculate_tria_areas(fixed_mesh)
         tiny_sz = coef * equilat_area
         tiny_verts = np.unique(fixed_mesh.tria3['index'][tria_areas<tiny_sz,:].ravel())
         if len(tiny_verts) == 0:
             break
-        mesh_clip = clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
+        mesh_clip = utils.clip_mesh_by_vertex(fixed_mesh, tiny_verts, inverse=True)
 
         fixed_mesh = jigsawpy.jigsaw_msh_t()
         fixed_mesh.mshID = 'euclidean-mesh'

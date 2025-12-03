@@ -38,6 +38,7 @@ class BaseMesh:
         object, it will affect the mesh.
         """
 
+        #pylint: disable=E1101
         return self._meshdata
 
     @property

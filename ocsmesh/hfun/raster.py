@@ -1,6 +1,5 @@
 """This module define class for raster based size function
 """
-from pathlib import Path
 import functools
 import shutil
 import gc
@@ -29,7 +28,7 @@ import rasterio
 from scipy.spatial import cKDTree
 from shapely import ops
 from shapely.geometry import (
-    LineString, MultiLineString, box, GeometryCollection,
+    LineString, MultiLineString, GeometryCollection,
     Polygon, MultiPolygon)
 
 from ocsmesh.internal import MeshData

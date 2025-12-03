@@ -5,12 +5,10 @@ import pathlib
 import logging
 
 import geopandas as gpd
-from shapely.geometry import MultiPolygon
 
 from ocsmesh import Raster, Geom, Hfun
 from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.mesh.mesh import Mesh
-from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.features.contour import Contour
 from ocsmesh.mesh.parsers import sms2dm
@@ -129,16 +127,17 @@ class MeshUpgrader:
         # TODO: Make jigsaw an option
         engine = get_mesh_engine('jigsaw', verbose=1)
         meshdata = engine.generate(
-            read_gdf.to_crs(meshdata_hfun), meshdata_hfun,
+            read_gdf.to_crs(meshdata_hfun.crs), meshdata_hfun,
         )
+        meshdata.crs = read_gdf.meshdata.crs
 
         ## Free-up memory
         del read_gdf
-        del geom_from_disk
         del read_hfun
         del hfun_from_disk
         gc.collect()
 
+        mesh = Mesh(meshdata)
         mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
 
         ## Interpolate DEMs on the mesh

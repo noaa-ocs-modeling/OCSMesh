@@ -538,8 +538,7 @@ class _ConstraintInfoCollector:
             The constraint object provided in `add`
         """
 
-        for defn in self._constraints_info:
-            yield defn
+        yield from self._constraints_info
 
 
     def apply(self, hfun_list, per_hfun=True):

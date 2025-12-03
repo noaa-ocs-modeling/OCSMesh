@@ -1,9 +1,6 @@
-from typing import Any, Optional, Dict
+from typing import Any
 import logging
 
-import shapely
-
-from ocsmesh.internal import MeshData
 from ocsmesh.engines.base import BaseMeshEngine
 from ocsmesh.engines.jigsaw import (
     JigsawEngine, JigsawOptions

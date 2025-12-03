@@ -10,7 +10,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
-from shapely.geometry import MultiPolygon, Polygon, GeometryCollection, MultiPoint
+from shapely.geometry import MultiPolygon, Polygon, GeometryCollection
 from shapely.ops import polygonize, unary_union, transform
 
 from ocsmesh import Raster, Geom, Mesh, Hfun, utils
@@ -266,7 +266,7 @@ class SubsetAndCombine:
         meshdata_lo = deepcopy(lores_mesh_clip)
 
         crs = buffer_crs
-        assert(not buffer_crs.is_geographic)
+        assert not buffer_crs.is_geographic
 
         # calculate mesh size for clipped bits
         hfun_hi = Hfun(Mesh(meshdata_hi))
@@ -287,12 +287,12 @@ class SubsetAndCombine:
 
         # TODO: Make jigsaw an option
         engine = get_mesh_engine('jigsaw')
-        utm_crs = utils.estimate_bounds_utm(buffer_domain.bounds, crs=crs):
+        utm_crs = utils.estimate_bounds_utm(buffer_domain.bounds, crs=crs)
         meshdata_domain_rep = engine.generate(
             gpd.GeoSeries(buffer_domain, crs=crs).to_crs(utm_crs),
             meshdata_cdt,
         )
-        utils.final_mesh(meshdata_domain_rep)
+        utils.finalize_mesh(meshdata_domain_rep)
 
 #        utils.reproject(meshdata_domain_rep, crs)
 
@@ -320,30 +320,30 @@ class SubsetAndCombine:
             self, buffer_polygon, meshdata_hfun_buffer, buffer_crs):
 
         crs = buffer_crs
-        assert(not buffer_crs.is_geographic)
-        assert(buffer_crs == meshdata_hfun_buffer.crs)
+        assert not buffer_crs.is_geographic
+        assert buffer_crs == meshdata_hfun_buffer.crs
 
         # TODO: Make jigsaw an option
         engine = get_mesh_engine('jigsaw')
-        utm_crs = utils.estimate_bounds_utm(buffer_polygon.bounds, crs=crs):
+        utm_crs = utils.estimate_bounds_utm(buffer_polygon.bounds, crs=crs)
         meshdata_buf_apprx = engine.generate(
             gpd.GeoSeries(buffer_polygon, crs=crs).to_crs(utm_crs),
             meshdata_hfun_buffer,
         )
-        utils.final_mesh(meshdata_buf_apprx)
+        utils.finalize_mesh(meshdata_buf_apprx)
 
         # If vertices are too close to buffer geom boundary,
         # it's going to cause issues (thin elements)
 #        if meshdata_buf_apprx.crs != hfun_buffer.crs:
 #            utils.reproject(meshdata_buf_apprx, hfun_buffer.crs)
         seed_mesh = utils.clip_mesh_by_shape(
-            meshdata_buf_apprx, 
-            buffer_polygon.buffer(-min(meshdata_hfun_buffer)))
+            meshdata_buf_apprx,
+            buffer_polygon.buffer(-min(meshdata_hfun_buffer))
         )
 
 #        utils.reproject(meshdata_buf_apprx, buffer_crs)
         engine = get_mesh_engine('triangle', opts='p')
-        meshdata = engine.generate(
+        meshdata_buffer = engine.generate(
             gpd.GeoSeries(buffer_polygon),
             seed=seed_mesh
         )
@@ -620,8 +620,10 @@ class SubsetAndCombine:
 
 
         # Attach overlaps to buffer region (due to 1 layer and upstream)
-        poly_seam_4, meshdata_clip_hires_1 = self._add_overlap_to_polygon(meshdata_clip_hires_0, poly_seam_3)
-        poly_seam_5, meshdata_clip_lowres_1 = self._add_overlap_to_polygon(meshdata_clip_lowres_0, poly_seam_4)
+        poly_seam_4, meshdata_clip_hires_1 = self._add_overlap_to_polygon(
+                meshdata_clip_hires_0, poly_seam_3)
+        poly_seam_5, meshdata_clip_lowres_1 = self._add_overlap_to_polygon(
+                meshdata_clip_lowres_0, poly_seam_4)
 
         # Cleanup buffer shape
         poly_seam_6 = utils.remove_holes_by_relative_size(

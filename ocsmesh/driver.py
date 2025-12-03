@@ -1,7 +1,6 @@
 import logging
-from typing import Any, Optional, Dict, Union
+from typing import Union
 
-import shapely
 from pyproj import CRS
 
 from ocsmesh import utils

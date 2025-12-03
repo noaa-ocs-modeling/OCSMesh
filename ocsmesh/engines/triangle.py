@@ -1,4 +1,5 @@
-from typing import Any, Optional, Union, Dict, List
+from __future__ import annotations
+from typing import Any, Optional, Union, Dict
 import logging
 
 import numpy as np
@@ -12,6 +13,7 @@ try:
 except ImportError:
     _HAS_TRIANGLE = False
 
+from ocsmesh import utils
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 
@@ -98,7 +100,7 @@ def _shape_to_triangle_dict(
     vertices = df_coo[['lon', 'lat']].values
     segments = df_cnn.values
 
-        
+
     # To make sure islands formed by two polygons touching at multiple
     # points are also considered as holes, instead of getting interiors,
     # we get the negative of the domain and calculate points in all
@@ -139,10 +141,10 @@ def _meshdata_to_triangle_dict(mesh: MeshData) -> Dict[str, Any]:
     # calculated. For simple remeshing of an existing mesh,
     # 'vertices' and 'triangles' are often enough for 'r' mode.
     # If using 'p' mode on existing nodes, segments are needed.
-    
+
     # We can infer boundary segments if not provided, but
     # Triangle library usually expects PSLG for 'p'.
-    
+
     return data
 
 
@@ -154,10 +156,10 @@ def _triangle_dict_to_meshdata(
     """
     coords = data.get('vertices')
     tria = data.get('triangles')
-    
+
     # Triangle outputs segments/edges too, usually we ignore
     # unless we want to store them.
-    
+
     return MeshData(
         coords=coords,
         tria=tria,
@@ -172,14 +174,14 @@ class TriangleOptions(BaseMeshOptions):
     def __init__(self, opts: str='', **kwargs):
         if not _HAS_TRIANGLE:
             raise ImportError("Triangle library not installed.")
-        
+
         self._opts = opts
-        
+
         # Allow appending/modifying opts via kwargs if needed
         # e.g. min_angle=30 -> append 'q30'
         if 'min_angle' in kwargs:
             self._opts += f"q{kwargs['min_angle']}"
-        
+
         if 'max_area' in kwargs:
             self._opts += f"a{kwargs['max_area']}"
 
@@ -198,7 +200,7 @@ class TriangleEngine(BaseMeshEngine):
         sizing: Optional[MeshData | int | float] = None,
         seed: Optional[MeshData] = None,
     ) -> MeshData:
-        
+
         if not _HAS_TRIANGLE:
             raise ImportError("Triangle library not installed.")
 
@@ -221,25 +223,25 @@ class TriangleEngine(BaseMeshEngine):
             )
         input_dict['segments'] = shape_dict['segments']
 
-        
+
         # 2. Handle Sizing
         # Triangle uses 'a' switch for global area, or a separate
         # refinement function.
         # If sizing is a scalar float, we can append 'a{value}'
         opts = self._options.get_config()
-        
+
         if isinstance(sizing, (float, int)):
             # If 'a' is not already in opts with a value
             if 'a' not in opts or 'a' == opts[-1]:
-                 opts = opts.replace('a', '') + f"a{sizing}"
-        
+                opts = opts.replace('a', '') + f"a{sizing}"
+
         # 3. Run Engine
         # 'p' is usually required for PSLG input (vertices + segments)
         if 'p' not in opts and 'segments' in input_dict:
             opts += 'p'
-            
+
         out_dict = tr.triangulate(input_dict, opts)
-        
+
         # 4. Convert Output
         # Preserve CRS from shape if available?
         # Shape usually doesn't carry CRS in raw form,
@@ -254,7 +256,7 @@ class TriangleEngine(BaseMeshEngine):
         sizing: Optional[MeshData | int | float] = None,
         seed: Optional[MeshData] = None,
     ) -> MeshData:
-        
+
         if not _HAS_TRIANGLE:
             raise ImportError("Triangle library not installed.")
 
@@ -263,7 +265,7 @@ class TriangleEngine(BaseMeshEngine):
 
         # Prepare Input
         bdry_edges = utils.get_boundary_edges(mesh)
-        bdry_vert_idx = np.unique(mesh_edges.ravel())
+        bdry_vert_idx = np.unique(bdry_edges.ravel())
         mapping = np.full(mesh.num_nodes, -1)
         mapping[bdry_vert_idx] = np.range(len(bdry_vert_idx))
         geom_coords = mesh.coords[bdry_vert_idx, :]
@@ -310,7 +312,7 @@ class TriangleEngine(BaseMeshEngine):
         input_dict['segments'] = shape_dict['segments']
         input_dict['triangles'] = init_dict['triangles'] + len(shape_dict['vertices'])
 
-        
+
         # Handle Options
         # TODO: For remeshing/refining, 'r' switch is often used
 #        opts = self._options.get_config()
@@ -319,10 +321,10 @@ class TriangleEngine(BaseMeshEngine):
 
         # Handle Sizing
         if isinstance(sizing, (float, int)):
-             if 'a' not in opts or 'a' == opts[-1]:
-                 opts = opts.replace('a', '') + f"a{sizing}"
+            if 'a' not in opts or 'a' == opts[-1]:
+                opts = opts.replace('a', '') + f"a{sizing}"
 
         # Run Engine
         out_dict = tr.triangulate(input_dict, opts)
-        
+
         return _triangle_dict_to_meshdata(out_dict)
