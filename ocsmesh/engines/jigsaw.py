@@ -83,7 +83,7 @@ class JigsawEngine(BaseMeshEngine):
 
         seed_msh = None
         if seed is not None:
-            seed_msh = meshdata_to_jigsaw(seed)
+            seed_msh = meshdata_to_msh_t(seed)
             seed_msh.vert2['IDtag'][:] = -1
             seed_edges = utils.get_mesh_edges(seed, unique=True)
             seed_msh.edge2 = np.array(
@@ -92,7 +92,7 @@ class JigsawEngine(BaseMeshEngine):
             )
 
         # Convert back to MeshData
-        return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, seed_msh))
+        return msh_t_to_mesdata(self._jigsaw_mesh(geom, sizing, seed_msh))
 
 
     def remesh(
@@ -110,7 +110,7 @@ class JigsawEngine(BaseMeshEngine):
         if seed is not None:
             # NOTE: User should make sure seed mesh is compatible with the
             # input mesh and refinement shape!
-            seed_msh = meshdata_to_jigsaw(seed)
+            seed_msh = meshdata_to_msh_t(seed)
             seed_msh.vert2['IDtag'][:] = -1
             seed_edges = utils.get_mesh_edges(seed, unique=True)
             seed_msh.edge2 = np.array(
@@ -118,12 +118,12 @@ class JigsawEngine(BaseMeshEngine):
                 dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
             )
 
-        init_msh = meshdata_to_jigsaw(mesh)
+        init_msh = meshdata_to_msh_t(mesh)
         if remesh_region is not None:
             if seed is not None:
                 seed_in_roi = utils.clip_mesh_by_shape(
                     seed, remesh_region.union_all(), fit_inside=True, inverse=False)
-                seed_msh = meshdata_to_jigsaw(seed_in_roi)
+                seed_msh = meshdata_to_msh_t(seed_in_roi)
                 seed_msh.vert2['IDtag'][:] = -1
                 # note: add edge2 from elements
                 seed_edges = utils.get_mesh_edges(seed_in_roi, unique=True)
@@ -141,7 +141,7 @@ class JigsawEngine(BaseMeshEngine):
                 raise RuntimeError(err)
 
             # Convert MeshData to Jigsaw format (Initial Mesh)
-            init_msh = meshdata_to_jigsaw(mesh_w_hole)
+            init_msh = meshdata_to_msh_t(mesh_w_hole)
             init_msh.vert2['IDtag'][:] = -1
             # note: add edge2 from elements
             init_edges = utils.get_mesh_edges(mesh_w_hole, unique=True)
@@ -177,7 +177,7 @@ class JigsawEngine(BaseMeshEngine):
             dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
         )
 
-        return jigsaw_to_meshdata(self._jigsaw_mesh(geom, sizing, init_msh))
+        return msh_t_to_mesdata(self._jigsaw_mesh(geom, sizing, init_msh))
 
 
     def _jigsaw_mesh(self, geom, sizing, init_mesh=None):
@@ -194,7 +194,7 @@ class JigsawEngine(BaseMeshEngine):
         if sizing is not None:
             # TODO: Should sizing override options or options the sizing?
             if isinstance(sizing, MeshData):
-                hfun = meshdata_to_jigsaw(sizing)
+                hfun = meshdata_to_msh_t(sizing)
 
                 opts.hfun_hmin = np.min(sizing.values)
                 opts.hfun_hmax = np.max(sizing.values)
@@ -236,7 +236,7 @@ class JigsawEngine(BaseMeshEngine):
 
 
 
-def meshdata_to_jigsaw(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
+def meshdata_to_msh_t(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
     if not _HAS_JIGSAW:
         raise ImportError("Jigsawpy not installed.")
 
@@ -277,7 +277,7 @@ def meshdata_to_jigsaw(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
     return msh
 
 
-def jigsaw_to_meshdata(msh: 'jigsawpy.jigsaw_msh_t') -> MeshData:
+def msh_t_to_mesdata(msh: 'jigsawpy.jigsaw_msh_t') -> MeshData:
     coords = msh.vert2['coord']
 
     tria = None
@@ -371,6 +371,9 @@ def remesh_small_elements(opts, geom, mesh, hfun):
 
 
     # TODO: Implement for quad
+    if not _HAS_JIGSAW:
+        raise ImportError("Jigsawpy not installed.")
+
 
     hmin = np.min(hfun.value)
     equilat_area = np.sqrt(3)/4 * hmin**2

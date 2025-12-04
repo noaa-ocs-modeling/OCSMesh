@@ -20,7 +20,7 @@ from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 _logger = logging.getLogger(__name__)
 
 
-def _shape_to_triangle_dict(
+def shape_to_triangle_dict(
     shape: Union[Polygon, MultiPolygon]
 ) -> Dict[str, Any]:
     """
@@ -126,7 +126,7 @@ def _shape_to_triangle_dict(
     return data
 
 
-def _meshdata_to_triangle_dict(mesh: MeshData) -> Dict[str, Any]:
+def meshdata_to_triangle_dict(mesh: MeshData) -> Dict[str, Any]:
     """
     Convert MeshData to Triangle library input dict.
     """
@@ -148,7 +148,7 @@ def _meshdata_to_triangle_dict(mesh: MeshData) -> Dict[str, Any]:
     return data
 
 
-def _triangle_dict_to_meshdata(
+def triangle_dict_to_meshdata(
     data: Dict[str, Any],
 ) -> MeshData:
     """
@@ -205,13 +205,13 @@ class TriangleEngine(BaseMeshEngine):
             raise ImportError("Triangle library not installed.")
 
         # 1. Prepare Input
-        shape_dict = _shape_to_triangle_dict(shape.union_all())
+        shape_dict = shape_to_triangle_dict(shape.union_all())
 
         seed_dict = None
         if seed is not None:
             seed.tria = []
             seed.quad = []
-            seed_dict = _meshdata_to_triangle_dict(seed)
+            seed_dict = meshdata_to_triangle_dict(seed)
 
         input_dict = {}
         input_dict['vertices'] = shape_dict['vertices'].copy()
@@ -246,7 +246,7 @@ class TriangleEngine(BaseMeshEngine):
         # Preserve CRS from shape if available?
         # Shape usually doesn't carry CRS in raw form,
         # usually managed externally.
-        return _triangle_dict_to_meshdata(out_dict)
+        return triangle_dict_to_meshdata(out_dict)
 
 
     def remesh(
@@ -280,14 +280,14 @@ class TriangleEngine(BaseMeshEngine):
         if seed is not None:
             seed.tria = []
             seed.quad = []
-            seed_dict = _meshdata_to_triangle_dict(seed)
+            seed_dict = meshdata_to_triangle_dict(seed)
 
-        init_dict = _meshdata_to_triangle_dict(mesh)
+        init_dict = meshdata_to_triangle_dict(mesh)
         if remesh_region is not None:
             if seed is not None:
                 seed_in_roi = utils.clip_mesh_by_shape(
                     seed, remesh_region.union_all(), fit_inside=True, inverse=False)
-                seed_dict = _meshdata_to_triangle_dict(seed_in_roi)
+                seed_dict = meshdata_to_triangle_dict(seed_in_roi)
 
             mesh_w_hole = utils.clip_mesh_by_shape(
                 mesh, remesh_region.union_all(), fit_inside=True, inverse=True)
@@ -298,7 +298,7 @@ class TriangleEngine(BaseMeshEngine):
                 raise RuntimeError(err)
 
             # Convert MeshData to Jigsaw format (Initial Mesh)
-            init_dict = _meshdata_to_triangle_dict(mesh_w_hole)
+            init_dict = meshdata_to_triangle_dict(mesh_w_hole)
 
 
         input_dict = {}
@@ -327,4 +327,4 @@ class TriangleEngine(BaseMeshEngine):
         # Run Engine
         out_dict = tr.triangulate(input_dict, opts)
 
-        return _triangle_dict_to_meshdata(out_dict)
+        return triangle_dict_to_meshdata(out_dict)
