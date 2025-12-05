@@ -121,7 +121,7 @@ class TriangleEngine(BaseMeshEngine):
         bdry_edges = utils.get_boundary_edges(mesh)
         bdry_vert_idx = np.unique(bdry_edges.ravel())
         mapping = np.full(mesh.num_nodes, -1)
-        mapping[bdry_vert_idx] = np.range(len(bdry_vert_idx))
+        mapping[bdry_vert_idx] = np.arange(len(bdry_vert_idx))
         geom_coords = mesh.coords[bdry_vert_idx, :]
         geom_edges = mapping[bdry_edges]
 

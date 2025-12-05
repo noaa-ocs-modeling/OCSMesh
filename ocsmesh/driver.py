@@ -1,5 +1,6 @@
 import logging
-from typing import Union
+import copy
+from typing import Union, Optional
 
 from pyproj import CRS
 
@@ -22,8 +23,8 @@ class MeshDriver:
     def __init__(
         self,
         geom: BaseGeom,
-        hfun: BaseHfun,
-        init_mesh: Mesh = None,
+        hfun: Optional[BaseHfun],
+        init_mesh: Optional[Union[Mesh, MeshData]] = None,
         crs: Union[str, CRS] = None,
         engine_name: str = 'jigsaw',
         **engine_kwargs
@@ -33,20 +34,49 @@ class MeshDriver:
 
         Parameters
         ----------
-        goem: BaseGeom
-        hfun: BaseHfun
+        geom: BaseGeom
+            The geometry definition for the domain.
+        hfun: BaseHfun, optional
+            The size function definition. Must be instance of BaseHfun or None.
+        init_mesh: Mesh or MeshData, optional
+            Initial mesh or points to be used as a seed. 
+            Accepts high-level Mesh objects (BaseMesh subclasses) or low-level MeshData.
         crs: str, CRS, optional
+            Coordinate reference system for the output.
         engine_name : str
             Name of the engine ('jigsaw', 'triangle', etc).
         **engine_kwargs : dict
             Options to pass to the engine's Option class.
         """
 
-
         self._geom = geom
+        
+        # 1. Validate hfun
+        if hfun is not None and not isinstance(hfun, BaseHfun):
+            raise TypeError(
+                f"hfun must be an instance of BaseHfun or None, "
+                f"got {type(hfun).__name__}"
+            )
         self._hfun = hfun
-        self._init_mesh = init_mesh
+
+        # 2. Validate and Normalize init_mesh (used as seed)
+        self._seed_data = None
+        if init_mesh is not None:
+            if isinstance(init_mesh, MeshData):
+                self._seed_data = init_mesh
+            elif hasattr(init_mesh, 'meshdata'):
+                # Handle BaseMesh and its subclasses (EuclideanMesh, EuclideanMesh2D)
+                # The property defined in base.py is 'meshdata'
+                self._seed_data = init_mesh.meshdata
+            else:
+                raise TypeError(
+                    f"init_mesh must be of type MeshData or have a 'meshdata' property "
+                    f"(like ocsmesh.mesh.Mesh), got {type(init_mesh).__name__}"
+                )
+
         self._crs = CRS.from_user_input(crs) if crs is not None else None
+        
+        # Initialize Engine
         self._engine = get_mesh_engine(engine_name, **engine_kwargs)
 
 
@@ -55,16 +85,51 @@ class MeshDriver:
         Run a mesh generation job.
         """
         shape = self._geom.geoseries()
-        sizing : MeshData = self._hfun.meshdata()
+        
+        # Handle optional sizing
+        sizing: Optional[MeshData] = None
+        if self._hfun is not None:
+            sizing = self._hfun.meshdata()
 
-        # When the center of geom and hfun are NOT the same, utm
-        # zones would be different for resulting meshdata.
-        if shape.crs != sizing.crs:
-            utils.reproject(sizing, shape.crs)
+            # When the center of geom and hfun are NOT the same, utm
+            # zones would be different for resulting meshdata.
+            if shape.crs is not None and sizing.crs is not None:
+                if shape.crs != sizing.crs:
+                    utils.reproject(sizing, shape.crs)
 
+        # Handle Seed CRS mismatch
+        # We assume shape has the "correct" projection (likely UTM from BaseGeom)
+        generation_seed = self._seed_data
+        
+        if generation_seed is not None:
+            # Determine the CRS of the seed data
+            # If explicit CRS is missing, assume it matches the input geometry's CRS
+            seed_crs = generation_seed.crs
+            if seed_crs is None:
+                seed_crs = self._geom.crs
 
-        output_mesh : MeshData = self._engine.generate(shape, sizing)
-        output_mesh.crs = sizing.crs
+            # Check if reprojection is needed
+            if (seed_crs is not None and shape.crs is not None 
+                    and seed_crs != shape.crs):
+                
+                _logger.info("Reprojecting seed data to match geometry CRS...")
+                # Create a deepcopy to avoid side-effects on the user's original object
+                generation_seed = copy.deepcopy(generation_seed)
+                generation_seed.crs = seed_crs
+                utils.reproject(generation_seed, shape.crs)
+
+        # Pass the prepared seed to generate
+        output_mesh: MeshData = self._engine.generate(
+            shape, 
+            sizing, 
+            seed=generation_seed
+        )
+
+        # Handle Output CRS assignment
+        if sizing is not None and sizing.crs is not None:
+            output_mesh.crs = sizing.crs
+        elif shape.crs is not None:
+            output_mesh.crs = shape.crs
 
         utils.finalize_mesh(output_mesh, sieve)
 
@@ -78,5 +143,6 @@ class MeshDriver:
         """
         Run a mesh refinement/optimization job.
         """
+        # Note: If remeshing logic is implemented later, 
+        # self._seed_data can be used here as well if needed.
         raise NotImplementedError()
-#        return self._engine.remesh(mesh, shape, sizing)
