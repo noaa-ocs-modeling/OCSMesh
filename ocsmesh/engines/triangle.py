@@ -40,7 +40,8 @@ class TriangleOptions(BaseMeshOptions):
             self._opts += f"a{kwargs['max_area']}"
 
     def get_config(self) -> str:
-        return self._opts
+        # Return a copy, not the object internals
+        return str(self._opts)
 
 
 class TriangleEngine(BaseMeshEngine):
@@ -57,6 +58,10 @@ class TriangleEngine(BaseMeshEngine):
 
         if not _HAS_TRIANGLE:
             raise ImportError("Triangle library not installed.")
+
+        if isinstance(sizing, MeshData):
+            raise NotImplementedError("Varying sizing is not supported for Triangle engine!")
+
 
         # 1. Prepare Input
         shape_dict = shape_to_triangle_dict(shape.union_all())
@@ -114,6 +119,8 @@ class TriangleEngine(BaseMeshEngine):
         if not _HAS_TRIANGLE:
             raise ImportError("Triangle library not installed.")
 
+        if isinstance(sizing, MeshData):
+            raise NotImplementedError("Varying sizing is not supported for Triangle engine!")
         if mesh.quad is not None:
             raise NotImplementedError("Triangle does not support quads!")
 

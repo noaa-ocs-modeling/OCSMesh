@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any, Optional, Union
+from copy import deepcopy
 import logging
 
 import geopandas as gpd
@@ -29,7 +30,7 @@ class JigsawOptions(BaseMeshOptions):
             hfun_marche=False,
             remesh_tiny_elements=False,
             quality_metric=1.05,
-            **other_options
+            **opts_options
     ):
         if not _HAS_JIGSAW:
             raise ImportError("Jigsawpy not installed.")
@@ -51,7 +52,7 @@ class JigsawOptions(BaseMeshOptions):
         self._opts.mesh_rad2 = float(quality_metric)
 
         # Apply user overrides
-        for key, value in other_options.items():
+        for key, value in opts_options.items():
             if hasattr(self._opts, key):
                 setattr(self._opts, key, value)
             else:
@@ -60,7 +61,10 @@ class JigsawOptions(BaseMeshOptions):
                 )
 
     def get_config(self) -> Any:
-        return {'opts': self._opts, 'marche': self._hfun_marche, 'tiny_elem': self._remesh_tiny}
+        # Return a copy, not the object internals
+        return deepcopy(
+            {'opts': self._opts, 'marche': self._hfun_marche, 'tiny_elem': self._remesh_tiny}
+        )
 
 
 class JigsawEngine(BaseMeshEngine):

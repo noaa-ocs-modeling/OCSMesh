@@ -287,7 +287,7 @@ class HfunRaster(BaseHfun, Raster):
             The verbosity of the output.
         mesh_engine: str, default='jigsaw'
             Engine to use for generating background mesh
-        mesh_options: 
+        mesh_options:
             Arguments for meshing options
 
         Returns
@@ -378,7 +378,7 @@ class HfunRaster(BaseHfun, Raster):
 
             # BUILD VERT2_t. this one comes from the memcache array
             _logger.info('Building hfun coords...')
-            
+
             rast_coords = self.get_xy(win)
             if win_utm_crs is not None:
                 rast_coords = np.array(self.get_xy_memcache(win, win_utm_crs))

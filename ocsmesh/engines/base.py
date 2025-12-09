@@ -29,6 +29,10 @@ class BaseMeshEngine(ABC):
         """
         Initialize the engine with specific options.
         """
+        if not isinstance(options, BaseMeshOptions):
+            raise ValueError(
+                f"options must be of type BaseMeshOptions, received {type(options)}"
+            )
         self._options = options
 
     @abstractmethod

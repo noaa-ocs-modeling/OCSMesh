@@ -1,6 +1,7 @@
 #! python
 import re
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import geopandas as gpd
@@ -14,12 +15,47 @@ from shapely.geometry import (
 from shapely.ops import polygonize
 
 from ocsmesh import utils, MeshData
+from ocsmesh.engines.jigsaw import JigsawOptions, JigsawEngine
+from ocsmesh.engines.triangle import TriangleOptions, TriangleEngine
 from ocsmesh.engines.factory import get_mesh_engine
 
 
+class Base(unittest.TestCase):
+    def test_string_arg_as_option_fails(self):
+        with self.assertRaises(ValueError):
+            TriangleEngine(options='pq30')
+
+        # This is to ensure the correct format doesn't raise error!
+        TriangleEngine(TriangleOptions('pq30'))
+        get_mesh_engine('triangle', opts='pq30')
+
+
+class Jigsaw(unittest.TestCase):
+    def test_options_init(self):
+        """Test JigsawOptions initialization and config retrieval."""
+        # Test default init
+        opts = JigsawOptions()
+        config = opts.get_config()
+        self.assertIn('opts', config)
+        self.assertFalse(config['marche'])
+
+        # Test overrides
+        opts = JigsawOptions(hfun_hmin=0.5, hfun_marche=True)
+        config = opts.get_config()
+        self.assertTrue(config['marche'])
+        # Depending on how the mock/real object behaves, we check logic
+        # Here we assume _opts stores attributes directly
+        self.assertEqual(opts.get_config()['opts'].hfun_hmin, 0.5)
+
+
+    @patch('ocsmesh.engines.jigsaw._HAS_JIGSAW', False)
+    def test_missing_dependency(self):
+        """Test that ImportError is raised if jigsawpy is missing."""
+        with self.assertRaises(ImportError):
+            JigsawEngine(JigsawOptions())
+
+
 class Triangle(unittest.TestCase):
-
-
     def setUp(self):
         self.triangle_engine = get_mesh_engine('triangle', opts='p')
 
@@ -209,5 +245,3 @@ class Triangle(unittest.TestCase):
         mesh_poly = utils.get_mesh_polygons(meshdata)
 
         self.assertTrue(multpoly.equals(mesh_poly))
-
-
