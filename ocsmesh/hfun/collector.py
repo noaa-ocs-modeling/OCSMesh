@@ -889,7 +889,7 @@ class HfunCollector(BaseHfun):
             shutil.rmtree(self._work_dir, ignore_errors=True)
 
 
-    def meshdata(self) -> MeshData:
+    def meshdata(self, **kwargs) -> MeshData:
         """Interpolates mesh size functions on an unstructred mesh
 
         Calculates and the interpolate the mesh sizes from all inputs
@@ -932,12 +932,20 @@ class HfunCollector(BaseHfun):
             with tempfile.TemporaryDirectory() as temp_dir:
                 rast = self._create_big_raster(temp_dir)
                 hfun = self._apply_features_fast(rast)
-                composite_hfun = self._get_hfun_composite_fast(hfun)
-                # So that the tempfiles are deleted and the dir can be
-                # safely removed
+                
+                # If the temporary hfun object supports meshdata args, use them
+                if hasattr(hfun, 'meshdata'):
+                    try:
+                        composite_hfun = hfun.meshdata(**kwargs)
+                    except TypeError:
+                        # Fallback if the object doesn't support the specific kwarg
+                        _logger.warning("Underlying hfun.meshdata() did not accept arguments. Calling without kwargs.")
+                        composite_hfun = hfun.meshdata()
+                else:
+                     composite_hfun = self._get_hfun_composite_fast(hfun)
+                
                 del rast
                 del hfun
-
         else:
             raise ValueError(f"Invalid method specified: {self._method}")
 
@@ -2155,7 +2163,8 @@ class HfunCollector(BaseHfun):
 
     def _write_hfun_to_disk(
             self,
-            out_path: Union[str, Path]
+            out_path: Union[str, Path],
+            **kwargs 
             ) -> List[Union[str, Path]]:
         """Internal: write individual size function output mesh to file
 
@@ -2168,6 +2177,8 @@ class HfunCollector(BaseHfun):
         out_path : path-like
             The path of the (temporary) directory to which mesh size
             functions must be written.
+        **kwargs : dict
+            Arguments to pass to the hfun.meshdata() method (e.g. stride).
 
         Returns
         -------
@@ -2191,9 +2202,13 @@ class HfunCollector(BaseHfun):
         for hfun in hfun_list:
             # TODO: Calling meshdata() on HfunMesh more than once causes
             # issue right now due to change in crs of internal Mesh
+            try:
+                meshdata_hfun = deepcopy(hfun.meshdata(**kwargs))
+            except TypeError:
+                # If a specific hfun type (like HfunMesh) doesn't support the args, ignore them
+                # This protects against passing 'stride' to a Mesh-based hfun which might not need it
+                meshdata_hfun = deepcopy(hfun.meshdata())
 
-            # To avoid removing verts and trias from mesh hfuns
-            meshdata_hfun = deepcopy(hfun.meshdata())
             # If no CRS info, we assume EPSG:4326
             if hasattr(meshdata_hfun, "crs"):
                 dst_crs = CRS.from_user_input("EPSG:4326")

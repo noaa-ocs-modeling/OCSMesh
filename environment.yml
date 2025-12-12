@@ -24,3 +24,5 @@ dependencies:
   - colored-traceback<=0.3.0
   - typing-extensions
   - jigsawpy
+  - gmsh>=4.15.0
+  - python-gmsh

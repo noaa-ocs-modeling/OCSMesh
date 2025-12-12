@@ -2,6 +2,9 @@ from typing import Any
 import logging
 
 from ocsmesh.engines.base import BaseMeshEngine
+from ocsmesh.engines.gmsh import (
+    GmshEngine, GmshOptions
+)
 from ocsmesh.engines.jigsaw import (
     JigsawEngine, JigsawOptions
 )
@@ -11,6 +14,7 @@ from ocsmesh.engines.triangle import (
 # from ocsmesh.engines.triangle_wrapper import ...
 
 _ENGINES = {
+    'gmsh': (GmshEngine, GmshOptions),
     'jigsaw': (JigsawEngine, JigsawOptions),
     'triangle': (TriangleEngine, TriangleOptions),
 }
@@ -24,7 +28,7 @@ def get_mesh_engine(engine_name: str, **engine_kwargs: Any) -> BaseMeshEngine:
     Parameters
     ----------
     engine_name : str
-        Name of the engine ('jigsaw', 'triangle', etc).
+        Name of the engine ('gmsh', 'jigsaw', 'triangle').
     **engine_kwargs : dict
         Options to pass to the engine's Option class.
     """

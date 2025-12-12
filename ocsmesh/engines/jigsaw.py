@@ -27,6 +27,7 @@ class JigsawOptions(BaseMeshOptions):
 
     def __init__(
             self,
+            bnd_representation='fixed',
             hfun_marche=False,
             remesh_tiny_elements=False,
             quality_metric=1.05,
@@ -37,6 +38,7 @@ class JigsawOptions(BaseMeshOptions):
 
         self._hfun_marche = hfun_marche
         self._remesh_tiny = remesh_tiny_elements
+        self._bnd_representation = bnd_representation
 
         # internal storage for options
         self._opts = jigsawpy.jigsaw_jig_t()
@@ -59,6 +61,11 @@ class JigsawOptions(BaseMeshOptions):
                 _logger.warning(
                     f"Unknown Jigsaw option: {key}"
                 )
+        
+        # Log note about boundary representation behavior in Jigsaw
+        if self._bnd_representation == 'exact':
+            _logger.debug("bnd_representation='exact' passed to Jigsaw. "
+                          "Note: Jigsaw topology logic may still refine boundaries based on sizing.")
 
     def get_config(self) -> Any:
         # Return a copy, not the object internals
@@ -96,7 +103,7 @@ class JigsawEngine(BaseMeshEngine):
             )
 
         # Convert back to MeshData
-        return msh_t_to_mesdata(self._jigsaw_mesh(geom, sizing, seed_msh))
+        return msh_t_to_meshdata(self._jigsaw_mesh(geom, sizing, seed_msh))
 
 
     def remesh(
@@ -181,7 +188,7 @@ class JigsawEngine(BaseMeshEngine):
             dtype=jigsawpy.jigsaw_msh_t.EDGE2_t
         )
 
-        return msh_t_to_mesdata(self._jigsaw_mesh(geom, sizing, init_msh))
+        return msh_t_to_meshdata(self._jigsaw_mesh(geom, sizing, init_msh))
 
 
     def _jigsaw_mesh(self, geom, sizing, init_mesh=None):
@@ -281,7 +288,7 @@ def meshdata_to_msh_t(mesh: MeshData) -> 'jigsawpy.jigsaw_msh_t':
     return msh
 
 
-def msh_t_to_mesdata(msh: 'jigsawpy.jigsaw_msh_t') -> MeshData:
+def msh_t_to_meshdata(msh: 'jigsawpy.jigsaw_msh_t') -> MeshData:
     coords = msh.vert2['coord']
 
     tria = None
