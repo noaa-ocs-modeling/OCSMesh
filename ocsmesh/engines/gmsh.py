@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Optional
 import logging
 from copy import deepcopy
+import uuid
 
 import numpy as np
 import geopandas as gpd
@@ -24,17 +25,19 @@ class GmshOptions(BaseMeshOptions):
     Wraps options for the Gmsh library.
     """
 
-    def __init__(self, bnd_representation='fixed', **kwargs):
+    def __init__(self, **kwargs):
         if not _HAS_GMSH:
             raise ImportError("Gmsh library not installed.")
 
-        self._bnd_representation = bnd_representation
+        # Extract known args that are not part of gmsh native options
+        self._bnd_representation = kwargs.pop('bnd_representation', 'fixed')
+        self._optimize_mesh = kwargs.pop('optimize_mesh', True)
+
         self._options = {
-            # Algorithm 5 (Delaunay) often respects variable sizing fields better than 6
+            # Algorithm 5 (Delaunay) often respects variable sizing fields better
             "Mesh.Algorithm": 6,  
             "General.Verbosity": 2,
-            # Critical options for sizing fields in 4.x:
-            # Disable looking at geometry points so it ONLY looks at the background field
+            # Critical options for sizing fields in 4.x
             "Mesh.MeshSizeExtendFromBoundary": 0,
             "Mesh.MeshSizeFromPoints": 0, 
             "Mesh.MeshSizeFromCurvature": 0,
@@ -45,13 +48,17 @@ class GmshOptions(BaseMeshOptions):
     def bnd_representation(self):
         return self._bnd_representation
 
+    @property
+    def optimize_mesh(self):
+        return self._optimize_mesh
+
     def get_config(self) -> dict:
         return deepcopy(self._options)
 
 
 class GmshEngine(BaseMeshEngine):
     """
-    Concrete Gmsh engine supporting direct point-based sizing via Background Fields.
+    Concrete Gmsh engine supporting direct point-based sizing via Background Fields
     """
 
     def __init__(self, options: BaseMeshOptions):
@@ -70,11 +77,25 @@ class GmshEngine(BaseMeshEngine):
         if combined_shape.is_empty:
             raise ValueError("Input shape is empty.")
 
+        # If Gmsh is already running (user session), we don't want to finalize it.
+        # If we start it, we finalize it.
+        we_initialized = False
         if not gmsh.isInitialized():
             gmsh.initialize()
+            we_initialized = True
 
-        gmsh.clear()
-        gmsh.model.add("ocsmesh_model")
+        # Use a unique model name to avoid clashing with existing user models
+        model_name = f"ocsmesh_model_{uuid.uuid4().hex}"
+        
+        # Save current model to restore later if needed
+        prev_model = None
+        try:
+            prev_model = gmsh.model.getCurrent()
+        except:
+            pass
+
+        gmsh.model.add(model_name)
+        gmsh.model.setCurrent(model_name)
 
         try:
             # 1. Build geometry (Respects bnd_representation)
@@ -91,10 +112,13 @@ class GmshEngine(BaseMeshEngine):
             # 3. Apply sizing (Background Field method)
             self._apply_sizing(sizing)
 
-            # 4. Generate and Optimize
+            # 4. Generate mesh
             gmsh.model.mesh.generate(2)
-            gmsh.model.mesh.optimize("Netgen")
-            gmsh.model.mesh.optimize("Laplace2D")
+
+            # 5. Optimize (Optional)
+            if self._options.optimize_mesh:
+                gmsh.model.mesh.optimize("Netgen")
+                gmsh.model.mesh.optimize("Laplace2D")
 
             return self._extract_meshdata()
 
@@ -103,7 +127,19 @@ class GmshEngine(BaseMeshEngine):
             raise e
 
         finally:
-            gmsh.clear()
+            # Clean up OUR model only
+            gmsh.model.remove()
+
+            # Restore previous state
+            if prev_model:
+                try:
+                    gmsh.model.setCurrent(prev_model)
+                except:
+                    pass
+
+            # Only finalize if we started the session
+            if we_initialized:
+                gmsh.finalize()
 
     # --------------------------
     # Geometry
@@ -121,7 +157,7 @@ class GmshEngine(BaseMeshEngine):
             raise TypeError(f"Unsupported geometry type: {type(shape)}")
 
         self._point_tags = {} 
-        
+
         # Check boundary preference
         bnd_rep = self._options.bnd_representation
         is_exact = (bnd_rep == 'exact')
@@ -134,7 +170,7 @@ class GmshEngine(BaseMeshEngine):
                 if key not in self._point_tags:
                     self._point_tags[key] = gmsh.model.occ.addPoint(*key, 0.0)
                 pts.append(self._point_tags[key])
-            
+
             # 2. Add Lines
             line_tags = []
             for i in range(len(pts)):
@@ -142,7 +178,7 @@ class GmshEngine(BaseMeshEngine):
                 p2 = pts[(i + 1) % len(pts)]
                 l_tag = gmsh.model.occ.addLine(p1, p2)
                 line_tags.append(l_tag)
-                
+
             return gmsh.model.occ.addCurveLoop(line_tags), line_tags
 
         all_line_tags = []
@@ -151,23 +187,21 @@ class GmshEngine(BaseMeshEngine):
                 continue
             ext_loop, ext_lines = add_loop(poly.exterior.coords)
             all_line_tags.extend(ext_lines)
-            
+
             holes = []
             for r in poly.interiors:
                 hole_loop, hole_lines = add_loop(r.coords)
                 holes.append(hole_loop)
                 all_line_tags.extend(hole_lines)
-                
+
             gmsh.model.occ.addPlaneSurface([ext_loop] + holes)
 
         gmsh.model.occ.synchronize()
 
-        # --- HANDLING BOUNDARY TYPES ---
+        # HANDLING BOUNDARY TYPES
         if is_exact:
             _logger.info("Boundary representation is 'exact': Locking edges.")
             for l_tag in all_line_tags:
-                # Transfinite Curve with 2 points means the line IS the element. 
-                # No internal nodes allowed on the curve.
                 gmsh.model.mesh.setTransfiniteCurve(l_tag, 2)
         
         # For 'fixed' and 'adapt', we leave the curves standard.

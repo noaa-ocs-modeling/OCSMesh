@@ -266,18 +266,8 @@ class HfunRaster(BaseHfun, Raster):
             stride: Optional[int] = None,
             **mesh_options
             ) -> MeshData:
-        """Interpolates mesh size function on an unstructred mesh
-
-        This method supports two distinct workflows based on the selected engine:
-        
-        1. 'gmsh': Uses an optimized Scalar Point (SP) view approach. The raster 
-           points are passed directly to Gmsh as a background field without 
-           generating intermediate connectivity in Python. This is fast and 
-           memory efficient.
-           
-        2. 'jigsaw' (and others): Uses the legacy approach where a temporary 
-           triangulated mesh is built in Python to represent the raster surface 
-           before passing it to the engine.
+        """
+        Interpolates mesh size function on an unstructred mesh
 
         Parameters
         ----------
@@ -303,276 +293,42 @@ class HfunRaster(BaseHfun, Raster):
         """
 
         if window is None:
-                iter_windows = list(self.iter_windows())
+            iter_windows = list(self.iter_windows())
         else:
             iter_windows = [window]
 
-        # ---------------------------------------------------------
-        # PATH A: GMSH (Direct Point Sizing + Auto Stride)
-        # ---------------------------------------------------------
-        if mesh_engine == 'gmsh':
-            import gmsh
-            from scipy.spatial import cKDTree
+        _logger.info(f'Configuring engine: {mesh_engine}...')
+        # Factory handles loading the specific engine module (abstraction safe)
+        engine = get_mesh_engine(mesh_engine, **mesh_options)
 
-            tria_list, coords_list, values_list = [], [], []
-            idx_offset = 0
+        tria_list = []
+        coords_list = []
+        values_list = []
+        idx_offset = 0
 
-            if not gmsh.is_initialized():
-                gmsh.initialize()
+        for i_win, win in enumerate(iter_windows):
+            _logger.debug(f"Processing window {i_win+1}/{len(iter_windows)}")
 
-            if verbosity is not None and verbosity < 1:
-                gmsh.option.setNumber("General.Terminal", 0)
+            x0, y0, x1, y1 = self.get_window_bounds(win)
+            win_utm_crs = utils.estimate_bounds_utm((x0, y0, x1, y1), self.crs)
 
-            for i_win, win in enumerate(iter_windows):
-                # --- 1. AUTO STRIDE CALCULATION ---
-                current_stride = stride  # Default to user input
-                
-                if current_stride is None:
-                    if self.hmin is not None:
-                        # Get DEM pixel size (handle non-square pixels safely)
-                        res_x, res_y = self.src.res
-                        dem_res = min(abs(res_x), abs(res_y))
-                        
-                        # Nyquist Limit: We need 2 points to resolve feature 'hmin'
-                        target_sampling_res = self.hmin / 2.0
-                        
-                        # Calculate Stride (Target / Actual)
-                        calculated_stride = int(target_sampling_res / dem_res)
-                        current_stride = max(1, calculated_stride)
-                    else:
-                        current_stride = 1
+            # --- Stride Logic (Optional Optimization) ---
+            # If stride is provided, we read a subset of data to save memory
+            step = stride if stride is not None else 1
 
-                _logger.info(f"Processing window {i_win+1}/{len(iter_windows)} "
-                             f"(Auto-Stride: {current_stride})...")
+            # Read window
+            start = time()
 
-                # --- 2. OPTIMIZED I/O (Lazy Reading) ---
-                # Calculate new dimensions based on stride
-                # We use ceil to ensure we cover the edge pixels
-                new_h = int(np.ceil(win.height / current_stride))
-                new_w = int(np.ceil(win.width / current_stride))
+            # Optimization: If using 'gmsh', we assume it handles point clouds.
+            # We skip building the dense triangulation array in Python.
+            build_triangles = (mesh_engine != 'gmsh')
 
-                # MEMORY FIX: Read directly into the smaller shape.
-                # This prevents loading the full high-res array into RAM.
-                try:
-                    rast_values = self.src.read(
-                        1, 
-                        window=win, 
-                        out_shape=(new_h, new_w)
-                    ).flatten().astype(float)
-                except Exception as e:
-                    _logger.error(f"Error reading window with stride: {e}")
-                    continue
-
-                # --- 3. OPTIMIZED COORDINATES (Sparse Generation) ---
-                # MEMORY FIX: Generate coordinates only for the points we read.
-                # Instead of get_xy() which makes a massive dense grid.
-                
-                # Get transform for this specific window
-                win_transform = self.src.window_transform(win)
-                
-                # Generate indices for pixel CENTERS (0.5, 1.5, etc) with stride
-                # We slice [:new_h] to ensure shapes match exactly due to potential rounding
-                row_indices = np.arange(0.5, win.height, current_stride)[:new_h]
-                col_indices = np.arange(0.5, win.width, current_stride)[:new_w]
-
-                # Create sparse meshgrid
-                cols_grid, rows_grid = np.meshgrid(col_indices, row_indices)
-                
-                # Apply Affine Transform to get native coordinates (X, Y)
-                # This uses negligible memory compared to the old approach
-                x_native, y_native = win_transform * (cols_grid.flatten(), rows_grid.flatten())
-                rast_coords = np.column_stack((x_native, y_native))
-
-                # Handle CRS Projection if needed
-                if self.crs != self.src.crs:
-                    #  - conceptual tag
-                    transformer = Transformer.from_crs(self.src.crs, self.crs, always_xy=True)
-                    x_proj, y_proj = transformer.transform(rast_coords[:, 0], rast_coords[:, 1])
-                    rast_coords = np.column_stack((x_proj, y_proj))
-
-                # --- Apply Constraints ---
-                if self.hmin is not None:
-                    rast_values[rast_values < self.hmin] = self.hmin
-                if self.hmax is not None:
-                    rast_values[rast_values > self.hmax] = self.hmax
-
-                # --- Create Gmsh model ---
-                model_name = f"Background_Gen_{i_win}"
-                try:
-                    gmsh.model.setCurrent(model_name)
-                    gmsh.model.remove()
-                except:
-                    pass
-                gmsh.model.add(model_name)
-                gmsh.model.setCurrent(model_name)
-
-                # --- Create simple plane surface for meshing ---
-                x0, y0, x1, y1 = self.get_window_bounds(win)
-                p1 = gmsh.model.occ.addPoint(x0, y0, 0)
-                p2 = gmsh.model.occ.addPoint(x1, y0, 0)
-                p3 = gmsh.model.occ.addPoint(x1, y1, 0)
-                p4 = gmsh.model.occ.addPoint(x0, y1, 0)
-                l1 = gmsh.model.occ.addLine(p1, p2)
-                l2 = gmsh.model.occ.addLine(p2, p3)
-                l3 = gmsh.model.occ.addLine(p3, p4)
-                l4 = gmsh.model.occ.addLine(p4, p1)
-                cl = gmsh.model.occ.addCurveLoop([l1, l2, l3, l4])
-                gmsh.model.occ.addPlaneSurface([cl])
-                gmsh.model.occ.synchronize()
-
-                # 1. Create the View
-                view_tag = gmsh.view.add("Background_Hfun")
-                
-                # 2. Prepare Data: [x, y, z, val, x, y, z, val, ...]
-                n_pts = len(rast_values)
-                zeros = np.zeros(n_pts)
-                
-                # Stack columns: X, Y, Z(0), H
-                combined_data = np.column_stack((
-                    rast_coords[:, 0], 
-                    rast_coords[:, 1], 
-                    zeros, 
-                    rast_values
-                ))
-                
-                # Flatten to a single list
-                flat_data = combined_data.flatten().tolist()
-                
-                # 3. Add Data to View
-                gmsh.view.addListData(view_tag, "SP", n_pts, flat_data)
-                
-                # 4. Set as Background Field
-                field_tag = gmsh.model.mesh.field.add("PostView")
-                gmsh.model.mesh.field.setNumber(field_tag, "ViewTag", view_tag)
-                gmsh.model.mesh.field.setAsBackgroundMesh(field_tag)
-                
-                # 5. Apply Crucial Options
-                gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
-                gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
-                gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 0)
-
-                gmsh.model.mesh.generate(2)
-
-                # --- 1. OPTIMIZED: Extract Nodes & Values (Direct Lookup) ---
-                # We replace cKDTree (Memory hog) with direct arithmetic lookup.
-                
-                node_tags, node_coords_flat, _ = gmsh.model.mesh.getNodes()
-                # Reshape to (N, 3) and take only X,Y columns
-                node_coords = np.array(node_coords_flat).reshape(-1, 3)[:, :2]
-
-                # A. Transform Mesh Nodes back to Source Raster CRS
-                if self.crs != self.src.crs:
-                    trans_back = Transformer.from_crs(self.crs, self.src.crs, always_xy=True)
-                    x_src, y_src = trans_back.transform(node_coords[:, 0], node_coords[:, 1])
-                else:
-                    x_src, y_src = node_coords[:, 0], node_coords[:, 1]
-
-                # B. Map World Coordinates -> Window Indices
-                # Use the inverse of the window transform: (x, y) -> (col_full, row_full)
-                inv_transform = ~win_transform
-                cols_full, rows_full = inv_transform * (x_src, y_src)
-                
-                # C. Adjust for Stride to get Array Indices
-                # We round to nearest integer to find the closest pixel center
-                cols_idx = np.rint(cols_full / current_stride).astype(int)
-                rows_idx = np.rint(rows_full / current_stride).astype(int)
-                
-                # D. Clip to valid bounds (Handle edge cases)
-                cols_idx = np.clip(cols_idx, 0, new_w - 1)
-                rows_idx = np.clip(rows_idx, 0, new_h - 1)
-                
-                # E. Sample the value directly from the array
-                # Reshape rast_values back to 2D (new_h, new_w) for easy indexing
-                mapped_values = rast_values.reshape(new_h, new_w)[rows_idx, cols_idx].reshape(-1, 1)
-
-                # --- 2. AGGRESSIVE CLEANUP ---
-                # Delete massive arrays immediately now that we have the result
-                del rast_values, rast_coords, combined_data, flat_data
-                gc.collect()
-
-                # --- 3. OPTIMIZED: Extract Triangles (Vectorized) ---
-                elem_types, _, elem_node_tags = gmsh.model.mesh.getElements(dim=2)
-                triangles = np.empty((0, 3), dtype=int)
-                
-                if 2 in elem_types:
-                    idx_tri = list(elem_types).index(2)
-                    tri_tags = np.array(elem_node_tags[idx_tri], dtype=int).reshape(-1, 3)
-                    
-                    # VECTORIZED REMAPPING (Replaces slow dictionary loop)
-                    # We map Gmsh tags to 0-based indices using searchsorted
-                    # This eliminates the CPU spike during triangle processing.
-                    
-                    # 1. Sort node tags to allow binary search
-                    # Note: node_tags are usually sorted, but we ensure it for safety
-                    sort_idx = np.argsort(node_tags)
-                    sorted_tags = node_tags[sort_idx]
-                    
-                    # 2. Find positions of triangle tags in the sorted node list
-                    # searchsorted returns the index in sorted_tags
-                    found_indices = np.searchsorted(sorted_tags, tri_tags)
-                    
-                    # 3. Map back to original indices using the sort_idx
-                    # This maps the Gmsh Tag -> Index in node_coords array
-                    triangles = sort_idx[found_indices]
-
-                out_mesh = MeshData(
-                    coords=node_coords,
-                    tria=triangles,
-                    values=mapped_values,
-                    crs=self.crs
-                )
-
-                tria_list.append(out_mesh.tria + idx_offset)
-                coords_list.append(out_mesh.coords)
-                values_list.append(out_mesh.values)
-                idx_offset += len(out_mesh.coords)
-
-                gmsh.model.remove()
-
-            # --- Combine windows ---
-            if len(coords_list) == 0:
-                return MeshData(np.empty((0, 2)), np.empty((0, 3)), np.empty((0, 1)), self.crs)
-
-            output_coords = np.concatenate(coords_list)
-            output_tria = np.concatenate(tria_list)
-            output_values = np.concatenate(values_list)
-
-            return MeshData(coords=output_coords, tria=output_tria, values=output_values, crs=self.crs)
-
-
-        # ---------------------------------------------------------
-        # PATH B: Legacy/Jigsaw (unchanged)
-        # ---------------------------------------------------------
-        else:
-            _logger.info(f'Configuring legacy engine: {mesh_engine}...')
-            engine = get_mesh_engine(mesh_engine, **mesh_options)
-
-            tria_list = []
-            coords_list = []
-            values_list = []
-            idx_offset = 0
-            
-            for win in iter_windows:
-                x0, y0, x1, y1 = self.get_window_bounds(win)
-                win_utm_crs = utils.estimate_bounds_utm((x0, y0, x1, y1), self.crs)
-
-                start = time()
-                _logger.info('Building initial geom...')
-                
-                # Jigsaw expects a Polygon for the domain
-                from shapely.geometry import box
-                bbox_poly = gpd.GeoSeries(box(x0, y0, x1, y1), crs=self.crs)
-                if win_utm_crs is not None:
-                    bbox_poly = bbox_poly.to_crs(win_utm_crs)
-
+            if build_triangles:
                 _logger.info('Building hfun triangulation...')
-                dim1 = win.width
-                dim2 = win.height
+                # Calculate dimensions based on stride (if any)
+                dim1 = int(np.ceil(win.width / step))
+                dim2 = int(np.ceil(win.height / step))
 
-                # Standard single-pass triangulation (Original Logic)
-                # Note: This has the "Swiss Cheese" issue if strictly viewed, 
-                # but Jigsaw handles this specific topology internally very well.
-                # If you want to fix it for generic engines, add the 2nd triangle set here too.
                 rast_tria = np.empty((dim1 - 1, dim2 - 1, 3), dtype=int)
                 i = np.arange(dim1 - 1, dtype=int)[:, None]
                 j = np.arange(dim2 - 1, dtype=int)[None, :]
@@ -580,67 +336,121 @@ class HfunRaster(BaseHfun, Raster):
                 rast_tria[:, :, 1] = (i+1) + j * dim1
                 rast_tria[:, :, 2] = (i+1) + (j+1) * dim1
                 rast_tria = rast_tria.ravel()
-
                 gc.collect()
+            else:
+                _logger.info('Engine is Gmsh: Skipping python-side triangulation build.')
+                rast_tria = None
 
-                _logger.info('Building hfun coords...')
+            # Get Coords
+            _logger.info('Building hfun coords...')
+            # NOTE: get_xy returns full density. If striding, we should slice.
+            if step > 1:
+                # Logic to subsample coords if stride is used
+                # This is a basic implementation of striding on existing arrays
+                full_xy = self.get_xy(win)
+                # Reshape to 2D grid to slice
+                full_xy = full_xy.reshape(win.height, win.width, 2)
+                # Slice [::step, ::step]
+                sub_xy = full_xy[::step, ::step, :].reshape(-1, 2)
+                rast_coords = sub_xy
+                
+                if win_utm_crs is not None:
+                    # We have to project the subsampled points
+                    transformer = Transformer.from_crs(self.crs, win_utm_crs, always_xy=True)
+                    xt, yt = transformer.transform(rast_coords[:, 0], rast_coords[:, 1])
+                    rast_coords = np.column_stack((xt, yt))
+            else:
                 rast_coords = self.get_xy(win)
                 if win_utm_crs is not None:
                     rast_coords = np.array(self.get_xy_memcache(win, win_utm_crs))
 
-                _logger.info('Building sizing values...')
+            # Get Values
+            _logger.info('Building sizing values...')
+            # Use out_shape in read() for efficient IO striding if supported, 
+            # or read and slice numpy array
+            if step > 1:
+                # Read full then slice (safer for now) or use rasterio decimation
+                full_vals = self.get_values(window=win, band=1)
+                sub_vals = full_vals[::step, ::step]
+                rast_values = sub_vals.flatten().reshape(-1, 1).astype(float)
+            else:
                 rast_values = np.array(
-                    self.get_values(window=win, band=1).flatten().reshape(
-                        (win.width*win.height, 1)
-                    ),
+                    self.get_values(window=win, band=1).flatten().reshape(-1, 1),
                     dtype=float
                 )
-                if self.hmin is not None:
-                    rast_values[rast_values < self.hmin] = self.hmin
-                if self.hmax is not None:
-                    rast_values[rast_values > self.hmax] = self.hmax
 
-                _logger.info(f'Hfun-raster generation-prep took {time()-start}.')
-                _logger.info('Generating sizing mesh...')
+            if self.hmin is not None:
+                rast_values[rast_values < self.hmin] = self.hmin
+            if self.hmax is not None:
+                rast_values[rast_values > self.hmax] = self.hmax
 
-                win_sizes = MeshData(
-                    coords=rast_coords,
-                    tria=rast_tria.reshape(-1, 3),
-                    values=rast_values,
-                    crs=self.crs if win_utm_crs is None else win_utm_crs
-                )
+            # Build Geom
+            from shapely.geometry import box
+            bbox_poly = gpd.GeoSeries(box(x0, y0, x1, y1), crs=self.crs)
+            if win_utm_crs is not None:
+                bbox_poly = bbox_poly.to_crs(win_utm_crs)
 
-                # Call Legacy Engine
-                win_optim_sizes = engine.generate(bbox_poly, win_sizes)
+            _logger.info(f'Hfun-raster prep took {time()-start}.')
 
-                # Post processing
-                kwargs = {'method': 'nearest'}
-                utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
+            # Create MeshData
+            # If rast_tria is None (Gmsh case), MeshData handles tria=None gracefully
+            win_sizes = MeshData(
+                coords=rast_coords,
+                tria=rast_tria.reshape(-1, 3) if rast_tria is not None else None,
+                values=rast_values,
+                crs=self.crs if win_utm_crs is None else win_utm_crs
+            )
 
-                if win_utm_crs is not None:
-                    win_optim_sizes.crs = win_utm_crs
-                    utils.reproject(win_optim_sizes, self.crs)
+            # Call Engine
+            # This is where abstraction happens. GmshEngine.generate() will handle
+            # a points-only MeshData by using addListData("SP").
+            win_optim_sizes = engine.generate(bbox_poly, win_sizes)
 
+            # Post processing (Interpolation)
+            # Interpolation requires source connectivity (triangles) or Nearest Neighbor.
+            # If we skipped triangulation, we MUST use nearest neighbor or build a cKDTree.
+            # ocsmesh.utils.interpolate handles this check.
+            kwargs = {'method': 'nearest'} 
+            utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
+
+            # Reproject result
+            if win_utm_crs is not None:
+                win_optim_sizes.crs = win_utm_crs
+                utils.reproject(win_optim_sizes, self.crs)
+
+            # Collect results
+            if win_optim_sizes.tria is not None:
                 tria_list.append(win_optim_sizes.tria + idx_offset)
-                coords_list.append(win_optim_sizes.coords)
-                idx_offset += len(coords_list[-1])
-                values_list.append(win_optim_sizes.values)
-
-            output_coords = np.concatenate(coords_list)
-            output_tria = np.concatenate(tria_list)
-            output_values = np.concatenate(values_list)
             
-            # Final CRS Wrap
-            final_crs = self.crs
-            utm_crs = utils.estimate_bounds_utm(self.get_bbox().bounds, self.crs)
-            if utm_crs is not None:
-                transformer = Transformer.from_crs(self.crs, utm_crs, always_xy=True)
-                output_coords = np.vstack(
-                    transformer.transform(output_coords[:, 0], output_coords[:, 1])
-                ).T
-                final_crs = utm_crs
+            coords_list.append(win_optim_sizes.coords)
+            values_list.append(win_optim_sizes.values)
+            idx_offset += len(win_optim_sizes.coords)
 
-            return MeshData(coords=output_coords, tria=output_tria, values=output_values, crs=final_crs)
+        # Concatenate
+        output_coords = np.concatenate(coords_list)
+        if tria_list:
+            output_tria = np.concatenate(tria_list)
+        else:
+            output_tria = None # Return point cloud if engine returned points (rare for meshdata)
+            
+        output_values = np.concatenate(values_list)
+
+        # Final UTM projection check
+        output_crs = self.crs
+        utm_crs = utils.estimate_bounds_utm(self.get_bbox().bounds, self.crs)
+        if utm_crs is not None:
+            transformer = Transformer.from_crs(self.crs, utm_crs, always_xy=True)
+            output_coords = np.vstack(
+                transformer.transform(output_coords[:, 0], output_coords[:, 1])
+            ).T
+            output_crs = utm_crs
+
+        return MeshData(
+            coords=output_coords,
+            tria=output_tria,
+            values=output_values,
+            crs=output_crs
+        )
 
 
     @contextmanager

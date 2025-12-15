@@ -16,6 +16,7 @@ import rasterio as rio
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
 from scipy import sparse, constants
+from scipy.spatial import cKDTree
 from shapely.geometry import (
     Polygon, MultiPolygon,
     box, GeometryCollection,
@@ -2026,3 +2027,103 @@ https://github.com/sorooshmani-noaa/river-in-mesh/tree/main/river_in_mesh/utils
             setattr(new_msht, elm_type, elems[~mask])
     cleanup_isolates(new_msht)
     return new_msht
+
+
+def resample_geom_by_hfun(shape_series, hfun_data):
+    """
+    Resamples polygons in the GeoSeries by 'walking' the boundary
+    with step sizes determined by the local Hfun value.
+    
+    Tiny islands (holes) that collapse below 3 vertices are removed.
+    """
+    
+    # Check for CRS mismatch warning
+    if shape_series.crs is not None and hfun_data.crs is not None:
+        if not shape_series.crs.equals(hfun_data.crs):
+            _logger.warning(
+                "CRS mismatch between geometry and hfun in resampling. "
+                "Spatial lookups may be incorrect."
+            )
+
+    # Build KDTree for fast spatial lookup of Hfun values
+    tree = cKDTree(hfun_data.coords)
+    values = hfun_data.values.ravel()
+
+    def get_local_size(x, y):
+        # Find nearest Hfun point, optimization: query 1 point
+        dist, idx = tree.query([x, y], k=1)
+        return values[idx]
+
+    def resample_ring(ring):
+        if ring.is_empty: return None 
+
+        new_coords = []
+        # Start at the beginning
+        curr_dist = 0.0
+        total_length = ring.length
+
+        # Add first point
+        start_pt = ring.interpolate(0.0)
+        new_coords.append((start_pt.x, start_pt.y))
+
+        while curr_dist < total_length:
+            curr_pt = new_coords[-1]
+
+            # Look up target size at this location
+            h = get_local_size(curr_pt[0], curr_pt[1])
+
+            next_dist = curr_dist + h
+
+            if next_dist >= total_length:
+                break
+
+            # Interpolate new point along the original geometry
+            next_pt = ring.interpolate(next_dist)
+            new_coords.append((next_pt.x, next_pt.y))
+
+            curr_dist = next_dist
+
+        # Close the loop
+        if len(new_coords) < 3:
+            return None
+
+        new_coords.append(new_coords[0]) # Close ring
+        return LinearRing(new_coords)
+
+    # Apply to all polygons in the series
+    new_geoms = []
+    for poly in shape_series:
+        if isinstance(poly, Polygon):
+            new_ext = resample_ring(poly.exterior)
+            if new_ext is None: 
+                continue 
+
+            new_ints = []
+            for inter in poly.interiors:
+                resampled_island = resample_ring(inter)
+                if resampled_island is not None:
+                    new_ints.append(resampled_island)
+            
+            new_geoms.append(Polygon(new_ext, new_ints))
+
+        elif isinstance(poly, MultiPolygon):
+            parts = []
+            for p in poly.geoms:
+                new_ext = resample_ring(p.exterior)
+                if new_ext is None:
+                    continue 
+
+                new_ints = []
+                for inter in p.interiors:
+                    resampled_island = resample_ring(inter)
+                    if resampled_island is not None:
+                        new_ints.append(resampled_island)
+                
+                parts.append(Polygon(new_ext, new_ints))
+
+            if parts:
+                new_geoms.append(MultiPolygon(parts))
+        else:
+            new_geoms.append(poly)
+
+    return gpd.GeoSeries(new_geoms, crs=shape_series.crs)

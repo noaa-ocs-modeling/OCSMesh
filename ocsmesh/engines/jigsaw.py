@@ -5,7 +5,7 @@ import logging
 
 import geopandas as gpd
 import numpy as np
-from shapely import Polygon, MultiPolygon
+from shapely.geometry import Polygon, MultiPolygon
 try:
     import jigsawpy
     _HAS_JIGSAW = True
@@ -19,7 +19,6 @@ from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 
 _logger = logging.getLogger(__name__)
 
-
 class JigsawOptions(BaseMeshOptions):
     """
     Wraps jigsaw_opts_t options.
@@ -27,7 +26,6 @@ class JigsawOptions(BaseMeshOptions):
 
     def __init__(
             self,
-            bnd_representation='fixed',
             hfun_marche=False,
             remesh_tiny_elements=False,
             quality_metric=1.05,
@@ -38,8 +36,7 @@ class JigsawOptions(BaseMeshOptions):
 
         self._hfun_marche = hfun_marche
         self._remesh_tiny = remesh_tiny_elements
-        self._bnd_representation = bnd_representation
-
+        
         # internal storage for options
         self._opts = jigsawpy.jigsaw_jig_t()
 
@@ -55,17 +52,18 @@ class JigsawOptions(BaseMeshOptions):
 
         # Apply user overrides
         for key, value in opts_options.items():
+            if key == 'bnd_representation':
+                if value == 'exact':
+                    _logger.debug("bnd_representation='exact' passed to Jigsaw. "
+    "Note: Jigsaw topology logic may still refine boundaries based on sizing.")
+                continue
+
             if hasattr(self._opts, key):
                 setattr(self._opts, key, value)
             else:
                 _logger.warning(
                     f"Unknown Jigsaw option: {key}"
                 )
-        
-        # Log note about boundary representation behavior in Jigsaw
-        if self._bnd_representation == 'exact':
-            _logger.debug("bnd_representation='exact' passed to Jigsaw. "
-                          "Note: Jigsaw topology logic may still refine boundaries based on sizing.")
 
     def get_config(self) -> Any:
         # Return a copy, not the object internals
