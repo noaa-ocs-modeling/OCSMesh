@@ -55,6 +55,18 @@ class MeshDriver:
 
         # Set default CRS immediately if not provided
         self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_epsg(4326)
+<<<<<<< HEAD
+=======
+
+        # Extract boundary representation from kwargs for driver-level logic
+        # Default is 'fixed' if not provided
+        self._bnd_representation = engine_kwargs.get('bnd_representation', 'fixed')
+
+        # Validate bnd_representation
+        valid_reps = ['exact', 'fixed', 'adapt']
+        if self._bnd_representation not in valid_reps:
+            raise ValueError(f"bnd_representation must be {valid_reps}, got '{self._bnd_representation}'")
+>>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
 
         # Validate hfun
         if hfun is not None and not isinstance(hfun, BaseHfun):
@@ -110,6 +122,12 @@ class MeshDriver:
         if generation_seed is not None:
             generation_seed = copy.deepcopy(generation_seed)
             seed_crs = generation_seed.crs
+<<<<<<< HEAD
+=======
+            if seed_crs is not None and calc_crs is not None and not seed_crs.equals(calc_crs):
+                _logger.info("Reprojecting seed data to match calculation CRS...")
+                utils.reproject(generation_seed, calc_crs)
+>>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
 
             if calc_crs is None:
                 # If we don't know the calculation CRS yet, trust the seed
