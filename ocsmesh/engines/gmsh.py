@@ -165,6 +165,7 @@ class GmshEngine(BaseMeshEngine):
         Convert Shapely Polygon/MultiPolygon to Gmsh OCC geometry.
         Handles 'exact' boundary locking.
         """
+
         if isinstance(shape, Polygon):
             polys = [shape]
         elif isinstance(shape, MultiPolygon):
@@ -179,19 +180,43 @@ class GmshEngine(BaseMeshEngine):
         is_exact = (bnd_rep == 'exact')
 
         def add_loop(coords):
+            # 1. Clean coordinates using a coarser tolerance (1e-6)
+            # This satisfies Gmsh's internal OCC kernel (usually ~1e-7)
+            cleaned_coords = []
+            for p in coords:
+                pt = (float(p[0]), float(p[1]))
+                if not cleaned_coords:
+                    cleaned_coords.append(pt)
+                else:
+                    dist = ((pt[0] - cleaned_coords[-1][0])**2 + 
+                            (pt[1] - cleaned_coords[-1][1])**2)**0.5
+                    # Increased tolerance to 1e-6 to avoid kernel crashes
+                    if dist > 1e-6: 
+                        cleaned_coords.append(pt)
+            
+            if len(cleaned_coords) > 1:
+                dist_close = ((cleaned_coords[0][0] - cleaned_coords[-1][0])**2 + 
+                              (cleaned_coords[0][1] - cleaned_coords[-1][1])**2)**0.5
+                if dist_close < 1e-6:
+                    cleaned_coords.pop()
+
             pts = []
-            # 1. Add Points
-            for x, y in coords[:-1]:
-                key = (float(x), float(y))
+            for x, y in cleaned_coords:
+                # Rounding keys ensures logical consistency with the tolerance
+                key = (round(x, 6), round(y, 6))
                 if key not in self._point_tags:
-                    self._point_tags[key] = gmsh.model.occ.addPoint(*key, 0.0)
+                    self._point_tags[key] = gmsh.model.occ.addPoint(x, y, 0.0)
                 pts.append(self._point_tags[key])
 
-            # 2. Add Lines
             line_tags = []
             for i in range(len(pts)):
                 p1 = pts[i]
                 p2 = pts[(i + 1) % len(pts)]
+                
+                # Critical check: do not create lines between identical tags
+                if p1 == p2: 
+                    continue
+                    
                 l_tag = gmsh.model.occ.addLine(p1, p2)
                 line_tags.append(l_tag)
 
@@ -221,9 +246,9 @@ class GmshEngine(BaseMeshEngine):
                 gmsh.model.mesh.setTransfiniteCurve(l_tag, 2)
 
         # For 'fixed' and 'adapt', we leave the curves standard.
-        # Since we used occ.addLine between vertices, the vertices are already 
+        # Since we used occ.addLine between vertices, the vertices are already
         # hard points ('fixed').
-        # If 'adapt' was chosen, the generate() method has already resampled 
+        # If 'adapt' was chosen, the generate() method has already resampled
         # these vertices for us.
 
     # --------------------------

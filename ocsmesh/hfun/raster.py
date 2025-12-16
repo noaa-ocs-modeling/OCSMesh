@@ -27,8 +27,9 @@ from pyproj import CRS, Transformer
 import rasterio
 from scipy.spatial import cKDTree
 from shapely import ops
-from shapely.geometry import (LineString, MultiLineString,
-                              GeometryCollection, Polygon, MultiPolygon)
+from shapely.geometry import (
+    LineString, MultiLineString, GeometryCollection,
+    Polygon, MultiPolygon)
 
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
