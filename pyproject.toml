@@ -42,7 +42,7 @@ ocsmesh = "ocsmesh.__main__:main"
 gmsh = ["gmsh", "python-gmsh"]
 jigsaw = ["jigsawpy"]
 triangle = ["triangle"]
-testing = ['pylint>=2.14', 'jigsawpy', 'triangle']
+testing = ['pylint>=2.14', 'jigsawpy', 'triangle','gmsh']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',

@@ -386,7 +386,6 @@ class HfunRaster(BaseHfun, Raster):
                 rast_values[rast_values > self.hmax] = self.hmax
 
             # Build Geom
-<<<<<<< HEAD
             _logger.info('Building initial geom...')
             # get bbox data
             xgrid = self.get_x(window=win)
@@ -409,9 +408,6 @@ class HfunRaster(BaseHfun, Raster):
                 ]),
                 crs=self.crs
             )
-=======
-            bbox_poly = gpd.GeoSeries(box(x0, y0, x1, y1), crs=self.crs)
->>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
             if win_utm_crs is not None:
                 bbox_poly = bbox_poly.to_crs(win_utm_crs)
 
@@ -457,11 +453,7 @@ class HfunRaster(BaseHfun, Raster):
         if tria_list:
             output_tria = np.concatenate(tria_list)
         else:
-<<<<<<< HEAD
             output_tria = None # Return point cloud if engine returned points
-=======
-            output_tria = None # Return point cloud if engine returned points (rare for meshdata)
->>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
 
         output_values = np.concatenate(values_list)
 

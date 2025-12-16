@@ -2636,19 +2636,6 @@ class HfunCollector(BaseHfun):
                 use_box_only=False,
                 fit_inside=False)
 
-<<<<<<< HEAD
-=======
-            # Check if we actually got triangles (Gmsh optimization might return None for tria)
-            # If tria is None, we can't easily concatenate indices unless we generate them,
-            # but usually 'fast' mode implies we are stitching meshes.
-            # If Gmsh returns points-only, this step needs care.
-            # However, utils.clip_mesh_by_shape usually expects a valid mesh.
-            # Ideally, even for Gmsh, if we are returning a MeshData for *storage* or *usage*,
-            # it should probably have connectivity.
-            # *Self-Correction*: The maintainer said old scripts work fine.
-            # If we pass mesh_engine='gmsh', let's ensure HfunRaster returns something compatible.
-
->>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
             if big_meshdata.tria is not None:
                 index.append(big_meshdata.tria + offset)
 
@@ -2662,7 +2649,6 @@ class HfunCollector(BaseHfun):
 
         nondem_shape_list = []
         for hfun in hfun_list:
-<<<<<<< HEAD
             nondem_meshdata = deepcopy(hfun.meshdata())
             if hasattr(nondem_meshdata, "crs"):
                 if not epsg4326.equals(nondem_meshdata.crs):
@@ -2692,11 +2678,6 @@ class HfunCollector(BaseHfun):
                     use_box_only=False,
                     fit_inside=True,
                     inverse=True)
-=======
-            nondem_meshdata = deepcopy(hfun.meshdata()) # These are meshes, they ignore kwargs usually
-            # ... [Keep rest of the loop unchanged] ...
-            # ...
->>>>>>> 3330d02e9aa9bc3733ae89e06c58314c74e820a6
 
             nondem_shape_list.append(nondem_shape)
 
