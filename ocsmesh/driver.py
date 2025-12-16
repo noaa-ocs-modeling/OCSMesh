@@ -40,11 +40,12 @@ class MeshDriver:
         init_mesh: Mesh or MeshData, optional
             Initial mesh or points to be used as a seed.
         crs: str, CRS, optional
-            Coordinate reference system for the output. If None, defaults to EPSG:4326.
+            Coordinate reference system for the output.
+            If None, defaults to EPSG:4326.
         engine_name : str
             Name of the engine ('jigsaw', 'triangle', 'gmsh').
         **engine_kwargs : dict
-            Options to pass to the engine's Option class. 
+            Options to pass to the engine's Option class.
             Common options:
             - bnd_representation (str): 'exact', 'fixed', or 'adapt'.
         """
@@ -53,16 +54,7 @@ class MeshDriver:
         self._hfun = hfun
 
         # Set default CRS immediately if not provided
-        self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_user_input("EPSG:4326")
-
-        # Extract boundary representation from kwargs for driver-level logic
-        # Default is 'fixed' if not provided
-        self._bnd_representation = engine_kwargs.get('bnd_representation', 'fixed')
-
-        # Validate bnd_representation
-        valid_reps = ['exact', 'fixed', 'adapt']
-        if self._bnd_representation not in valid_reps:
-            raise ValueError(f"bnd_representation must be {valid_reps}, got '{self._bnd_representation}'")
+        self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_epsg(4326)
 
         # Validate hfun
         if hfun is not None and not isinstance(hfun, BaseHfun):
@@ -78,13 +70,6 @@ class MeshDriver:
             else:
                 raise TypeError("init_mesh must be MeshData or have 'meshdata' prop")
 
-        # Logic for 'adapt':
-        # If 'adapt' is chosen, the Driver handles the resampling (coarsening/refining).
-        # We then tell the engine to treat the resulting geometry as 'fixed' so it
-        # respects the nodes we explicitly calculated.
-        if self._bnd_representation == 'adapt':
-            engine_kwargs['bnd_representation'] = 'fixed'
-
         self._engine = get_mesh_engine(engine_name, **engine_kwargs)
 
 
@@ -96,15 +81,15 @@ class MeshDriver:
         calc_crs = shape.crs
 
         # 1. Project to Metric (UTM) if needed
-        # We need metric units for 'adapt' (Hfun is in meters) and for Gmsh 
+        # We need metric units for 'adapt' (Hfun is in meters) and for Gmsh
         # to correctly interpret Hfun values vs Edge lengths.
         if calc_crs is not None and calc_crs.is_geographic:
-             _logger.info("Input is Geographic. Projecting to UTM for processing...")
-             calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
-             shape = shape.to_crs(calc_crs)
-             _logger.info(f"Calculations will be performed in: {calc_crs}")
+            _logger.info("Input is Geographic. Projecting to UTM for processing...")
+            calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
+            shape = shape.to_crs(calc_crs)
+            _logger.info(f"Calculations will be performed in: {calc_crs}")
 
-        # 2. Prepare Sizing (Hfun) early 
+        # 2. Prepare Sizing (Hfun) early
         # (Needed for adaptation step and engine generation)
         sizing: Optional[MeshData] = None
         if self._hfun is not None:
@@ -120,24 +105,29 @@ class MeshDriver:
                 _logger.info("Reprojecting sizing field to match calculation CRS...")
                 utils.reproject(sizing, calc_crs)
 
-        # 3. Handle 'adapt' mode (Resample Geometry based on Hfun)
-        if self._bnd_representation == 'adapt':
-            if sizing is None:
-                _logger.warning("'adapt' boundary requested but no Hfun provided. Skipping adaptation.")
-            else:
-                _logger.info("Adapting boundary geometry to match Hfun resolution...")
-                shape = utils.resample_geom_by_hfun(shape, sizing)
-
-        # 4. Handle Seed CRS
+        # 3. Handle Seed CRS
         generation_seed = self._seed_data
         if generation_seed is not None:
             generation_seed = copy.deepcopy(generation_seed)
             seed_crs = generation_seed.crs
-            if seed_crs is not None and calc_crs is not None and not seed_crs.equals(calc_crs):
-                 _logger.info("Reprojecting seed data to match calculation CRS...")
-                 utils.reproject(generation_seed, calc_crs)
 
-        # 5. Generate Mesh
+            if calc_crs is None:
+                # If we don't know the calculation CRS yet, trust the seed
+                if seed_crs is not None:
+                    calc_crs = seed_crs
+                    shape = shape.set_crs(calc_crs)
+                    # Safety Check: sizing might be None if no hfun was passed
+                    if sizing is not None:
+                        sizing.crs = calc_crs
+            elif seed_crs is None:
+                # If seed has no CRS, assume it matches the calculation frame
+                generation_seed.crs = calc_crs
+            elif not seed_crs.equals(calc_crs):
+                # If both exist and differ, reproject
+                _logger.info("Reprojecting seed data to match calculation CRS...")
+                utils.reproject(generation_seed, calc_crs)
+
+        # 4. Generate Mesh
         output_mesh: MeshData = self._engine.generate(
             shape,
             sizing,
@@ -145,10 +135,10 @@ class MeshDriver:
         )
         output_mesh.crs = calc_crs
 
-        # 6. Finalize
+        # 5. Finalize
         utils.finalize_mesh(output_mesh, sieve)
 
-        # 7. Final Projection (to self._crs, which defaults to 4326 in init)
+        # 6. Final Projection (to self._crs, which defaults to 4326 in init)
         if output_mesh.crs is None:
             output_mesh.crs = self._crs
         elif not output_mesh.crs.equals(self._crs):

@@ -36,7 +36,7 @@ class JigsawOptions(BaseMeshOptions):
 
         self._hfun_marche = hfun_marche
         self._remesh_tiny = remesh_tiny_elements
-        
+
         # internal storage for options
         self._opts = jigsawpy.jigsaw_jig_t()
 
@@ -68,7 +68,9 @@ class JigsawOptions(BaseMeshOptions):
     def get_config(self) -> Any:
         # Return a copy, not the object internals
         return deepcopy(
-            {'opts': self._opts, 'marche': self._hfun_marche, 'tiny_elem': self._remesh_tiny}
+            {'opts': self._opts,
+             'marche': self._hfun_marche,
+             'tiny_elem': self._remesh_tiny}
         )
 
 

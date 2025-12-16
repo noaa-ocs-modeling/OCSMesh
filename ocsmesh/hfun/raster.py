@@ -27,8 +27,7 @@ from pyproj import CRS, Transformer
 import rasterio
 from scipy.spatial import cKDTree
 from shapely import ops
-from shapely.geometry import (box,
-                              LineString, MultiLineString,
+from shapely.geometry import (LineString, MultiLineString,
                               GeometryCollection, Polygon, MultiPolygon)
 
 from ocsmesh.internal import MeshData
@@ -244,7 +243,7 @@ class HfunRaster(BaseHfun, Raster):
         if initial_value is not None:
             # This is the "Wrap Existing" mode for workers.
             # The descriptor has already created a blank file for us at self.tmpfile.
-            # Now, we overwrite that blank file with the contents from the previous step.
+            # We overwrite that blank file with the contents from the previous step.
             if isinstance(initial_value, (str, pathlib.Path)):
                 shutil.copy2(initial_value, self.tmpfile)
                 # We must re-open the source to reflect the copied content
@@ -338,7 +337,7 @@ class HfunRaster(BaseHfun, Raster):
                 rast_tria = rast_tria.ravel()
                 gc.collect()
             else:
-                _logger.info('Engine is Gmsh: Skipping python-side triangulation build.')
+                _logger.info('Engine is Gmsh: Skipping python-side triangulation.')
                 rast_tria = None
 
             # Get Coords
@@ -353,11 +352,13 @@ class HfunRaster(BaseHfun, Raster):
                 # Slice [::step, ::step]
                 sub_xy = full_xy[::step, ::step, :].reshape(-1, 2)
                 rast_coords = sub_xy
-                
+
                 if win_utm_crs is not None:
                     # We have to project the subsampled points
-                    transformer = Transformer.from_crs(self.crs, win_utm_crs, always_xy=True)
-                    xt, yt = transformer.transform(rast_coords[:, 0], rast_coords[:, 1])
+                    transformer = Transformer.from_crs(self.crs,win_utm_crs,
+                                                       always_xy=True)
+                    xt, yt = transformer.transform(rast_coords[:, 0],
+                                                   rast_coords[:, 1])
                     rast_coords = np.column_stack((xt, yt))
             else:
                 rast_coords = self.get_xy(win)
@@ -366,7 +367,7 @@ class HfunRaster(BaseHfun, Raster):
 
             # Get Values
             _logger.info('Building sizing values...')
-            # Use out_shape in read() for efficient IO striding if supported, 
+            # Use out_shape in read() for efficient IO striding if supported,
             # or read and slice numpy array
             if step > 1:
                 # Read full then slice (safer for now) or use rasterio decimation
@@ -385,11 +386,32 @@ class HfunRaster(BaseHfun, Raster):
                 rast_values[rast_values > self.hmax] = self.hmax
 
             # Build Geom
-            from shapely.geometry import box
-            bbox_poly = gpd.GeoSeries(box(x0, y0, x1, y1), crs=self.crs)
+            _logger.info('Building initial geom...')
+            # get bbox data
+            xgrid = self.get_x(window=win)
+            ygrid = np.flip(self.get_y(window=win))
+            xgrid, ygrid = np.meshgrid(xgrid, ygrid)
+            bottom = xgrid[0, :]
+            top = xgrid[1, :]
+            del xgrid
+            left = ygrid[:, 0]
+            right = ygrid[:, 1]
+            del ygrid
+
+            # Create a dense polygon by walking along the edges of the grid
+            bbox_poly = gpd.GeoSeries(
+                Polygon([
+                    *[(x, left[0]) for x in bottom][:-1],
+                    *[(bottom[-1], y) for y in right][:-1],
+                    *[(x, right[-1]) for x in reversed(top)][:-1],
+                    *[(bottom[0], y) for y in reversed(left)][:-1]
+                ]),
+                crs=self.crs
+            )
             if win_utm_crs is not None:
                 bbox_poly = bbox_poly.to_crs(win_utm_crs)
 
+            _logger.info('Building initial geom done.')
             _logger.info(f'Hfun-raster prep took {time()-start}.')
 
             # Create MeshData
@@ -407,10 +429,10 @@ class HfunRaster(BaseHfun, Raster):
             win_optim_sizes = engine.generate(bbox_poly, win_sizes)
 
             # Post processing (Interpolation)
-            # Interpolation requires source connectivity (triangles) or Nearest Neighbor.
-            # If we skipped triangulation, we MUST use nearest neighbor or build a cKDTree.
+            # Interpolation requires source connectivity (tria) or Nearest Neighbor.
+            # If we skipped triangulation, we MUST use nearest neighbor or cKDTree.
             # ocsmesh.utils.interpolate handles this check.
-            kwargs = {'method': 'nearest'} 
+            kwargs = {'method': 'nearest'}
             utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
 
             # Reproject result
@@ -421,7 +443,7 @@ class HfunRaster(BaseHfun, Raster):
             # Collect results
             if win_optim_sizes.tria is not None:
                 tria_list.append(win_optim_sizes.tria + idx_offset)
-            
+
             coords_list.append(win_optim_sizes.coords)
             values_list.append(win_optim_sizes.values)
             idx_offset += len(win_optim_sizes.coords)
@@ -431,8 +453,8 @@ class HfunRaster(BaseHfun, Raster):
         if tria_list:
             output_tria = np.concatenate(tria_list)
         else:
-            output_tria = None # Return point cloud if engine returned points (rare for meshdata)
-            
+            output_tria = None # Return point cloud if engine returned points
+
         output_values = np.concatenate(values_list)
 
         # Final UTM projection check

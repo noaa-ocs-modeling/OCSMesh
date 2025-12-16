@@ -14,6 +14,7 @@ try:
 except ImportError:
     _HAS_GMSH = False
 
+from ocsmesh import utils
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 
@@ -25,21 +26,25 @@ class GmshOptions(BaseMeshOptions):
     Wraps options for the Gmsh library.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, bnd_representation='fixed', optimize_mesh=True, **kwargs):
         if not _HAS_GMSH:
             raise ImportError("Gmsh library not installed.")
 
-        # Extract known args that are not part of gmsh native options
-        self._bnd_representation = kwargs.pop('bnd_representation', 'fixed')
-        self._optimize_mesh = kwargs.pop('optimize_mesh', True)
+        valid_reps = ['exact', 'fixed', 'adapt']
+        if bnd_representation not in valid_reps:
+            raise ValueError(f"bnd_representation must be {valid_reps}, "
+                             f"got '{bnd_representation}'")
+
+        self._bnd_representation = bnd_representation
+        self._optimize_mesh = optimize_mesh
 
         self._options = {
             # Algorithm 5 (Delaunay) often respects variable sizing fields better
-            "Mesh.Algorithm": 6,  
+            "Mesh.Algorithm": 6,
             "General.Verbosity": 2,
             # Critical options for sizing fields in 4.x
             "Mesh.MeshSizeExtendFromBoundary": 0,
-            "Mesh.MeshSizeFromPoints": 0, 
+            "Mesh.MeshSizeFromPoints": 0,
             "Mesh.MeshSizeFromCurvature": 0,
         }
         self._options.update(kwargs)
@@ -77,6 +82,17 @@ class GmshEngine(BaseMeshEngine):
         if combined_shape.is_empty:
             raise ValueError("Input shape is empty.")
 
+        if self._options.bnd_representation == 'adapt':
+            if isinstance(sizing, MeshData):
+                _logger.info("Adapting boundary geometry to match "
+                             "Hfun resolution (Engine-side)...")
+                temp_series = gpd.GeoSeries([combined_shape], crs=shape.crs)
+                resampled_series = utils.resample_geom_by_hfun(temp_series, sizing)
+                combined_shape = resampled_series.union_all()
+            elif sizing is None:
+                _logger.warning("'adapt' boundary requested but no Hfun provided. "
+                                "Skipping adaptation.")
+
         # If Gmsh is already running (user session), we don't want to finalize it.
         # If we start it, we finalize it.
         we_initialized = False
@@ -86,7 +102,7 @@ class GmshEngine(BaseMeshEngine):
 
         # Use a unique model name to avoid clashing with existing user models
         model_name = f"ocsmesh_model_{uuid.uuid4().hex}"
-        
+
         # Save current model to restore later if needed
         prev_model = None
         try:
@@ -156,7 +172,7 @@ class GmshEngine(BaseMeshEngine):
         else:
             raise TypeError(f"Unsupported geometry type: {type(shape)}")
 
-        self._point_tags = {} 
+        self._point_tags = {}
 
         # Check boundary preference
         bnd_rep = self._options.bnd_representation
@@ -198,15 +214,17 @@ class GmshEngine(BaseMeshEngine):
 
         gmsh.model.occ.synchronize()
 
-        # HANDLING BOUNDARY TYPES
+        # Handling Boundary Types
         if is_exact:
             _logger.info("Boundary representation is 'exact': Locking edges.")
             for l_tag in all_line_tags:
                 gmsh.model.mesh.setTransfiniteCurve(l_tag, 2)
-        
+
         # For 'fixed' and 'adapt', we leave the curves standard.
-        # Since we used occ.addLine between vertices, the vertices are already hard points ('fixed').
-        # If 'adapt' was chosen, the Driver has already resampled these vertices for us.
+        # Since we used occ.addLine between vertices, the vertices are already 
+        # hard points ('fixed').
+        # If 'adapt' was chosen, the generate() method has already resampled 
+        # these vertices for us.
 
     # --------------------------
     # Sizing
@@ -234,7 +252,7 @@ class GmshEngine(BaseMeshEngine):
         # Case 2: Hfun MeshData (Background Field)
         # 1. Create a "Post-Processing View"
         view_tag = gmsh.view.add("hfun_sizing")
-        
+
         # 2. Prepare data [x, y, z, val]
         n_pts = len(coords)
         try:
@@ -286,4 +304,4 @@ class GmshEngine(BaseMeshEngine):
         """
         Dummy implementation to satisfy abstract base class requirements.
         """
-        raise NotImplementedError("Remeshing is not currently implemented for Gmsh engine.")
+        raise NotImplementedError("Remeshing is not currently implemented for Gmsh.")

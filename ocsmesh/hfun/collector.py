@@ -594,7 +594,7 @@ def _flow_limiter_task_worker(task: dict):
             upper_bound=params['zmax']
         )
 
-    # 4. CRITICAL FIX: Explicitly save the final state of the worker's
+    # 4. Explicitly save the final state of the worker's
     #    object to the designated output path.
     worker_hfun.save(output_path)
 
@@ -891,11 +891,11 @@ class HfunCollector(BaseHfun):
 
     def meshdata(self, **kwargs) -> MeshData:
         """Interpolates mesh size functions on an unstructred mesh
-        
+
         Parameters
         ----------
         **kwargs : dict
-            Arguments passed down to the underlying Hfun classes (e.g. 
+            Arguments passed down to the underlying Hfun classes (e.g.
             mesh_engine='gmsh', stride=...).
         """
 
@@ -906,7 +906,7 @@ class HfunCollector(BaseHfun):
             self._apply_features()
 
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Pass kwargs if needed, though exact method usually handles writes differently
+                # Pass kwargs if needed
                 hfun_path_list = self._write_hfun_to_disk(temp_dir, **kwargs)
                 composite_hfun = self._get_hfun_composite(hfun_path_list)
 
@@ -917,7 +917,7 @@ class HfunCollector(BaseHfun):
                 hfun = self._apply_features_fast(rast)
                 # Pass kwargs (like mesh_engine) down to the composite generator
                 composite_hfun = self._get_hfun_composite_fast(hfun, **kwargs)
-                
+
                 del rast
                 del hfun
 
@@ -1731,12 +1731,12 @@ class HfunCollector(BaseHfun):
             The desired mode. Must be either 'serial' or 'parallel'.
         """
         if mode not in ['serial', 'parallel']:
-            raise ValueError("Execution mode must be either 'serial' or 'parallel'")
+            raise ValueError("Execution must be either 'serial' or 'parallel'")
 
         if mode == 'parallel' and (self._nprocs is None or self._nprocs <= 1):
             warnings.warn(
                 f"Execution mode set to 'parallel' but nprocs is {self._nprocs}. "
-                "Execution will fall back to serial. Set nprocs > 1 for parallel execution."
+            "Execution will fall back to serial. Set nprocs > 1 for parallel."
             )
 
         self._execution_mode = mode
@@ -1805,10 +1805,10 @@ class HfunCollector(BaseHfun):
         """
         if self._method == 'fast':
             raise NotImplementedError(
-                "This function is part of the 'exact' method and does not support 'fast' mode."
+            "This function is part of the 'exact' method and doesnt support 'fast' mode."
             )
 
-        # --- Phase 1: PREPARATION (Coordinator) ---
+        # Phase 1: PREPARATION (Coordinator)
         # This phase gathers all the work that needs to be done and packages it
         # into a list of simple, pickleable tasks for the worker processes.
 
@@ -1827,10 +1827,10 @@ class HfunCollector(BaseHfun):
                 # Check if the rule applies to this specific hfun instance
                 if src_idx is None or in_idx in src_idx:
                     limiter_rules_for_this_hfun.append({
-                        'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
-                        'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
-                        'zmin': zmin,
-                        'zmax': zmax
+                    'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
+                    'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
+                    'zmin': zmin,
+                    'zmax': zmax
                     })
 
             # If any rules were found, mark this HfunRaster for processing.
@@ -1854,7 +1854,8 @@ class HfunCollector(BaseHfun):
             topo_input_path = hfun._raster.path # pylint: disable=W0212
 
             # Define a unique output path in our persistent working directory.
-            output_path = os.path.join(self._work_dir, f"flow_limiter_result_{in_idx}.tif")
+            output_path = os.path.join(self._work_dir,
+                                       f"flow_limiter_result_{in_idx}.tif")
 
             task = {
                 'original_index': in_idx,
@@ -1873,16 +1874,16 @@ class HfunCollector(BaseHfun):
             _logger.info("No flow limiter tasks to execute.")
             return
 
-        # --- Phase 2: EXECUTION (Distribute to Laborers) ---
+        # Phase 2: EXECUTION (Distribute to Laborers)
         # This phase sends the prepared tasks to a pool of worker processes
         # and waits for them to complete the heavy computational work.
 
-        _logger.info(f"Starting parallel execution for {len(tasks)} flow limiter tasks...")
+        _logger.info(f"Start parallel execution for {len(tasks)} flow limiter tasks")
         with Pool(processes=self._nprocs) as p:
             results = p.map(_flow_limiter_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
-        # --- Phase 3: INTEGRATION (Process Results) ---
+        # Phase 3: INTEGRATION (Process Results)
         # This phase takes the results from the workers (which are just file paths)
         # and updates the main HfunCollector's state with the new, processed data.
 
@@ -1900,17 +1901,16 @@ class HfunCollector(BaseHfun):
             original_hfun = self._hfun_list[idx]
             # Create a new, updated HfunRaster instance to replace the old one.
             new_hfun_objects[idx] = HfunRaster(
-                raster=original_hfun.raster,      # Pass the original topography Raster object
+                raster=original_hfun.raster,
                 hmin=original_hfun.hmin,
                 hmax=original_hfun.hmax,
                 verbosity=original_hfun.verbosity,
-                initial_value=output_path     # Pass the path to the file created by the worker
+                initial_value=output_path
             )
 
         # Finally, update the main list with the new objects.
         for idx, new_hfun in new_hfun_objects.items():
-            _logger.info(f"Updating HfunCollector state with processed raster for index {idx}.")
-            # The old hfun object at this index will be replaced and eventually garbage collected.
+            _logger.info(f"Updating HfunCol. state with processed raster for idx {idx}.")
             self._hfun_list[idx] = new_hfun
 
 
@@ -1979,7 +1979,7 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
-       # --- Phase 1: PREPARATION (Coordinator) ---
+       # Phase 1: PREPARATION (Coordinator)
         tasks = []
         hfuns_to_process = {}
 
@@ -1999,16 +1999,18 @@ class HfunCollector(BaseHfun):
                     })
 
             if rules_for_this_hfun:
-                hfuns_to_process[in_idx] = { 'hfun': hfun, 'rules': rules_for_this_hfun }
+                hfuns_to_process[in_idx] = { 'hfun': hfun,
+                                            'rules': rules_for_this_hfun }
 
         # Now, create the simple task dictionaries for the pool.
         for in_idx, data in hfuns_to_process.items():
             hfun = data['hfun']
-            # Determine the correct input file. If this raster was already processed
+            # Determine the correct input file.If this raster was already processed
             hfun_input_path = hfun.tmpfile
             topo_input_path = hfun._raster.path # pylint: disable=W0212
 
-            output_path = os.path.join(self._work_dir, f"const_val_result_{in_idx}.tif")
+            output_path = os.path.join(self._work_dir,
+                                       f"const_val_result_{in_idx}.tif")
 
             task = {
                 'original_index': in_idx,
@@ -2026,17 +2028,19 @@ class HfunCollector(BaseHfun):
             return
 
 
-            # --- Phase 2: EXECUTION ---
-        _logger.info(f"Starting parallel execution for {len(tasks)} constant value tasks...")
+            # Phase 2: EXECUTION
+        _logger.info(f"Start parallel execution for {len(tasks)} const. value tasks")
         with Pool(processes=self._nprocs) as p:
             results = p.map(_const_val_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
-        # --- Phase 3: INTEGRATION ---
+        # Phase 3: INTEGRATION
         new_hfun_objects = {}
         for result in results:
             if result['status'] == 'error':
-                _logger.error("Val worker %s failed: %s", result['original_index'], result['error'])
+                _logger.error("Val worker %s failed: %s",
+                              result['original_index'],
+                              result['error'])
                 continue
 
             idx = result['original_index']
@@ -2045,16 +2049,16 @@ class HfunCollector(BaseHfun):
 
             # Create the new HfunRaster, ensuring we don't wipe the worker's data.
             new_hfun_objects[idx] = HfunRaster(
-            raster=original_hfun.raster,        # Pass the original topography Raster object
+            raster=original_hfun.raster, # Pass the original topography Raster object
             hmin=original_hfun.hmin,
             hmax=original_hfun.hmax,
             verbosity=original_hfun.verbosity,
-            initial_value=output_path       # Pass the path to the file created by the worker
+            initial_value=output_path # Pass the path to the file created by the worker
             )
 
         # Finally, update the main list with the newly created objects.
         for idx, new_hfun in new_hfun_objects.items():
-            _logger.info(f"Updating HfunCollector with const_val raster at index {idx}.")
+            _logger.info(f"Update HfunCollector with const_val raster at idx {idx}.")
             self._hfun_list[idx] = new_hfun
 
 
@@ -2139,7 +2143,7 @@ class HfunCollector(BaseHfun):
     def _write_hfun_to_disk(
             self,
             out_path: Union[str, Path],
-            **kwargs 
+            **kwargs
             ) -> List[Union[str, Path]]:
         """Internal: write individual size function output mesh to file
 
@@ -2180,8 +2184,10 @@ class HfunCollector(BaseHfun):
             try:
                 meshdata_hfun = deepcopy(hfun.meshdata(**kwargs))
             except TypeError:
-                # If a specific hfun type (like HfunMesh) doesn't support the args, ignore them
-                # This protects against passing 'stride' to a Mesh-based hfun which might not need it
+            # If a specific hfun type (like HfunMesh) doesn't support the args,
+            # ignore them
+            # This protects against passing 'stride' to a Mesh-based hfun which
+            # might not need it
                 meshdata_hfun = deepcopy(hfun.meshdata())
 
             # If no CRS info, we assume EPSG:4326
@@ -2630,16 +2636,6 @@ class HfunCollector(BaseHfun):
                 use_box_only=False,
                 fit_inside=False)
 
-            # Check if we actually got triangles (Gmsh optimization might return None for tria)
-            # If tria is None, we can't easily concatenate indices unless we generate them,
-            # but usually 'fast' mode implies we are stitching meshes. 
-            # If Gmsh returns points-only, this step needs care. 
-            # However, utils.clip_mesh_by_shape usually expects a valid mesh.
-            # Ideally, even for Gmsh, if we are returning a MeshData for *storage* or *usage*, 
-            # it should probably have connectivity. 
-            # *Self-Correction*: The maintainer said old scripts work fine. 
-            # If we pass mesh_engine='gmsh', let's ensure HfunRaster returns something compatible.
-
             if big_meshdata.tria is not None:
                 index.append(big_meshdata.tria + offset)
 
@@ -2651,13 +2647,38 @@ class HfunCollector(BaseHfun):
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*nondem_hfun_list[::-1], self._base_mesh]
 
-        # ... [Rest of the method remains the same] ...
         nondem_shape_list = []
         for hfun in hfun_list:
-            nondem_meshdata = deepcopy(hfun.meshdata()) # These are meshes, they ignore kwargs usually
-            # ... [Keep rest of the loop unchanged] ...
-            # ...
-            
+            nondem_meshdata = deepcopy(hfun.meshdata())
+            if hasattr(nondem_meshdata, "crs"):
+                if not epsg4326.equals(nondem_meshdata.crs):
+                    utils.reproject(nondem_meshdata, epsg4326)
+
+            nondem_shape = utils.get_mesh_polygons(hfun.mesh.meshdata)
+            if not epsg4326.equals(hfun.crs):
+                transformer = Transformer.from_crs(
+                    hfun.crs, epsg4326, always_xy=True)
+                nondem_shape = ops.transform(
+                        transformer.transform, nondem_shape)
+
+            # In fast method all DEM hfuns have more priority than all
+            # other inputs
+            if big_cut_shape:
+                nondem_meshdata = utils.clip_mesh_by_shape(
+                    nondem_meshdata,
+                    big_cut_shape,
+                    use_box_only=False,
+                    fit_inside=True,
+                    inverse=True)
+
+            for ishp in nondem_shape_list:
+                nondem_meshdata = utils.clip_mesh_by_shape(
+                    nondem_meshdata,
+                    ishp,
+                    use_box_only=False,
+                    fit_inside=True,
+                    inverse=True)
+
             nondem_shape_list.append(nondem_shape)
 
             if nondem_meshdata.tria is not None:
@@ -2682,7 +2703,6 @@ class HfunCollector(BaseHfun):
             crs=epsg4326
         )
 
-        # ... [Keep hmin/hmax logic and project_to_utm unchanged] ...
         hmin = self._size_info['hmin']
         hmax = self._size_info['hmax']
         if hmin:
