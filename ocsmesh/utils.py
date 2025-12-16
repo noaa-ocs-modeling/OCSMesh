@@ -2033,10 +2033,10 @@ def resample_geom_by_hfun(shape_series, hfun_data):
     """
     Resamples polygons in the GeoSeries by 'walking' the boundary
     with step sizes determined by the local Hfun value.
-    
+
     Tiny islands (holes) that collapse below 3 vertices are removed.
     """
-    
+
     # Check for CRS mismatch warning
     if shape_series.crs is not None and hfun_data.crs is not None:
         if not shape_series.crs.equals(hfun_data.crs):
@@ -2055,7 +2055,7 @@ def resample_geom_by_hfun(shape_series, hfun_data):
         return values[idx]
 
     def resample_ring(ring):
-        if ring.is_empty: return None 
+        if ring.is_empty: return None
 
         new_coords = []
         # Start at the beginning
@@ -2095,15 +2095,15 @@ def resample_geom_by_hfun(shape_series, hfun_data):
     for poly in shape_series:
         if isinstance(poly, Polygon):
             new_ext = resample_ring(poly.exterior)
-            if new_ext is None: 
-                continue 
+            if new_ext is None:
+                continue
 
             new_ints = []
             for inter in poly.interiors:
                 resampled_island = resample_ring(inter)
                 if resampled_island is not None:
                     new_ints.append(resampled_island)
-            
+
             new_geoms.append(Polygon(new_ext, new_ints))
 
         elif isinstance(poly, MultiPolygon):
@@ -2111,14 +2111,14 @@ def resample_geom_by_hfun(shape_series, hfun_data):
             for p in poly.geoms:
                 new_ext = resample_ring(p.exterior)
                 if new_ext is None:
-                    continue 
+                    continue
 
                 new_ints = []
                 for inter in p.interiors:
                     resampled_island = resample_ring(inter)
                     if resampled_island is not None:
                         new_ints.append(resampled_island)
-                
+
                 parts.append(Polygon(new_ext, new_ints))
 
             if parts:

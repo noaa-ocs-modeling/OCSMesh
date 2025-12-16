@@ -44,7 +44,7 @@ class MeshDriver:
         engine_name : str
             Name of the engine ('jigsaw', 'triangle', 'gmsh').
         **engine_kwargs : dict
-            Options to pass to the engine's Option class. 
+            Options to pass to the engine's Option class.
             Common options:
             - bnd_representation (str): 'exact', 'fixed', or 'adapt'.
         """
@@ -53,7 +53,7 @@ class MeshDriver:
         self._hfun = hfun
 
         # Set default CRS immediately if not provided
-        self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_user_input("EPSG:4326")
+        self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_epsg(4326)
 
         # Extract boundary representation from kwargs for driver-level logic
         # Default is 'fixed' if not provided
@@ -96,15 +96,15 @@ class MeshDriver:
         calc_crs = shape.crs
 
         # 1. Project to Metric (UTM) if needed
-        # We need metric units for 'adapt' (Hfun is in meters) and for Gmsh 
+        # We need metric units for 'adapt' (Hfun is in meters) and for Gmsh
         # to correctly interpret Hfun values vs Edge lengths.
         if calc_crs is not None and calc_crs.is_geographic:
-             _logger.info("Input is Geographic. Projecting to UTM for processing...")
-             calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
-             shape = shape.to_crs(calc_crs)
-             _logger.info(f"Calculations will be performed in: {calc_crs}")
+            _logger.info("Input is Geographic. Projecting to UTM for processing...")
+            calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
+            shape = shape.to_crs(calc_crs)
+            _logger.info(f"Calculations will be performed in: {calc_crs}")
 
-        # 2. Prepare Sizing (Hfun) early 
+        # 2. Prepare Sizing (Hfun) early
         # (Needed for adaptation step and engine generation)
         sizing: Optional[MeshData] = None
         if self._hfun is not None:
@@ -134,8 +134,8 @@ class MeshDriver:
             generation_seed = copy.deepcopy(generation_seed)
             seed_crs = generation_seed.crs
             if seed_crs is not None and calc_crs is not None and not seed_crs.equals(calc_crs):
-                 _logger.info("Reprojecting seed data to match calculation CRS...")
-                 utils.reproject(generation_seed, calc_crs)
+                _logger.info("Reprojecting seed data to match calculation CRS...")
+                utils.reproject(generation_seed, calc_crs)
 
         # 5. Generate Mesh
         output_mesh: MeshData = self._engine.generate(

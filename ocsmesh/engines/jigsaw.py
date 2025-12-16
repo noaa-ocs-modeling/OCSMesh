@@ -36,7 +36,7 @@ class JigsawOptions(BaseMeshOptions):
 
         self._hfun_marche = hfun_marche
         self._remesh_tiny = remesh_tiny_elements
-        
+
         # internal storage for options
         self._opts = jigsawpy.jigsaw_jig_t()
 

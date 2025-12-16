@@ -35,11 +35,11 @@ class GmshOptions(BaseMeshOptions):
 
         self._options = {
             # Algorithm 5 (Delaunay) often respects variable sizing fields better
-            "Mesh.Algorithm": 6,  
+            "Mesh.Algorithm": 6,
             "General.Verbosity": 2,
             # Critical options for sizing fields in 4.x
             "Mesh.MeshSizeExtendFromBoundary": 0,
-            "Mesh.MeshSizeFromPoints": 0, 
+            "Mesh.MeshSizeFromPoints": 0,
             "Mesh.MeshSizeFromCurvature": 0,
         }
         self._options.update(kwargs)
@@ -86,7 +86,7 @@ class GmshEngine(BaseMeshEngine):
 
         # Use a unique model name to avoid clashing with existing user models
         model_name = f"ocsmesh_model_{uuid.uuid4().hex}"
-        
+
         # Save current model to restore later if needed
         prev_model = None
         try:
@@ -156,7 +156,7 @@ class GmshEngine(BaseMeshEngine):
         else:
             raise TypeError(f"Unsupported geometry type: {type(shape)}")
 
-        self._point_tags = {} 
+        self._point_tags = {}
 
         # Check boundary preference
         bnd_rep = self._options.bnd_representation
@@ -203,7 +203,7 @@ class GmshEngine(BaseMeshEngine):
             _logger.info("Boundary representation is 'exact': Locking edges.")
             for l_tag in all_line_tags:
                 gmsh.model.mesh.setTransfiniteCurve(l_tag, 2)
-        
+
         # For 'fixed' and 'adapt', we leave the curves standard.
         # Since we used occ.addLine between vertices, the vertices are already hard points ('fixed').
         # If 'adapt' was chosen, the Driver has already resampled these vertices for us.
@@ -234,7 +234,7 @@ class GmshEngine(BaseMeshEngine):
         # Case 2: Hfun MeshData (Background Field)
         # 1. Create a "Post-Processing View"
         view_tag = gmsh.view.add("hfun_sizing")
-        
+
         # 2. Prepare data [x, y, z, val]
         n_pts = len(coords)
         try:

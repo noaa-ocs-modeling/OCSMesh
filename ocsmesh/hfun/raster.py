@@ -353,7 +353,7 @@ class HfunRaster(BaseHfun, Raster):
                 # Slice [::step, ::step]
                 sub_xy = full_xy[::step, ::step, :].reshape(-1, 2)
                 rast_coords = sub_xy
-                
+
                 if win_utm_crs is not None:
                     # We have to project the subsampled points
                     transformer = Transformer.from_crs(self.crs, win_utm_crs, always_xy=True)
@@ -366,7 +366,7 @@ class HfunRaster(BaseHfun, Raster):
 
             # Get Values
             _logger.info('Building sizing values...')
-            # Use out_shape in read() for efficient IO striding if supported, 
+            # Use out_shape in read() for efficient IO striding if supported,
             # or read and slice numpy array
             if step > 1:
                 # Read full then slice (safer for now) or use rasterio decimation
@@ -385,7 +385,6 @@ class HfunRaster(BaseHfun, Raster):
                 rast_values[rast_values > self.hmax] = self.hmax
 
             # Build Geom
-            from shapely.geometry import box
             bbox_poly = gpd.GeoSeries(box(x0, y0, x1, y1), crs=self.crs)
             if win_utm_crs is not None:
                 bbox_poly = bbox_poly.to_crs(win_utm_crs)
@@ -410,7 +409,7 @@ class HfunRaster(BaseHfun, Raster):
             # Interpolation requires source connectivity (triangles) or Nearest Neighbor.
             # If we skipped triangulation, we MUST use nearest neighbor or build a cKDTree.
             # ocsmesh.utils.interpolate handles this check.
-            kwargs = {'method': 'nearest'} 
+            kwargs = {'method': 'nearest'}
             utils.interpolate(win_sizes, win_optim_sizes, **kwargs)
 
             # Reproject result
@@ -421,7 +420,7 @@ class HfunRaster(BaseHfun, Raster):
             # Collect results
             if win_optim_sizes.tria is not None:
                 tria_list.append(win_optim_sizes.tria + idx_offset)
-            
+
             coords_list.append(win_optim_sizes.coords)
             values_list.append(win_optim_sizes.values)
             idx_offset += len(win_optim_sizes.coords)
@@ -432,7 +431,7 @@ class HfunRaster(BaseHfun, Raster):
             output_tria = np.concatenate(tria_list)
         else:
             output_tria = None # Return point cloud if engine returned points (rare for meshdata)
-            
+
         output_values = np.concatenate(values_list)
 
         # Final UTM projection check

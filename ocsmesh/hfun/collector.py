@@ -891,11 +891,11 @@ class HfunCollector(BaseHfun):
 
     def meshdata(self, **kwargs) -> MeshData:
         """Interpolates mesh size functions on an unstructred mesh
-        
+
         Parameters
         ----------
         **kwargs : dict
-            Arguments passed down to the underlying Hfun classes (e.g. 
+            Arguments passed down to the underlying Hfun classes (e.g.
             mesh_engine='gmsh', stride=...).
         """
 
@@ -917,7 +917,7 @@ class HfunCollector(BaseHfun):
                 hfun = self._apply_features_fast(rast)
                 # Pass kwargs (like mesh_engine) down to the composite generator
                 composite_hfun = self._get_hfun_composite_fast(hfun, **kwargs)
-                
+
                 del rast
                 del hfun
 
@@ -2139,7 +2139,7 @@ class HfunCollector(BaseHfun):
     def _write_hfun_to_disk(
             self,
             out_path: Union[str, Path],
-            **kwargs 
+            **kwargs
             ) -> List[Union[str, Path]]:
         """Internal: write individual size function output mesh to file
 
@@ -2632,12 +2632,12 @@ class HfunCollector(BaseHfun):
 
             # Check if we actually got triangles (Gmsh optimization might return None for tria)
             # If tria is None, we can't easily concatenate indices unless we generate them,
-            # but usually 'fast' mode implies we are stitching meshes. 
-            # If Gmsh returns points-only, this step needs care. 
+            # but usually 'fast' mode implies we are stitching meshes.
+            # If Gmsh returns points-only, this step needs care.
             # However, utils.clip_mesh_by_shape usually expects a valid mesh.
-            # Ideally, even for Gmsh, if we are returning a MeshData for *storage* or *usage*, 
-            # it should probably have connectivity. 
-            # *Self-Correction*: The maintainer said old scripts work fine. 
+            # Ideally, even for Gmsh, if we are returning a MeshData for *storage* or *usage*,
+            # it should probably have connectivity.
+            # *Self-Correction*: The maintainer said old scripts work fine.
             # If we pass mesh_engine='gmsh', let's ensure HfunRaster returns something compatible.
 
             if big_meshdata.tria is not None:
@@ -2657,7 +2657,7 @@ class HfunCollector(BaseHfun):
             nondem_meshdata = deepcopy(hfun.meshdata()) # These are meshes, they ignore kwargs usually
             # ... [Keep rest of the loop unchanged] ...
             # ...
-            
+
             nondem_shape_list.append(nondem_shape)
 
             if nondem_meshdata.tria is not None:
