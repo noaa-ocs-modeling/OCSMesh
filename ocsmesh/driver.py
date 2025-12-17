@@ -54,7 +54,7 @@ class MeshDriver:
         self._hfun = hfun
 
         # Set default CRS immediately if not provided
-        self._crs = CRS.from_user_input(crs) if crs is not None else CRS.from_epsg(4326)
+        self._crs = CRS.from_user_input(crs) if crs is not None else None
 
         # Validate hfun
         if hfun is not None and not isinstance(hfun, BaseHfun):
@@ -80,14 +80,25 @@ class MeshDriver:
         shape = self._geom.geoseries()
         calc_crs = shape.crs
 
+        # Track if we auto-projected from Geographic so we can revert later
+        is_input_geographic = False
+        if calc_crs is not None and calc_crs.is_geographic:
+            is_input_geographic = True
+
         # 1. Project to Metric (UTM) if needed
         # We need metric units for 'adapt' (Hfun is in meters) and for Gmsh
         # to correctly interpret Hfun values vs Edge lengths.
-        if calc_crs is not None and calc_crs.is_geographic:
+        if is_input_geographic:
             _logger.info("Input is Geographic. Projecting to UTM for processing...")
             calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
             shape = shape.to_crs(calc_crs)
             _logger.info(f"Calculations will be performed in: {calc_crs}")
+        elif calc_crs is None:
+            # FIXED: Explicitly warn that we assume meters if no CRS is found.
+            _logger.warning(
+"Input geometry has no CRS. Assuming coordinates are Cartesian (Meters). "
+"If coordinates are Degrees, mesh sizing and boundary adaptation will be incorrect."
+            )
 
         # 2. Prepare Sizing (Hfun) early
         # (Needed for adaptation step and engine generation)
@@ -98,7 +109,10 @@ class MeshDriver:
             # Align Hfun CRS with Calculation CRS
             if calc_crs is None:
                 if sizing.crs is not None:
+                    # If geom has no CRS but hfun does, adopt hfun's CRS for calculation
                     calc_crs = sizing.crs
+                    # Update shape to have this CRS so subsequent steps are consistent
+                    shape.crs = calc_crs
             elif sizing.crs is None:
                 sizing.crs = calc_crs
             elif not sizing.crs.equals(calc_crs):
@@ -115,8 +129,7 @@ class MeshDriver:
                 # If we don't know the calculation CRS yet, trust the seed
                 if seed_crs is not None:
                     calc_crs = seed_crs
-                    shape = shape.set_crs(calc_crs)
-                    # Safety Check: sizing might be None if no hfun was passed
+                    shape.crs = calc_crs
                     if sizing is not None:
                         sizing.crs = calc_crs
             elif seed_crs is None:
@@ -138,12 +151,18 @@ class MeshDriver:
         # 5. Finalize
         utils.finalize_mesh(output_mesh, sieve)
 
-        # 6. Final Projection (to self._crs, which defaults to 4326 in init)
-        if output_mesh.crs is None:
-            output_mesh.crs = self._crs
-        elif not output_mesh.crs.equals(self._crs):
-            _logger.info(f"Reprojecting final mesh to {self._crs}...")
-            utils.reproject(output_mesh, self._crs)
+        # 6. Final Projection
+        target_crs = self._crs
+        if target_crs is None and is_input_geographic:
+            target_crs = CRS.from_epsg(4326)
+
+        if target_crs is not None:
+            # Only reproject if the current CRS differs from target
+            if output_mesh.crs is None:
+                 output_mesh.crs = target_crs
+            elif not output_mesh.crs.equals(target_crs):
+                _logger.info(f"Reprojecting final mesh to {target_crs}...")
+                utils.reproject(output_mesh, target_crs)
 
         return Mesh(output_mesh)
 
