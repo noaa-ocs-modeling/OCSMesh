@@ -519,7 +519,6 @@ class SizeFromMesh(unittest.TestCase):
         # We relax this to 0.6 to account for Gmsh optimization variances.
         threshold = 0.6
         err_value = np.mean(np.abs(hfun_val_diff))/np.mean(self.hfun_orig_val)
-        print(f"DEBUG: Calculated Error Value = {err_value}")
         self.assertTrue(err_value < threshold)
 
 

@@ -260,7 +260,6 @@ class HfunRaster(BaseHfun, Raster):
     def meshdata(
             self,
             window: Optional[rasterio.windows.Window] = None,
-            marche: bool = False,
             verbosity : Optional[bool] = None,
             mesh_engine: str = 'gmsh',
             stride: Optional[int] = None,
@@ -274,8 +273,6 @@ class HfunRaster(BaseHfun, Raster):
         window : rasterio.windows.Window or None, default=None
             If provided, a single window on raster for which the
             mesh size is to be returned.
-        marche : bool, default=False
-            Whether to run `marche` algorithm (Not implemented for Gmsh path).
         verbosity : bool or None, default=None
             The verbosity of the output.
         mesh_engine: str, default='gmsh'

@@ -188,14 +188,14 @@ class GmshEngine(BaseMeshEngine):
                 if not cleaned_coords:
                     cleaned_coords.append(pt)
                 else:
-                    dist = ((pt[0] - cleaned_coords[-1][0])**2 + 
+                    dist = ((pt[0] - cleaned_coords[-1][0])**2 +
                             (pt[1] - cleaned_coords[-1][1])**2)**0.5
                     # Increased tolerance to 1e-6 to avoid kernel crashes
-                    if dist > 1e-6: 
+                    if dist > 1e-6:
                         cleaned_coords.append(pt)
-            
+
             if len(cleaned_coords) > 1:
-                dist_close = ((cleaned_coords[0][0] - cleaned_coords[-1][0])**2 + 
+                dist_close = ((cleaned_coords[0][0] - cleaned_coords[-1][0])**2 +
                               (cleaned_coords[0][1] - cleaned_coords[-1][1])**2)**0.5
                 if dist_close < 1e-6:
                     cleaned_coords.pop()
@@ -212,11 +212,11 @@ class GmshEngine(BaseMeshEngine):
             for i in range(len(pts)):
                 p1 = pts[i]
                 p2 = pts[(i + 1) % len(pts)]
-                
+
                 # Critical check: do not create lines between identical tags
-                if p1 == p2: 
+                if p1 == p2:
                     continue
-                    
+
                 l_tag = gmsh.model.occ.addLine(p1, p2)
                 line_tags.append(l_tag)
 
