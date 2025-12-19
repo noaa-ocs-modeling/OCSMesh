@@ -265,7 +265,6 @@ class SubsetAndCombine:
         meshdata_hi = deepcopy(hires_mesh_clip)
         meshdata_lo = deepcopy(lores_mesh_clip)
 
-        crs = buffer_crs
         assert not buffer_crs.is_geographic
 
         # calculate mesh size for clipped bits
@@ -277,7 +276,7 @@ class SubsetAndCombine:
 
         engine = get_mesh_engine('triangle', opts='p')
         meshdata_cdt = engine.generate(gpd.GeoSeries(buffer_domain))
-        meshdata_cdt.crs = crs
+        meshdata_cdt.crs = buffer_crs
 
         hfun_cdt = Hfun(Mesh(meshdata_cdt))
         hfun_cdt.size_from_mesh()
@@ -287,14 +286,13 @@ class SubsetAndCombine:
 
         # TODO: Make jigsaw an option
         engine = get_mesh_engine('jigsaw')
-        utm_crs = utils.estimate_bounds_utm(buffer_domain.bounds, crs=crs)
+        # Note we alraeady know the buffer_crs is NOT geographic
         meshdata_domain_rep = engine.generate(
-            gpd.GeoSeries(buffer_domain, crs=crs).to_crs(utm_crs),
+            gpd.GeoSeries(buffer_domain),
             meshdata_cdt,
         )
         utils.finalize_mesh(meshdata_domain_rep)
 
-#        utils.reproject(meshdata_domain_rep, crs)
 
         pts_2mesh = np.vstack(
             (hfun_hi.meshdata().coords, hfun_lo.meshdata().coords)
@@ -312,6 +310,7 @@ class SubsetAndCombine:
         domain_sz[np.isnan(domain_sz_1)] = domain_sz_2[np.isnan(domain_sz_1)]
 
         meshdata_domain_rep.values = domain_sz
+        meshdata_domain_rep.crs = buffer_crs
 
         return meshdata_domain_rep
 
@@ -319,15 +318,14 @@ class SubsetAndCombine:
     def _generate_mesh_for_buffer_region(
             self, buffer_polygon, meshdata_hfun_buffer, buffer_crs):
 
-        crs = buffer_crs
         assert not buffer_crs.is_geographic
         assert buffer_crs == meshdata_hfun_buffer.crs
 
         # TODO: Make jigsaw an option
         engine = get_mesh_engine('jigsaw')
-        utm_crs = utils.estimate_bounds_utm(buffer_polygon.bounds, crs=crs)
+        # Note we alraeady know the buffer_crs is NOT geographic
         meshdata_buf_apprx = engine.generate(
-            gpd.GeoSeries(buffer_polygon, crs=crs).to_crs(utm_crs),
+            gpd.GeoSeries(buffer_polygon),
             meshdata_hfun_buffer,
         )
         utils.finalize_mesh(meshdata_buf_apprx)
@@ -338,7 +336,7 @@ class SubsetAndCombine:
 #            utils.reproject(meshdata_buf_apprx, hfun_buffer.crs)
         seed_mesh = utils.clip_mesh_by_shape(
             meshdata_buf_apprx,
-            buffer_polygon.buffer(-min(meshdata_hfun_buffer))
+            buffer_polygon.buffer(-min(meshdata_hfun_buffer.values).item())
         )
 
 #        utils.reproject(meshdata_buf_apprx, buffer_crs)
@@ -347,7 +345,7 @@ class SubsetAndCombine:
             gpd.GeoSeries(buffer_polygon),
             seed=seed_mesh
         )
-        meshdata_buffer.crs = crs
+        meshdata_buffer.crs = buffer_crs
 
 #        utils.reproject(meshdata_buffer, buffer_crs)
 
@@ -450,7 +448,7 @@ class SubsetAndCombine:
             coords=np.vstack(coord),
             values=np.vstack(value),
             crs=crs,
-            **elems,
+            **{k: np.vstack(v) for k, v in elems.items()},
         )
 
         return composite_mesh, mesh_shrd_idx
