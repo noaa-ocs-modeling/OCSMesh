@@ -514,7 +514,7 @@ class EuclideanMesh2D(EuclideanMesh):
             can_use_other_verts=True)
 
         boundary_edges = utils.get_boundary_edges(clipped_mesh)
-        coords = clipped_mesh.vert2
+        coords = clipped_mesh.coords
         coo_to_idx = {
             tuple(coo): idx
             for idx, coo in enumerate(coords)}

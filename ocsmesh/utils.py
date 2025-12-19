@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import permutations
+from itertools import permutations, islice
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
@@ -14,7 +14,7 @@ import numpy as np
 import numpy.typing as npt
 import rasterio as rio
 from pyproj import CRS, Transformer
-from scipy.interpolate import griddata
+from scipy.interpolate import griddata, RectBivariateSpline
 from scipy import sparse, constants
 from scipy.spatial import cKDTree
 from shapely.geometry import (
@@ -23,15 +23,15 @@ from shapely.geometry import (
     LineString, LinearRing
 )
 from shapely.ops import polygonize, linemerge, unary_union
+# Ensure union_all and make_valid are imported
+from shapely import union_all, make_valid 
 import geopandas as gpd
 import pandas as pd
 import utm
 
 from ocsmesh.internal import MeshData
 
-# Updated constants for MeshData attributes
 ELEM_2D_TYPES = ['tria', 'quad']
-
 _logger = logging.getLogger(__name__)
 
 def mesh_to_tri(mesh):
@@ -228,7 +228,6 @@ def get_boundary_segments(mesh) -> List[LineString]:
 
     return segments
 
-
 def get_mesh_polygons(mesh):
     elm_polys = []
     for elm_type in ELEM_2D_TYPES:
@@ -327,10 +326,10 @@ def needs_sieve(mesh, area=None):
     return False
 
 
-
-
 def _get_sieve_mask(mesh, polygons, sieve_area):
     areas = [p.area for p in polygons.geoms]
+    if not areas:
+        return np.zeros(mesh.coords.shape[0], dtype=bool)
     if sieve_area is None:
         remove = np.where(areas < np.max(areas))[0].tolist()
     else:
@@ -794,7 +793,7 @@ def get_cross_edges(
     Return the list of edges crossing the input shape exterior
     '''
 
-    coords = mesh.vert2['coord']
+    coords = mesh.coords
 
     coord_dict = {}
     for i, coo in enumerate(coords):
@@ -1195,23 +1194,28 @@ def triplot(
     return axes
 
 
-def reproject(
-    mesh: MeshData,
-    dst_crs: Union[str, CRS]
-):
+def reproject(mesh: MeshData, dst_crs: Union[str, CRS]) -> MeshData:
     if mesh.crs is None:
         raise ValueError("Mesh doesn't have a CRS!")
 
     src_crs = mesh.crs
     dst_crs = CRS.from_user_input(dst_crs)
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-    # pylint: disable=E0633
-    x, y = transformer.transform(
-        mesh.coords[:, 0], mesh.coords[:, 1])
 
-    mesh.coords = np.vstack((x, y)).T
-    mesh.crs = dst_crs
+    # Transform coords safely
+    coords = np.array(mesh.coords)
+    try:
+        x, y = transformer.transform(coords[:, 0], coords[:, 1])
+        new_coords = np.column_stack([x, y])
+    except Exception:
+        # Fallback for pyproj versions that fail with arrays
+        new_coords = np.array([transformer.transform(xi, yi) for xi, yi in coords])
 
+    # Return a new MeshData
+    new_mesh = deepcopy(mesh)
+    new_mesh.coords = new_coords
+    new_mesh.crs = dst_crs
+    return new_mesh
 
 
 def msh_t_to_grd(msh: MeshData) -> Dict:
@@ -1469,13 +1473,14 @@ def merge_meshdata(
             # To avoid modifying inputs
             mesh = deepcopy(mesh)
             reproject(mesh, dst_crs)
+            # mesh = reproject(mesh, dst_crs)
 
         if drop_by_bbox:
             x = mesh.coords[:, 0]
             y = mesh.coords[:, 1]
             mesh_shape = box(np.min(x), np.min(y), np.max(x), np.max(y))
         else:
-            mesh_shape = get_mesh_polygons(mesh)
+            mesh_shape = make_valid(get_mesh_polygons(mesh))
 
         for ishp in mesh_shape_list:
             # NOTE: fit_inside = True w/ inverse = True results
@@ -1596,11 +1601,11 @@ def remove_holes(
     -----
     For a `Polygon` with no holes, this function returns the original
     object. For `MultiPolygon` with no holes, the return value is a
-    `unary_union` of all the underlying `Polygon`s.
+    `union_all` of all the underlying `Polygon`s.
     '''
 
     if isinstance(poly, MultiPolygon):
-        return unary_union([remove_holes(p) for p in poly.geoms])
+        return union_all([remove_holes(p) for p in poly.geoms])
     if not isinstance(poly, Polygon):
         raise ValueError(
             "The input must be either a `Polygon` or `MultiPolygon`:"
@@ -1643,7 +1648,7 @@ def remove_holes_by_relative_size(
     -----
     For a `Polygon` with no holes, this function returns the original
     object. For `MultiPolygon` with no holes, the return value is a
-    `unary_union` of all the underlying `Polygon`s.
+    `union_all` of all the underlying `Polygon`s.
 
     If `rel_size=1` is specified the result is the same as
     `remove_holes` function, except for the additional cost of
@@ -1651,7 +1656,7 @@ def remove_holes_by_relative_size(
     '''
 
     if isinstance(poly, MultiPolygon):
-        return unary_union([
+        return union_all([
             remove_holes_by_relative_size(p, rel_size) for p in poly.geoms])
 
     if not isinstance(poly, Polygon):
@@ -1845,7 +1850,7 @@ def create_rectangle_mesh(
     quads=None,
 ):
     # pylint: disable=W1401
-    """
+    r"""
     Note:
         x = x-index
         y = y-index
@@ -2127,3 +2132,201 @@ def resample_geom_by_hfun(shape_series, hfun_data):
             new_geoms.append(poly)
 
     return gpd.GeoSeries(new_geoms, crs=shape_series.crs)
+
+def calc_el_angles(msht: MeshData):
+    coords = msht.coords
+    tri_angles = np.empty((0, 3))
+    if msht.tria.size > 0:
+        v = coords[msht.tria]
+        vec_01 = v[:, 1] - v[:, 0]
+        vec_02 = v[:, 2] - v[:, 0]
+        vec_10 = -vec_01
+        vec_12 = v[:, 2] - v[:, 1]
+        vec_20 = -vec_02
+        vec_21 = -vec_12
+        def angle(u, v):
+            dot = np.sum(u * v, axis=1)
+            norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
+            return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
+        tri_angles = np.vstack((angle(vec_01, vec_02),
+                                angle(vec_10, vec_12),
+                                angle(vec_20, vec_21))).T
+
+    quad_angles = np.empty((0, 4))
+    if msht.quad.size > 0:
+        v = coords[msht.quad]
+        def angle(u, v):
+            dot = np.sum(u * v, axis=1)
+            norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
+            return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
+        v01 = v[:, 1] - v[:, 0]
+        v03 = v[:, 3] - v[:, 0]
+        v12 = v[:, 2] - v[:, 1]
+        v23 = v[:, 3] - v[:, 2]
+        quad_angles = np.vstack((angle(v01, v03),
+                                 angle(-v01, v12),
+                                 angle(-v12, v23),
+                                 angle(-v23, -v03))).T
+
+    return tri_angles, quad_angles
+
+def cleanup_skewed_el(mesh: MeshData,
+                      lw_bound_tri=1.,
+                      up_bound_tri=175.,
+                      lw_bound_quad=10.,
+                      up_bound_quad=179.) -> MeshData:
+    '''
+    Removes elements based on their internal angles.
+
+    Parameters
+    ----------
+    mesh : MeshData
+    lw_bound_tri : float, default=1.
+    up_bound_tri : float, default=175.
+    lw_bound_quad : float, default=10.
+    up_bound_quad : float, default=179.
+
+    Returns
+    -------
+    MeshData
+        Mesh with skewed elements removed.
+    '''
+    tria_mask, quad_mask = None, None
+    ang_tri, ang_quad = calc_el_angles(mesh)
+    if ang_tri.size > 0:
+        ang_chk_tri = np.logical_or(ang_tri < lw_bound_tri,
+                                    ang_tri >= up_bound_tri)
+        tria_mask = np.where(np.any(ang_chk_tri, axis=1))[0]
+    if ang_quad.size > 0:
+        ang_chk_quad = np.logical_or(ang_quad < lw_bound_quad,
+                                     ang_quad >= up_bound_quad)
+        quad_mask = np.where(np.any(ang_chk_quad, axis=1))[0]
+    return clip_elements_by_index(mesh, tria=tria_mask,
+                                  quad=quad_mask,
+                                  inverse=False)
+
+
+def cleanup_concave_quads(mesh: MeshData) -> MeshData:
+    '''
+    Removes concave quads that might have been wrongly created
+    during the quadrangulation process.
+
+    Parameters
+    ----------
+    mesh : MeshData
+
+    Returns
+    -------
+    MeshData
+    '''
+    quad = mesh.quad
+    coord = mesh.coords
+    if quad.size == 0: return mesh
+    concave_el = []
+    for l_idx, n_idx in enumerate(quad):
+        polygon = Polygon(coord[n_idx])
+        if not np.isclose(polygon.convex_hull.area, polygon.area):
+            concave_el.append(l_idx)
+    return clip_elements_by_index(mesh, tria=None, quad=concave_el, inverse=False)
+
+def order_mesh(msht: MeshData, crs=None) -> MeshData:
+    '''
+    Order mesh nodes counterclockwise (triangles and quads)
+    based on the coordinates
+
+    Parameters
+    ----------
+    msht : MeshData
+        triangular mesh
+
+    Returns
+    -------
+    MeshData
+        quadrangular + triangular mesh
+    np.array
+        mesh whose nodes within each element are oriented counterclockwise
+
+    Notes
+    -----
+    '''
+    def order_nodes(verts):
+        centroid = np.mean(verts, axis=0)
+        angles = np.arctan2(verts[:,1] - centroid[1], verts[:,0] - centroid[0])
+        return np.argsort(angles)
+
+    new_mesh = deepcopy(msht)
+    for etype in ELEM_2D_TYPES:
+        elems = getattr(new_mesh, etype)
+        if elems.size == 0: continue
+        coords = new_mesh.coords
+        ordered_elems = []
+        for el in elems:
+            el_coords = coords[el]
+            order = order_nodes(el_coords)
+            ordered_elems.append(el[order])
+        setattr(new_mesh, etype, np.array(ordered_elems))
+    return new_mesh
+
+def quads_from_tri(msht: MeshData) -> MeshData:
+    """
+    Combines all triangles that share vertices that are not right angles.
+    right angles is defined as the internal angle closest to 90deg
+
+    Parameters
+    ----------
+    msht : MeshData
+        triangular mesh
+
+    Returns
+    -------
+    MeshData
+        quadrangular + triangular mesh
+
+    Notes
+    -----
+    """
+    ang_chk, _ = calc_el_angles(msht)
+    if ang_chk.size == 0: return msht
+
+    el = msht.tria
+    idx_of_closest = np.abs(ang_chk - 90).argmin(axis=1)
+
+    diagonals = []
+    for row, col in enumerate(idx_of_closest):
+        tri_verts = el[row]
+        diag_verts = np.delete(tri_verts, col)
+        diag_verts.sort()
+        diagonals.append(tuple(diag_verts))
+
+    edge_map = defaultdict(list)
+    for i, edge in enumerate(diagonals): edge_map[edge].append(i)
+
+    pairs = {k: v for k, v in edge_map.items() if len(v) == 2}
+
+    new_quads = []
+    tri_to_remove = []
+    for edge, tri_indices in pairs.items():
+        t1, t2 = tri_indices
+        combined = np.unique(np.concatenate((el[t1], el[t2])))
+        if len(combined) == 4:
+            new_quads.append(combined)
+            tri_to_remove.extend([t1, t2])
+
+    if not new_quads: return msht
+
+    mask = np.ones(len(el), dtype=bool)
+    mask[tri_to_remove] = False
+    remaining_tris = el[mask]
+
+    final_quads = np.array(new_quads)
+    if msht.quad.size > 0:
+        final_quads = np.vstack((msht.quad, final_quads))
+
+    new_mesh = MeshData(coords=msht.coords,
+                        tria=remaining_tris,
+                        quad=final_quads,
+                        values=msht.values,
+                        crs=msht.crs)
+    finalize_mesh(new_mesh)
+
+    return order_mesh(new_mesh)
