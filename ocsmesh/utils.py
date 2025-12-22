@@ -1194,28 +1194,22 @@ def triplot(
     return axes
 
 
-def reproject(mesh: MeshData, dst_crs: Union[str, CRS]) -> MeshData:
+def reproject(
+    mesh: MeshData,
+    dst_crs: Union[str, CRS]
+):
     if mesh.crs is None:
         raise ValueError("Mesh doesn't have a CRS!")
 
     src_crs = mesh.crs
     dst_crs = CRS.from_user_input(dst_crs)
     transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
+    # pylint: disable=E0633
+    x, y = transformer.transform(
+        mesh.coords[:, 0], mesh.coords[:, 1])
 
-    # Transform coords safely
-    coords = np.array(mesh.coords)
-    try:
-        x, y = transformer.transform(coords[:, 0], coords[:, 1])
-        new_coords = np.column_stack([x, y])
-    except Exception:
-        # Fallback for pyproj versions that fail with arrays
-        new_coords = np.array([transformer.transform(xi, yi) for xi, yi in coords])
-
-    # Return a new MeshData
-    new_mesh = deepcopy(mesh)
-    new_mesh.coords = new_coords
-    new_mesh.crs = dst_crs
-    return new_mesh
+    mesh.coords = np.vstack((x, y)).T
+    mesh.crs = dst_crs
 
 
 def msh_t_to_grd(msh: MeshData) -> Dict:
