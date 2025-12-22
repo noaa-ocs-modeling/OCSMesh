@@ -115,12 +115,6 @@ def quadrangulate_rivermapper_arcs(
                             n = n + 1
 
                     # Define the 4 nodes of the quad.
-                    # The logic assumes arcs are parallel and points align.
-                    # n is the index in the flattened 'coords' list we are building.
-                    # idx1: Current point on current arc
-                    # idx2: Corresponding point on next arc (offset by arc length)
-                    # idx3: Next point on next arc
-                    # idx4: Next point on current arc
                             idx1 = n - 1
                             idx2 = n + current_arc_len - 1
                             idx3 = n + current_arc_len
@@ -130,7 +124,7 @@ def quadrangulate_rivermapper_arcs(
 
                     # Increment n once more to account for the last point in the arc
                     # that wasn't a "start" of a quad segment loop
-                    n = n + 1 
+                    n = n + 1
 
                 # Add this arc's points to the master coordinate list
                 coords.append(g_coords)
@@ -163,7 +157,7 @@ def quadrangulate_rivermapper_arcs(
             # Create the local mesh for this stream
             # FIX: Must assign CRS so merge_meshdata doesn't fail later
             mesh = MeshData(
-                coords=coords_np, 
+                coords=coords_np,
                 quad=np.array(valid_quads),
                 crs=crs
             )
@@ -226,11 +220,11 @@ def quadrangulate_rivermapper_arcs(
         # Buffer the overlap slightly to ensure clean cutting
         # Project to UTM for accurate meter-based buffering if needed
         if overlap_gdf.crs.is_geographic:
-             utm_crs = utils.estimate_bounds_utm(overlap_gdf.total_bounds,
-                                                 overlap_gdf.crs)
-             overlap_gdf = overlap_gdf.to_crs(utm_crs).buffer(_buffer_2).to_crs(crs)
+            utm_crs = utils.estimate_bounds_utm(overlap_gdf.total_bounds,
+                                                overlap_gdf.crs)
+            overlap_gdf = overlap_gdf.to_crs(utm_crs).buffer(_buffer_2).to_crs(crs)
         else:
-             overlap_gdf = overlap_gdf.buffer(_buffer_2)
+            overlap_gdf = overlap_gdf.buffer(_buffer_2)
 
         # Merge all overlap shapes into one cut-out mask
         # Using the new Shapely 2.0+ union_all (replaces unary_union)
@@ -238,8 +232,8 @@ def quadrangulate_rivermapper_arcs(
 
         # Clip the final mesh to remove these junctions
         final_mesh = utils.clip_mesh_by_shape(
-            final_mesh, 
-            removal_shape, 
+            final_mesh,
+            removal_shape,
             inverse=True, # Inverse=True means "Remove this shape"
             check_cross_edges=True
         )
@@ -461,7 +455,7 @@ def validate_RMmesh(rm_mesh: MeshData) -> MeshData:
         v0 = xy[tri[:, 0]]
         v1 = xy[tri[:, 1]]
         v2 = xy[tri[:, 2]]
-        
+
         for i in range(len(tri)):
             p = [v0[i], v1[i], v2[i], v0[i]]
             poly.append(p)

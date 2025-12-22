@@ -159,7 +159,7 @@ class MeshDriver:
         if target_crs is not None:
             # Only reproject if the current CRS differs from target
             if output_mesh.crs is None:
-                 output_mesh.crs = target_crs
+                output_mesh.crs = target_crs
             elif not output_mesh.crs.equals(target_crs):
                 _logger.info(f"Reprojecting final mesh to {target_crs}...")
                 utils.reproject(output_mesh, target_crs)

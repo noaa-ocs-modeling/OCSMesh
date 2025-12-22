@@ -1,5 +1,5 @@
 from collections import defaultdict
-from itertools import permutations, islice
+from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
 from multiprocessing import cpu_count, Pool
@@ -14,7 +14,7 @@ import numpy as np
 import numpy.typing as npt
 import rasterio as rio
 from pyproj import CRS, Transformer
-from scipy.interpolate import griddata, RectBivariateSpline
+from scipy.interpolate import griddata
 from scipy import sparse, constants
 from scipy.spatial import cKDTree
 from shapely.geometry import (
@@ -24,7 +24,7 @@ from shapely.geometry import (
 )
 from shapely.ops import polygonize, linemerge, unary_union
 # Ensure union_all and make_valid are imported
-from shapely import union_all, make_valid 
+from shapely import union_all, make_valid
 import geopandas as gpd
 import pandas as pd
 import utm
@@ -1364,8 +1364,16 @@ def project_to_utm(msh: MeshData):
 
 def estimate_bounds_utm(bounds, crs="EPSG:4326"):
     in_crs = CRS.from_user_input(crs)
+
+    # CRITICAL CHECK: Only run UTM logic if the input is Geographic (Lat/Lon)
     if in_crs.is_geographic:
         x0, y0, x1, y1 = bounds
+
+        # Safety: clamp values to valid earth range to prevent crashes on edge cases
+        # or return None if they are obviously projected coordinates masquerading as Geo
+        if y0 < -90 or y1 > 90 or x0 < -180 or x1 > 180:
+             return None
+
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
         # PyProj 3.2.1 throws error if letter is provided
@@ -2136,6 +2144,10 @@ def resample_geom_by_hfun(shape_series, hfun_data):
 def calc_el_angles(msht: MeshData):
     coords = msht.coords
     tri_angles = np.empty((0, 3))
+    def angle(u, v):
+                dot = np.sum(u * v, axis=1)
+                norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
+                return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
     if msht.tria.size > 0:
         v = coords[msht.tria]
         vec_01 = v[:, 1] - v[:, 0]
@@ -2144,10 +2156,6 @@ def calc_el_angles(msht: MeshData):
         vec_12 = v[:, 2] - v[:, 1]
         vec_20 = -vec_02
         vec_21 = -vec_12
-        def angle(u, v):
-            dot = np.sum(u * v, axis=1)
-            norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
-            return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
         tri_angles = np.vstack((angle(vec_01, vec_02),
                                 angle(vec_10, vec_12),
                                 angle(vec_20, vec_21))).T
@@ -2155,10 +2163,6 @@ def calc_el_angles(msht: MeshData):
     quad_angles = np.empty((0, 4))
     if msht.quad.size > 0:
         v = coords[msht.quad]
-        def angle(u, v):
-            dot = np.sum(u * v, axis=1)
-            norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
-            return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
         v01 = v[:, 1] - v[:, 0]
         v03 = v[:, 3] - v[:, 0]
         v12 = v[:, 2] - v[:, 1]

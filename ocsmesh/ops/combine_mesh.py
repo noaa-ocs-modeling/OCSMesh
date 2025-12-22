@@ -4,9 +4,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon, MultiPolygon, box, MultiPoint, Point
-from shapely.validation import make_valid
-from shapely import union_all, intersection,difference
-from shapely.ops import snap
+from shapely import union_all, intersection
 from scipy.spatial import cKDTree
 from pyproj import CRS
 
@@ -26,21 +24,20 @@ ELEM_2D_TYPES = ['tria', 'quad']
 # =============================================================================
 # Main Workflow
 # =============================================================================
-
 def merge_overlapping_meshes(
     all_msht: list,
-    adjacent_layers: int = 2,
-    buffer_size: float = 0.0075,   # Degrees (~10m)
-    buffer_domain: float = 0.005,  # Degrees (~100m)
-    min_int_ang: int = 25,
+    adjacent_layers: int = 0,
+    buffer_size: float = 0.0075,
+    buffer_domain: float = 0.002,
+    min_int_ang: int = 30,
     hfun_mesh = None,
-    crs=4326
+    crs=4326,
+    clip_final = True,
 ) -> MeshData:
     '''
     Combine meshes that overlap by stitching them together.
     Follows the robust logic of the legacy OCSMesh utils.
     '''
-    from ocsmesh import Mesh
     if not all_msht:
         raise ValueError("No meshes provided.")
 
@@ -48,7 +45,6 @@ def merge_overlapping_meshes(
     dst_crs = CRS.from_user_input(crs) if crs else None
 
     for msht in all_msht[1:]:
-        print("1. Carving...")
         # Clip background (msht_combined) by foreground (msht)
         carved_mesh = clip_mesh_by_mesh(
             msht_combined,
@@ -56,46 +52,46 @@ def merge_overlapping_meshes(
             adjacent_layers=adjacent_layers,
             buffer_size=buffer_size
         )
+        if clip_final is True:
+            domain = pd.concat([gpd.GeoDataFrame(geometry=\
+                                [utils.get_mesh_polygons(i)],crs=crs) for \
+                                i in [msht_combined,msht]])
         utils.cleanup_isolates(carved_mesh)
-        Mesh(carved_mesh).write(r"C:\Users\Felicio.Cassalho\Work\Python_Development\Mesh\gmsh2ocsmesh/carved.2dm", format='2dm', overwrite=True)
-        
-        # Define Domain for the gap
-        print("2. Preparing Domain...")
-        domain = pd.concat([gpd.GeoDataFrame(geometry=\
-                                        [utils.get_mesh_polygons(i)],crs=crs) for \
-                                         i in [msht_combined,msht]])
-        print("opened domain")
+
         if hfun_mesh is None:
             hfun_mesh = deepcopy(msht_combined)
-            Mesh(hfun_mesh).write(r"C:\Users\Felicio.Cassalho\Work\Python_Development\Mesh\gmsh2ocsmesh/hfun_mesh.2dm", format='2dm', overwrite=True)
-            
-        print("3. Generating Stitch Mesh...")
+
         buff_mesh = create_mesh_from_mesh_diff(
-            [msht_combined,msht],
-            carved_mesh,
-            msht,
-            min_int_ang=min_int_ang,
-            buffer_domain=buffer_domain, 
-            hfun_mesh=hfun_mesh,
-            crs=crs
-        )
-        
-        print("4. Stitching (Merging Neighbors)...")
-        # CRITICAL: Use the ported merge_neighboring_meshes logic
-        # This snaps the buffer mesh vertices to the carved and foreground meshes
+                                               [msht_combined,msht],
+                                               carved_mesh,
+                                               msht,
+                                               min_int_ang=min_int_ang,
+                                               buffer_domain=buffer_domain,
+                                               hfun_mesh=hfun_mesh,
+                                               crs=crs
+                                              )
+
         msht_combined = merge_neighboring_meshes(buff_mesh, carved_mesh, msht)
+
+        if clip_final is True:
+            msht_combined = utils.clip_mesh_by_shape(msht_combined,
+                                                     domain.union_all(),
+                                                     fit_inside=True,
+                                                     check_cross_edges=False
+                                                    )
+
+        del carved_mesh,buff_mesh,msht
 
     utils.finalize_mesh(msht_combined)
     if dst_crs:
         msht_combined.crs = dst_crs
-        
+
     return msht_combined
 
 
 # =============================================================================
-# Core Logic Ports (from old utils.py)
+# Core Logic Ports
 # =============================================================================
-
 def merge_neighboring_meshes(*all_msht):
     '''
     Combine meshes whose boundaries match.
@@ -119,7 +115,7 @@ def merge_neighboring_meshes(*all_msht):
         # Tolerance 1e-8 is safe for Lat/Lon (approx 1mm)
         tree_comb = cKDTree(combined_bdry_coords)
         tree_msht = cKDTree(msht_bdry_coords)
-        
+
         # Find which nodes in 'msht' match nodes in 'combined'
         neigh_idxs = tree_comb.query_ball_tree(tree_msht, r=1e-8)
 
@@ -138,7 +134,7 @@ def merge_neighboring_meshes(*all_msht):
         # 4. Prepare Arrays for Merging
         coord_list = [msht_combined.coords]
         val_list = [msht_combined.values] if msht_combined.values is not None else []
-        
+
         # Calculate offset for NEW nodes (nodes that are NOT shared)
         offset = len(msht_combined.coords)
 
@@ -146,15 +142,15 @@ def merge_neighboring_meshes(*all_msht):
         mesh_orig_idx = np.arange(len(msht.coords))
         mesh_shrd_idx = np.array(list(map_idx_shared.keys()), dtype=int)
         mesh_keep_idx = np.setdiff1d(mesh_orig_idx, mesh_shrd_idx)
-        
+
         # Build the Node Mapping Array
         # node_map[old_id] = new_id
-        node_map = np.zeros(len(msht.coords), dtype=np.int64) - 1 # Initialize with -1
-        
+        node_map = np.zeros(len(msht.coords),dtype=np.int64) - 1#Initialize with -1
+
         # Map shared nodes to existing indices
         for local, target in map_idx_shared.items():
             node_map[local] = target
-            
+
         # Map new nodes to offset indices
         # We need a secondary map for the keep_idx to 0..N range
         new_indices = np.arange(len(mesh_keep_idx)) + offset
@@ -169,21 +165,23 @@ def merge_neighboring_meshes(*all_msht):
         for etype in ELEM_2D_TYPES:
             # Existing elements
             current_elems = getattr(msht_combined, etype)
-            
+
             # New elements (from msht)
             new_elems_raw = getattr(msht, etype)
-            
+
             if new_elems_raw.size == 0:
                 continue
-                
+
             # Remap the new elements
             new_elems_mapped = node_map[new_elems_raw]
-            
+
             # Stack
             if current_elems.size == 0:
                 setattr(msht_combined, etype, new_elems_mapped)
             else:
-                setattr(msht_combined, etype, np.vstack((current_elems, new_elems_mapped)))
+                setattr(msht_combined,
+                        etype,
+                        np.vstack((current_elems, new_elems_mapped)))
 
         # Update Coords and Values
         msht_combined.coords = np.vstack(coord_list)
@@ -276,9 +274,6 @@ def create_mesh_from_mesh_diff(
         area_threshold = 1.0e-15 #to remove slivers
         gdf_full_buffer['area'] = gdf_full_buffer.geometry.area
         gdf_full_buffer = gdf_full_buffer[gdf_full_buffer['area'] >= area_threshold]
-        gdf_full_buffer.to_file(r"C:\Users\Felicio.Cassalho\Work\Python_Development\Mesh\gmsh2ocsmesh/domain_buffer.shp")
-        print(min_int_ang)
-        print(hfun_nodes)
         msht_buffer = triangulate_polygon_s(gdf_full_buffer,
                                             min_int_ang=min_int_ang,
                                             aux_pts=hfun_nodes)
@@ -293,8 +288,6 @@ def create_mesh_from_mesh_diff(
 
     return msht_buffer
 
-
-
 def clip_mesh_by_mesh(
     mesh_to_be_clipped: MeshData,
     mesh_clipper: MeshData,
@@ -305,14 +298,14 @@ def clip_mesh_by_mesh(
     buffer_size = None,
     crs=None
 ) -> MeshData:
-    
+
     clipper_poly = utils.get_mesh_polygons(mesh_clipper)
-    
+
     if buffer_size is not None and buffer_size > 0:
         shape = clipper_poly.buffer(buffer_size)
     else:
         shape = clipper_poly
-        
+
     return utils.clip_mesh_by_shape(
         mesh_to_be_clipped,
         shape=shape,
@@ -326,7 +319,6 @@ def clip_mesh_by_mesh(
 # =============================================================================
 # Triangle Wrappers (Restored Old Logic)
 # =============================================================================
-
 def triangulate_polygon(
     shape,
     aux_pts=None,
@@ -335,7 +327,7 @@ def triangulate_polygon(
 ) -> MeshData:
     """
     Triangulate input shape. 
-    Follows old logic: using 'Negative Domain' (Bounding Box - Shape) to detect holes.
+    Follows old logic:using 'NegativeDomain' (Bounding Box - Shape) to detect holes.
     """
     if not _HAS_TRIANGLE:
         raise ImportError("Triangle library not installed.")
@@ -366,7 +358,7 @@ def triangulate_polygon(
         for ring in rings:
             coords = np.array(ring.coords)
             if len(coords) < 4: continue
-            
+
             pts = coords[:-1]
             current_indices = []
             for pt in pts:
@@ -376,7 +368,7 @@ def triangulate_polygon(
                     coord_map[key] = len(vertices)
                     vertices.append(pt)
                 current_indices.append(coord_map[key])
-            
+
             # Segments
             for i in range(len(current_indices)):
                 u = current_indices[i]
@@ -397,9 +389,9 @@ def triangulate_polygon(
         bbox_geom = box(*shape_geom.bounds)
         # Add slight buffer to bounds to ensure it covers everything
         bbox_geom = box(*shape_geom.buffer(np.sqrt(shape_geom.area)/100).bounds)
-        
+
         neg_shape = bbox_geom.difference(shape_geom)
-        
+
         holes = []
         if isinstance(neg_shape, Polygon):
             if not neg_shape.is_empty:
@@ -419,7 +411,7 @@ def triangulate_polygon(
     # 4. Aux Points
     if aux_pts is not None:
         aux_coords = None
-        
+
         # Handle GeoPandas inputs
         if isinstance(aux_pts, (gpd.GeoDataFrame, gpd.GeoSeries)):
             # If it's a DataFrame, get the geometry series
@@ -427,7 +419,7 @@ def triangulate_polygon(
                 gs = aux_pts.geometry
             else:
                 gs = aux_pts
-            
+
             # Helper to extract coordinates from any geometry type
             def get_coords(geom):
                 if geom is None or geom.is_empty:
@@ -443,14 +435,14 @@ def triangulate_polygon(
             coords_list = []
             for geom in gs:
                 coords_list.extend(get_coords(geom))
-                
+
             if coords_list:
                 aux_coords = np.array(coords_list)
-        
+
         # Handle numpy/list inputs
         elif isinstance(aux_pts, (list, np.ndarray)):
              aux_coords = np.array(aux_pts)
-        
+
         if aux_coords is not None and len(aux_coords) > 0:
             # Check for duplicates against existing vertices
             new_aux = []
@@ -460,7 +452,7 @@ def triangulate_polygon(
                 if k not in existing_keys:
                     new_aux.append(pt)
                     existing_keys.add(k)
-            
+
             if new_aux:
                 vertices = np.vstack((vertices, new_aux))
 
@@ -473,7 +465,7 @@ def triangulate_polygon(
         shape_dict['holes'] = np.array(holes, dtype=float)
 
     if 'p' not in opts: opts += 'p'
-    
+
     try:
         out_dict = tr.triangulate(shape_dict, opts=opts)
     except Exception as e:
@@ -481,7 +473,7 @@ def triangulate_polygon(
         raise
 
     msht = triangle_dict_to_meshdata(out_dict)
-    
+
     if aux_pts is not None:
         utils.cleanup_isolates(msht)
 
@@ -501,11 +493,11 @@ def triangulate_polygon_s(
     # Using 'q' switch
     opts_1 = f'pq{min_int_ang}'
     mesh1 = triangulate_polygon(shape, aux_pts=aux_pts, opts=opts_1)
-    
+
     # Extract Internal Nodes
     # Find boundary edges
     nb = utils.get_boundary_edges(mesh1)
-    
+
     if nb.size > 0:
         nb_idx = np.unique(nb.ravel())
         all_pts = mesh1.coords
@@ -517,5 +509,5 @@ def triangulate_polygon_s(
     # Pass 2: Constrained triangulation
     # Use internal nodes as aux_pts, but don't refine further ('p' only)
     mesh2 = triangulate_polygon(shape, aux_pts=internal_pts, opts='p')
-    
+
     return mesh2
