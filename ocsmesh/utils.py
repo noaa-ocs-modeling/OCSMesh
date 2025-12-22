@@ -1668,7 +1668,10 @@ def merge_msh_t(
         drop_by_bbox=True,
         can_overlap=True,
         check_cross_edges=False):
-
+    warnings.warn(
+        "merge_msh_t is renamed to 'merge_meshdata'.",
+        FutureWarning, stacklevel=2
+    )
 
     dst_crs = CRS.from_user_input(out_crs)
 
@@ -2211,6 +2214,10 @@ def msht_from_numpy(
     values=None,
     crs=CRS.from_epsg(4326)
 ):
+    warnings.warn(
+        "msht_from_numpy will be deprecated. Use the 'MeshData' class constructor directly.",
+        FutureWarning, stacklevel=2
+    )
     mesh = jigsaw_msh_t()
     mesh.mshID = 'euclidean-mesh'
     mesh.ndims = +2
@@ -2278,7 +2285,11 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
     ------
     NotImplementedError
     """
-
+    warnings.warn(
+        "shape_to_msh_t is deprecated and will be removed. "
+        "Consider using 'utils.get_mesh_polygons' or 'MeshData' from geometry.",
+        FutureWarning, stacklevel=2
+    )
     vert2: List[Tuple[Tuple[float, float], int]] = []
     if isinstance(shape, Polygon):
         shape = MultiPolygon([shape])
@@ -2326,6 +2337,10 @@ def shape_to_msh_t(shape: Union[Polygon, MultiPolygon]) -> jigsaw_msh_t:
 def shape_to_msh_t_2(
     shape: Union[Polygon, MultiPolygon, gpd.GeoDataFrame, gpd.GeoSeries]
 ) -> jigsaw_msh_t:
+    warnings.warn(
+        "shape_to_msh_t_2 is deprecated and will be removed.",
+        FutureWarning, stacklevel=2
+    )
     gdf_shape = shape
     if isinstance(shape, gpd.GeoSeries):
         gdf_shape = gpd.GeoDataFrame(geometry=shape)
@@ -2453,7 +2468,11 @@ def triangulate_polygon(
 
     # NOTE: Triangle can handle separate closed polygons,
     # so no need to have for loop
-
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     if isinstance(shape, (gpd.GeoDataFrame, gpd.GeoSeries)):
         shape = shape.union_all()
 
@@ -2543,6 +2562,11 @@ def triangulate_polygon_s(
     jigsaw_msh_t
         Generated triangulation
     '''
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     #First triangulation. Smooth but adds extra nodes at boundary
     if aux_pts is not None:
         if isinstance(aux_pts, (np.ndarray, list, tuple)):
@@ -2642,7 +2666,11 @@ def create_patch_mesh(mesh_w_problem,
     The hfun.2dm can be used as mesh_for_patch
     Default buffer_size is optimum for finding small area elements
     '''
-
+    warnings.warn(
+        "create_patch_mesh will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils is deprecated.",
+        FutureWarning, stacklevel=2
+    )
     coords = mesh_w_problem.coord
     all_gdf = []
     for t in list(sel_el_dict.values()):
@@ -2701,7 +2729,11 @@ def clip_mesh_by_mesh(mesh_to_be_clipped: jigsaw_msh_t,
     Notes
     -----
     '''
-
+    warnings.warn(
+        "clip_mesh_by_mesh will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     gdf_mesh = [get_mesh_polygons(mesh_to_be_clipped)]
     gdf_mesh = gpd.GeoDataFrame(geometry=gdf_mesh, crs=crs)
 
@@ -2765,7 +2797,11 @@ def create_mesh_from_mesh_diff(domain: Union[jigsaw_msh_t,
     Notes
     -----
     '''
-
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     if isinstance(domain, (gpd.GeoDataFrame)):
         pass
     if isinstance(domain, (gpd.GeoSeries)):
@@ -2871,7 +2907,11 @@ https://github.com/SorooshMani-NOAA/river-in-mesh/blob/main/river_in_mesh/mesh
     Notes
     -----
     '''
-
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     msht_combined = all_msht[0]
     crs = msht_combined.crs
 
@@ -2990,7 +3030,11 @@ def fix_small_el(mesh_w_problem: jigsaw_msh_t,
          adjacent_layers=2    
     
     '''
-
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     # find small elements
     small_el = filter_el_by_area(mesh_w_problem,
                                  l_limit=l_limit,
@@ -3062,6 +3106,11 @@ def merge_overlapping_meshes(all_msht: list,
     Notes
     -----
     '''
+    warnings.warn(
+        "merge_overlapping_meshes will be moved to 'ocsmesh.ops.combine_mesh'. "
+        "This version in utils is deprecated.",
+        FutureWarning, stacklevel=2
+    )
 
     msht_combined = all_msht[0]
     for msht in all_msht[1:]:
@@ -3495,7 +3544,11 @@ def quadrangulate_rivermapper_arcs(arcs_shp,
     -----
     Future versions of this function should be parallelized for efficiency
     '''
-
+    warnings.warn(
+        "quadrangulate_rivermapper_arcs will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     shape = arcs_shp.sort_values(['river_idx', 'local_arc_'],
                                  ascending=[True,True])
     polygons_final = []
@@ -3696,7 +3749,11 @@ def triangulate_shp(gdf):
     -----
 
     '''
-
+    warnings.warn(
+        "quadrangulate_rivermapper_arcs will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     shape_tri = [delaunay_within(gdf)]
     shape_diff = gpd.GeoDataFrame(geometry =
                                   gpd.GeoSeries(
@@ -3740,7 +3797,11 @@ def shptri_to_msht(triangulated_shp):
     -----
 
     '''
-
+    warnings.warn(
+        "shptri_to_msht will be moved to 'ocsmesh.ops.river_mesh' (renamed 'shptri_to_meshdata'). "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     coords = []
     verts = []
     for t in enumerate(triangulated_shp['geometry']):
@@ -3775,7 +3836,11 @@ def triangulate_poly(rm_poly):
     -----
 
     '''
-
+    warnings.warn(
+        "create_mesh_from_mesh_diff will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     rm_poly = triangulate_shp(rm_poly)
     rm_mesh = shptri_to_msht(rm_poly)
 
@@ -3798,6 +3863,11 @@ def validate_poly(gdf):
     -----
 
     '''
+    warnings.warn(
+        "validate_poly will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     gdf = [make_valid(p) for p in gdf['geometry'].to_list()]
     gdf = gpd.GeoDataFrame(geometry =
                               gpd.GeoSeries(gdf),
@@ -3829,6 +3899,11 @@ def find_polyneighbors(target_gdf, ref_gdf):
     Notes
     -----
     '''
+    warnings.warn(
+        "validate_poly will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     intersects = gpd.sjoin(
         target_gdf, ref_gdf,how='inner', predicate='intersects'
         )
@@ -3864,7 +3939,11 @@ def validate_RMmesh(RMmesh):
     Notes
     -----
     '''
-
+    warnings.warn(
+        "validate_poly will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     tri = RMmesh.tria3['index']
     xy = RMmesh.vert2['coord']
     poly=[]
@@ -3917,7 +3996,11 @@ def triangulate_rivermapper_poly(rm_poly):
     -----
 
     '''
-
+    warnings.warn(
+        "quadrangulate_rivermapper_arcs will be moved to 'ocsmesh.ops.river_mesh'. "
+        "This version in utils will be deprecated.",
+        FutureWarning, stacklevel=2
+    )
     # Finds slivers (gdf_invalid) on RM shapefile:
     gdf_valid, gdf_invalid = validate_poly(rm_poly)
     # Finds all polygons next to slivers:
