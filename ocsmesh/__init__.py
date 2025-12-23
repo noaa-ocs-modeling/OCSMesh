@@ -8,22 +8,22 @@ import warnings
 
 # Major API Change Warning
 warnings.warn(
-    "\n\n"
-    "********************************************************************************\n"
-    "                  MAJOR UPDATE ALERT - Upcoming OCSMesh 2.0.0                   \n"
-    "********************************************************************************\n"
-    "OCSMesh is going through significant architectural changes:\n"
-    "1. Mesh Engines (Jigsaw and Triangle) will become OPTIONAL dependencies.\n"
-    "   You must install them manually if needed.\n"
-    "2. A new default mesh engine will be adopted to replace Jigsaw.\n"
-    "3. 'jigsaw_msh_t' has been replaced by 'ocsmesh.internal.MeshData'.\n"
-    "4. Functions operating on msh_t objects are deprecated and will be updated to support meshdata.\n"
-    "Please check the release notes and update your workflows accordingly.\n"
-    "********************************************************************************\n",
+"\n\n"
+"********************************************************************************\n"
+"                  MAJOR UPDATE ALERT - Upcoming OCSMesh 2.0.0                   \n"
+"********************************************************************************\n"
+"OCSMesh is going through significant architectural changes.\n"
+"The current architecture will be depracated soon, among the upcoming changes we highlight:\n"
+"1. Mesh Engines (Jigsaw and Triangle) will become OPTIONAL dependencies.\n"
+"   After version 2.0.0 you will have to install them manually.\n"
+"2. A new default mesh engine will be adopted to replace Jigsaw.\n"
+"3. 'jigsaw_msh_t' will be replaced by a new custom Python class called 'MeshData'.\n"
+"4. Functions operating on msh_t objects will be updated to support MeshData.\n"
+"This v1.7.0 is the last release version before OCSMesh 2.0.0.\n"
+"********************************************************************************\n",
     FutureWarning,
     stacklevel=2
 )
-
 try:
     import jigsawpy  # noqa: F401
 except OSError as e:
