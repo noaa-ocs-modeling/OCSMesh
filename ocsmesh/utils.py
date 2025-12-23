@@ -4081,7 +4081,7 @@ def remesh_holes(msht: jigsaw_msh_t,
                                 gpd.GeoSeries(intersection(
                                 aux_pts,
                                 patch_poly.buffer(-0.00001),
-                                )))    
+                                )))
         msht_patch = triangulate_polygon_s(patch_gdf,
                                            aux_pts=aux_pts)
 

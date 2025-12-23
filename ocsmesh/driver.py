@@ -128,8 +128,10 @@ class JigsawDriver:
 
         _logger.info('Finalizing mesh...')
         if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
-            # Jigsaw creates tiny elements on high gradients. Run the driver with the remesh_tiny_elements key
-            # set to True once you find that your mesh has tiny elements. Default is False as it is an expensive
+            # Jigsaw creates tiny elements on high gradients.
+            # Run the driver with the remesh_tiny_elements key
+            # set to True once you find that your mesh has tiny elements.
+            # Default is False as it is an expensive
             # operation
             output_mesh = utils.remesh_small_elements(
                 self.opts, geom_msh_t, output_mesh, hfun_msh_t)

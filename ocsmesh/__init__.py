@@ -24,6 +24,7 @@ warnings.warn(
     FutureWarning,
     stacklevel=2
 )
+
 try:
     import jigsawpy  # noqa: F401
 except OSError as e:
