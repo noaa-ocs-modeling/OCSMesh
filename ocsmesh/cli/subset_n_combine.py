@@ -632,8 +632,10 @@ class SubsetAndCombine:
 
 
         # Attach overlaps to buffer region (due to 1 layer and upstream)
-        poly_seam_4, jig_clip_hires_1 = self._add_overlap_to_polygon(jig_clip_hires_0, poly_seam_3)
-        poly_seam_5, jig_clip_lowres_1 = self._add_overlap_to_polygon(jig_clip_lowres_0, poly_seam_4)
+        poly_seam_4, jig_clip_hires_1 = self._add_overlap_to_polygon(jig_clip_hires_0,
+                                                                     poly_seam_3)
+        poly_seam_5, jig_clip_lowres_1 = self._add_overlap_to_polygon(jig_clip_lowres_0,
+                                                                      poly_seam_4)
 
         # Cleanup buffer shape
         poly_seam_6 = utils.remove_holes_by_relative_size(

@@ -1,5 +1,6 @@
 import logging
 from typing import Union
+import warnings
 
 from jigsawpy import jigsaw_msh_t, jigsaw_jig_t
 from jigsawpy import libsaw
@@ -71,6 +72,12 @@ class JigsawDriver:
         """
         geom can be SizeFunction or PlanarStraightLineGraph instance.
         """
+        warnings.warn(
+            "JigsawDriver is deprecated and will be removed in a future release. "
+            "Please use 'ocsmesh.driver.MeshDriver' with engine_name='jigsaw'." 
+            "We strongly suggest the adoption of gmsh and the driver engine",
+            FutureWarning, stacklevel=2
+        )
         self._geom = geom
         self._hfun = hfun
         self._init = initial_mesh
@@ -78,7 +85,11 @@ class JigsawDriver:
         self._opts.verbosity = verbosity
 
     def run(self, sieve=None, quality_metric=1.05, remesh_tiny_elements=False):
-
+        warnings.warn(
+            "JigsawDriver.run() is deprecated. "
+            "Use MeshDriver.run() instead.",
+            FutureWarning, stacklevel=2
+        )
         hfun_msh_t = self.hfun.msh_t()
 
         output_mesh = jigsaw_msh_t()
@@ -117,8 +128,10 @@ class JigsawDriver:
 
         _logger.info('Finalizing mesh...')
         if self.opts.hfun_hmin > 0 and remesh_tiny_elements:
-            # Jigsaw creates tiny elements on high gradients. Run the driver with the remesh_tiny_elements key
-            # set to True once you find that your mesh has tiny elements. Default is False as it is an expensive
+            # Jigsaw creates tiny elements on high gradients.
+            # Run the driver with the remesh_tiny_elements key
+            # set to True once you find that your mesh has tiny elements.
+            # Default is False as it is an expensive
             # operation
             output_mesh = utils.remesh_small_elements(
                 self.opts, geom_msh_t, output_mesh, hfun_msh_t)

@@ -1,6 +1,6 @@
 """This module define class for raster based size function
 """
-from pathlib import Path
+# from pathlib import Path
 import functools
 import shutil
 import gc
