@@ -43,7 +43,7 @@ jobs:
 
     - name: Install other dependencies
       shell: bash -l {0}
-      run: pip install .
+      run: pip install .[testing]
 
     - name: Prepare example DEM
       if: runner.os != 'Windows'

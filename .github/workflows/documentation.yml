@@ -24,9 +24,7 @@ jobs:
         environment-name: ocsmesh-env
     - name: Install dependencies
       shell: bash -l {0}
-      run: |
-        python ./setup.py install_jigsaw
-        pip install .[documentation]
+      run: pip install .[documentation]
     - name: Retrieve latest version from Git tags
       uses: mtkennerly/dunamai-action@v1
       with:

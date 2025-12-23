@@ -4,8 +4,6 @@ This module implements wrapper for basic functionalities of handling
 raster files such as CRS transformations, resampling, clipping,
 extracting & overriding data, plotting, etc.
 """
-from pathlib import Path
-import shutil
 import math
 import hashlib
 import logging
@@ -1606,9 +1604,8 @@ class Raster:
             yield rasterio.windows.Window(0, 0, self.width, self.height)
             return
 
-        for window in get_iter_windows(
-                self.width, self.height, chunk_size, overlap):
-            yield window
+        yield from get_iter_windows(
+                self.width, self.height, chunk_size, overlap)
 
     def get_window_data(
             self,
