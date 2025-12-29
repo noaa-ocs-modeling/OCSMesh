@@ -3,20 +3,14 @@ from copy import deepcopy
 import numpy as np
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import Polygon, MultiPolygon, box, MultiPoint, Point
-from shapely import union_all, intersection
+from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
+from shapely import  intersection
 from scipy.spatial import cKDTree
 from pyproj import CRS
 
-try:
-    import triangle as tr
-    _HAS_TRIANGLE = True
-except ImportError:
-    _HAS_TRIANGLE = False
-
 from ocsmesh import utils
 from ocsmesh.internal import MeshData
-from ocsmesh.engines.triangle import triangle_dict_to_meshdata
+from ocsmesh.engines.factory import get_mesh_engine
 
 _logger = logging.getLogger(__name__)
 ELEM_2D_TYPES = ['tria', 'quad']
@@ -317,110 +311,46 @@ def clip_mesh_by_mesh(
 
 
 # =============================================================================
-# Triangle Wrappers (Restored Old Logic)
+# Triangle Wrappers
 # =============================================================================
 def triangulate_polygon(
     shape,
     aux_pts=None,
     opts='p',
-    type_t=2,
+    # type_t=2,
 ) -> MeshData:
     """
     Triangulate input shape. 
-    Follows old logic:using 'NegativeDomain' (Bounding Box - Shape) to detect holes.
     """
-    if not _HAS_TRIANGLE:
-        raise ImportError("Triangle library not installed.")
-
-    # 1. Flatten Input to Shapely Geometry
+    # 1. Prepare Shape as GeoSeries for the Engine
     if isinstance(shape, (gpd.GeoDataFrame, gpd.GeoSeries)):
+        # Engine expects GeoSeries of the flattened shape or raw list
+        # To match old behavior, we might want to union them if it's multiple
         shape_geom = shape.union_all()
+        shape_series = gpd.GeoSeries([shape_geom])
     elif isinstance(shape, (list, np.ndarray)):
         # Handle list of polygons
+        from shapely import union_all
         shape_geom = union_all(shape)
+        shape_series = gpd.GeoSeries([shape_geom])
+    elif isinstance(shape, (Polygon, MultiPolygon)):
+        shape_series = gpd.GeoSeries([shape])
     else:
-        shape_geom = shape
+        raise ValueError("Input shape must be convertible to polygon/series!")
 
-    if isinstance(shape_geom, Polygon):
-        shape_geom = MultiPolygon([shape_geom])
-
-    if not isinstance(shape_geom, (MultiPolygon, Polygon)):
-        raise ValueError("Input shape must be convertible to polygon!")
-
-    # 2. Extract Vertices and Edges (Replacing shape_to_msh_t)
-    # We build the PSLG manually from the exterior/interiors
-    vertices = []
-    segments = []
-    coord_map = {}
-
-    for poly in shape_geom.geoms:
-        rings = [poly.exterior] + list(poly.interiors)
-        for ring in rings:
-            coords = np.array(ring.coords)
-            if len(coords) < 4: continue
-
-            pts = coords[:-1]
-            current_indices = []
-            for pt in pts:
-                # Use rounding for deduplication (critical for topology)
-                key = (round(pt[0], 9), round(pt[1], 9))
-                if key not in coord_map:
-                    coord_map[key] = len(vertices)
-                    vertices.append(pt)
-                current_indices.append(coord_map[key])
-
-            # Segments
-            for i in range(len(current_indices)):
-                u = current_indices[i]
-                v = current_indices[(i+1)%len(current_indices)]
-                if u != v:
-                    segments.append((u, v))
-
-    if not vertices:
-        return MeshData(coords=np.empty((0,2)), tria=np.empty((0,3)))
-
-    vertices = np.array(vertices)
-    segments = np.array(list(set(segments)))
-
-    # 3. Hole Detection (The Old Way: Negative Domain)
-    # buffer by 1/100 of shape length scale = sqrt(area)/100
-    # This logic detects islands and complex hole configurations
-    try:
-        bbox_geom = box(*shape_geom.bounds)
-        # Add slight buffer to bounds to ensure it covers everything
-        bbox_geom = box(*shape_geom.buffer(np.sqrt(shape_geom.area)/100).bounds)
-
-        neg_shape = bbox_geom.difference(shape_geom)
-
-        holes = []
-        if isinstance(neg_shape, Polygon):
-            if not neg_shape.is_empty:
-                holes.append(neg_shape.representative_point().coords[0])
-        elif isinstance(neg_shape, MultiPolygon):
-            for poly in neg_shape.geoms:
-                if not poly.is_empty:
-                    holes.append(poly.representative_point().coords[0])
-        elif hasattr(neg_shape, 'geoms'):
-             for poly in neg_shape.geoms:
-                if isinstance(poly, Polygon) and not poly.is_empty:
-                    holes.append(poly.representative_point().coords[0])
-    except Exception as e:
-        _logger.warning(f"Hole detection failed: {e}")
-        holes = []
-
-    # 4. Aux Points
+    # 2. Prepare Aux Points (Seed) for the Engine
+    # The Engine expects a MeshData object as a seed.
+    seed_mesh = None
     if aux_pts is not None:
         aux_coords = None
 
-        # Handle GeoPandas inputs
+        # Logic to extract coords matches the old function to ensure compatibility
         if isinstance(aux_pts, (gpd.GeoDataFrame, gpd.GeoSeries)):
-            # If it's a DataFrame, get the geometry series
             if isinstance(aux_pts, gpd.GeoDataFrame):
                 gs = aux_pts.geometry
             else:
                 gs = aux_pts
 
-            # Helper to extract coordinates from any geometry type
             def get_coords(geom):
                 if geom is None or geom.is_empty:
                     return []
@@ -428,10 +358,8 @@ def triangulate_polygon(
                     return [geom.coords[0]]
                 if isinstance(geom, MultiPoint):
                     return [pt.coords[0] for pt in geom.geoms]
-                # Fallback for other types if needed, though usually Points here
                 return []
 
-            # Flatten list of coordinates
             coords_list = []
             for geom in gs:
                 coords_list.extend(get_coords(geom))
@@ -439,46 +367,24 @@ def triangulate_polygon(
             if coords_list:
                 aux_coords = np.array(coords_list)
 
-        # Handle numpy/list inputs
         elif isinstance(aux_pts, (list, np.ndarray)):
-             aux_coords = np.array(aux_pts)
+            aux_coords = np.array(aux_pts)
 
         if aux_coords is not None and len(aux_coords) > 0:
-            # Check for duplicates against existing vertices
-            new_aux = []
-            existing_keys = set(coord_map.keys())
-            for pt in aux_coords:
-                k = (round(pt[0], 9), round(pt[1], 9))
-                if k not in existing_keys:
-                    new_aux.append(pt)
-                    existing_keys.add(k)
+            # Create a seed mesh containing only vertices
+            seed_mesh = MeshData(coords=aux_coords)
 
-            if new_aux:
-                vertices = np.vstack((vertices, new_aux))
+    # 3. Instantiate Engine and Generate
+    # We pass 'opts' to the factory via kwargs which go to TriangleOptions
+    engine = get_mesh_engine('triangle', opts=opts)
 
-    # 5. Run Triangle
-    shape_dict = {
-        'vertices': np.ascontiguousarray(vertices, dtype=float),
-        'segments': np.ascontiguousarray(segments, dtype=int)
-    }
-    if holes:
-        shape_dict['holes'] = np.array(holes, dtype=float)
-
-    if 'p' not in opts: opts += 'p'
-
-    try:
-        out_dict = tr.triangulate(shape_dict, opts=opts)
-    except Exception as e:
-        _logger.error(f"Triangle crash: {e}")
-        raise
-
-    msht = triangle_dict_to_meshdata(out_dict)
+    # Engine.generate expects a GeoSeries for shape and MeshData for seed
+    msht = engine.generate(shape_series, seed=seed_mesh)
 
     if aux_pts is not None:
         utils.cleanup_isolates(msht)
 
     return msht
-
 
 def triangulate_polygon_s(
     shape,
