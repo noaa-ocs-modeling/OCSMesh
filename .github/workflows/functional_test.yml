@@ -38,7 +38,7 @@ jobs:
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
-        extra-specs: |
+        create-args: >-
           python=${{ matrix.python-version }}
 
     - name: Install other dependencies
