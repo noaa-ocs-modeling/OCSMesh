@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon, MultiPolygon, MultiPoint, Point
-from shapely import  intersection
+from shapely import  intersection, union_all
 from scipy.spatial import cKDTree
 from pyproj import CRS
 
@@ -94,7 +94,7 @@ def merge_neighboring_meshes(*all_msht):
     '''
     # Start with the first mesh (usually the buffer mesh in the sequence)
     msht_combined = deepcopy(all_msht[0])
-    
+
     for msht in all_msht[1:]:
         # 1. Identify Boundary Nodes for snapping
         combined_bdry_edges = utils.get_boundary_edges(msht_combined)
@@ -120,7 +120,7 @@ def merge_neighboring_meshes(*all_msht):
                 continue
             # If multiple matches, just take the first one (standard snapping)
             idx_tree_msht = neigh_idx_list[0]
-            
+
             local_idx = msht_bdry_verts[idx_tree_msht]
             target_idx = combined_bdry_verts[idx_tree_comb]
             map_idx_shared[local_idx] = target_idx
@@ -330,7 +330,6 @@ def triangulate_polygon(
         shape_series = gpd.GeoSeries([shape_geom])
     elif isinstance(shape, (list, np.ndarray)):
         # Handle list of polygons
-        from shapely import union_all
         shape_geom = union_all(shape)
         shape_series = gpd.GeoSeries([shape_geom])
     elif isinstance(shape, (Polygon, MultiPolygon)):

@@ -374,7 +374,7 @@ def delaunay_within(gdf):
         try:
             # shapely.ops.triangulate performs Delaunay triangulation
             tri = [
-                triangle for triangle in triangulate(polygon) 
+                triangle for triangle in triangulate(polygon)
                 if triangle.within(polygon)
             ]
             if tri:

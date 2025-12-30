@@ -1366,7 +1366,7 @@ def estimate_bounds_utm(bounds, crs="EPSG:4326"):
         # Safety: clamp values to valid earth range to prevent crashes on edge cases
         # or return None if they are obviously projected coordinates masquerading as Geo
         if y0 < -90 or y1 > 90 or x0 < -180 or x1 > 180:
-             return None
+            return None
 
         _, _, number, letter = utm.from_latlon(
                 (y0 + y1)/2, (x0 + x1)/2)
@@ -2062,7 +2062,8 @@ def resample_geom_by_hfun(shape_series, hfun_data):
         return values[idx]
 
     def resample_ring(ring):
-        if ring.is_empty: return None
+        if ring.is_empty:
+            return None
 
         new_coords = []
         # Start at the beginning
@@ -2139,9 +2140,9 @@ def calc_el_angles(msht: MeshData):
     coords = msht.coords
     tri_angles = np.empty((0, 3))
     def angle(u, v):
-                dot = np.sum(u * v, axis=1)
-                norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
-                return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
+        dot = np.sum(u * v, axis=1)
+        norm = np.linalg.norm(u, axis=1) * np.linalg.norm(v, axis=1)
+        return np.degrees(np.arccos(np.clip(dot/norm, -1.0, 1.0)))
     if msht.tria.size > 0:
         v = coords[msht.tria]
         vec_01 = v[:, 1] - v[:, 0]
@@ -2219,7 +2220,8 @@ def cleanup_concave_quads(mesh: MeshData) -> MeshData:
     '''
     quad = mesh.quad
     coord = mesh.coords
-    if quad.size == 0: return mesh
+    if quad.size == 0:
+        return mesh
     concave_el = []
     for l_idx, n_idx in enumerate(quad):
         polygon = Polygon(coord[n_idx])
@@ -2255,7 +2257,8 @@ def order_mesh(msht: MeshData, crs=None) -> MeshData:
     new_mesh = deepcopy(msht)
     for etype in ELEM_2D_TYPES:
         elems = getattr(new_mesh, etype)
-        if elems.size == 0: continue
+        if elems.size == 0:
+            continue
         coords = new_mesh.coords
         ordered_elems = []
         for el in elems:
@@ -2284,7 +2287,8 @@ def quads_from_tri(msht: MeshData) -> MeshData:
     -----
     """
     ang_chk, _ = calc_el_angles(msht)
-    if ang_chk.size == 0: return msht
+    if ang_chk.size == 0:
+        return msht
 
     el = msht.tria
     idx_of_closest = np.abs(ang_chk - 90).argmin(axis=1)
@@ -2297,7 +2301,8 @@ def quads_from_tri(msht: MeshData) -> MeshData:
         diagonals.append(tuple(diag_verts))
 
     edge_map = defaultdict(list)
-    for i, edge in enumerate(diagonals): edge_map[edge].append(i)
+    for i, edge in enumerate(diagonals):
+        edge_map[edge].append(i)
 
     pairs = {k: v for k, v in edge_map.items() if len(v) == 2}
 
@@ -2310,7 +2315,8 @@ def quads_from_tri(msht: MeshData) -> MeshData:
             new_quads.append(combined)
             tri_to_remove.extend([t1, t2])
 
-    if not new_quads: return msht
+    if not new_quads:
+        return msht
 
     mask = np.ones(len(el), dtype=bool)
     mask[tri_to_remove] = False
