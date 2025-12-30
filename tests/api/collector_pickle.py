@@ -134,8 +134,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_serial.add_constant_value(value=200, lower_bound=5, upper_bound=10)
         
         print("\nRunning serial execution...")
-        msh_t_serial = hfun_serial.msh_t()
-        values_serial = msh_t_serial.value
+        meshdata_serial = hfun_serial.meshdata()
+        values_serial = meshdata_serial.values
         print("Serial execution finished.")
 
         # --- PARALLEL EXECUTION ---
@@ -147,8 +147,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.add_constant_value(value=200, lower_bound=5, upper_bound=10)
 
         print("Running parallel execution...")
-        msh_t_parallel = hfun_parallel.msh_t()
-        values_parallel = msh_t_parallel.value
+        meshdata_parallel = hfun_parallel.meshdata()
+        values_parallel = meshdata_parallel.values
         print("Parallel execution finished.")
         
         # --- COMPARISON ---

@@ -1,7 +1,6 @@
 import rasterio as rio
 import numpy as np
 from pyproj import CRS
-from jigsawpy import jigsaw_msh_t
 
 import ocsmesh
 
@@ -27,12 +26,12 @@ def topo_2rast_1mesh(r1_path, r2_path, m1_path):
             r2_path, rast_z_2, rast_xy_2, 4326
         )
 
-        msh_t = ocsmesh.utils.create_rectangle_mesh(
+        meshdata = ocsmesh.utils.create_rectangle_mesh(
             nx=17, ny=7, holes=[40, 41], x_extent=(-1, 1), y_extent=(0, 1))
-        msh_t.crs = CRS.from_epsg(4326)
-        msh_t.value[:] = 10
+        meshdata.crs = CRS.from_epsg(4326)
+        meshdata.values[:] = 10
 
-        mesh = ocsmesh.Mesh(msh_t)
+        mesh = ocsmesh.Mesh(meshdata)
         # NOTE: Assuming the interpolation works fine!
         mesh.interpolate(
             [ocsmesh.Raster(i) for i in [r1_path, r2_path]],
