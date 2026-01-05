@@ -491,8 +491,6 @@ def sort_edges(edges):
 
 def index_ring_collection(mesh):
 
-    # find boundary edges using triangulation neighbors table,
-    # see: https://stackoverflow.com/a/23073229/7432462
     boundary_edges = []
     tri = mesh_to_tri(mesh)
     idxs = np.vstack(
@@ -2001,9 +1999,6 @@ def clip_elements_by_index(
     quad=None,
     inverse: bool = False) -> MeshData:
     '''
-    adapted from:
-https://github.com/sorooshmani-noaa/river-in-mesh/tree/main/river_in_mesh/utils
-
     parameters
     ----------
     msht : MeshData

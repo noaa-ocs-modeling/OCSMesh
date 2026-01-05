@@ -9,11 +9,11 @@ from scipy.spatial import cKDTree
 from pyproj import CRS
 
 from ocsmesh import utils
+from ocsmesh.utils import ELEM_2D_TYPES
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
 
 _logger = logging.getLogger(__name__)
-ELEM_2D_TYPES = ['tria', 'quad']
 
 # =============================================================================
 # Main Workflow
@@ -75,7 +75,7 @@ def merge_overlapping_meshes(
                                                     )
 
         del carved_mesh,buff_mesh,msht
-
+    utils.order_mesh(msht_combined)
     utils.finalize_mesh(msht_combined)
     if dst_crs:
         msht_combined.crs = dst_crs

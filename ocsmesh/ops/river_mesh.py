@@ -1,3 +1,17 @@
+"""
+River Mesh Generation Operations
+
+This module contains high-level, specific-purpose functions for generating
+river meshes (River Mapper).
+
+WARNING: ARCHITECTURAL CONSTRAINT
+    This module imports from `ocsmesh.ops.combine_mesh`. To prevent circular
+    dependency cycles (e.g., A -> B -> A), this module should remain a 
+    "leaf node" in the dependency graph. 
+    
+    NO other internal modules (especially within `ocsmesh.ops`) should import
+    from this module.
+"""
 import logging
 import warnings
 from itertools import islice
@@ -11,16 +25,11 @@ from shapely import union_all, make_valid
 
 from ocsmesh import utils
 from ocsmesh.internal import MeshData
+from ocsmesh.utils import ELEM_2D_TYPES
 
-# IMPORTS FROM OPS
-# This establishes that river_mesh depends on combine_mesh.
-# This is safe as long as combine_mesh does NOT import river_mesh.
 from ocsmesh.ops.combine_mesh import triangulate_polygon_s
 
 _logger = logging.getLogger(__name__)
-
-# Constants
-ELEM_2D_TYPES = ['tria', 'quad']
 
 # =============================================================================
 # Core River Mapper Functions
