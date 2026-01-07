@@ -1,3 +1,4 @@
+import sys
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -244,7 +245,8 @@ class GeomCollector(unittest.TestCase):
 #        geom_gs = geom_coll.geoseries()
 #        self.assertTrue(isinstance(geom_gs, gpd.GeoSeries))
 
-
+    @unittest.skipIf(sys.platform.startswith("win"),
+                     "Flaky I/O race condition on Windows multiprocessing")
     def test_add_patch(self):
         rast1 = ocsmesh.Raster(self.rast1)
         mesh1 = ocsmesh.Mesh.open(self.mesh1, crs=4326)
