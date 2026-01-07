@@ -1818,9 +1818,9 @@ def approximate_courant_number_for_depth(
     '''
 
     if not isinstance(depth, np.ndarray):
-        depth = np.array(depth)
+        depth = np.array([depth])
     if not isinstance(element_size, np.ndarray):
-        element_size = np.array(element_size)
+        element_size = np.array([element_size])
 
     if np.any(element_size == 0):
         raise ValueError("Element size(s) for Courant number approximation include zero!")

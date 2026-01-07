@@ -121,7 +121,8 @@ class TriangleEngine(BaseMeshEngine):
 
         if isinstance(sizing, MeshData):
             raise NotImplementedError("Varying sizing is not supported for Triangle engine!")
-        if mesh.quad is not None:
+        # Use size > 0 check to ensure we don't error on empty quad arrays
+        if mesh.quad is not None and mesh.quad.size > 0:
             raise NotImplementedError("Triangle does not support quads!")
 
         # Prepare Input
@@ -181,8 +182,18 @@ class TriangleEngine(BaseMeshEngine):
 #            opts += 'r'
 
         # Handle Sizing
+        # Retrieve options string from the instance configuration
+        if hasattr(self._options, '_opts'):
+            opts = self._options._opts
+        else:
+            # Fallback for safety
+            opts = getattr(self._options, 'options', 'p')
+
+        # Handle Sizing override if provided
         if isinstance(sizing, (float, int)):
             if 'a' not in opts or 'a' == opts[-1]:
+                # If 'a' is missing or empty, append our sizing
+                # Remove any existing bare 'a' to avoid confusion
                 opts = opts.replace('a', '') + f"a{sizing}"
 
         # Run Engine
