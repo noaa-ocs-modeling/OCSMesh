@@ -76,8 +76,6 @@ class GeomCollector(BaseGeom):
 
     Methods
     -------
-    msh_t(**kwargs)
-        Returns the `jigsawpy` vertex-edge representation of the geometry
     get_multipolygon(**kwargs)
         Returns `shapely` object representation of the geometry
     add_patch(...)
@@ -176,7 +174,7 @@ class GeomCollector(BaseGeom):
         self._type_chk(in_list)
 
         # TODO: CRS considerations -- geom combine doesn't necessarily
-        # return EPSG:4326 (unlike hfun collector msh_t)
+        # return EPSG:4326 (unlike hfun collector)
         self._crs = 'EPSG:4326'
 
         for in_item in in_list:
