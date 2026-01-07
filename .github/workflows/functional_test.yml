@@ -112,7 +112,11 @@ jobs:
         name: remesh-bydem-results-${{ matrix.python-version }}
         path: remeshed.2dm
         retention-days: 7
-
+    # Ensure engines are installed so tests don't skip
+    - name: Install Engine Dependencies
+      shell: bash -l {0}
+      run: pip install gmsh triangle
+  
     - name: Run Python API tests
       shell: bash -el {0}
-      run: python -m unittest discover tests/api -p "*.py"
+      run: python -m unittest discover tests
