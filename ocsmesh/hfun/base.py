@@ -1,9 +1,10 @@
 """This module defines the base class for all size function types
 """
 
+import warnings
 from abc import ABC, abstractmethod
 
-from jigsawpy import jigsaw_msh_t  # type: ignore[import]
+from ocsmesh.internal import MeshData  # type: ignore[import]
 
 
 class BaseHfun(ABC):
@@ -15,11 +16,16 @@ class BaseHfun(ABC):
 
     Methods
     -------
-    msh_t()
-        Returns the `jigsawpy` vertex-edge representation of the mesh.
+    meshdata()
+        Returns the `MeshData` vertex-edge representation of the mesh.
     """
+
+    def msh_t(self, *args, **kwargs) -> MeshData:
+        '''Abstract method to generate hfun object.'''
+        warnings.warn("Use meshdata(...) instead!", DeprecationWarning)
+        return self.meshdata(*args, **kwargs)
 
 
     @abstractmethod
-    def msh_t(self) -> jigsaw_msh_t:
+    def meshdata(self) -> MeshData:
         '''Abstract method to generate hfun object.'''

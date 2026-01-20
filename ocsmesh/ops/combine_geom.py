@@ -15,8 +15,6 @@ from shapely import ops
 from shapely.geometry import box, Polygon, MultiPolygon, LinearRing
 from shapely.validation import explain_validity
 
-from jigsawpy import jigsaw_msh_t, savemsh, savevtk
-
 from ocsmesh.raster import Raster
 from ocsmesh.mesh.mesh import Mesh
 
@@ -547,43 +545,6 @@ class GeomCombine:
                 gdf = gdf.to_crs(crs)
             gdf.to_feather(out_file)
 
-        elif out_format in ("jigsaw", "vtk"):
-
-            if not crs.equals(self._calc_crs):
-                _logger.info(
-                    f"Project from {self._calc_crs.to_string()} to"
-                    f" {crs.to_string()} ...")
-                transformer = Transformer.from_crs(
-                    self._calc_crs, crs, always_xy=True)
-                multi_polygon = ops.transform(
-                        transformer.transform, multi_polygon)
-
-            msh = jigsaw_msh_t()
-            msh.ndims = +2
-            msh.mshID = 'euclidean-mesh'
-
-            coords = []
-            edges = []
-            for polygon in multi_polygon:
-                self._linearring_to_vert_edge(
-                        coords, edges, polygon.exterior)
-                for interior in polygon.interiors:
-                    self._linearring_to_vert_edge(
-                            coords, edges, interior)
-
-            msh.vert2 = np.array(
-                [(i, 0) for i in coords],
-                dtype=jigsaw_msh_t.VERT2_t)
-            msh.edge2 = np.array(
-                [(i, 0) for i in edges],
-                dtype=jigsaw_msh_t.EDGE2_t)
-
-
-            if out_format == "jigsaw":
-                savemsh(out_file, msh)
-
-            elif out_format == "vtk":
-                savevtk(out_file, msh)
 
         else:
             raise NotImplementedError(f"Output type {out_format} is not supported")

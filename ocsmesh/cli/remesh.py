@@ -5,13 +5,13 @@ import logging
 from pathlib import Path
 from copy import deepcopy
 
-import jigsawpy
 import numpy as np
 import geopandas as gpd
 from shapely.geometry import Polygon, MultiPolygon
 
 from ocsmesh import Raster, Geom, Hfun, Mesh
 from ocsmesh import utils
+from ocsmesh.engines.factory import get_mesh_engine
 
 
 logging.basicConfig(
@@ -217,7 +217,7 @@ class RemeshByDEM:
             hfun = Hfun(
                 [hfun_base_mesh, *hfun_rast_list],
                 hmin=hmin,
-                hmax=np.max(hfun_base_mesh.msh_t().value),
+                hmax=np.max(hfun_base_mesh.meshdata().values),
                 nprocs=nprocs)
 
             for level, expansion_rate, target_size in contour_defns:
@@ -248,14 +248,14 @@ class RemeshByDEM:
                 gc.collect()
 
                 _logger.info("Calculating final size function")
-                jig_hfun = hfun.msh_t()
+                meshdata_hfun = hfun.meshdata()
 
                 _logger.info("Writing hfun to disk")
                 # This writes in EPSG:4326
-                Mesh(jig_hfun).write(
+                Mesh(meshdata_hfun).write(
                     str(out_path)+'.hfun.2dm',
                     format='2dm', overwrite=True)
-                del jig_hfun
+                del meshdata_hfun
                 gc.collect()
 
                 # Read back from file to avoid recalculation of hfun
@@ -275,25 +275,25 @@ class RemeshByDEM:
             # NOTE: If intermediate files are written then we calculated
             # this in previous section
             _logger.info("Calculating final geometry")
-        jig_geom = geom.msh_t()
+        shape_geom = geom.geoseries()
         if log_calculation:
             # NOTE: If intermediate files are written then we calculated
             # this in previous section
             _logger.info("Calculating final size function")
-        jig_hfun = hfun.msh_t()
+        meshdata_hfun = hfun.meshdata()
 
-        jig_init = init_mesh.msh_t
+        meshdata_init = init_mesh.meshdata
 
-        _logger.info("Projecting geometry to be in meters unit")
-        utils.msh_t_to_utm(jig_geom)
         _logger.info("Projecting size function to be in meters unit")
-        utils.msh_t_to_utm(jig_hfun)
+        utils.project_to_utm(meshdata_hfun)
         _logger.info("Projecting initial mesh to be in meters unit")
-        utils.msh_t_to_utm(jig_init)
+        utils.project_to_utm(meshdata_init)
+        _logger.info("Projecting geometry to be in meters unit")
+        shape_geom.to_crs(meshdata_init.crs)
 
 
         # pylint: disable=C0325
-        if not (jig_geom.crs == jig_hfun.crs == jig_init.crs):
+        if not (shape_geom.crs == meshdata_hfun.crs == meshdata_init.crs):
             raise ValueError(
                 "Converted UTM CRS for geometry, hfun and init mesh"
                 "is not equivalent")
@@ -301,64 +301,33 @@ class RemeshByDEM:
 
         _logger.info("Calculate remeshing region of interest")
         # Prep for Remeshing
-        boxes = [i.get_bbox(crs=jig_geom.crs) for i in geom_rast_list]
+        boxes = [i.get_bbox(crs=shape_geom.crs) for i in geom_rast_list]
         region_of_interest = MultiPolygon(boxes)
-        roi_bnds = region_of_interest.bounds
-        roi_s = max(roi_bnds[2] - roi_bnds[0], roi_bnds[3] - roi_bnds[1])
 
-        _logger.info("Clip mesh by inverse of region of interest")
-        fixed_mesh_w_hole = utils.clip_mesh_by_shape(
-            jig_init, region_of_interest, fit_inside=True, inverse=True)
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw')
+        meshdata_remeshed = engine.remesh(
+            deepcopy(meshdata_init),
+            gpd.GeoSeries(region_of_interest, crs=shape_geom.crs),
+            meshdata_hfun
+        )
 
-        _logger.info(
-                "Get all initial mesh vertices in the region of interest")
-        vert_idx_to_refin = utils.get_verts_in_shape(
-            jig_hfun, region_of_interest)
-
-        fixed_mesh_w_hole.point['IDtag'][:] = -1
-        fixed_mesh_w_hole.edge2['IDtag'][:] = -1
-
-        refine_opts = jigsawpy.jigsaw_jig_t()
-        refine_opts.hfun_scal = "absolute"
-        refine_opts.hfun_hmin = np.min(jig_hfun.value)
-        refine_opts.hfun_hmax = np.max(jig_hfun.value)
-        refine_opts.mesh_dims = +2
-        # Mesh becomes TOO refined on exact boundaries from DEM
-#    refine_opts.mesh_top1 = True
-#    refine_opts.geom_feat = True
-
-        jig_remeshed = jigsawpy.jigsaw_msh_t()
-        jig_remeshed.ndims = +2
-
-        _logger.info("Remeshing...")
-        # Remeshing
-        jigsawpy.lib.jigsaw(
-                refine_opts,
-                jig_geom,
-                jig_remeshed,
-                init=fixed_mesh_w_hole,
-                hfun=jig_hfun)
-        jig_remeshed.crs = fixed_mesh_w_hole.crs
+        meshdata_remeshed.crs = shape_geom.crs
         _logger.info("Done")
-
-        if jig_remeshed.tria3['index'].shape[0] == 0:
-            _err = 'ERROR: Jigsaw returned empty mesh.'
-            _logger.error(_err)
-            raise ValueError(_err)
 
         # TODO: This is irrelevant right now since output file is
         # always is EPSG:4326, enable when APIs for remeshing is added
 #    if out_crs is not None:
-#        utils.reproject(jig_remeshed, out_crs)
+#        utils.reproject(meshdata_remeshed, out_crs)
 
         _logger.info('Finalizing mesh...')
-        utils.finalize_mesh(jig_remeshed, sieve)
+        utils.finalize_mesh(meshdata_remeshed, sieve)
 
         _logger.info("Interpolating depths on mesh...")
         # Interpolation
         utils.interpolate_euclidean_mesh_to_euclidean_mesh(
-                jig_init, jig_remeshed)
-        final_mesh = Mesh(jig_remeshed)
+                meshdata_init, meshdata_remeshed)
+        final_mesh = Mesh(meshdata_remeshed)
         final_mesh.interpolate(interp_rast_list, nprocs=nprocs)
         _logger.info("Done")
 

@@ -5,7 +5,6 @@ from multiprocessing import cpu_count
 from typing import Union, Sequence, List
 
 from pyproj import CRS
-from jigsawpy import savemsh, savevtk
 
 from ocsmesh.raster import Raster
 from ocsmesh.hfun.hfun import Hfun
@@ -125,23 +124,16 @@ class HfunCombine:
         _logger.info(f"Writing for file ({out_format}) ...")
 
         # NOTE: Combined mesh from collector is always in EPSG:4326
-        jig_hfun = hfun_collector.msh_t()
+        meshdata_hfun = hfun_collector.meshdata()
         dst_crs = CRS.from_user_input(crs)
-        if jig_hfun.crs != dst_crs:
+        if meshdata_hfun.crs != dst_crs:
             _logger.info(f"Reprojecting hfun to ({crs}) ...")
-            utils.reproject(jig_hfun, dst_crs)
+            utils.reproject(meshdata_hfun, dst_crs)
 
         # TODO: Check for correct extension on out_file
-        if out_format in ("jigsaw", "vtk"):
-            if out_format == "jigsaw":
-                savemsh(out_file, jig_hfun)
-
-            elif out_format == "vtk":
-                savevtk(out_file, jig_hfun)
-
-        elif out_format in ['2dm', 'sms']:
+        if out_format in ['2dm', 'sms']:
             # TODO: How to specify crs in 2dm file?
-            mesh = Mesh(jig_hfun)
+            mesh = Mesh(meshdata_hfun)
             mesh.write(out_file, format='2dm')
 
         else:

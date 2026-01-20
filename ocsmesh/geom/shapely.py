@@ -27,8 +27,6 @@ class PolygonGeom(ShapelyGeom):
     -------
     get_multipolygon(**kwargs)
         Returns `shapely` object representation of the geometry
-    msh_t(**kwargs)
-        Returns the `jigsawpy` vertex-edge representation of the geometry
     """
 
     def __init__(self, polygon: Polygon, crs: Union[CRS, str]) -> None:

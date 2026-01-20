@@ -5,15 +5,14 @@ import pathlib
 import logging
 
 import geopandas as gpd
-from shapely.geometry import MultiPolygon
 
-from ocsmesh import Raster, Geom, Hfun, JigsawDriver
+from ocsmesh import Raster, Geom, Hfun
+from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.mesh.mesh import Mesh
-from ocsmesh.geom.shapely import MultiPolygonGeom
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.features.contour import Contour
 from ocsmesh.mesh.parsers import sms2dm
-from ocsmesh.utils import msh_t_to_2dm
+from ocsmesh.utils import meshdata_to_2dm
 
 
 logging.basicConfig(
@@ -108,37 +107,37 @@ class MeshUpgrader:
         del geom_mp
 
         # Calculate hfun
-        hfun_msh_t = hfun.msh_t()
+        hfun_meshdata = hfun.meshdata()
         # Write to disk
         sms2dm.writer(
-                msh_t_to_2dm(hfun_msh_t),
+                meshdata_to_2dm(hfun_meshdata),
                 str(out_path) + '.hfun.2dm',
                 True)
-        del hfun_msh_t
+        del hfun_meshdata
 
 
         # Read back stored values to pass to mesh driver
         read_gdf = gpd.read_file(str(out_path) + '.geom.shp')
-        geom_from_disk = MultiPolygonGeom(
-            MultiPolygon(list(read_gdf.geometry)),
-            crs=read_gdf.crs)
 
         read_hfun = Mesh.open(str(out_path) + '.hfun.2dm', crs="EPSG:4326")
         hfun_from_disk = HfunMesh(read_hfun)
 
-        jigsaw = JigsawDriver(geom_from_disk, hfun=hfun_from_disk, initial_mesh=None)
-        jigsaw.verbosity = 1
+        meshdata_hfun = hfun_from_disk.meshdata()
 
-        ## Execute mesher (processing of geom and hfun happens here)
-        mesh = jigsaw.run()
+        # TODO: Make jigsaw an option
+        engine = get_mesh_engine('jigsaw', verbose=1)
+        meshdata = engine.generate(
+            read_gdf.to_crs(meshdata_hfun.crs), meshdata_hfun,
+        )
+        meshdata.crs = read_gdf.meshdata.crs
 
         ## Free-up memory
         del read_gdf
-        del geom_from_disk
         del read_hfun
         del hfun_from_disk
         gc.collect()
 
+        mesh = Mesh(meshdata)
         mesh.write(str(out_path) + '.raw.2dm', format='2dm', overwrite=True)
 
         ## Interpolate DEMs on the mesh

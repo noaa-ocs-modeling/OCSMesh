@@ -4,10 +4,6 @@
 import os
 from typing import Union
 
-# from jigsawpy import jigsaw_msh_t  # type: ignore[import]
-# import matplotlib.pyplot as plt  # type: ignore[import]
-# import mpl_toolkits.mplot3d as m3d  # type: ignore[import]
-# import numpy as np  # type: ignore[import]
 from shapely.geometry import MultiPolygon
 
 from ocsmesh.geom.base import BaseGeom
@@ -51,8 +47,6 @@ class MeshGeom(BaseGeom):
     -------
     get_multipolygon(**kwargs)
         Returns `shapely` object representation of the geometry
-    msh_t(**kwargs)
-        Returns the `jigsawpy` vertex-edge representation of the geometry
 
     Notes
     -----
@@ -95,8 +89,8 @@ class MeshGeom(BaseGeom):
             Calculated polygon from mesh based on the element boundaries
         """
 
-        # TODO: What if there's no tria, e.g. Mesh object is
-        # created from geom.msh_t() return value
+        # TODO: What if there's no tria, e.g. `Mesh` object is
+        # created from edges only
         return self.mesh.hull.multipolygon()
 
     @property
