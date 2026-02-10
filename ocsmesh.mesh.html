@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mesh representation &mdash; ocsmesh 1.7.0 documentation</title>
+  <title>Mesh representation &mdash; ocsmesh 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -49,7 +49,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.mesh.Mesh"><code class="docutils literal notranslate"><span class="pre">Mesh</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.open"><code class="docutils literal notranslate"><span class="pre">Mesh.open()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord"><code class="docutils literal notranslate"><span class="pre">Mesh.coord</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t"><code class="docutils literal notranslate"><span class="pre">Mesh.msh_t</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.Mesh.meshdata"><code class="docutils literal notranslate"><span class="pre">Mesh.meshdata</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D</span></code></a><ul>
@@ -66,11 +66,9 @@
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.crs"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.crs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.elements"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.elements</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.hull"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.hull</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.msh_t</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.meshdata"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.meshdata</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.nodes"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.nodes</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quad4"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quad4</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quads"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quads</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tria3"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.tria3</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.triangles"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.triangles</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.write"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.write()</span></code></a></li>
 </ul>
@@ -109,7 +107,7 @@
 <span id="mesh-representation"></span><h1>Mesh representation<a class="headerlink" href="#module-ocsmesh.mesh" title="Permalink to this heading"></a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="ocsmesh.mesh.Mesh">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">Mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.Mesh" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">Mesh</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">MeshData</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.Mesh" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseMesh</span></code></p>
 <p>Mesh object factory</p>
 <p>Factory class that creates and returns concrete mesh object
@@ -119,8 +117,9 @@ based on the input types.</p>
 <dd class="field-odd"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord" title="ocsmesh.mesh.Mesh.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
 </dd>
-<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t" title="ocsmesh.mesh.Mesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.meshdata" title="ocsmesh.mesh.Mesh.meshdata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">meshdata</span></code></a></dt><dd><p>Read-only property returning reference to the mesh data</p>
 </dd>
+<dt><strong>msh_t</strong></dt><dd></dd>
 </dl>
 </dd>
 </dl>
@@ -136,7 +135,7 @@ based on the input types.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>mesh</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>Input jigsaw mesh object</p>
+<dt><strong>mesh</strong><span class="classifier">MeshData</span></dt><dd><p>Input mesh object</p>
 </dd>
 </dl>
 </dd>
@@ -144,8 +143,9 @@ based on the input types.</p>
 <dd class="field-even"><dl class="simple">
 <dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.coord" title="ocsmesh.mesh.Mesh.coord"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coord</span></code></a></dt><dd><p>Read-only property for coordinates of mesh points</p>
 </dd>
-<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.msh_t" title="ocsmesh.mesh.Mesh.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<dt><a class="reference internal" href="#ocsmesh.mesh.Mesh.meshdata" title="ocsmesh.mesh.Mesh.meshdata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">meshdata</span></code></a></dt><dd><p>Read-only property returning reference to the mesh data</p>
 </dd>
+<dt><strong>msh_t</strong></dt><dd></dd>
 </dl>
 </dd>
 </dl>
@@ -166,7 +166,7 @@ based on the input types.</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><dl class="simple">
-<dt>TypeError</dt><dd><p>Input <cite>mesh</cite> is not a <cite>jigsaw_msh_t</cite> object.</p>
+<dt>TypeError</dt><dd><p>Input <cite>mesh</cite> is not a <cite>MeshData</cite> object.</p>
 </dd>
 <dt>NotImplementedError</dt><dd><p>Input <cite>mesh</cite> object cannot be used to create a EuclideanMesh2D</p>
 </dd>
@@ -223,12 +223,12 @@ object, it will affect the mesh.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.msh_t">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">msh_t</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jigsaw_msh_t</span></em><a class="headerlink" href="#ocsmesh.mesh.Mesh.msh_t" title="Permalink to this definition"></a></dt>
-<dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<dt class="sig sig-object py" id="ocsmesh.mesh.Mesh.meshdata">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">meshdata</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">MeshData</span></em><a class="headerlink" href="#ocsmesh.mesh.Mesh.meshdata" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property returning reference to the mesh data</p>
 <p class="rubric">Notes</p>
 <p>The property is read-only, however the returned value is not.
-That means if the user mutates the returned jigsaw_msh_t
+That means if the user mutates the returned MeshData
 object, it will affect the mesh.</p>
 </dd></dl>
 
@@ -236,7 +236,7 @@ object, it will affect the mesh.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">EuclideanMesh2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">jigsaw_msh_t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundaries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D" title="Permalink to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ocsmesh.mesh.</span></span><span class="sig-name descname"><span class="pre">EuclideanMesh2D</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mesh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">MeshData</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">boundaries</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D" title="Permalink to this definition"></a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">EuclideanMesh</span></code></p>
 <p>2D Euclidean mesh definition</p>
 <dl class="field-list simple">
@@ -277,7 +277,7 @@ object, it will affect the mesh.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>mesh</strong><span class="classifier">jigsaw_msh_t</span></dt><dd><p>The underlying jigsaw_msh_t object to hold onto mesh data.</p>
+<dt><strong>mesh</strong><span class="classifier">MeshData</span></dt><dd><p>The underlying MeshData object to hold onto mesh data.</p>
 </dd>
 <dt><strong>boundaries</strong><span class="classifier">dict or None, default = None</span></dt><dd><p>Dictionary of boundaries assignment</p>
 </dd>
@@ -297,15 +297,12 @@ object, it will affect the mesh.</p>
 </dd>
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.hull" title="ocsmesh.mesh.EuclideanMesh2D.hull"><code class="xref py py-obj docutils literal notranslate"><span class="pre">hull</span></code></a></dt><dd><p>Reference to hull calculator helper object</p>
 </dd>
-<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t" title="ocsmesh.mesh.EuclideanMesh2D.msh_t"><code class="xref py py-obj docutils literal notranslate"><span class="pre">msh_t</span></code></a></dt><dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.meshdata" title="ocsmesh.mesh.EuclideanMesh2D.meshdata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">meshdata</span></code></a></dt><dd><p>Read-only property returning reference to the mesh data</p>
 </dd>
+<dt><strong>msh_t</strong></dt><dd></dd>
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.nodes" title="ocsmesh.mesh.EuclideanMesh2D.nodes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodes</span></code></a></dt><dd><p>Reference to node handler helper object</p>
 </dd>
-<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quad4" title="ocsmesh.mesh.EuclideanMesh2D.quad4"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quad4</span></code></a></dt><dd><p>Reference to underlying mesh quadrangle element structure</p>
-</dd>
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.quads" title="ocsmesh.mesh.EuclideanMesh2D.quads"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quads</span></code></a></dt><dd><p>Reference to underlying mesh quadrangle element index array</p>
-</dd>
-<dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.tria3" title="ocsmesh.mesh.EuclideanMesh2D.tria3"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tria3</span></code></a></dt><dd><p>Reference to underlying mesh tirangle element structure</p>
 </dd>
 <dt><a class="reference internal" href="#ocsmesh.mesh.EuclideanMesh2D.triangles" title="ocsmesh.mesh.EuclideanMesh2D.triangles"><code class="xref py py-obj docutils literal notranslate"><span class="pre">triangles</span></code></a></dt><dd><p>Reference to underlying mesh triangle element index array</p>
 </dd>
@@ -534,12 +531,12 @@ object, it will affect the mesh.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.msh_t">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">msh_t</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">jigsaw_msh_t</span></em><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.msh_t" title="Permalink to this definition"></a></dt>
-<dd><p>Read-only property returning reference to the jigsawpy mesh object</p>
+<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.meshdata">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">meshdata</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">MeshData</span></em><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.meshdata" title="Permalink to this definition"></a></dt>
+<dd><p>Read-only property returning reference to the mesh data</p>
 <p class="rubric">Notes</p>
 <p>The property is read-only, however the returned value is not.
-That means if the user mutates the returned jigsaw_msh_t
+That means if the user mutates the returned MeshData
 object, it will affect the mesh.</p>
 </dd></dl>
 
@@ -550,21 +547,9 @@ object, it will affect the mesh.</p>
 </dd></dl>
 
 <dl class="py property">
-<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.quad4">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">quad4</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.quad4" title="Permalink to this definition"></a></dt>
-<dd><p>Reference to underlying mesh quadrangle element structure</p>
-</dd></dl>
-
-<dl class="py property">
 <dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.quads">
 <em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">quads</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.quads" title="Permalink to this definition"></a></dt>
 <dd><p>Reference to underlying mesh quadrangle element index array</p>
-</dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="ocsmesh.mesh.EuclideanMesh2D.tria3">
-<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">tria3</span></span><a class="headerlink" href="#ocsmesh.mesh.EuclideanMesh2D.tria3" title="Permalink to this definition"></a></dt>
-<dd><p>Reference to underlying mesh tirangle element structure</p>
 </dd></dl>
 
 <dl class="py property">
@@ -617,7 +602,7 @@ object, it will affect the mesh.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

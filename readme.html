@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCSMesh &mdash; ocsmesh 1.7.0 documentation</title>
+  <title>OCSMesh &mdash; ocsmesh 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -78,8 +78,7 @@
 <section id="ocsmesh">
 <h1>OCSMesh<a class="headerlink" href="#ocsmesh" title="Permalink to this heading"></a></h1>
 <p>OCSMesh is a Python package for processing DEM data into georeferenced
-unstructured meshes using the
-<a class="reference external" href="https://github.com/dengwirda/jigsaw-python">jigsaw-python</a> library.</p>
+unstructured meshes using different meshing engine libraries.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h2>
 <p>Two ways of installing OCSMesh are described below:</p>
@@ -89,33 +88,26 @@ unstructured meshes using the
 use <cite>``conda`</cite> &lt;<a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html#linux-installers">https://docs.conda.io/en/latest/miniconda.html#linux-installers</a>&gt;`_
 with the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file provided in the repo to install
 required libraries.</p>
-<p>The Jigsaw library and its Python wrapper  must be instlled
-before OCSMesh can be used. Jigsaw is available on <code class="docutils literal notranslate"><span class="pre">conda-forge</span></code>
-channel.</p>
+<p>You need to make sure you’ve installed the mesh engine you’d like to
+use (i.e. Jigsaw, Triangle, or Gmsh).</p>
 <p>First you need to download the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wget</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">noaa</span><span class="o">-</span><span class="n">ocs</span><span class="o">-</span><span class="n">modeling</span><span class="o">/</span><span class="n">OCSMesh</span><span class="o">/</span><span class="n">main</span><span class="o">/</span><span class="n">environment</span><span class="o">.</span><span class="n">yml</span>
 
 <span class="n">conda</span> <span class="n">env</span> <span class="n">create</span> <span class="o">-</span><span class="n">f</span> <span class="n">environment</span><span class="o">.</span><span class="n">yml</span> <span class="o">-</span><span class="n">n</span> <span class="n">your</span><span class="o">-</span><span class="n">env</span><span class="o">-</span><span class="n">name</span>
 <span class="n">conda</span> <span class="n">activate</span> <span class="n">your</span><span class="o">-</span><span class="n">env</span><span class="o">-</span><span class="n">name</span>
 
-<span class="n">conda</span> <span class="n">install</span> <span class="o">-</span><span class="n">y</span> <span class="o">-</span><span class="n">c</span> <span class="n">conda</span><span class="o">-</span><span class="n">forge</span> <span class="n">jigsawpy</span>
 <span class="n">pip</span> <span class="n">install</span> <span class="n">ocsmesh</span>
 </pre></div>
 </div>
 </section>
 <section id="from-github-repo">
 <h3>From GitHub repo<a class="headerlink" href="#from-github-repo" title="Permalink to this heading"></a></h3>
-<p>OCSMesh can be installed from the GitHub repository as well.
-After downloading the repo, you need to first install Jigsaw using
-the script provided in OCSMesh repo by calling:
-<code class="docutils literal notranslate"><span class="pre">./setup.py</span> <span class="pre">install_jigsaw</span></code> in the OCSMesh root directory.
-Then OCSMesh can be installed.</p>
+<p>You need to make sure you’ve installed the mesh engine you’d like to
+use (i.e. Jigsaw, Triangle, or Gmsh).</p>
+<p>OCSMesh can be installed from the GitHub repository as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">noaa</span><span class="o">-</span><span class="n">ocs</span><span class="o">-</span><span class="n">modeling</span><span class="o">/</span><span class="n">ocsmesh</span>
 <span class="n">cd</span> <span class="n">ocsmesh</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install_jigsaw</span> <span class="c1"># To install latest Jigsaw from GitHub</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span> <span class="c1"># Installs the OCSMesh library to the current Python environment</span>
-<span class="c1"># OR</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">develop</span> <span class="c1"># Run this if you are a developer.</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">.</span><span class="p">[</span><span class="nb">all</span><span class="p">]</span>
 </pre></div>
 </div>
 </section>
@@ -146,6 +138,10 @@ DOI : https://doi.org/10.25923/csba-m072
 </pre></div>
 </div>
 </section>
+<section id="disclaimer">
+<h1>Disclaimer<a class="headerlink" href="#disclaimer" title="Permalink to this heading"></a></h1>
+<p>This repository is a scientific product and is not official communication of the National Oceanic and Atmospheric Administration, or the United States Department of Commerce. All NOAA GitHub project code is provided on an “as is” basis and the user assumes responsibility for its use. Any claims against the Department of Commerce or Department of Commerce bureaus stemming from the use of this GitHub project will be governed by all applicable Federal law. Any reference to specific commercial products, processes, or services by service mark, trademark, manufacturer, or otherwise, does not constitute or imply their endorsement, recommendation or favoring by the Department of Commerce. The Department of Commerce seal and logo, or the seal and logo of a DOC bureau, shall not be used in any manner to imply endorsement of any commercial product or activity by DOC or the United States Government.</p>
+</section>
 
 
            </div>
@@ -155,7 +151,7 @@ DOI : https://doi.org/10.25923/csba-m072
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a

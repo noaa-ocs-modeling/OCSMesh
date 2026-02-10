@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCSMesh &mdash; ocsmesh 1.7.0 documentation</title>
+  <title>OCSMesh &mdash; ocsmesh 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -79,8 +79,7 @@
 <section id="ocsmesh">
 <h1>OCSMesh<a class="headerlink" href="#ocsmesh" title="Permalink to this heading"></a></h1>
 <p>OCSMesh is a Python package for processing DEM data into georeferenced
-unstructured meshes using the
-<a class="reference external" href="https://github.com/dengwirda/jigsaw-python">jigsaw-python</a> library.</p>
+unstructured meshes using different meshing engine libraries.</p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h2>
 <p>Two ways of installing OCSMesh are described below:</p>
@@ -90,33 +89,26 @@ unstructured meshes using the
 use <cite>``conda`</cite> &lt;<a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html#linux-installers">https://docs.conda.io/en/latest/miniconda.html#linux-installers</a>&gt;`_
 with the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file provided in the repo to install
 required libraries.</p>
-<p>The Jigsaw library and its Python wrapper  must be instlled
-before OCSMesh can be used. Jigsaw is available on <code class="docutils literal notranslate"><span class="pre">conda-forge</span></code>
-channel.</p>
+<p>You need to make sure you’ve installed the mesh engine you’d like to
+use (i.e. Jigsaw, Triangle, or Gmsh).</p>
 <p>First you need to download the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">wget</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">raw</span><span class="o">.</span><span class="n">githubusercontent</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">noaa</span><span class="o">-</span><span class="n">ocs</span><span class="o">-</span><span class="n">modeling</span><span class="o">/</span><span class="n">OCSMesh</span><span class="o">/</span><span class="n">main</span><span class="o">/</span><span class="n">environment</span><span class="o">.</span><span class="n">yml</span>
 
 <span class="n">conda</span> <span class="n">env</span> <span class="n">create</span> <span class="o">-</span><span class="n">f</span> <span class="n">environment</span><span class="o">.</span><span class="n">yml</span> <span class="o">-</span><span class="n">n</span> <span class="n">your</span><span class="o">-</span><span class="n">env</span><span class="o">-</span><span class="n">name</span>
 <span class="n">conda</span> <span class="n">activate</span> <span class="n">your</span><span class="o">-</span><span class="n">env</span><span class="o">-</span><span class="n">name</span>
 
-<span class="n">conda</span> <span class="n">install</span> <span class="o">-</span><span class="n">y</span> <span class="o">-</span><span class="n">c</span> <span class="n">conda</span><span class="o">-</span><span class="n">forge</span> <span class="n">jigsawpy</span>
 <span class="n">pip</span> <span class="n">install</span> <span class="n">ocsmesh</span>
 </pre></div>
 </div>
 </section>
 <section id="from-github-repo">
 <h3>From GitHub repo<a class="headerlink" href="#from-github-repo" title="Permalink to this heading"></a></h3>
-<p>OCSMesh can be installed from the GitHub repository as well.
-After downloading the repo, you need to first install Jigsaw using
-the script provided in OCSMesh repo by calling:
-<code class="docutils literal notranslate"><span class="pre">./setup.py</span> <span class="pre">install_jigsaw</span></code> in the OCSMesh root directory.
-Then OCSMesh can be installed.</p>
+<p>You need to make sure you’ve installed the mesh engine you’d like to
+use (i.e. Jigsaw, Triangle, or Gmsh).</p>
+<p>OCSMesh can be installed from the GitHub repository as follows:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">git</span> <span class="n">clone</span> <span class="n">https</span><span class="p">:</span><span class="o">//</span><span class="n">github</span><span class="o">.</span><span class="n">com</span><span class="o">/</span><span class="n">noaa</span><span class="o">-</span><span class="n">ocs</span><span class="o">-</span><span class="n">modeling</span><span class="o">/</span><span class="n">ocsmesh</span>
 <span class="n">cd</span> <span class="n">ocsmesh</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install_jigsaw</span> <span class="c1"># To install latest Jigsaw from GitHub</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span> <span class="c1"># Installs the OCSMesh library to the current Python environment</span>
-<span class="c1"># OR</span>
-<span class="n">python</span> <span class="o">./</span><span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">develop</span> <span class="c1"># Run this if you are a developer.</span>
+<span class="n">pip</span> <span class="n">install</span> <span class="o">.</span><span class="p">[</span><span class="nb">all</span><span class="p">]</span>
 </pre></div>
 </div>
 </section>
@@ -146,6 +138,10 @@ DOI : https://doi.org/10.25923/csba-m072
 <span class="n">DOI</span> <span class="p">:</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">dx</span><span class="o">.</span><span class="n">doi</span><span class="o">.</span><span class="n">org</span><span class="o">/</span><span class="mf">10.2139</span><span class="o">/</span><span class="n">ssrn</span><span class="mf">.5226658</span>
 </pre></div>
 </div>
+</section>
+<section id="disclaimer">
+<h1>Disclaimer<a class="headerlink" href="#disclaimer" title="Permalink to this heading"></a></h1>
+<p>This repository is a scientific product and is not official communication of the National Oceanic and Atmospheric Administration, or the United States Department of Commerce. All NOAA GitHub project code is provided on an “as is” basis and the user assumes responsibility for its use. Any claims against the Department of Commerce or Department of Commerce bureaus stemming from the use of this GitHub project will be governed by all applicable Federal law. Any reference to specific commercial products, processes, or services by service mark, trademark, manufacturer, or otherwise, does not constitute or imply their endorsement, recommendation or favoring by the Department of Commerce. The Department of Commerce seal and logo, or the seal and logo of a DOC bureau, shall not be used in any manner to imply endorsement of any commercial product or activity by DOC or the United States Government.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a><ul>
@@ -153,7 +149,6 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.Geom.is_valid_type"><code class="docutils literal notranslate"><span class="pre">Geom.is_valid_type()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.Geom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">Geom.get_multipolygon()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.Geom.crs"><code class="docutils literal notranslate"><span class="pre">Geom.crs</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.Geom.msh_t"><code class="docutils literal notranslate"><span class="pre">Geom.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.Geom.multipolygon"><code class="docutils literal notranslate"><span class="pre">Geom.multipolygon</span></code></a></li>
 </ul>
 </li>
@@ -162,7 +157,6 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.RasterGeom.raster"><code class="docutils literal notranslate"><span class="pre">RasterGeom.raster</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.RasterGeom.crs"><code class="docutils literal notranslate"><span class="pre">RasterGeom.crs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.RasterGeom.make_plot"><code class="docutils literal notranslate"><span class="pre">RasterGeom.make_plot()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.RasterGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">RasterGeom.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.RasterGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">RasterGeom.multipolygon</span></code></a></li>
 </ul>
 </li>
@@ -170,7 +164,6 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MeshGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">MeshGeom.get_multipolygon()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MeshGeom.mesh"><code class="docutils literal notranslate"><span class="pre">MeshGeom.mesh</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MeshGeom.crs"><code class="docutils literal notranslate"><span class="pre">MeshGeom.crs</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MeshGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">MeshGeom.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MeshGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">MeshGeom.multipolygon</span></code></a></li>
 </ul>
 </li>
@@ -178,7 +171,6 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.get_multipolygon()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.polygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.polygon</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.crs"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.crs</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">PolygonGeom.multipolygon</span></code></a></li>
 </ul>
 </li>
@@ -186,14 +178,12 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MultiPolygonGeom.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.get_multipolygon()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MultiPolygonGeom.multipolygon"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.multipolygon</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MultiPolygonGeom.crs"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.crs</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.MultiPolygonGeom.msh_t"><code class="docutils literal notranslate"><span class="pre">MultiPolygonGeom.msh_t()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector"><code class="docutils literal notranslate"><span class="pre">GeomCollector</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector.get_multipolygon"><code class="docutils literal notranslate"><span class="pre">GeomCollector.get_multipolygon()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector.add_patch"><code class="docutils literal notranslate"><span class="pre">GeomCollector.add_patch()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector.crs"><code class="docutils literal notranslate"><span class="pre">GeomCollector.crs</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">GeomCollector.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.geometry.html#ocsmesh.geom.GeomCollector.multipolygon"><code class="docutils literal notranslate"><span class="pre">GeomCollector.multipolygon</span></code></a></li>
 </ul>
 </li>
@@ -205,7 +195,7 @@ DOI : https://doi.org/10.25923/csba-m072
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster"><code class="docutils literal notranslate"><span class="pre">HfunRaster</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunRaster.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.meshdata"><code class="docutils literal notranslate"><span class="pre">HfunRaster.meshdata()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.apply_added_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_added_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.apply_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.get_xy_memcache"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_xy_memcache()</span></code></a></li>
@@ -248,6 +238,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.mask"><code class="docutils literal notranslate"><span class="pre">HfunRaster.mask()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.md5"><code class="docutils literal notranslate"><span class="pre">HfunRaster.md5</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.modifying_raster"><code class="docutils literal notranslate"><span class="pre">HfunRaster.modifying_raster()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunRaster.msh_t()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.nodataval"><code class="docutils literal notranslate"><span class="pre">HfunRaster.nodataval()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.overlap"><code class="docutils literal notranslate"><span class="pre">HfunRaster.overlap</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.path"><code class="docutils literal notranslate"><span class="pre">HfunRaster.path</span></code></a></li>
@@ -272,7 +263,7 @@ DOI : https://doi.org/10.25923/csba-m072
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunMesh.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.meshdata"><code class="docutils literal notranslate"><span class="pre">HfunMesh.meshdata()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.size_from_mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.size_from_mesh()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.apply_added_constraints"><code class="docutils literal notranslate"><span class="pre">HfunMesh.apply_added_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.apply_constraints"><code class="docutils literal notranslate"><span class="pre">HfunMesh.apply_constraints()</span></code></a></li>
@@ -281,10 +272,11 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.mesh"><code class="docutils literal notranslate"><span class="pre">HfunMesh.mesh</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.crs"><code class="docutils literal notranslate"><span class="pre">HfunMesh.crs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.get_bbox"><code class="docutils literal notranslate"><span class="pre">HfunMesh.get_bbox()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunMesh.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunMesh.msh_t()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector"><code class="docutils literal notranslate"><span class="pre">HfunCollector</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunCollector.msh_t()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.meshdata"><code class="docutils literal notranslate"><span class="pre">HfunCollector.meshdata()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.add_topo_bound_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_bound_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.add_topo_func_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_topo_func_constraint()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.add_courant_num_constraint"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_courant_num_constraint()</span></code></a></li>
@@ -296,6 +288,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.add_patch"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_patch()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.add_feature"><code class="docutils literal notranslate"><span class="pre">HfunCollector.add_feature()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.execution_mode"><code class="docutils literal notranslate"><span class="pre">HfunCollector.execution_mode</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunCollector.msh_t"><code class="docutils literal notranslate"><span class="pre">HfunCollector.msh_t()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -304,7 +297,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh"><code class="docutils literal notranslate"><span class="pre">Mesh</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.open"><code class="docutils literal notranslate"><span class="pre">Mesh.open()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.coord"><code class="docutils literal notranslate"><span class="pre">Mesh.coord</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.msh_t"><code class="docutils literal notranslate"><span class="pre">Mesh.msh_t</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.meshdata"><code class="docutils literal notranslate"><span class="pre">Mesh.meshdata</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D</span></code></a><ul>
@@ -321,11 +314,9 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.crs"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.crs</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.elements"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.elements</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.hull"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.hull</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.msh_t"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.msh_t</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.meshdata"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.meshdata</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.nodes"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.nodes</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.quad4"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quad4</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.quads"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.quads</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.tria3"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.tria3</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.triangles"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.triangles</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.EuclideanMesh2D.write"><code class="docutils literal notranslate"><span class="pre">EuclideanMesh2D.write()</span></code></a></li>
 </ul>
@@ -392,21 +383,17 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.overlap"><code class="docutils literal notranslate"><span class="pre">Raster.overlap</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.must_be_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">must_be_euclidean_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.mesh_to_tri"><code class="docutils literal notranslate"><span class="pre">mesh_to_tri()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_isolates"><code class="docutils literal notranslate"><span class="pre">cleanup_isolates()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_duplicates"><code class="docutils literal notranslate"><span class="pre">cleanup_duplicates()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_folded_bound_el"><code class="docutils literal notranslate"><span class="pre">cleanup_folded_bound_el()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.put_edge2"><code class="docutils literal notranslate"><span class="pre">put_edge2()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.geom_to_multipolygon"><code class="docutils literal notranslate"><span class="pre">geom_to_multipolygon()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_boundary_segments"><code class="docutils literal notranslate"><span class="pre">get_boundary_segments()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_mesh_polygons"><code class="docutils literal notranslate"><span class="pre">get_mesh_polygons()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.repartition_features"><code class="docutils literal notranslate"><span class="pre">repartition_features()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.transform_linestring"><code class="docutils literal notranslate"><span class="pre">transform_linestring()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.needs_sieve"><code class="docutils literal notranslate"><span class="pre">needs_sieve()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.put_id_tags"><code class="docutils literal notranslate"><span class="pre">put_id_tags()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.finalize_mesh"><code class="docutils literal notranslate"><span class="pre">finalize_mesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.remesh_small_elements"><code class="docutils literal notranslate"><span class="pre">remesh_small_elements()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.sieve"><code class="docutils literal notranslate"><span class="pre">sieve()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.sort_edges"><code class="docutils literal notranslate"><span class="pre">sort_edges()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.index_ring_collection"><code class="docutils literal notranslate"><span class="pre">index_ring_collection()</span></code></a></li>
@@ -427,28 +414,30 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_mesh_edges"><code class="docutils literal notranslate"><span class="pre">get_mesh_edges()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.calculate_tria_areas"><code class="docutils literal notranslate"><span class="pre">calculate_tria_areas()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.calculate_edge_lengths"><code class="docutils literal notranslate"><span class="pre">calculate_edge_lengths()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.elements"><code class="docutils literal notranslate"><span class="pre">elements()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.faces_around_vertex"><code class="docutils literal notranslate"><span class="pre">faces_around_vertex()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_boundary_edges"><code class="docutils literal notranslate"><span class="pre">get_boundary_edges()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">get_pinched_nodes()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.has_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">has_pinched_nodes()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_pinched_nodes"><code class="docutils literal notranslate"><span class="pre">cleanup_pinched_nodes()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.interpolate"><code class="docutils literal notranslate"><span class="pre">interpolate()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.interpolate_euclidean_mesh_to_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">interpolate_euclidean_mesh_to_euclidean_mesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.interpolate_euclidean_grid_to_euclidean_mesh"><code class="docutils literal notranslate"><span class="pre">interpolate_euclidean_grid_to_euclidean_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.tricontourf"><code class="docutils literal notranslate"><span class="pre">tricontourf()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triplot"><code class="docutils literal notranslate"><span class="pre">triplot()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.reproject"><code class="docutils literal notranslate"><span class="pre">reproject()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.limgrad"><code class="docutils literal notranslate"><span class="pre">limgrad()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.msh_t_to_grd"><code class="docutils literal notranslate"><span class="pre">msh_t_to_grd()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.meshdata_to_grd"><code class="docutils literal notranslate"><span class="pre">meshdata_to_grd()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.grd_to_msh_t"><code class="docutils literal notranslate"><span class="pre">grd_to_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.grd_to_meshdata"><code class="docutils literal notranslate"><span class="pre">grd_to_meshdata()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.msh_t_to_2dm"><code class="docutils literal notranslate"><span class="pre">msh_t_to_2dm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.meshdata_to_2dm"><code class="docutils literal notranslate"><span class="pre">meshdata_to_2dm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.sms2dm_to_msh_t"><code class="docutils literal notranslate"><span class="pre">sms2dm_to_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.sms2dm_to_meshdata"><code class="docutils literal notranslate"><span class="pre">sms2dm_to_meshdata()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.msh_t_to_utm"><code class="docutils literal notranslate"><span class="pre">msh_t_to_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.project_to_utm"><code class="docutils literal notranslate"><span class="pre">project_to_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.estimate_bounds_utm"><code class="docutils literal notranslate"><span class="pre">estimate_bounds_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.estimate_mesh_utm"><code class="docutils literal notranslate"><span class="pre">estimate_mesh_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_polygon_channels"><code class="docutils literal notranslate"><span class="pre">get_polygon_channels()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_msh_t"><code class="docutils literal notranslate"><span class="pre">merge_msh_t()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_meshdata"><code class="docutils literal notranslate"><span class="pre">merge_meshdata()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.add_pool_args"><code class="docutils literal notranslate"><span class="pre">add_pool_args()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.drop_extra_vertex_from_line"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_line()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.drop_extra_vertex_from_polygon"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_polygon()</span></code></a></li>
@@ -461,34 +450,13 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.create_rectangle_mesh"><code class="docutils literal notranslate"><span class="pre">create_rectangle_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.raster_from_numpy"><code class="docutils literal notranslate"><span class="pre">raster_from_numpy()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.msht_from_numpy"><code class="docutils literal notranslate"><span class="pre">msht_from_numpy()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.shape_to_msh_t"><code class="docutils literal notranslate"><span class="pre">shape_to_msh_t()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.shape_to_msh_t_2"><code class="docutils literal notranslate"><span class="pre">shape_to_msh_t_2()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triangulate_polygon"><code class="docutils literal notranslate"><span class="pre">triangulate_polygon()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triangulate_polygon_s"><code class="docutils literal notranslate"><span class="pre">triangulate_polygon_s()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.filter_el_by_area"><code class="docutils literal notranslate"><span class="pre">filter_el_by_area()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.create_patch_mesh"><code class="docutils literal notranslate"><span class="pre">create_patch_mesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.clip_mesh_by_mesh"><code class="docutils literal notranslate"><span class="pre">clip_mesh_by_mesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.create_mesh_from_mesh_diff"><code class="docutils literal notranslate"><span class="pre">create_mesh_from_mesh_diff()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_neighboring_meshes"><code class="docutils literal notranslate"><span class="pre">merge_neighboring_meshes()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.fix_small_el"><code class="docutils literal notranslate"><span class="pre">fix_small_el()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_overlapping_meshes"><code class="docutils literal notranslate"><span class="pre">merge_overlapping_meshes()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.calc_el_angles"><code class="docutils literal notranslate"><span class="pre">calc_el_angles()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.order_mesh"><code class="docutils literal notranslate"><span class="pre">order_mesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.quads_from_tri"><code class="docutils literal notranslate"><span class="pre">quads_from_tri()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.clip_elements_by_index"><code class="docutils literal notranslate"><span class="pre">clip_elements_by_index()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.resample_geom_by_hfun"><code class="docutils literal notranslate"><span class="pre">resample_geom_by_hfun()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.calc_el_angles"><code class="docutils literal notranslate"><span class="pre">calc_el_angles()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_skewed_el"><code class="docutils literal notranslate"><span class="pre">cleanup_skewed_el()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_concave_quads"><code class="docutils literal notranslate"><span class="pre">cleanup_concave_quads()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.quadrangulate_rivermapper_arcs"><code class="docutils literal notranslate"><span class="pre">quadrangulate_rivermapper_arcs()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.batched"><code class="docutils literal notranslate"><span class="pre">batched()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.delaunay_within"><code class="docutils literal notranslate"><span class="pre">delaunay_within()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triangulate_shp"><code class="docutils literal notranslate"><span class="pre">triangulate_shp()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.shptri_to_msht"><code class="docutils literal notranslate"><span class="pre">shptri_to_msht()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triangulate_poly"><code class="docutils literal notranslate"><span class="pre">triangulate_poly()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.validate_poly"><code class="docutils literal notranslate"><span class="pre">validate_poly()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.find_polyneighbors"><code class="docutils literal notranslate"><span class="pre">find_polyneighbors()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.validate_RMmesh"><code class="docutils literal notranslate"><span class="pre">validate_RMmesh()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.triangulate_rivermapper_poly"><code class="docutils literal notranslate"><span class="pre">triangulate_rivermapper_poly()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.remesh_holes"><code class="docutils literal notranslate"><span class="pre">remesh_holes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.order_mesh"><code class="docutils literal notranslate"><span class="pre">order_mesh()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.quads_from_tri"><code class="docutils literal notranslate"><span class="pre">quads_from_tri()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a><ul>
@@ -566,7 +534,7 @@ DOI : https://doi.org/10.25923/csba-m072
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2025, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
