@@ -4,9 +4,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Union
 
-from jigsawpy import jigsaw_msh_t
-from pyproj import CRS, Transformer
-from shapely import ops
+import geopandas as gpd
+from pyproj import CRS
 from shapely.geometry import MultiPolygon
 
 from ocsmesh.crs import CRS as CRSDescriptor
@@ -29,8 +28,6 @@ class BaseGeom(ABC):
 
     Methods
     -------
-    msh_t(**kwargs)
-        Returns the `jigsawpy` vertex-edge representation of the geometry
     get_multipolygon(**kwargs)
         Returns `shapely` object representation of the geometry
 
@@ -38,7 +35,7 @@ class BaseGeom(ABC):
     -----
     A "geom" object represents the domain of meshing (i.e.
     simulation). This domain can be represented either as a `shapely`
-    `MultiPolygon` object, or as a `jigsawpy` `jigsaw_msh_t` object.
+    `MultiPolygon` object
     """
 
     _crs = CRSDescriptor()
@@ -56,37 +53,20 @@ class BaseGeom(ABC):
 
         return self.get_multipolygon()
 
-    def msh_t(self, **kwargs: Any) -> jigsaw_msh_t:
-        """Returns the `jigsawpy` representation of the geometry.
-
-        This method calculates the vertex-edge representation of
-        the geometry in the form of `jigsaw_msh_t`. The return value
-        is in a projected CRS. If the geometry CRS is geographic, then
-        a local UTM CRS is calculated and used for this representation.
-
-        Parameters
-        ----------
-        **kwargs : dict, optional
-            Keyword arguments passed to `get_multipolygon` method
-
-        Returns
-        -------
-        jigsaw_msh_t
-            Calculated vertex-edge representation of the geometry
-            if a projected or local UTM CRS.
-
-        Notes
-        -----
-        The output of this method needs to have length unit for
-        distances (i.e. not degrees) since mesh size is specified
-        in length units and the domain and size function are the
-        passed to the mesh engine for cartesian meshing.
-        """
-
-        return multipolygon_to_jigsaw_msh_t(
-            self.get_multipolygon(**kwargs),
-            self.crs
+    def msh_t(self, **kwargs: Any) -> 'jigsaw_msh_t':
+        raise NotImplementedError(
+            "Deprecated for new internal mesh structure and multiple mesh engine support!"
         )
+
+
+    def geoseries(self, **kwargs: Any) -> gpd.GeoSeries:
+        gs = gpd.GeoSeries(self.get_multipolygon(**kwargs), crs=self.crs)
+        utm_crs = utils.estimate_bounds_utm(gs.total_bounds, gs.crs)
+        if utm_crs is not None:
+            gs = gs.to_crs(utm_crs)
+
+        return gs
+
 
     @abstractmethod
     def get_multipolygon(self, **kwargs: Any) -> MultiPolygon:
@@ -107,44 +87,3 @@ class BaseGeom(ABC):
     def crs(self) -> CRS:
         """Read-only attribute for CRS of the input geometry"""
         return self._crs
-
-
-def multipolygon_to_jigsaw_msh_t(
-        multipolygon: MultiPolygon,
-        crs: CRS
-    ) -> jigsaw_msh_t:
-    """Calculate vertex-edge representation of multipolygon
-
-    Calculate `jigsawpy` vertex-edge representation of the input
-    `shapely` multipolygon. The resulting object is in a projected or
-    local UTM CRS
-
-    Parameters
-    ----------
-    multipolygon : MultiPolygon
-        Input polygon for which the vertex-edge representation is to
-        be calculated
-    crs : CRS
-        CRS of the input polygon
-
-    Returns
-    -------
-    jigsaw_msh_t
-        Vertex-edge representation of the input multipolygon
-
-    Raises
-    ------
-    NotImplementedError
-    """
-
-    utm_crs = utils.estimate_bounds_utm(
-            multipolygon.bounds, crs)
-    if utm_crs is not None:
-        transformer = Transformer.from_crs(crs, utm_crs, always_xy=True)
-        multipolygon = ops.transform(transformer.transform, multipolygon)
-
-    msht = utils.shape_to_msh_t(multipolygon)
-    msht.crs = crs
-    if utm_crs is not None:
-        msht.crs = utm_crs
-    return msht

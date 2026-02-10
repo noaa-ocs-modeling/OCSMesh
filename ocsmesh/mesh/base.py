@@ -1,17 +1,19 @@
 """This module defines a base type for mesh objects.
 """
+import warnings
 
 import numpy as np
 import numpy.typing as npt
-from jigsawpy import jigsaw_msh_t
+
+from ocsmesh.internal import MeshData
 
 class BaseMesh:
     """Base class for mesh types in OCSMesh.
 
     Attributes
     ----------
-    msh_t : jigsaw_msh_t
-        Refernece to underlying jigsaw mesh object.
+    meshdata : MeshData
+        Refernece to underlying mesh object.
     coord : array-like
         Coordinates of mesh nodes.
 
@@ -20,17 +22,24 @@ class BaseMesh:
     """
 
     @property
-    def msh_t(self) -> jigsaw_msh_t:
-        """Read-only property returning reference to the jigsawpy mesh object
+    def msh_t(self) -> MeshData:
+        warnings.warn("Use meshdata(...) instead!", DeprecationWarning)
+        return self.meshdata
+
+
+    @property
+    def meshdata(self) -> MeshData:
+        """Read-only property returning reference to the mesh data
 
         Notes
         -----
         The property is read-only, however the returned value is not.
-        That means if the user mutates the returned jigsaw_msh_t
+        That means if the user mutates the returned MeshData
         object, it will affect the mesh.
         """
 
-        return self._msh_t
+        #pylint: disable=E1101
+        return self._meshdata
 
     @property
     def coord(self) -> npt.NDArray[np.float32]:
@@ -47,9 +56,4 @@ class BaseMesh:
         object, it will affect the mesh.
         """
 
-        if self.msh_t.ndims == 2: # pylint: disable=R1705
-            return self.msh_t.vert2['coord']
-        elif self.msh_t.ndims == 3:
-            return self.msh_t.vert3['coord']
-
-        raise ValueError(f'Unhandled mesh dimensions {self.msh_t.ndims}.')
+        return self.meshdata.coords

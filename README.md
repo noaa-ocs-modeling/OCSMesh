@@ -4,8 +4,7 @@
 
 ## OCSMesh
 OCSMesh is a Python package for processing DEM data into georeferenced
-unstructured meshes using the
-[jigsaw-python](https://github.com/dengwirda/jigsaw-python) library.
+unstructured meshes using different meshing engine libraries.
 
 ### Installation
 Two ways of installing OCSMesh are described below:
@@ -16,36 +15,28 @@ use [`conda`](https://docs.conda.io/en/latest/miniconda.html#linux-installers)
 with the `environment.yml` file provided in the repo to install
 required libraries.
 
-The Jigsaw library and its Python wrapper  must be instlled
-before OCSMesh can be used. Jigsaw is available on `conda-forge`
-channel.
+You need to make sure you've installed the mesh engine you'd like to
+use (i.e. Jigsaw, Triangle, or Gmsh).
 
 First you need to download the `environment.yml` file.
-
 ```
 wget https://raw.githubusercontent.com/noaa-ocs-modeling/OCSMesh/main/environment.yml
 
 conda env create -f environment.yml -n your-env-name
 conda activate your-env-name
 
-conda install -y -c conda-forge jigsawpy
 pip install ocsmesh
 ```
 
 #### From GitHub repo
-OCSMesh can be installed from the GitHub repository as well.
-After downloading the repo, you need to first install Jigsaw using
-the script provided in OCSMesh repo by calling:
-`./setup.py install_jigsaw` in the OCSMesh root directory.
-Then OCSMesh can be installed. 
+You need to make sure you've installed the mesh engine you'd like to
+use (i.e. Jigsaw, Triangle, or Gmsh).
 
+OCSMesh can be installed from the GitHub repository as follows:
 ```
 git clone https://github.com/noaa-ocs-modeling/ocsmesh
 cd ocsmesh
-python ./setup.py install_jigsaw # To install latest Jigsaw from GitHub
-python ./setup.py install # Installs the OCSMesh library to the current Python environment
-# OR
-python ./setup.py develop # Run this if you are a developer.
+pip install .[all]
 ```
 
 #### Requirements
@@ -71,5 +62,3 @@ DOI : http://dx.doi.org/10.2139/ssrn.5226658
 
 ## Disclaimer
 This repository is a scientific product and is not official communication of the National Oceanic and Atmospheric Administration, or the United States Department of Commerce. All NOAA GitHub project code is provided on an "as is" basis and the user assumes responsibility for its use. Any claims against the Department of Commerce or Department of Commerce bureaus stemming from the use of this GitHub project will be governed by all applicable Federal law. Any reference to specific commercial products, processes, or services by service mark, trademark, manufacturer, or otherwise, does not constitute or imply their endorsement, recommendation or favoring by the Department of Commerce. The Department of Commerce seal and logo, or the seal and logo of a DOC bureau, shall not be used in any manner to imply endorsement of any commercial product or activity by DOC or the United States Government.
-
-
