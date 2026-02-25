@@ -124,8 +124,7 @@ class MeshUpgrader:
 
         meshdata_hfun = hfun_from_disk.meshdata()
 
-        # TODO: Make jigsaw an option
-        engine = get_mesh_engine('jigsaw', verbose=1)
+        engine = get_mesh_engine('gmsh', verbose=1)
         meshdata = engine.generate(
             read_gdf.to_crs(meshdata_hfun.crs), meshdata_hfun,
         )

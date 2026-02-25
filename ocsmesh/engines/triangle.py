@@ -159,7 +159,6 @@ class TriangleEngine(BaseMeshEngine):
                 _logger.error(err)
                 raise RuntimeError(err)
 
-            # Convert MeshData to Jigsaw format (Initial Mesh)
             init_dict = meshdata_to_triangle_dict(mesh_w_hole)
 
 

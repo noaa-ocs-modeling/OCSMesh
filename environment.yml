@@ -23,6 +23,5 @@ dependencies:
   - pytz
   - colored-traceback<=0.3.0
   - typing-extensions
-  - jigsawpy
   - gmsh
   - python-gmsh

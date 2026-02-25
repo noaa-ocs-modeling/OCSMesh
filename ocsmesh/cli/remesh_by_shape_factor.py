@@ -279,8 +279,7 @@ class RemeshByShape:
             raise ValueError(
                 "CRS for geometry, hfun and init mesh is not the same")
 
-        # TODO: Make jigsaw an option
-        engine = get_mesh_engine('jigsaw')
+        engine = get_mesh_engine('gmsh')
         if all(obj is not None for obj in [init_meshdata, refine_polys]):
             meshdata_remeshed = engine.remesh(
                 init_meshdata,

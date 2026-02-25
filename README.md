@@ -16,7 +16,7 @@ with the `environment.yml` file provided in the repo to install
 required libraries.
 
 You need to make sure you've installed the mesh engine you'd like to
-use (i.e. Jigsaw, Triangle, or Gmsh).
+use (e.g., Triangle or Gmsh).
 
 First you need to download the `environment.yml` file.
 ```
@@ -30,7 +30,7 @@ pip install ocsmesh
 
 #### From GitHub repo
 You need to make sure you've installed the mesh engine you'd like to
-use (i.e. Jigsaw, Triangle, or Gmsh).
+use (e.g., Triangle or Gmsh).
 
 OCSMesh can be installed from the GitHub repository as follows:
 ```

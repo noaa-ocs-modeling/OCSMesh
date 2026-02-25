@@ -276,7 +276,7 @@ class HfunRaster(BaseHfun, Raster):
         verbosity : bool or None, default=None
             The verbosity of the output.
         mesh_engine: str, default='gmsh'
-            Engine to use for generating background mesh ('gmsh' or 'jigsaw').
+            Engine to use for generating background mesh ('gmsh' or 'triangle').
         stride: int or None
             Determines the sampling frequency in the hfun as:
             stride = int(hmin / dem_res / 2)
