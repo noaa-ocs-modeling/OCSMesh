@@ -53,7 +53,7 @@ class BaseGeom(ABC):
 
         return self.get_multipolygon()
 
-    def msh_t(self, **kwargs: Any) -> 'jigsaw_msh_t':
+    def msh_t(self, **kwargs: Any) -> 'MeshData':
         raise NotImplementedError(
             "Deprecated for new internal mesh structure and multiple mesh engine support!"
         )

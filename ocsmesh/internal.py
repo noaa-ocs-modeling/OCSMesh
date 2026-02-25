@@ -6,7 +6,7 @@ from pyproj import CRS
 
 class MeshData:
     """
-    A simple container for mesh data to replace jigsawpy_msh_t in OCSMesh.
+    A simple container for mesh data to replace legacy classes in OCSMesh.
 
     Parameters
     ----------

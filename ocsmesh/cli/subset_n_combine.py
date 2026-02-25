@@ -284,8 +284,7 @@ class SubsetAndCombine:
         hfun_cdt_sz = deepcopy(hfun_cdt.meshdata().values) / approx_elem_per_width
         meshdata_cdt.values = hfun_cdt_sz
 
-        # TODO: Make jigsaw an option
-        engine = get_mesh_engine('jigsaw')
+        engine = get_mesh_engine('gmsh')
         # Note we alraeady know the buffer_crs is NOT geographic
         meshdata_domain_rep = engine.generate(
             gpd.GeoSeries(buffer_domain),
@@ -321,8 +320,7 @@ class SubsetAndCombine:
         assert not buffer_crs.is_geographic
         assert buffer_crs == meshdata_hfun_buffer.crs
 
-        # TODO: Make jigsaw an option
-        engine = get_mesh_engine('jigsaw')
+        engine = get_mesh_engine('gmsh')
         # Note we alraeady know the buffer_crs is NOT geographic
         meshdata_buf_apprx = engine.generate(
             gpd.GeoSeries(buffer_polygon),

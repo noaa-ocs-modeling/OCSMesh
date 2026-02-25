@@ -304,8 +304,7 @@ class RemeshByDEM:
         boxes = [i.get_bbox(crs=shape_geom.crs) for i in geom_rast_list]
         region_of_interest = MultiPolygon(boxes)
 
-        # TODO: Make jigsaw an option
-        engine = get_mesh_engine('jigsaw')
+        engine = get_mesh_engine('gmsh')
         meshdata_remeshed = engine.remesh(
             deepcopy(meshdata_init),
             gpd.GeoSeries(region_of_interest, crs=shape_geom.crs),

@@ -19,17 +19,10 @@ from shapely.ops import polygonize
 from ocsmesh import utils, MeshData
 from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 from ocsmesh.engines.factory import get_mesh_engine
-from ocsmesh.engines.jigsaw import JigsawOptions, JigsawEngine
 from ocsmesh.engines.triangle import TriangleOptions, TriangleEngine
 from ocsmesh.engines.gmsh import GmshOptions, GmshEngine
 
 # Check dependencies for skipping tests
-try:
-    import jigsawpy
-    HAS_JIGSAW = True
-except ImportError:
-    HAS_JIGSAW = False
-
 try:
     import gmsh
     HAS_GMSH = True
@@ -66,102 +59,11 @@ class TestFactory(unittest.TestCase):
             self.assertIsInstance(eng, GmshEngine)
             self.assertIsInstance(eng, BaseMeshEngine)
 
-        if HAS_JIGSAW:
-            eng = get_mesh_engine('jigsaw', hfun_marche=True)
-            self.assertIsInstance(eng, JigsawEngine)
-            self.assertIsInstance(eng, BaseMeshEngine)
-
 class TestBaseEngine(unittest.TestCase):
     """Test constraints defined in the abstract base classes."""
     # NOTE: test_init_type_check removed because engines do not currently 
     # enforce strict type checking on __init__.
     pass
-
-class TestJigsaw(unittest.TestCase):
-    def setUp(self):
-        self.box = box(0, 0, 10, 10)
-        self.geo_box = gpd.GeoSeries([self.box])
-        
-        # A simple sizing field (MeshData)
-        coords = np.array([[0,0], [10,0], [10,10], [0,10], [5,5]])
-        values = np.array([1.0, 1.0, 1.0, 1.0, 0.5])
-        self.sizing_field = MeshData(coords=coords, values=values)
-
-    def test_options_init(self):
-        """Test JigsawOptions initialization and config retrieval."""
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsawpy not installed")
-
-        # Test default init
-        opts = JigsawOptions()
-        config = opts.get_config()
-        self.assertIn('opts', config)
-        self.assertFalse(config['marche'])
-
-        # Test overrides
-        opts = JigsawOptions(hfun_hmin=0.5, hfun_marche=True)
-        config = opts.get_config()
-        self.assertTrue(config['marche'])
-        self.assertEqual(config['opts'].hfun_hmin, 0.5)
-
-    @patch('ocsmesh.engines.jigsaw._HAS_JIGSAW', False)
-    def test_missing_dependency(self):
-        """Test that ImportError is raised if jigsawpy is missing."""
-        with self.assertRaises(ImportError):
-            JigsawEngine(JigsawOptions())
-
-    def test_generate_basic(self):
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsawpy not installed")
-
-        engine = get_mesh_engine('jigsaw', hfun_hmax=10.0)
-        mesh = engine.generate(self.geo_box, sizing=2.0)
-
-        self.assertIsInstance(mesh, MeshData)
-        self.assertGreater(mesh.num_nodes, 0)
-        self.assertGreater(get_num_elements(mesh), 0)
-
-    def test_generate_with_sizing_field(self):
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsawpy not installed")
-
-        engine = get_mesh_engine('jigsaw', hfun_marche=False)
-        # Pass MeshData as sizing
-        mesh = engine.generate(self.geo_box, sizing=self.sizing_field)
-
-        self.assertIsInstance(mesh, MeshData)
-        self.assertGreater(mesh.num_nodes, 0)
-
-    def test_remesh(self):
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsawpy not installed")
-
-        # 1. Create a coarse initial mesh
-        init_engine = get_mesh_engine('jigsaw')
-        init_mesh = init_engine.generate(self.geo_box, sizing=5.0)
-        initial_nodes = init_mesh.num_nodes
-
-        # 2. Remesh a sub-region with finer resolution
-        # Region: bottom left corner
-        region = box(0, 0, 5, 5)
-    
-        remeshed = init_engine.remesh(
-            init_mesh, 
-            remesh_region=gpd.GeoSeries([region]),
-            sizing=1.0 # Finer sizing
-        )
-
-        self.assertIsInstance(remeshed, MeshData)
-        # Should have more nodes now because we refined the corner
-        self.assertGreater(remeshed.num_nodes, initial_nodes)
-
-    def test_invalid_input(self):
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsawpy not installed")
-
-        engine = get_mesh_engine('jigsaw')
-        with self.assertRaises(Exception):#Usually Jigsaw raises Exception or Error
-            engine.generate(gpd.GeoSeries([Point(0,0)]))
 
 
 class TestGmsh(unittest.TestCase):
@@ -378,7 +280,6 @@ class TestBehavior(unittest.TestCase):
         # Test for whatever engines are installed
         engines_to_test = []
         if HAS_GMSH: engines_to_test.append('gmsh')
-        if HAS_JIGSAW: engines_to_test.append('jigsaw')
         if HAS_TRIANGLE: engines_to_test.append('triangle')
 
         for engine_name in engines_to_test:
@@ -425,42 +326,6 @@ class TestBehavior(unittest.TestCase):
             self.fail(f"Gmsh engine crashed on dirty geometry: {e}")
 
         self.assertIsInstance(mesh, MeshData)
-
-    def test_jigsaw_seeding_integration(self):
-        """
-        Verify Jigsaw correctly concatenates a seed mesh with the new mesh.
-        """
-        if not HAS_JIGSAW:
-            self.skipTest("Jigsaw not installed")
-
-        eng = get_mesh_engine('jigsaw')
-
-        # 1. Create a "Seed" mesh (e.g., a fixed island in the middle)
-        #    Triangle: (4,4) -> (6,4) -> (5,6)
-        seed_coords = np.array([[4,4], [6,4], [5,6]])
-        seed_tria = np.array([[0, 1, 2]])
-        seed_mesh = MeshData(coords=seed_coords, tria=seed_tria)
-
-        # 2. Generate mesh for the whole box, enforcing this seed
-        mesh = eng.generate(self.geo_box, sizing=2.0, seed=seed_mesh)
-
-        # 3. Verify the seed nodes exist exactly in the output
-        #    (Jigsaw usually preserves seed coordinates exactly)
-        output_coords = mesh.coords
-
-        # Check for the presence of (4,4)
-        found_seeds = 0
-        for s_node in seed_coords:
-            # Calculate distance to all output nodes
-            dists = np.linalg.norm(output_coords - s_node, axis=1)
-            if np.min(dists) < 1e-9: # floating point tolerance
-                found_seeds += 1
-
-        self.assertEqual(
-            found_seeds, 
-            3,
-            "Jigsaw failed to preserve the 3 seed vertices in the final mesh"
-        )
 
 if __name__ == '__main__':
     unittest.main()

@@ -43,7 +43,7 @@ class MeshDriver:
             Coordinate reference system for the output.
             If None, defaults to EPSG:4326.
         engine_name : str
-            Name of the engine ('jigsaw', 'triangle', 'gmsh').
+            Name of the engine ('triangle', 'gmsh').
         **engine_kwargs : dict
             Options to pass to the engine's Option class.
             Common options:
