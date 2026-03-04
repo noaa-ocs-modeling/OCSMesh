@@ -266,8 +266,8 @@ class EuclideanMesh2D(EuclideanMesh):
         """
 
         output_type = 'polygon' if output_type is None else output_type
-        xmin, xmax = np.min(self.coord[:, 0]), np.max(self.coord[:, 0])
-        ymin, ymax = np.min(self.coord[:, 1]), np.max(self.coord[:, 1])
+        xmin, xmax = np.min(self.coords[:, 0]), np.max(self.coords[:, 0])
+        ymin, ymax = np.min(self.coords[:, 1]), np.max(self.coords[:, 1])
         crs = self.crs if crs is None else crs
         if crs is not None:
             if not self.crs.equals(crs):
@@ -543,9 +543,19 @@ class EuclideanMesh2D(EuclideanMesh):
         return self.meshdata.coords
 
     @property
-    def value(self):
+    def values(self):
         """Reference to underlying mesh values"""
         return self.meshdata.values
+
+    @property
+    def value(self):
+        """Deprecated. Use ``values`` instead."""
+        warnings.warn(
+            "'value' is deprecated, use 'values' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.values
 
     @property
     def bbox(self):
@@ -1056,7 +1066,7 @@ class Hull:
                 [quad[0], quad[1], quad[3]],
                 [quad[1], quad[2], quad[3]]
             ])
-        return Triangulation(self.mesh.coord[:, 0], self.mesh.coord[:, 1], triangles)
+        return Triangulation(self.mesh.coords[:, 0], self.mesh.coords[:, 1], triangles)
 
 
 
@@ -1161,10 +1171,10 @@ class Nodes:
         Returns
         -------
         array-like
-            Coordinates of the mesh nodes as returned by `BaseMesh.coord`
+            Coordinates of the mesh nodes as returned by `BaseMesh.coords`
         """
 
-        return self.mesh.coord
+        return self.mesh.coords
 
     def values(self):
         """Retrieve the values stored for mesh nodes
@@ -1466,8 +1476,8 @@ class Elements:
             triangles.append([quad[0], quad[1], quad[3]])
             triangles.append([quad[1], quad[2], quad[3]])
         return Triangulation(
-            self.mesh.coord[:, 0],
-            self.mesh.coord[:, 1],
+            self.mesh.coords[:, 0],
+            self.mesh.coords[:, 1],
             triangles)
 
     def area(self):
@@ -1526,7 +1536,7 @@ class Elements:
         for elem_id, elem_nd_ids in self().items():
             data.append({
                 'geometry': Polygon(
-                    self.mesh.coord[list(
+                    self.mesh.coords[list(
                         map(self.mesh.nodes.get_index_by_id, elem_nd_ids))]),
                 'id': elem_id})
         return gpd.GeoDataFrame(data, crs=self.mesh.crs)
@@ -1657,7 +1667,7 @@ class Boundaries:
                             'id': bnd_id,
                             "index_id": data['indexes'],
                             "indexes": indexes,
-                            'geometry': LineString(self.mesh.coord[indexes])
+                            'geometry': LineString(self.mesh.coords[indexes])
                             })
 
                 elif str(ibtype).endswith('1'):
@@ -1669,7 +1679,7 @@ class Boundaries:
                             'ibtype': ibtype,
                             "index_id": data['indexes'],
                             "indexes": indexes,
-                            'geometry': LineString(self.mesh.coord[indexes])
+                            'geometry': LineString(self.mesh.coords[indexes])
                             })
                 else:
                     for bnd_id, data in bnds.items():
@@ -1694,7 +1704,7 @@ class Boundaries:
                             'ibtype': ibtype,
                             "index_id": data['indexes'],
                             "indexes": indexes,
-                            'geometry': LineString(self.mesh.coord[indexes])
+                            'geometry': LineString(self.mesh.coords[indexes])
                             })
 
         crs = self.mesh.crs
@@ -1872,7 +1882,7 @@ class Boundaries:
         dry (its elevation is larger than or equal to the `threshold`).
         """
 
-        values = self.mesh.value
+        values = self.mesh.values
         if np.any(np.isnan(values)):
             raise ValueError(
                 "Mesh contains invalid values. Raster values must"
