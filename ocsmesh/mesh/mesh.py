@@ -152,16 +152,35 @@ class EuclideanMesh(BaseMesh):
 
 
     @property
-    def triangles(self):
+    def tria(self):
         """Reference to underlying mesh triangle element index array"""
 
         return self.meshdata.tria
 
     @property
-    def quads(self):
-        """Reference to underlying mesh quadrangle element index array"""
+    def triangles(self):
+        """Deprecated. Use ``tria`` instead."""
+        warnings.warn(
+            "'triangles' is deprecated, use 'tria' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.tria
 
+    @property
+    def quad(self):
+        """Reference to underlying mesh quadrangle element index array"""
         return self.meshdata.quad
+
+    @property
+    def quads(self):
+        """Deprecated. Use ``quad`` instead."""
+        warnings.warn(
+            "'quads' is deprecated, use 'quad' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.quad
 
     @property
     def crs(self):
