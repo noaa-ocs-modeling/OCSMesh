@@ -362,7 +362,7 @@ class RasterInterpolation(unittest.TestCase):
         rast = Raster(self.rast)
 
         self.mesh1.interpolate(rast)
-        self.assertTrue(np.isclose(self.mesh1.value, 1).all())
+        self.assertTrue(np.isclose(self.mesh1.values, 1).all())
 
         # TODO: Improve the assertion!
         with self.assertRaises(Exception):
@@ -373,10 +373,10 @@ class RasterInterpolation(unittest.TestCase):
         rast = Raster(self.rast)
 
         self.mesh1.interpolate(rast)
-        self.assertTrue(np.isclose(self.mesh1.value, 1).all())
+        self.assertTrue(np.isclose(self.mesh1.values, 1).all())
 
         self.mesh1.interpolate(rast, band=2)
-        self.assertTrue(np.isclose(self.mesh1.value, 2).all())
+        self.assertTrue(np.isclose(self.mesh1.values, 2).all())
 
 
     # TODO Add more interpolation tests
