@@ -2,7 +2,7 @@ name: ocsmesh
 channels:
   - conda-forge
 dependencies:
-  - python>=3.9
+  - python >=3.9,<3.13
   - gdal
   - geos
   - proj
