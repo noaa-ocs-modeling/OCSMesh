@@ -5,6 +5,13 @@ on:
   release:
     types:
       - published
+    workflow_dispatch:
+      inputs:
+        deploy_docs:
+          description: 'Deploy documentation to GitHub Pages?'
+          required: true
+          type: boolean
+          default: false
 
 
 jobs:
@@ -48,7 +55,7 @@ jobs:
     name: deploy to GitHub Pages
     runs-on: ubuntu-latest
     needs: [ create-documentation ]
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.deploy_docs == true)
 
     steps:
     - name: Checkout repository
