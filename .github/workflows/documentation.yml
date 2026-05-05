@@ -5,13 +5,13 @@ on:
   release:
     types:
       - published
-    workflow_dispatch:
-      inputs:
-        deploy_docs:
-          description: 'Deploy documentation to GitHub Pages?'
-          required: true
-          type: boolean
-          default: false
+  workflow_dispatch:
+    inputs:
+      deploy_docs:
+        description: 'Deploy documentation to GitHub Pages?'
+        required: true
+        type: boolean
+        default: false
 
 
 jobs:
