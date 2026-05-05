@@ -5,6 +5,12 @@ on:
     types:
       - published
   workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: 'Publish package to PyPI?'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build_packages:
@@ -37,7 +43,7 @@ jobs:
           name: build
           path: ./dist
   upload_pypi:
-    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true)
     name: publish to PyPI
     needs: [ build_packages ]
     runs-on: ubuntu-latest
