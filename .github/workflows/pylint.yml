@@ -17,6 +17,7 @@ on:
       - 'pyproject.toml'
       - 'setup.py'
       - 'setup.cfg'
+  workflow_dispatch:
 
 jobs:
   format-check:
