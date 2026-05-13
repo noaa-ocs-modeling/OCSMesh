@@ -78,7 +78,7 @@ class HfunInputRaster:
                     obj.modifying_raster(use_src_meta=False, **meta))
             for window in windows:
                 values = src.read(window=window).astype(np.float32)
-                values[:] = np.finfo(np.float32).max
+                values[:] = getattr(np.finfo(np.float32), 'max')
                 dst.write(values, window=window)
 
         obj.__dict__['raster'] = raster
