@@ -2272,10 +2272,10 @@ class HfunCollector(BaseHfun):
         value = []
         offset = 0
         for hfun in collection:
-            index.append(hfun.triangles + offset)
-            coord.append(hfun.coord)
-            value.append(hfun.value.reshape(-1, 1))
-            offset += hfun.coord.shape[0]
+            index.append(hfun.tria + offset)
+            coord.append(hfun.coords)
+            value.append(hfun.values.reshape(-1, 1))
+            offset += hfun.coords.shape[0]
 
         composite_hfun = MeshData(
                 coords=np.vstack(coord),

@@ -125,10 +125,10 @@ class GeomCombine:
                 _logger.info("Reprojecting base mesh...")
                 transformer = Transformer.from_crs(
                     base_crs, self._calc_crs, always_xy=True)
-                xy = base_mesh.coord
+                xy = base_mesh.coords
                 xy = np.vstack(
                     transformer.transform(xy[:, 0], xy[:, 1])).T
-                base_mesh.coord[:] = xy
+                base_mesh.coords[:] = xy
 
             _logger.info("Done")
 
