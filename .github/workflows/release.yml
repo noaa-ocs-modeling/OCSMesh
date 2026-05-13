@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_pypi:
-        description: 'Publish package to PyPI?'
+        description: 'Publish package to PyPI ? *Note this workflow only runs on tags, so manual runs must be tag-based.*'
         required: true
         type: boolean
         default: false
