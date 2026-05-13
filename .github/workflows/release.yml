@@ -13,9 +13,24 @@ on:
         default: false
 
 jobs:
+  precheck_tag:
+    name: precheck tag-only run
+    runs-on: ubuntu-latest
+    steps:
+      # Explicit tag-only guard for manual runs; avoids silent skip or unintended branch builds.
+      - name: assert tag-only run
+        shell: bash
+        run: |
+          echo "Note: this workflow can only run on tags."
+          if [[ "${GITHUB_REF}" != refs/tags/* ]]; then
+            echo "::error::This workflow only runs on tags. Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+          echo "Tag detected: ${GITHUB_REF#refs/tags/}"
   build_packages:
     name: build wheel & source distribtions
     runs-on: ${{ matrix.os }}
+    needs: [ precheck_tag ]
     strategy:
       matrix:
         os: [ ubuntu-latest ]
@@ -45,7 +60,7 @@ jobs:
   upload_pypi:
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true)
     name: publish to PyPI
-    needs: [ build_packages ]
+    needs: [ precheck_tag, build_packages ]
     runs-on: ubuntu-latest
     steps:
       - name: retrieve wheel(s) and source
