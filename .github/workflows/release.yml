@@ -4,6 +4,13 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: 'Publish package to PyPI? Note: publishing only runs on tags; build can run on branches for verification.'
+        required: true
+        type: boolean
+        default: false
 
 jobs:
   build_packages:
@@ -36,11 +43,21 @@ jobs:
           name: build
           path: ./dist
   upload_pypi:
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.publish_pypi == true)
     name: publish to PyPI
     needs: [ build_packages ]
     runs-on: ubuntu-latest
     steps:
+      # Explicit tag-only guard for publish; gives a clear failure on branch runs.
+      - name: assert tag-only run
+        shell: bash
+        run: |
+          echo "Note: publishing only runs on tags."
+          if [[ "${GITHUB_REF}" != refs/tags/* ]]; then
+            echo "::error::Publishing is tag-only. Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+          echo "Tag detected: ${GITHUB_REF#refs/tags/}"
       - name: retrieve wheel(s) and source
         uses: actions/download-artifact@v4
         with:
