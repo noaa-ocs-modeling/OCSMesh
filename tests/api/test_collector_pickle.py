@@ -245,5 +245,57 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertTrue(len(meshdata.values) > 0)
 
 
+    def test_mixed_raster_mesh_constraint_filtering(self):
+        """
+        Verify that constraints are correctly filtered when applied to a mix of
+        rasters and meshes, using selective source indices.
+        """
+        from ocsmesh.hfun.collector import _ConstraintInfoCollector
+        from ocsmesh.features.constraint import TopoConstConstraint
+        from unittest.mock import MagicMock
+        from ocsmesh.hfun.raster import HfunRaster
+        from ocsmesh.hfun.mesh import HfunMesh
+
+        coll = _ConstraintInfoCollector()
+        
+        # Add constraint 1: applies to indices 1, 2, 3
+        c1 = TopoConstConstraint(10, value_type='min')
+        coll.add([1, 2, 3], c1)
+        
+        # Add constraint 2: applies to indices 1, 7, 8
+        c2 = TopoConstConstraint(20, value_type='min')
+        coll.add([1, 7, 8], c2)
+        
+        # Add constraint 3: applies to all (no source_index)
+        c3 = TopoConstConstraint(30, value_type='min')
+        coll.add(None, c3)
+        
+        mock_raster = MagicMock(spec=HfunRaster)
+        mock_mesh = MagicMock(spec=HfunMesh)
+        
+        # Test all indices based on the mixed scenario:
+        # 1: raster, 2: raster, 3: raster
+        # 4: mesh, 5: mesh, 6: mesh
+        # 7: raster, 8: raster, 9: raster
+        
+        # Index 1 (Raster) -> Expected: c1, c2, c3
+        self.assertEqual(coll.get_constraints(mock_raster, 1), [c1, c2, c3])
+        
+        # Index 2 & 3 (Raster) -> Expected: c1, c3
+        for idx in [2 , 3]:
+            self.assertEqual(coll.get_constraints(mock_raster, idx), [c1, c3])
+                
+        # Index 4 & 5 & 6 (Mesh) -> Expected: []
+        for idx in [4 , 5 , 6]:
+            self.assertEqual(coll.get_constraints(mock_mesh, idx), [])
+        
+        # Index 7 & 8 (Raster) -> Expected: c2, c3
+        for idx in [7 , 8]:
+            self.assertEqual(coll.get_constraints(mock_raster, idx), [c2, c3])
+        
+        # Index 9 (Raster) -> Expected: c3
+        self.assertEqual(coll.get_constraints(mock_raster, 9), [c3])
+        
+
 if __name__ == '__main__':
     unittest.main()
