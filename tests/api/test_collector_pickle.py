@@ -237,8 +237,10 @@ class TestHfunCollectorExecution(unittest.TestCase):
             value_type='min',
         )
 
-        # Should NOT raise PicklingError — falls back to serial
-        meshdata = hfun.meshdata()
+        # Should NOT raise PicklingError — falls back to serial and emits a warning
+        with self.assertWarns(UserWarning):
+            meshdata = hfun.meshdata()
+        
         self.assertIsNotNone(meshdata)
         self.assertTrue(len(meshdata.values) > 0)
 

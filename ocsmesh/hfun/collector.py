@@ -1644,10 +1644,11 @@ class HfunCollector(BaseHfun):
                 for _, c in self._constraint_info_coll
             )
             if has_func_constraint:
-                _logger.warning(
+                warnings.warn(
                     "TopoFuncConstraint contains a callable that cannot "
                     "be pickled for parallel execution. Falling back to "
-                    "serial for _apply_constraints()."
+                    "serial for _apply_constraints().",
+                    UserWarning
                 )
                 self._apply_constraints_serial()
             else:
