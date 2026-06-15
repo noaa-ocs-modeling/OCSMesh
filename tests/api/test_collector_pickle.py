@@ -165,6 +165,137 @@ class TestHfunCollectorExecution(unittest.TestCase):
         npt.assert_allclose(np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
 
 
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_serial_vs_parallel_constraints_equivalence(self):
+        """
+        Verify that _apply_constraints() produces numerically equivalent
+        results when run in serial vs parallel mode.
+
+        Uses TopoConstConstraint (pickleable) with a min and max constraint
+        to exercise both value_type paths.
+        """
+        nprocs = 2
+
+        # --- SERIAL EXECUTION ---
+        hfun_serial = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        # Default execution_mode is 'serial'
+        hfun_serial.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        hfun_serial.add_topo_bound_constraint(
+            value=500, upper_bound=0, value_type='max')
+
+        print("\nRunning serial constraints execution...")
+        meshdata_serial = hfun_serial.meshdata()
+        values_serial = meshdata_serial.values
+        print("Serial constraints execution finished.")
+
+        # --- PARALLEL EXECUTION ---
+        hfun_parallel = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        hfun_parallel.add_topo_bound_constraint(
+            value=500, upper_bound=0, value_type='max')
+
+        print("Running parallel constraints execution...")
+        meshdata_parallel = hfun_parallel.meshdata()
+        values_parallel = meshdata_parallel.values
+        print("Parallel constraints execution finished.")
+
+        # --- COMPARISON ---
+        # Node count should be very close (meshing is non-deterministic)
+        self.assertAlmostEqual(
+            len(values_serial), len(values_parallel),
+            delta=len(values_serial) * 0.01)
+
+        # Statistical properties must be nearly identical
+        npt.assert_allclose(
+            np.min(values_serial), np.min(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(values_serial), np.max(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_parallel_falls_back_for_func_constraint(self):
+        """
+        Verify that when a TopoFuncConstraint (which stores a lambda)
+        is present, parallel mode gracefully falls back to serial
+        without raising a pickling error.
+        """
+        hfun = Hfun(self.raster_list, nprocs=2, hmin=10, hmax=1000)
+        hfun.execution_mode = 'parallel'
+
+        # TopoFuncConstraint uses a lambda — not pickleable by default.
+        # The dispatcher should detect this and fall back to serial.
+        hfun.add_topo_func_constraint(
+            func=lambda i: abs(i) / 2.0,
+            upper_bound=-10,
+            value_type='min',
+        )
+
+        # Should NOT raise PicklingError — falls back to serial and emits a warning
+        with self.assertWarns(UserWarning):
+            meshdata = hfun.meshdata()
+        
+        self.assertIsNotNone(meshdata)
+        self.assertTrue(len(meshdata.values) > 0)
+
+
+    def test_mixed_raster_mesh_constraint_filtering(self):
+        """
+        Verify that constraints are correctly filtered when applied to a mix of
+        rasters and meshes, using selective source indices.
+        """
+        from ocsmesh.hfun.collector import _ConstraintInfoCollector
+        from ocsmesh.features.constraint import TopoConstConstraint
+        from unittest.mock import MagicMock
+        from ocsmesh.hfun.raster import HfunRaster
+        from ocsmesh.hfun.mesh import HfunMesh
+
+        coll = _ConstraintInfoCollector()
+        
+        # Add constraint 1: applies to indices 1, 2, 3
+        c1 = TopoConstConstraint(10, value_type='min')
+        coll.add([1, 2, 3], c1)
+        
+        # Add constraint 2: applies to indices 1, 7, 8
+        c2 = TopoConstConstraint(20, value_type='min')
+        coll.add([1, 7, 8], c2)
+        
+        # Add constraint 3: applies to all (no source_index)
+        c3 = TopoConstConstraint(30, value_type='min')
+        coll.add(None, c3)
+        
+        mock_raster = MagicMock(spec=HfunRaster)
+        mock_mesh = MagicMock(spec=HfunMesh)
+        
+        # Test all indices based on the mixed scenario:
+        # 1: raster, 2: raster, 3: raster
+        # 4: mesh, 5: mesh, 6: mesh
+        # 7: raster, 8: raster, 9: raster
+        
+        # Index 1 (Raster) -> Expected: c1, c2, c3
+        self.assertEqual(coll.get_constraints(mock_raster, 1), [c1, c2, c3])
+        
+        # Index 2 & 3 (Raster) -> Expected: c1, c3
+        for idx in [2 , 3]:
+            self.assertEqual(coll.get_constraints(mock_raster, idx), [c1, c3])
+                
+        # Index 4 & 5 & 6 (Mesh) -> Expected: []
+        for idx in [4 , 5 , 6]:
+            self.assertEqual(coll.get_constraints(mock_mesh, idx), [])
+        
+        # Index 7 & 8 (Raster) -> Expected: c2, c3
+        for idx in [7 , 8]:
+            self.assertEqual(coll.get_constraints(mock_raster, idx), [c2, c3])
+        
+        # Index 9 (Raster) -> Expected: c3
+        self.assertEqual(coll.get_constraints(mock_raster, 9), [c3])
+        
 
 if __name__ == '__main__':
     unittest.main()

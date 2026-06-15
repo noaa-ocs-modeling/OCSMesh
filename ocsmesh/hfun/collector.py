@@ -541,18 +541,23 @@ class _ConstraintInfoCollector:
         yield from self._constraints_info
 
 
+    def get_constraints(self, hfun, in_idx, per_hfun=True):
+        is_raster = isinstance(hfun, HfunRaster)
+        constraint_list = []
+        for src_idx, constraint_defn in self:
+            if per_hfun and src_idx is not None and in_idx not in src_idx:
+                continue
+
+            if isinstance(constraint_defn, RASTER_CONSTR) and not is_raster:
+                continue
+
+            constraint_list.append(constraint_defn)
+        return constraint_list
+
+
     def apply(self, hfun_list, per_hfun=True):
         for in_idx, hfun in enumerate(hfun_list):
-            is_raster = isinstance(hfun, HfunRaster)
-            constraint_list = []
-            for src_idx, constraint_defn in self:
-                if per_hfun and src_idx is not None and in_idx not in src_idx:
-                    continue
-
-                if isinstance(constraint_defn, RASTER_CONSTR) and not is_raster:
-                    continue
-
-                constraint_list.append(constraint_defn)
+            constraint_list = self.get_constraints(hfun, in_idx, per_hfun)
 
             if constraint_list:
                 hfun.apply_constraints(constraint_list)
@@ -646,6 +651,50 @@ def _const_val_task_worker(task: dict):
     worker_hfun.save(output_path)
 
     # 5. The work is done. Return a simple result dictionary.
+    return {
+        'status': 'success',
+        'original_index': original_index,
+        'output_path': output_path
+    }
+
+
+def _constraints_task_worker(task: dict):
+    """
+    A self-contained worker for applying constraint objects to a single
+    HfunRaster.
+
+    This worker reconstructs the HfunRaster from file paths inside the
+    child process, applies pickleable constraint objects via
+    ``HfunRaster.apply_constraints()``, and saves the result to disk.
+    """
+
+    # 1. Unpack the simple, pickleable task description
+    original_index = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path = task['output_path']
+    global_hmin = task['global_hmin']
+    global_hmax = task['global_hmax']
+    constraint_list = task['constraint_list']
+
+    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+    topo_raster = Raster(topo_input_path)
+    worker_hfun = HfunRaster(
+        raster=topo_raster,
+        hmin=global_hmin,
+        hmax=global_hmax,
+        verbosity=0,
+        initial_value=hfun_input_path
+    )
+
+    # 3. Apply the constraint objects using the existing HfunRaster method.
+    #    This handles windowed processing, hmin/hmax clamping, etc.
+    worker_hfun.apply_constraints(constraint_list)
+
+    # 4. Save the final state to the designated output path.
+    worker_hfun.save(output_path)
+
+    # 5. Return a simple result dictionary.
     return {
         'status': 'success',
         'original_index': original_index,
@@ -1564,12 +1613,13 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_constraints(self) -> None:
-        """Internal: apply specified constraints.
+        """Internal: dispatch constraint application to serial or parallel.
 
-        Apply specified constraints for the exact algorithm.
-
-        Parameters
-        ----------
+        Dispatches to either ``_apply_constraints_serial`` or
+        ``_apply_constraints_parallel`` based on the current
+        ``execution_mode``.  When any ``TopoFuncConstraint`` is present
+        (which stores an unpickleable lambda), the parallel path falls
+        back to serial automatically with a logged warning.
 
         Returns
         -------
@@ -1577,14 +1627,160 @@ class HfunCollector(BaseHfun):
 
         See Also
         --------
+        _apply_constraints_serial :
+        _apply_constraints_parallel :
         _apply_constraints_fast :
         """
 
         if self._method == 'fast':
             raise NotImplementedError(
-                "This function does not suuport fast hfun method")
+                "This function does not support fast hfun method")
+
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
+            # TopoFuncConstraint stores a lambda which cannot be pickled
+            # for multiprocessing.Pool — fall back to serial in that case.
+            has_func_constraint = any(
+                isinstance(c, TopoFuncConstraint)
+                for _, c in self._constraint_info_coll
+            )
+            if has_func_constraint:
+                warnings.warn(
+                    "TopoFuncConstraint contains a callable that cannot "
+                    "be pickled for parallel execution. Falling back to "
+                    "serial for _apply_constraints().",
+                    UserWarning
+                )
+                self._apply_constraints_serial()
+            else:
+                _logger.info("Applying constraints using PARALLEL method.")
+                self._apply_constraints_parallel()
+        else:
+            _logger.info("Applying constraints using SERIAL method.")
+            self._apply_constraints_serial()
+
+
+    def _apply_constraints_serial(self) -> None:
+        """Internal: apply specified constraints serially.
+
+        Delegates to ``_ConstraintInfoCollector.apply()`` which iterates
+        over each hfun and applies matching constraints one-by-one.
+
+        Returns
+        -------
+        None
+        """
 
         self._constraint_info_coll.apply(self._hfun_list)
+
+
+    def _apply_constraints_parallel(self) -> None:
+        """Internal: apply specified constraints in parallel.
+
+        Uses the same 3-phase pattern as ``_apply_flow_limiters_parallel``:
+
+        1. **Preparation** — build one pickleable task dict per raster,
+           containing file paths + the list of applicable ``Constraint``
+           objects.
+        2. **Execution** — ``Pool.map()`` sends tasks to
+           ``_constraints_task_worker`` processes.
+        3. **Integration** — replace ``self._hfun_list`` entries with new
+           ``HfunRaster`` objects built from the worker output files.
+
+        Notes
+        -----
+        This method must **not** be called when any constraint is a
+        ``TopoFuncConstraint`` because its internal lambda is not
+        pickleable.  The dispatcher ``_apply_constraints()`` handles
+        this check.
+
+        Returns
+        -------
+        None
+        """
+
+        # Phase 1: PREPARATION
+        tasks = []
+        hfuns_to_process = {}
+
+        for in_idx, hfun in enumerate(self._hfun_list):
+            if not isinstance(hfun, HfunRaster):
+                continue
+
+            constraint_list = self._constraint_info_coll.get_constraints(
+                hfun, in_idx, per_hfun=True
+            )
+
+            if constraint_list:
+                hfuns_to_process[in_idx] = {
+                    'hfun': hfun,
+                    'constraints': constraint_list
+                }
+
+
+        # Same style as other functions 
+        # (Can be refactored to be a shared function that 
+        # accept needed parameters to make code cleaner)
+        # in another PR
+        for in_idx, data in hfuns_to_process.items():
+            hfun = data['hfun']
+            hfun_input_path = hfun.tmpfile
+            topo_input_path = hfun._raster.path  # pylint: disable=W0212
+
+            output_path = os.path.join(
+                self._work_dir, f"constraints_result_{in_idx}.tif")
+
+            task = {
+                'original_index': in_idx,
+                'hfun_input_path': hfun_input_path,
+                'topo_input_path': topo_input_path,
+                'output_path': output_path,
+                'global_hmin': hfun._hmin,   # pylint: disable=W0212
+                'global_hmax': hfun._hmax,   # pylint: disable=W0212
+                'constraint_list': data['constraints']
+            }
+            tasks.append(task)
+
+        if not tasks:
+            _logger.info("No constraint tasks to execute.")
+            return
+
+        # Phase 2: EXECUTION
+        _logger.info(
+            f"Start parallel execution for {len(tasks)} constraint tasks")
+        with Pool(processes=self._nprocs) as p:
+            results = p.map(_constraints_task_worker, tasks)
+        _logger.info("Parallel execution finished.")
+
+        # Same style as other functions 
+        # (Can be refactored to be a shared function that 
+        # accept needed parameters to make code cleaner)
+        # in another PR
+        # Phase 3: INTEGRATION
+        new_hfun_objects = {}
+        for result in results:
+            if result['status'] == 'error':
+                _logger.error(
+                    "Constraint worker %s failed: %s",
+                    result['original_index'],
+                    result['error'])
+                continue
+
+            idx = result['original_index']
+            output_path = result['output_path']
+            original_hfun = self._hfun_list[idx]
+
+            new_hfun_objects[idx] = HfunRaster(
+                raster=original_hfun.raster,
+                hmin=original_hfun.hmin,
+                hmax=original_hfun.hmax,
+                verbosity=original_hfun.verbosity,
+                initial_value=output_path
+            )
+
+        for idx, new_hfun in new_hfun_objects.items():
+            _logger.info(
+                f"Updating HfunCollector with constraint result at idx {idx}.")
+            self._hfun_list[idx] = new_hfun
 
 
     def _apply_contours(self, apply_to: Optional[SizeFuncList] = None) -> None:
