@@ -1877,30 +1877,31 @@ class HfunCollector(BaseHfun):
             # Channels are ONLY extracted from raster sources
             self._channels_coll.calculate(raster_hfun_list, temp_path)
             counter = 0
-            for hfun in apply_to:
-                for gdf in self._channels_coll:
-                    for row in gdf.itertuples():
-                        _logger.debug(row)
-                        shape = row.geometry
-                        if isinstance(shape, GeometryCollection):
-                            continue
-                        # NOTE: CRS check is done AFTER
-                        # GeometryCollection check because
-                        # gdf.to_crs results in an error in case
-                        # of empty GeometryCollection
-                        if not gdf.crs.equals(hfun.crs):
-                            _logger.info("Reprojecting feature...")
-                            transformer = Transformer.from_crs(
-                                gdf.crs, hfun.crs, always_xy=True)
-                            shape = ops.transform(
-                                    transformer.transform, shape)
-                        counter = counter + 1
-                        hfun.add_patch(**{
-                            'multipolygon': shape,
-                            'expansion_rate': row.expansion_rate,
-                            'target_size': row.target_size,
-                            'nprocs': self._nprocs
-                        })
+            with Pool(processes=self._nprocs) as p:
+                for hfun in apply_to:
+                    for gdf in self._channels_coll:
+                        for row in gdf.itertuples():
+                            _logger.debug(row)
+                            shape = row.geometry
+                            if isinstance(shape, GeometryCollection):
+                                continue
+                            # NOTE: CRS check is done AFTER
+                            # GeometryCollection check because
+                            # gdf.to_crs results in an error in case
+                            # of empty GeometryCollection
+                            if not gdf.crs.equals(hfun.crs):
+                                _logger.info("Reprojecting feature...")
+                                transformer = Transformer.from_crs(
+                                    gdf.crs, hfun.crs, always_xy=True)
+                                shape = ops.transform(
+                                        transformer.transform, shape)
+                            counter = counter + 1
+                            hfun.add_patch(**{
+                                'multipolygon': shape,
+                                'expansion_rate': row.expansion_rate,
+                                'target_size': row.target_size,
+                                'pool': p
+                            })
 
 
     @property
@@ -2281,18 +2282,18 @@ class HfunCollector(BaseHfun):
                 mesh_hfun_list.insert(0, self._base_mesh)
             apply_to = [*mesh_hfun_list, *raster_hfun_list]
 
-        # TODO: Parallelize
-        for hfun in apply_to:
-            for patch_defn, size_info in self._refine_patch_info_coll:
-                shape, crs = patch_defn.get_multipolygon()
-                if hfun.crs != crs:
-                    transformer = Transformer.from_crs(
-                        crs, hfun.crs, always_xy=True)
-                    shape = ops.transform(
-                            transformer.transform, shape)
+        with Pool(processes=self._nprocs) as p:
+            for hfun in apply_to:
+                for patch_defn, size_info in self._refine_patch_info_coll:
+                    shape, crs = patch_defn.get_multipolygon()
+                    if hfun.crs != crs:
+                        transformer = Transformer.from_crs(
+                            crs, hfun.crs, always_xy=True)
+                        shape = ops.transform(
+                                transformer.transform, shape)
 
-                hfun.add_patch(
-                        shape, nprocs=self._nprocs, **size_info)
+                    hfun.add_patch(
+                            shape, pool=p, **size_info)
 
 
     def _apply_linefeatures(self, apply_to: Optional[SizeFuncList] = None) -> None:
