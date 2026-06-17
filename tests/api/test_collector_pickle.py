@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import numpy as np
 import numpy.testing as npt
+from shapely import geometry
 
 from ocsmesh import Hfun, Raster
 from ocsmesh.hfun.raster import HfunRaster
@@ -296,6 +297,208 @@ class TestHfunCollectorExecution(unittest.TestCase):
         # Index 9 (Raster) -> Expected: c3
         self.assertEqual(coll.get_constraints(mock_raster, 9), [c3])
         
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_serial_vs_parallel_patch_equivalence(self):
+        """
+        Verify that add_patch() without expansion_rate produces
+        equivalent results in serial vs parallel modes.
+
+        Exercises: _apply_patch() -> hfun.add_patch(pool=p)
+        """
+        nprocs = 2
+        bx = geometry.box(0.2, 0.2, 0.8, 0.8)
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.add_patch(shape=bx, target_size=50)
+
+        print("\nRunning serial patch execution...")
+        meshdata_serial = hfun_serial.meshdata()
+        values_serial = meshdata_serial.values
+        print("Serial patch execution finished.")
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_patch(shape=bx, target_size=50)
+
+        print("Running parallel patch execution...")
+        meshdata_parallel = hfun_parallel.meshdata()
+        values_parallel = meshdata_parallel.values
+        print("Parallel patch execution finished.")
+
+        # --- COMPARISON ---
+        self.assertAlmostEqual(
+            len(values_serial), len(values_parallel),
+            delta=len(values_serial) * 0.01)
+        npt.assert_allclose(
+            np.min(values_serial), np.min(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(values_serial), np.max(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_serial_vs_parallel_patch_with_expansion_equivalence(self):
+        """
+        Verify that add_patch() WITH expansion_rate produces
+        equivalent results in serial vs parallel modes.
+
+        This is the critical path: add_patch(pool=p) internally
+        calls add_feature(pool=pool), exercising the shared-pool
+        forwarding chain.
+
+        Exercises: _apply_patch() -> hfun.add_patch(pool=p)
+                                       -> hfun.add_feature(pool=pool)
+        """
+        nprocs = 2
+        bx = geometry.box(0.2, 0.2, 0.8, 0.8)
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.add_patch(
+            shape=bx, target_size=200, expansion_rate=0.1)
+
+        print("\nRunning serial patch+expansion execution...")
+        meshdata_serial = hfun_serial.meshdata()
+        values_serial = meshdata_serial.values
+        print("Serial patch+expansion execution finished.")
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_patch(
+            shape=bx, target_size=200, expansion_rate=0.1)
+
+        print("Running parallel patch+expansion execution...")
+        meshdata_parallel = hfun_parallel.meshdata()
+        values_parallel = meshdata_parallel.values
+        print("Parallel patch+expansion execution finished.")
+
+        # --- COMPARISON ---
+        self.assertAlmostEqual(
+            len(values_serial), len(values_parallel),
+            delta=len(values_serial) * 0.01)
+        npt.assert_allclose(
+            np.min(values_serial), np.min(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(values_serial), np.max(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_serial_vs_parallel_channel_equivalence(self):
+        """
+        Verify that add_channel() produces equivalent results in
+        serial vs parallel modes.
+
+        Exercises: _apply_channels() -> hfun.add_patch(pool=p)
+                                          -> hfun.add_feature(pool=pool)
+        """
+        nprocs = 2
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.add_channel(
+            level=0, width=200, target_size=100, expansion_rate=0.1)
+
+        print("\nRunning serial channel execution...")
+        meshdata_serial = hfun_serial.meshdata()
+        values_serial = meshdata_serial.values
+        print("Serial channel execution finished.")
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(
+            self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_channel(
+            level=0, width=200, target_size=100, expansion_rate=0.1)
+
+        print("Running parallel channel execution...")
+        meshdata_parallel = hfun_parallel.meshdata()
+        values_parallel = meshdata_parallel.values
+        print("Parallel channel execution finished.")
+
+        # --- COMPARISON ---
+        self.assertAlmostEqual(
+            len(values_serial), len(values_parallel),
+            delta=len(values_serial) * 0.01)
+        npt.assert_allclose(
+            np.min(values_serial), np.min(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(values_serial), np.max(values_parallel), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_add_patch_backward_compat_nprocs(self):
+        """
+        Verify that calling HfunRaster.add_patch() with the old
+        nprocs= kwarg still works via @add_pool_args decorator
+        auto-spawn. This ensures external code using the old API
+        is not broken.
+        """
+        rast = Raster(self.dem1_path)
+        hfun = HfunRaster(rast, hmin=10, hmax=1000)
+        bx = geometry.box(0.2, 0.2, 0.8, 0.8)
+
+        # Old API: nprocs= should be translated to pool= by decorator
+        hfun.add_patch(
+            multipolygon=bx, target_size=200, nprocs=2)
+
+        # Verify values were actually modified
+        values = hfun.get_values()
+        self.assertTrue(np.any(values <= 200),
+            "Patch target_size was not applied to raster values")
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_add_patch_with_expansion_backward_compat_nprocs(self):
+        """
+        Verify that calling HfunRaster.add_patch() with expansion_rate
+        and the old nprocs= kwarg still works. This exercises the
+        decorator -> add_feature forwarding path via nprocs.
+        """
+        rast = Raster(self.dem1_path)
+        hfun = HfunRaster(rast, hmin=10, hmax=1000)
+        bx = geometry.box(0.2, 0.2, 0.8, 0.8)
+
+        # Old API with expansion_rate: nprocs= triggers decorator,
+        # which creates a pool and passes it to add_feature internally
+        hfun.add_patch(
+            multipolygon=bx, target_size=200,
+            expansion_rate=0.1, nprocs=2)
+
+        values = hfun.get_values()
+        self.assertTrue(np.any(values <= 200),
+            "Patch target_size was not applied to raster values")
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_add_channel_backward_compat_nprocs(self):
+        """
+        Verify that calling HfunRaster.add_channel() with the
+        nprocs= kwarg still works. add_channel was not refactored
+        with @add_pool_args, so nprocs is passed directly.
+        """
+        rast = Raster(self.dem1_path)
+        hfun = HfunRaster(rast, hmin=10, hmax=1000)
+
+        # add_channel still accepts nprocs= directly
+        # This should not raise any error
+        hfun.add_channel(
+            level=0, width=200, target_size=100, nprocs=2)
+
+        values = hfun.get_values()
+        self.assertIsNotNone(values)
+
 
 if __name__ == '__main__':
     unittest.main()
