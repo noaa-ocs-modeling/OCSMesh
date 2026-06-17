@@ -5,7 +5,6 @@ import shutil
 import gc
 import logging
 import os
-from multiprocessing import cpu_count
 from multiprocessing.pool import Pool
 import operator
 import pathlib
@@ -1074,6 +1073,7 @@ class HfunRaster(BaseHfun, Raster):
         if channels is None:
             return
 
+        # pylint: disable=E1123, E1125
         self.add_patch(
             channels, expansion_rate, target_size, nprocs=nprocs)
 

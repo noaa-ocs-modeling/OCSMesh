@@ -8,7 +8,6 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Union, Optional, Iterable, Literal
-from multiprocessing import cpu_count
 from multiprocessing.pool import Pool
 from time import time
 
