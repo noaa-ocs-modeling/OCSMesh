@@ -1011,13 +1011,15 @@ class HfunRaster(BaseHfun, Raster):
                 nprocs=nprocs)
 
     @apply_constraints_wrap
+    @utils.add_pool_args
     def add_channel(
             self,
             level: float = 0,
             width: float = 1000,
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
-            nprocs: Optional[int] = None,
+            *,
+            pool: Pool,
             tolerance: Optional[float] = None
             ) -> None:
         """Add refinement for auto detected channels
@@ -1039,9 +1041,9 @@ class HfunRaster(BaseHfun, Raster):
         expansion_rate : float or None, default=None
             Rate to use for expanding refinement with distance away
             from the detected channels.
-        nprocs : int or None, default=None
-            Number of processes to use for parallel sections of the
-            workflow.
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the workflow.
         tolerance: float or None, default=None
             Tolerance to use for simplifying the polygon extracted
             from DEM data. If `None` don't simplify.
@@ -1073,9 +1075,8 @@ class HfunRaster(BaseHfun, Raster):
         if channels is None:
             return
 
-        # pylint: disable=E1123, E1125
         self.add_patch(
-            channels, expansion_rate, target_size, nprocs=nprocs)
+            channels, expansion_rate, target_size, pool=pool)
 
 
 
