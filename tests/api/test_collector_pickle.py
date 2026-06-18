@@ -74,7 +74,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         npt.assert_allclose(loaded_values, initial_data)
         # Ensure it's not the default "blank" value
         self.assertNotEqual(loaded_values[0, 0], np.finfo(np.float32).max)
-        print("\nSUCCESS: HfunRaster correctly initializes from `initial_value`.")
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
@@ -134,10 +133,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_serial.add_subtidal_flow_limiter(hmin=50, lower_bound=-5, upper_bound=5)
         hfun_serial.add_constant_value(value=200, lower_bound=5, upper_bound=10)
         
-        print("\nRunning serial execution...")
         meshdata_serial = hfun_serial.meshdata()
         values_serial = meshdata_serial.values
-        print("Serial execution finished.")
 
         # --- PARALLEL EXECUTION ---
         hfun_parallel = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
@@ -147,10 +144,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.add_subtidal_flow_limiter(hmin=50, lower_bound=-5, upper_bound=5)
         hfun_parallel.add_constant_value(value=200, lower_bound=5, upper_bound=10)
 
-        print("Running parallel execution...")
         meshdata_parallel = hfun_parallel.meshdata()
         values_parallel = meshdata_parallel.values
-        print("Parallel execution finished.")
         
         # --- COMPARISON ---
         # NOTE: Due to minor floating point differences in meshing algorithms,
@@ -186,10 +181,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_serial.add_topo_bound_constraint(
             value=500, upper_bound=0, value_type='max')
 
-        print("\nRunning serial constraints execution...")
         meshdata_serial = hfun_serial.meshdata()
         values_serial = meshdata_serial.values
-        print("Serial constraints execution finished.")
 
         # --- PARALLEL EXECUTION ---
         hfun_parallel = Hfun(
@@ -200,10 +193,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.add_topo_bound_constraint(
             value=500, upper_bound=0, value_type='max')
 
-        print("Running parallel constraints execution...")
         meshdata_parallel = hfun_parallel.meshdata()
         values_parallel = meshdata_parallel.values
-        print("Parallel constraints execution finished.")
 
         # --- COMPARISON ---
         # Node count should be very close (meshing is non-deterministic)
@@ -314,10 +305,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
             self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
         hfun_serial.add_patch(shape=bx, target_size=50)
 
-        print("\nRunning serial patch execution...")
         meshdata_serial = hfun_serial.meshdata()
         values_serial = meshdata_serial.values
-        print("Serial patch execution finished.")
 
         # --- PARALLEL ---
         hfun_parallel = Hfun(
@@ -325,10 +314,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.execution_mode = 'parallel'
         hfun_parallel.add_patch(shape=bx, target_size=50)
 
-        print("Running parallel patch execution...")
         meshdata_parallel = hfun_parallel.meshdata()
         values_parallel = meshdata_parallel.values
-        print("Parallel patch execution finished.")
 
         # --- COMPARISON ---
         self.assertAlmostEqual(
@@ -364,10 +351,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_serial.add_patch(
             shape=bx, target_size=200, expansion_rate=0.1)
 
-        print("\nRunning serial patch+expansion execution...")
         meshdata_serial = hfun_serial.meshdata()
         values_serial = meshdata_serial.values
-        print("Serial patch+expansion execution finished.")
 
         # --- PARALLEL ---
         hfun_parallel = Hfun(
@@ -376,10 +361,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.add_patch(
             shape=bx, target_size=200, expansion_rate=0.1)
 
-        print("Running parallel patch+expansion execution...")
         meshdata_parallel = hfun_parallel.meshdata()
         values_parallel = meshdata_parallel.values
-        print("Parallel patch+expansion execution finished.")
 
         # --- COMPARISON ---
         self.assertAlmostEqual(
@@ -410,10 +393,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_serial.add_channel(
             level=0, width=200, target_size=100, expansion_rate=0.1)
 
-        print("\nRunning serial channel execution...")
         meshdata_serial = hfun_serial.meshdata()
         values_serial = meshdata_serial.values
-        print("Serial channel execution finished.")
 
         # --- PARALLEL ---
         hfun_parallel = Hfun(
@@ -422,10 +403,8 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun_parallel.add_channel(
             level=0, width=200, target_size=100, expansion_rate=0.1)
 
-        print("Running parallel channel execution...")
         meshdata_parallel = hfun_parallel.meshdata()
         values_parallel = meshdata_parallel.values
-        print("Parallel channel execution finished.")
 
         # --- COMPARISON ---
         self.assertAlmostEqual(
