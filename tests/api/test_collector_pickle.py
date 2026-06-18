@@ -47,7 +47,12 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
     def tearDown(self):
         """Remove the temporary directory and all its contents."""
-        shutil.rmtree(self.tdir)
+        self.raster_list = None
+        gc.collect()
+        try:
+            shutil.rmtree(self.tdir)
+        except PermissionError:
+            pass # Windows might still hold some locks, safe to ignore for temp dirs
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
