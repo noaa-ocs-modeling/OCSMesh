@@ -4,6 +4,7 @@ import platform
 import shutil
 import gc
 import os
+from multiprocessing.pool import Pool
 from pathlib import Path
 import numpy as np
 import numpy.testing as npt
@@ -461,17 +462,34 @@ class TestHfunCollectorExecution(unittest.TestCase):
             "Patch target_size was not applied to raster values")
 
     @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
-    def test_add_channel_backward_compat_nprocs(self):
+    def test_add_channel_with_pool(self):
         """
-        Verify that calling HfunRaster.add_channel() with the
-        nprocs= kwarg still works. add_channel was not refactored
-        with @add_pool_args, so nprocs is passed directly.
+        Verify that calling HfunRaster.add_channel() with an explicit
+        pool works and exercises the pool-forwarding path used by the
+        add_pool_args decorator.
         """
         rast = Raster(self.dem1_path)
         hfun = HfunRaster(rast, hmin=10, hmax=1000)
 
-        # add_channel still accepts nprocs= directly
-        # This should not raise any error
+        with Pool(processes=2) as pool:
+            hfun.add_channel(
+                level=0, width=200, target_size=100, pool=pool)
+
+        values = hfun.get_values()
+        self.assertIsNotNone(values)
+
+    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
+    def test_add_channel_backward_compat_nprocs(self):
+        """
+        Verify that calling HfunRaster.add_channel() with the old
+        nprocs= kwarg still works via @add_pool_args decorator.
+        This keeps compatibility with existing callers.
+        """
+        rast = Raster(self.dem1_path)
+        hfun = HfunRaster(rast, hmin=10, hmax=1000)
+
+        # Old API: nprocs= should be translated to pool= by decorator.
+        # pylint: disable=unexpected-keyword-arg,missing-kwoa
         hfun.add_channel(
             level=0, width=200, target_size=100, nprocs=2)
 
