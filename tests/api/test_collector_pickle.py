@@ -302,7 +302,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertEqual(coll.get_constraints(mock_raster, 9), [c3])
         
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_serial_vs_parallel_patch_equivalence(self):
         """
         Verify that add_patch() without expansion_rate produces
@@ -342,7 +341,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
             np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
 
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_serial_vs_parallel_patch_with_expansion_equivalence(self):
         """
         Verify that add_patch() WITH expansion_rate produces
@@ -389,7 +387,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
             np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
 
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_serial_vs_parallel_channel_equivalence(self):
         """
         Verify that add_channel() produces equivalent results in
@@ -431,7 +428,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
             np.mean(values_serial), np.mean(values_parallel), rtol=1e-5)
 
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_add_patch_backward_compat_nprocs(self):
         """
         Verify that calling HfunRaster.add_patch() with the old
@@ -452,7 +448,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertTrue(np.any(values <= 200),
             "Patch target_size was not applied to raster values")
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_add_patch_with_expansion_backward_compat_nprocs(self):
         """
         Verify that calling HfunRaster.add_patch() with expansion_rate
@@ -473,7 +468,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertTrue(np.any(values <= 200),
             "Patch target_size was not applied to raster values")
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_add_channel_with_pool(self):
         """
         Verify that calling HfunRaster.add_channel() with an explicit
@@ -490,7 +484,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values = hfun.get_values()
         self.assertIsNotNone(values)
 
-    @unittest.skipIf(IS_WINDOWS, 'Pool tests not guaranteed stable on Windows due to I/O issues')
     def test_add_channel_backward_compat_nprocs(self):
         """
         Verify that calling HfunRaster.add_channel() with the old
