@@ -28,7 +28,6 @@ from shapely import union_all, make_valid
 import geopandas as gpd
 import pandas as pd
 import utm
-import platform
 
 
 from ocsmesh.internal import MeshData
@@ -1533,16 +1532,10 @@ def add_pool_args(func):
             # Check nprocs
             nprocs = -1 if nprocs is None else nprocs
             nprocs = cpu_count() if nprocs == -1 else nprocs
-            
-            if True: # Testing ThreadPool
-                from multiprocessing.pool import ThreadPool
-                with ThreadPool(processes=nprocs) as new_pool:
-                    rv = func(*args, **kwargs, pool=new_pool)
-                new_pool.join()
-            else:
-                with Pool(processes=nprocs) as new_pool:
-                    rv = func(*args, **kwargs, pool=new_pool)
-                new_pool.join()
+
+            with Pool(processes=nprocs) as new_pool:
+                rv = func(*args, **kwargs, pool=new_pool)
+            new_pool.join()
         return rv
     return wrapper
 
