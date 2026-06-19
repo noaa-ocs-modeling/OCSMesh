@@ -47,7 +47,19 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
     def tearDown(self):
         """Remove the temporary directory and all its contents."""
-        shutil.rmtree(self.tdir)
+        # Fix for Windows: rasterio/GDAL keeps file handles open as long as
+        # Raster objects are in memory. Windows prevents deleting open files.
+        # We explicitly destroy the raster objects to release the file locks.
+        self.raster_list = None
+        gc.collect()
+        
+        try:
+            shutil.rmtree(self.tdir)
+        except PermissionError:
+            # Even after garbage collection, the Windows filesystem is sometimes
+            # too slow to release the lock before rmtree executes. Since this is 
+            # just a temporary test directory, it is safe to ignore.
+            pass
 
 
     @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
