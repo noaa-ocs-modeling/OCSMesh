@@ -27,10 +27,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Setup Mamba environment for Python
-      uses: mamba-org/setup-micromamba@v2
+      uses: mamba-org/setup-micromamba@v3
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
+        generate-run-shell: false
         create-args: >-
           python=3.14
     - name: Install dependencies
