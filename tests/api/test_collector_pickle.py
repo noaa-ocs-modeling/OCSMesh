@@ -211,6 +211,12 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
         # --- COMPARISON ---
         # Node count should be very close (meshing is non-deterministic)
+
+        # TODO: In the future, we should consider using proper
+        # statistical tests 
+        # like F-test or two-sampled t-test to compare
+        # the two results instead of these basic checks.
+
         self.assertAlmostEqual(
             len(values_serial), len(values_parallel),
             delta=len(values_serial) * 0.01)
@@ -330,6 +336,10 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values_parallel = meshdata_parallel.values
 
         # --- COMPARISON ---
+        # TODO: In the future, we should consider using proper
+        # statistical tests 
+        # like F-test or two-sampled t-test to compare
+        # the two results instead of these basic checks.
         self.assertAlmostEqual(
             len(values_serial), len(values_parallel),
             delta=len(values_serial) * 0.01)
@@ -376,6 +386,10 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values_parallel = meshdata_parallel.values
 
         # --- COMPARISON ---
+        # TODO: In the future, we should consider using proper
+        # statistical tests 
+        # like F-test or two-sampled t-test to compare
+        # the two results instead of these basic checks.
         self.assertAlmostEqual(
             len(values_serial), len(values_parallel),
             delta=len(values_serial) * 0.01)
@@ -417,6 +431,10 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values_parallel = meshdata_parallel.values
 
         # --- COMPARISON ---
+        # TODO: In the future, we should consider using proper
+        # statistical tests 
+        # like F-test or two-sampled t-test to compare
+        # the two results instead of these basic checks.
         self.assertAlmostEqual(
             len(values_serial), len(values_parallel),
             delta=len(values_serial) * 0.01)
@@ -444,6 +462,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
             multipolygon=bx, target_size=200, nprocs=2)
 
         # Verify values were actually modified
+        # TODO: The test is too loose,would be better to comeup with better one.
         values = hfun.get_values()
         self.assertTrue(np.any(values <= 200),
             "Patch target_size was not applied to raster values")
@@ -464,6 +483,9 @@ class TestHfunCollectorExecution(unittest.TestCase):
             multipolygon=bx, target_size=200,
             expansion_rate=0.1, nprocs=2)
 
+        # TODO: The test criteria does not really 
+        # check what was applied. If we want to check the expansion here,
+        # we need to make the fit tighter.
         values = hfun.get_values()
         self.assertTrue(np.any(values <= 200),
             "Patch target_size was not applied to raster values")
@@ -498,6 +520,11 @@ class TestHfunCollectorExecution(unittest.TestCase):
         hfun.add_channel(
             level=0, width=200, target_size=100, nprocs=2)
 
+        # TODO: Come up with a better check. 
+        # Use ocsmesh.utils.get_polygon_channels(polygon, width)
+        # to get the channel polygon, select nodes in
+        # the polygon, and get the values of the selected 
+        # nodes to make sure their mean is close to the target size.
         values = hfun.get_values()
         self.assertIsNotNone(values)
 
