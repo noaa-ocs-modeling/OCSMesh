@@ -5,7 +5,7 @@ import shutil
 import gc
 import logging
 import os
-from multiprocessing import cpu_count, Pool
+from multiprocessing.pool import Pool
 import operator
 import pathlib
 import tempfile
@@ -800,12 +800,14 @@ class HfunRaster(BaseHfun, Raster):
 
 
     @apply_constraints_wrap
+    @utils.add_pool_args
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
             expansion_rate: Optional[float] = None,
             target_size: Optional[float] = None,
-            nprocs: Optional[int] = None
+            *, # kwarg-only comes after this
+            pool: Pool,
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -824,9 +826,9 @@ class HfunRaster(BaseHfun, Raster):
         target_size : float or None, default=None
             Fixed target size of mesh to use for refinement in
             `multipolygon`
-        nprocs : int or None, default=None
-            Number of processors to use in parallel sections of the
-            algorithm
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the algorithm.
 
         Returns
         -------
@@ -846,8 +848,6 @@ class HfunRaster(BaseHfun, Raster):
             Add refinement with fixed value
         """
 
-        # TODO: Add pool input support like add_feature for performance
-
         # pylint: disable=R0801
         # TODO: Support other shapes - call buffer(1) on non polygons(?)
         if not isinstance(multipolygon, (Polygon, MultiPolygon)):
@@ -858,10 +858,7 @@ class HfunRaster(BaseHfun, Raster):
         if isinstance(multipolygon, Polygon):
             multipolygon = MultiPolygon([multipolygon])
 
-        # Check nprocs
-        nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        _logger.debug(f'Using nprocs={nprocs}')
+
 
 
         # check target size
@@ -885,7 +882,7 @@ class HfunRaster(BaseHfun, Raster):
                 feature=features,
                 expansion_rate=expansion_rate,
                 target_size=target_size,
-                nprocs=nprocs)
+                pool=pool)
 
         with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
@@ -1014,13 +1011,15 @@ class HfunRaster(BaseHfun, Raster):
                 nprocs=nprocs)
 
     @apply_constraints_wrap
+    @utils.add_pool_args
     def add_channel(
             self,
             level: float = 0,
             width: float = 1000,
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
-            nprocs: Optional[int] = None,
+            *,
+            pool: Pool,
             tolerance: Optional[float] = None
             ) -> None:
         """Add refinement for auto detected channels
@@ -1042,9 +1041,9 @@ class HfunRaster(BaseHfun, Raster):
         expansion_rate : float or None, default=None
             Rate to use for expanding refinement with distance away
             from the detected channels.
-        nprocs : int or None, default=None
-            Number of processes to use for parallel sections of the
-            workflow.
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the workflow.
         tolerance: float or None, default=None
             Tolerance to use for simplifying the polygon extracted
             from DEM data. If `None` don't simplify.
@@ -1077,7 +1076,7 @@ class HfunRaster(BaseHfun, Raster):
             return
 
         self.add_patch(
-            channels, expansion_rate, target_size, nprocs)
+            channels, expansion_rate, target_size, pool=pool)
 
 
 

@@ -8,7 +8,7 @@ import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from typing import Union, Optional, Iterable, Literal
-from multiprocessing import cpu_count, Pool
+from multiprocessing.pool import Pool
 from time import time
 
 from matplotlib.transforms import Bbox
@@ -213,12 +213,14 @@ class HfunMesh(BaseHfun):
 
 
     @apply_constraints_wrap
+    @utils.add_pool_args
     def add_patch(
             self,
             multipolygon: Union[MultiPolygon, Polygon],
             expansion_rate: Optional[float] = None,
             target_size: Optional[float] = None,
-            nprocs: Optional[int] = None
+            *, # kwarg-only comes after this
+            pool: Pool,
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -237,9 +239,9 @@ class HfunMesh(BaseHfun):
         target_size : float or None, default=None
             Fixed target size of mesh to use for refinement in
             `multipolygon`
-        nprocs : int or None, default=None
-            Number of processors to use in parallel sections of the
-            algorithm
+        pool : Pool
+            Pre-created and initialized process pool to be used for
+            parallel sections of the algorithm.
 
         Returns
         -------
@@ -251,8 +253,6 @@ class HfunMesh(BaseHfun):
             Add refinement for specified line string
         """
 
-        # TODO: Add pool input support like add_feature for performance
-
         # pylint: disable=R0801
         # TODO: Support other shapes - call buffer(1) on non polygons(?)
         if not isinstance(multipolygon, (Polygon, MultiPolygon)):
@@ -263,10 +263,7 @@ class HfunMesh(BaseHfun):
         if isinstance(multipolygon, Polygon):
             multipolygon = MultiPolygon([multipolygon])
 
-        # Check nprocs
-        nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
-        _logger.debug(f'Using nprocs={nprocs}')
+
 
 
         # check target size
@@ -290,7 +287,7 @@ class HfunMesh(BaseHfun):
                 feature=features,
                 expansion_rate=expansion_rate,
                 target_size=target_size,
-                nprocs=nprocs)
+                pool=pool)
 
         mesh_values = self.mesh.meshdata.values
         values = mesh_values.copy()
