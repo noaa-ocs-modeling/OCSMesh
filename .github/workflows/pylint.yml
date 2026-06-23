@@ -31,6 +31,7 @@ jobs:
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
+        post-cleanup: 'none'
         generate-run-shell: false
         create-args: >-
           python=3.14
