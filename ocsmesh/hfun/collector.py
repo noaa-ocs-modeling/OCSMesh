@@ -702,6 +702,70 @@ def _constraints_task_worker(task: dict):
     }
 
 
+def _meshdata_task_worker(task: dict):
+    """Worker that calls hfun.meshdata() on a single HfunRaster.
+
+    Runs the expensive triangulation/interpolation pipeline inside a
+    worker process and serializes the raw MeshData result to disk as
+    ``.npz``.  Overlap clipping is NOT performed here — that requires
+    sequential bounding-box accumulation and is handled by Stage 2 in
+    the coordinator.
+    """
+
+    original_index = task['original_index']
+    topo_path = task['topo_path']
+    hfun_input_path = task['hfun_input_path']
+    output_path = task['output_path']
+    hmin = task['hmin']
+    hmax = task['hmax']
+    meshdata_kwargs = task['meshdata_kwargs']
+
+    try:
+        # Reconstruct HfunRaster in the worker process
+        topo_raster = Raster(topo_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=hmin,
+            hmax=hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
+        )
+
+        meshdata_result = worker_hfun.meshdata(**meshdata_kwargs)
+
+        # Reproject to EPSG:4326 (same as serial path)
+        if hasattr(meshdata_result, "crs"):
+            dst_crs = CRS.from_user_input("EPSG:4326")
+            if meshdata_result.crs != dst_crs:
+                utils.reproject(meshdata_result, dst_crs)
+
+        # Serialize to .npz for fast coordinator pickup
+        tria_data = (meshdata_result.tria
+                     if meshdata_result.tria is not None
+                     else np.array([]))
+        crs_str = (str(meshdata_result.crs)
+                   if meshdata_result.crs else "")
+        np.savez(
+            output_path,
+            coords=meshdata_result.coords,
+            tria=tria_data,
+            values=meshdata_result.values,
+            crs=np.array(crs_str)
+        )
+
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': str(output_path) + '.npz'
+        }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': str(e)
+        }
+
+
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
 
