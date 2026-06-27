@@ -1,0 +1,68 @@
+=================================================================
+  _write_hfun_to_disk() Profiling Report
+=================================================================
+Date            : 2026-06-27T18:17:09.441104
+Rasters         : 4
+nprocs          : 4
+Grid size       : 100 x 100 per DEM
+Iterations      : 3
+Refinements     : 3 (topo_bound_min, topo_bound_max, constant_value)
+
+-----------------------------------------------------------------
+  MODE 1: ALL PARALLEL
+-----------------------------------------------------------------
+  apply_constraints    : PARALLEL
+  apply_features       : PARALLEL
+  apply_contours       : PARALLEL
+  _write_hfun_to_disk  : PARALLEL
+  Time  : 11.9820 s
+  Mean  : 286.771071
+
+-----------------------------------------------------------------
+  MODE 2: ALL SERIAL
+-----------------------------------------------------------------
+  apply_constraints    : SERIAL
+  apply_features       : SERIAL
+  apply_contours       : SERIAL
+  _write_hfun_to_disk  : SERIAL
+  Time  : 30.0198 s
+  Mean  : 286.771071
+
+-----------------------------------------------------------------
+  MODE 3: PARALLEL EXCEPT _write_hfun_to_disk
+-----------------------------------------------------------------
+  apply_constraints    : PARALLEL
+  apply_features       : PARALLEL
+  apply_contours       : PARALLEL
+  _write_hfun_to_disk  : SERIAL  (monkey-patched)
+  Time  : 30.6093 s
+  Mean  : 286.771071
+
+-----------------------------------------------------------------
+  MODE 4: SERIAL EXCEPT _write_hfun_to_disk
+-----------------------------------------------------------------
+  apply_constraints    : SERIAL
+  apply_features       : SERIAL
+  apply_contours       : SERIAL
+  _write_hfun_to_disk  : PARALLEL (monkey-patched)
+  Time  : 12.2095 s
+  Mean  : 286.771071
+
+=================================================================
+  COMPARISON
+=================================================================
+  Mode                                              Time
+  --------------------------------------------- --------
+  MODE 1: ALL PARALLEL                            11.98s
+  MODE 2: ALL SERIAL                              30.02s
+  MODE 3: PARALLEL EXCEPT _write_hfun_to_disk     30.61s
+  MODE 4: SERIAL EXCEPT _write_hfun_to_disk       12.21s
+
+  Speedup from parallel _write_hfun_to_disk:
+    Mode 3 / Mode 1 = 2.55x (30.61s → 11.98s)
+    Mode 2 / Mode 4 = 2.46x (30.02s → 12.21s)
+  Overall speedup (all serial → all parallel):
+    Mode 2 / Mode 1 = 2.51x (30.02s → 11.98s)
+
+  Values match  : YES
+=================================================================
