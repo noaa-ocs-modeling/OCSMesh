@@ -1,13 +1,3 @@
-# =============================================================================
-# HOW TO RUN:
-#
-#   conda activate ocsmesh-dev
-#   cd /home/anas/repos/OCSMesh
-#   python -m pytest tests/api/draft_profiling_test.py -v -s
-#
-# Or run a single mode:
-#   python -m pytest tests/api/draft_profiling_test.py::TestWriteHfunProfiling::test_write_hfun_profiling -v -s
-# =============================================================================
 """
 Profiling test for _write_hfun_to_disk().
 
