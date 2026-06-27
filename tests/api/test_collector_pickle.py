@@ -501,7 +501,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values = hfun.get_values()
         self.assertIsNotNone(values)
 
-    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    #@unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_serial_vs_parallel_write_hfun_to_disk_equivalence(self):
         """
         Ensure serial and parallel _write_hfun_to_disk() produce
@@ -539,7 +539,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
             np.mean(meshdata_parallel.values), rtol=1e-5)
 
 
-    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    #@unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
     def test_parallel_write_hfun_single_raster(self):
         """
         Verify parallel path works correctly with a single raster
