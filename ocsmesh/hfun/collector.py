@@ -703,7 +703,13 @@ def _constraints_task_worker(task: dict):
 
 
 def _meshdata_task_worker(task: dict):
-    """Worker that calls hfun.meshdata() on a single HfunRaster.
+    """Worker that calls hfun.meshdata() on a single hfun entry.
+
+    Supports two task types:
+    - ``'raster'``: Reconstructs an ``HfunRaster`` from file paths
+      (raster data cannot be pickled directly).
+    - ``'mesh'``: Uses a pre-pickled ``HfunMesh`` object directly
+      (HfunMesh is fully picklable).
 
     Runs the expensive triangulation/interpolation pipeline inside a
     worker process and serializes the raw MeshData result to disk as
@@ -713,25 +719,34 @@ def _meshdata_task_worker(task: dict):
     """
 
     original_index = task['original_index']
-    topo_path = task['topo_path']
-    hfun_input_path = task['hfun_input_path']
     output_path = task['output_path']
-    hmin = task['hmin']
-    hmax = task['hmax']
-    meshdata_kwargs = task['meshdata_kwargs']
+    meshdata_kwargs = task.get('meshdata_kwargs', {})
+    task_type = task.get('type', 'raster')
 
     try:
-        # Reconstruct HfunRaster in the worker process
-        topo_raster = Raster(topo_path)
-        worker_hfun = HfunRaster(
-            raster=topo_raster,
-            hmin=hmin,
-            hmax=hmax,
-            verbosity=0,
-            initial_value=hfun_input_path
-        )
+        if task_type == 'raster':
+            # Reconstruct HfunRaster in the worker process
+            topo_raster = Raster(task['topo_path'])
+            worker_hfun = HfunRaster(
+                raster=topo_raster,
+                hmin=task['hmin'],
+                hmax=task['hmax'],
+                verbosity=0,
+                initial_value=task['hfun_input_path']
+            )
+            meshdata_result = worker_hfun.meshdata(**meshdata_kwargs)
 
-        meshdata_result = worker_hfun.meshdata(**meshdata_kwargs)
+        elif task_type == 'mesh':
+            # HfunMesh is picklable — use the object directly
+            worker_hfun = task['hfun_obj']
+            try:
+                meshdata_result = deepcopy(
+                    worker_hfun.meshdata(**meshdata_kwargs))
+            except TypeError:
+                # HfunMesh.meshdata() doesn't accept kwargs like stride
+                meshdata_result = deepcopy(worker_hfun.meshdata())
+        else:
+            raise ValueError(f"Unknown task type: {task_type}")
 
         # Reproject to EPSG:4326 (same as serial path)
         if hasattr(meshdata_result, "crs"):
@@ -2536,17 +2551,16 @@ class HfunCollector(BaseHfun):
         """Two-stage parallel path for writing hfun to disk.
 
         Stage 1 (Parallel): Workers call ``hfun.meshdata()``
-        independently for each ``HfunRaster`` and serialize results
+        independently for each hfun entry and serialize results
         as ``.npz`` files.  All workers run simultaneously — this is
-        where the ~41 s/raster cost lives.
+        where the expensive triangulation/interpolation cost lives.
+        ``HfunRaster`` entries are reconstructed from file paths in
+        the worker; ``HfunMesh`` entries are pickled and sent directly.
 
         Stage 2 (Sequential): The coordinator loads results in
         priority order, clips each against accumulated bounding
         boxes, clamps hmin/hmax, and writes the final ``.2dm``
         files.  This stage is fast (array operations only).
-
-        ``HfunMesh`` entries (e.g. base mesh) are processed serially
-        because ``HfunMesh.meshdata()`` mutates internal CRS state.
 
         Parameters
         ----------
@@ -2573,34 +2587,37 @@ class HfunCollector(BaseHfun):
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*self._hfun_list[::-1], self._base_mesh]
 
-        # --- Separate HfunRaster (parallelizable) from HfunMesh (serial) ---
-        raster_entries = []   # (loop_index, hfun)
-        mesh_entries = []     # (loop_index, hfun)
-        for loop_idx, hfun in enumerate(hfun_list):
-            if isinstance(hfun, HfunRaster):
-                raster_entries.append((loop_idx, hfun))
-            else:
-                mesh_entries.append((loop_idx, hfun))
-
         # ========== STAGE 1: PARALLEL meshdata() ==========
         tasks = []
-        for loop_idx, hfun in raster_entries:
+        for loop_idx, hfun in enumerate(hfun_list):
             npz_path = os.path.join(
                 self._work_dir,
                 f"meshdata_stage1_{pid}_{loop_idx}"
             )
-            task = {
-                'original_index': loop_idx,
-                'topo_path': hfun._raster.path,
-                'hfun_input_path': hfun.tmpfile,
-                'output_path': npz_path,
-                'hmin': hfun._hmin,
-                'hmax': hfun._hmax,
-                'meshdata_kwargs': kwargs
-            }
+            if isinstance(hfun, HfunRaster):
+                task = {
+                    'type': 'raster',
+                    'original_index': loop_idx,
+                    'topo_path': hfun._raster.path,
+                    'hfun_input_path': hfun.tmpfile,
+                    'output_path': npz_path,
+                    'hmin': hfun._hmin,
+                    'hmax': hfun._hmax,
+                    'meshdata_kwargs': kwargs
+                }
+            else:
+                # HfunMesh and other types are picklable —
+                # send the object directly to the worker
+                task = {
+                    'type': 'mesh',
+                    'original_index': loop_idx,
+                    'hfun_obj': deepcopy(hfun),
+                    'output_path': npz_path,
+                    'meshdata_kwargs': kwargs
+                }
             tasks.append(task)
 
-        # Run parallel meshdata (the ~41 s per-raster cost)
+        # Run parallel meshdata for ALL entries
         stage1_results = {}
         if tasks:
             _logger.info(
@@ -2621,24 +2638,10 @@ class HfunCollector(BaseHfun):
                 stage1_results[result['original_index']] = \
                     result['output_path']
 
-        # Process HfunMesh entries serially (CRS mutation side effects)
-        mesh_meshdata = {}
-        for loop_idx, hfun in mesh_entries:
-            try:
-                meshdata_hfun = deepcopy(hfun.meshdata(**kwargs))
-            except TypeError:
-                meshdata_hfun = deepcopy(hfun.meshdata())
-
-            if hasattr(meshdata_hfun, "crs"):
-                dst_crs = CRS.from_user_input("EPSG:4326")
-                if meshdata_hfun.crs != dst_crs:
-                    utils.reproject(meshdata_hfun, dst_crs)
-            mesh_meshdata[loop_idx] = meshdata_hfun
-
         # ========== STAGE 2: SEQUENTIAL overlap clip + write ==========
         _logger.info("Stage 2: Sequential overlap clipping and .2dm write")
         for loop_idx in range(len(hfun_list)):
-            # Load the meshdata from Stage 1 result or serial mesh result
+            # Load the meshdata from Stage 1 result
             if loop_idx in stage1_results:
                 npz_path = stage1_results[loop_idx]
                 data = np.load(npz_path, allow_pickle=False)
@@ -2653,8 +2656,6 @@ class HfunCollector(BaseHfun):
                     coords=coords, tria=tria,
                     values=values, crs=crs
                 )
-            elif loop_idx in mesh_meshdata:
-                meshdata_hfun = mesh_meshdata[loop_idx]
             else:
                 # Worker failed for this index — skip
                 continue
