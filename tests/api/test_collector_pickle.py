@@ -501,6 +501,58 @@ class TestHfunCollectorExecution(unittest.TestCase):
         values = hfun.get_values()
         self.assertIsNotNone(values)
 
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_serial_vs_parallel_write_hfun_to_disk_equivalence(self):
+        """
+        Ensure serial and parallel _write_hfun_to_disk() produce
+        numerically equivalent composite meshdata results.
+
+        This validates the full end-to-end pipeline: meshdata generation,
+        overlap clipping, and .2dm write/read round-trip.
+        """
+        nprocs = 2
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_serial = hfun_serial.meshdata()
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_parallel = hfun_parallel.meshdata()
+
+        # --- COMPARISON ---
+        # Mesh topology may differ slightly due to floating point,
+        # but aggregate statistics must match
+        npt.assert_allclose(
+            np.min(meshdata_serial.values),
+            np.min(meshdata_parallel.values), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(meshdata_serial.values),
+            np.max(meshdata_parallel.values), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(meshdata_serial.values),
+            np.mean(meshdata_parallel.values), rtol=1e-5)
+
+
+    @unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
+    def test_parallel_write_hfun_single_raster(self):
+        """
+        Verify parallel path works correctly with a single raster
+        (edge case — only one worker task).
+        """
+        single_raster = [Raster(self.dem1_path)]
+
+        hfun = Hfun(single_raster, nprocs=2, hmin=10, hmax=1000)
+        hfun.execution_mode = 'parallel'
+        meshdata = hfun.meshdata()
+        self.assertIsNotNone(meshdata)
+        self.assertGreater(len(meshdata.coords), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
