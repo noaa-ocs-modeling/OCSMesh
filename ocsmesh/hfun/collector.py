@@ -1035,7 +1035,7 @@ class HfunCollector(BaseHfun):
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Pass kwargs if needed
-                hfun_path_list = self._write_hfun_to_disk(temp_dir, **kwargs)
+                hfun_path_list = self._calculate_and_write_hfun_to_disk(temp_dir, **kwargs)
                 composite_hfun = self._get_hfun_composite(hfun_path_list)
 
         elif self._method == 'fast':
@@ -2416,7 +2416,7 @@ class HfunCollector(BaseHfun):
                     )
 
 
-    def _write_hfun_to_disk(
+    def _calculate_and_write_hfun_to_disk(
             self,
             out_path: Union[str, Path],
             **kwargs
@@ -2446,13 +2446,13 @@ class HfunCollector(BaseHfun):
 
         if self.execution_mode == 'parallel' and self._nprocs > 1:
             _logger.info("Writing hfun to disk using PARALLEL method.")
-            return self._write_hfun_to_disk_parallel(out_path, **kwargs)
+            return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
         else:
             _logger.info("Writing hfun to disk using SERIAL method.")
-            return self._write_hfun_to_disk_serial(out_path, **kwargs)
+            return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
 
 
-    def _write_hfun_to_disk_serial(
+    def _calculate_and_write_hfun_to_disk_serial(
             self,
             out_path: Union[str, Path],
             **kwargs
@@ -2543,7 +2543,7 @@ class HfunCollector(BaseHfun):
         return path_list
 
 
-    def _write_hfun_to_disk_parallel(
+    def _calculate_and_write_hfun_to_disk_parallel(
             self,
             out_path: Union[str, Path],
             **kwargs

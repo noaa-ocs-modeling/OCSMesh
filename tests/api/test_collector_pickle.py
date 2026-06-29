@@ -503,9 +503,9 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
     # TODO: Check if running on windows won't casuse issues.
     #@unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_serial_vs_parallel_write_hfun_to_disk_equivalence(self):
+    def test_serial_vs_parallel_calculate_and_write_hfun_to_disk_equivalence(self):
         """
-        Ensure serial and parallel _write_hfun_to_disk() produce
+        Ensure serial and parallel _calculate_and_write_hfun_to_disk() produce
         numerically equivalent composite meshdata results.
 
         This validates the full end-to-end pipeline: meshdata generation,
@@ -541,7 +541,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
 
     #@unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_parallel_write_hfun_single_raster(self):
+    def test_parallel_calculate_and_write_hfun_single_raster(self):
         """
         Verify parallel path works correctly with a single raster
         (edge case — only one worker task).
@@ -555,7 +555,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertGreater(len(meshdata.coords), 0)
 
     #@unittest.skipIf(IS_WINDOWS, 'Pickle tests not guaranteed stable on Windows due to I/O issues')
-    def test_parallel_write_hfun_with_base_mesh(self):
+    def test_parallel_calculate_and_write_hfun_with_base_mesh(self):
         """
         Verify that HfunMesh (e.g. from base_mesh) successfully routes
         through the parallel worker and produces identical results to serial.

@@ -1,23 +1,23 @@
 """
-Profiling test for _write_hfun_to_disk().
+Profiling test for _calculate_and_write_hfun_to_disk().
 
 Runs the full meshdata() pipeline under 4 configurations to isolate
-the impact of parallelizing _write_hfun_to_disk:
+the impact of parallelizing _calculate_and_write_hfun_to_disk:
 
   Mode 1 — ALL PARALLEL:
-      apply_constraints = parallel, _write_hfun_to_disk = parallel
+      apply_constraints = parallel, _calculate_and_write_hfun_to_disk = parallel
 
   Mode 2 — ALL SERIAL:
-      apply_constraints = serial,   _write_hfun_to_disk = serial
+      apply_constraints = serial,   _calculate_and_write_hfun_to_disk = serial
 
   Mode 3 — PARALLEL EXCEPT WRITE HFUN:
-      apply_constraints = parallel, _write_hfun_to_disk = serial  (monkey-patched)
+      apply_constraints = parallel, _calculate_and_write_hfun_to_disk = serial  (monkey-patched)
 
   Mode 4 — SERIAL EXCEPT WRITE HFUN:
-      apply_constraints = serial,   _write_hfun_to_disk = parallel (monkey-patched)
+      apply_constraints = serial,   _calculate_and_write_hfun_to_disk = parallel (monkey-patched)
 
 By comparing Mode 1 vs Mode 3, you see the speedup from parallelizing
-_write_hfun_to_disk alone (everything else is the same).
+_calculate_and_write_hfun_to_disk alone (everything else is the same).
 
 By comparing Mode 2 vs Mode 4, you see the same thing but with the
 rest of the pipeline serial.
@@ -45,8 +45,8 @@ IS_WINDOWS = platform.system() == 'Windows'
 NUM_ITERATIONS = 3  # Number of times to run each mode for averaging
 
 
-class TestWriteHfunProfiling(unittest.TestCase):
-    """Profile _write_hfun_to_disk under 4 execution configurations."""
+class TestCalculateAndWriteHfunProfiling(unittest.TestCase):
+    """Profile _calculate_and_write_hfun_to_disk under 4 execution configurations."""
 
     def setUp(self):
         self.tdir = Path(tempfile.mkdtemp())
@@ -81,7 +81,7 @@ class TestWriteHfunProfiling(unittest.TestCase):
         hfun.add_constant_value(value=500, lower_bound=-10, upper_bound=-5)
         return hfun
 
-    def _run_mode(self, label, execution_mode, write_hfun_override=None):
+    def _run_mode(self, label, execution_mode, calculate_and_write_hfun_override=None):
         """
         Run meshdata() under a specific configuration.
 
@@ -91,9 +91,9 @@ class TestWriteHfunProfiling(unittest.TestCase):
             Human-readable mode name.
         execution_mode : str
             'serial' or 'parallel' — controls apply_constraints etc.
-        write_hfun_override : str or None
-            If 'serial', monkey-patch _write_hfun_to_disk → serial.
-            If 'parallel', monkey-patch _write_hfun_to_disk → parallel.
+        calculate_and_write_hfun_override : str or None
+            If 'serial', monkey-patch _calculate_and_write_hfun_to_disk → serial.
+            If 'parallel', monkey-patch _calculate_and_write_hfun_to_disk → parallel.
             If None, use whatever execution_mode dictates.
 
         Returns
@@ -105,14 +105,14 @@ class TestWriteHfunProfiling(unittest.TestCase):
         for i in range(NUM_ITERATIONS):
             hfun = self._build_hfun(execution_mode)
 
-            if write_hfun_override == 'serial':
+            if calculate_and_write_hfun_override == 'serial':
                 ctx = patch.object(
-                    HfunCollector, '_write_hfun_to_disk',
-                    HfunCollector._write_hfun_to_disk_serial)
-            elif write_hfun_override == 'parallel':
+                    HfunCollector, '_calculate_and_write_hfun_to_disk',
+                    HfunCollector._calculate_and_write_hfun_to_disk_serial)
+            elif calculate_and_write_hfun_override == 'parallel':
                 ctx = patch.object(
-                    HfunCollector, '_write_hfun_to_disk',
-                    HfunCollector._write_hfun_to_disk_parallel)
+                    HfunCollector, '_calculate_and_write_hfun_to_disk',
+                    HfunCollector._calculate_and_write_hfun_to_disk_parallel)
             else:
                 # No patching — use the default dispatcher
                 from contextlib import nullcontext
@@ -134,15 +134,15 @@ class TestWriteHfunProfiling(unittest.TestCase):
 
     # TODO: Check if windows won't cause issues.
     # @unittest.skipIf(IS_WINDOWS, 'Profiling not supported on Windows')
-    def test_write_hfun_profiling(self):
+    def test_calculate_and_write_hfun_profiling(self):
         """Run all 4 modes, print progress, write a .txt report."""
 
         n_rasters = len(self.raster_list)
         nprocs = 4
-        report_path = Path.cwd() / 'timing_report_write_hfun_profiling.txt'
+        report_path = Path.cwd() / 'timing_report_calculate_and_write_hfun_profiling.txt'
 
         # ─── Mode definitions ───────────────────────────────────────
-        #   (label, execution_mode, write_hfun_override)
+        #   (label, execution_mode, calculate_and_write_hfun_override)
         modes = [
             {
                 'label':     'MODE 1: ALL PARALLEL',
@@ -152,7 +152,7 @@ class TestWriteHfunProfiling(unittest.TestCase):
                     '  apply_constraints    : PARALLEL\n'
                     '  apply_features       : PARALLEL\n'
                     '  apply_contours       : PARALLEL\n'
-                    '  _write_hfun_to_disk  : PARALLEL\n'
+                    '  _calculate_and_write_hfun_to_disk  : PARALLEL\n'
                 ),
             },
             {
@@ -163,29 +163,29 @@ class TestWriteHfunProfiling(unittest.TestCase):
                     '  apply_constraints    : SERIAL\n'
                     '  apply_features       : SERIAL\n'
                     '  apply_contours       : SERIAL\n'
-                    '  _write_hfun_to_disk  : SERIAL\n'
+                    '  _calculate_and_write_hfun_to_disk  : SERIAL\n'
                 ),
             },
             {
-                'label':     'MODE 3: PARALLEL EXCEPT _write_hfun_to_disk',
+                'label':     'MODE 3: PARALLEL EXCEPT _calculate_and_write_hfun_to_disk',
                 'exec_mode': 'parallel',
                 'override':  'serial',
                 'details': (
                     '  apply_constraints    : PARALLEL\n'
                     '  apply_features       : PARALLEL\n'
                     '  apply_contours       : PARALLEL\n'
-                    '  _write_hfun_to_disk  : SERIAL  (monkey-patched)\n'
+                    '  _calculate_and_write_hfun_to_disk  : SERIAL  (monkey-patched)\n'
                 ),
             },
             {
-                'label':     'MODE 4: SERIAL EXCEPT _write_hfun_to_disk',
+                'label':     'MODE 4: SERIAL EXCEPT _calculate_and_write_hfun_to_disk',
                 'exec_mode': 'serial',
                 'override':  'parallel',
                 'details': (
                     '  apply_constraints    : SERIAL\n'
                     '  apply_features       : SERIAL\n'
                     '  apply_contours       : SERIAL\n'
-                    '  _write_hfun_to_disk  : PARALLEL (monkey-patched)\n'
+                    '  _calculate_and_write_hfun_to_disk  : PARALLEL (monkey-patched)\n'
                 ),
             },
         ]
@@ -217,7 +217,7 @@ class TestWriteHfunProfiling(unittest.TestCase):
         # ─── Build report ───────────────────────────────────────────
         lines = []
         lines.append('=' * 65)
-        lines.append('  _write_hfun_to_disk() Profiling Report')
+        lines.append('  _calculate_and_write_hfun_to_disk() Profiling Report')
         lines.append('=' * 65)
         lines.append(f'Date            : {datetime.datetime.now().isoformat()}')
         lines.append(f'Rasters         : {n_rasters}')
@@ -246,10 +246,10 @@ class TestWriteHfunProfiling(unittest.TestCase):
             lines.append(f'  {result["label"]:<45} {result["elapsed"]:>7.2f}s')
         lines.append('')
 
-        # Speedup: Mode 1 vs Mode 3 (isolates _write_hfun_to_disk parallel)
+        # Speedup: Mode 1 vs Mode 3 (isolates _calculate_and_write_hfun_to_disk parallel)
         if results[2]['elapsed'] > 0:
             speedup_write = results[2]['elapsed'] / results[0]['elapsed']
-            lines.append(f'  Speedup from parallel _write_hfun_to_disk:')
+            lines.append(f'  Speedup from parallel _calculate_and_write_hfun_to_disk:')
             lines.append(f'    Mode 3 / Mode 1 = {speedup_write:.2f}x '
                          f'({results[2]["elapsed"]:.2f}s → {results[0]["elapsed"]:.2f}s)')
 
