@@ -20,7 +20,7 @@ maintainers = [
 description = "Package to generate computational unstructured meshes for ocean simulation."
 license = {file = "LICENSE"}
 readme = "README.md"
-requires-python = '>=3.9, <3.13' # 3.8 -> scipy
+requires-python = '>=3.10, <3.14' # TODO: Update to <3.15 when triangle library adds support for 3.14
 dependencies = [
     "colored-traceback<=0.3.0", 
     "fiona", "geopandas>=1.0.0",

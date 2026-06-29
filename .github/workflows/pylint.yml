@@ -27,12 +27,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Setup Mamba environment for Python
-      uses: mamba-org/setup-micromamba@v1
+      uses: mamba-org/setup-micromamba@v3
       with:
         environment-file: ./environment.yml
         environment-name: ocsmesh-env
+        post-cleanup: 'none'
+        generate-run-shell: false
+        # TODO: Update to 3.14 when triangle library adds support
         create-args: >-
-          python=3.12
+          python=3.13
     - name: Install dependencies
       shell: bash -l {0}
       run: pip install .[testing]
