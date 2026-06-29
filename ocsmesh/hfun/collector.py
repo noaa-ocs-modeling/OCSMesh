@@ -746,7 +746,7 @@ def _meshdata_task_worker(task: dict):
                 # HfunMesh.meshdata() doesn't accept kwargs like stride
                 meshdata_result = deepcopy(worker_hfun.meshdata())
         else:
-            raise ValueError(f"Unknown task type: {task_type}")
+            raise ValueError(f"Unknown task type: {type}")
 
         # Reproject to EPSG:4326 (same as serial path)
         if hasattr(meshdata_result, "crs"):
