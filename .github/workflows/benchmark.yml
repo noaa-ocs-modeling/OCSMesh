@@ -1,0 +1,72 @@
+name: Benchmark
+
+on:
+  pull_request:
+    paths:
+      - '**.py'
+      - '.github/workflows/benchmark.yml'
+
+permissions:
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Mamba environment
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: ./environment.yml
+          environment-name: ocsmesh-env
+
+      - name: Install dependencies
+        shell: bash -l {0}
+        run: pip install .[testing] pytest-benchmark
+
+      - name: Run benchmarks
+        shell: bash -l {0}
+        run: >
+          python -m pytest tests/benchmarks/benchmark.py
+          --benchmark-only
+          --benchmark-json output.json
+          -v
+
+      - name: Post benchmark results to PR
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: pytest
+          output-file-path: output.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Comment-only mode — no gh-pages branch needed
+          auto-push: false
+          save-data-file: false
+          comment-always: true
+          # Flag benchmarks that are >=150% slower than baseline
+          alert-threshold: '150%'
+          comment-on-alert: true
+
+      - name: Post metrics explanation to PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const body = `### 📊 Benchmark Metrics Explained
+            - **Min / Max / Mean / Median**: Raw execution times in seconds across all rounds.
+            - **StdDev**: Standard Deviation. A lower value means the runs were very consistent.
+            - **IQR**: Interquartile Range, another variance measure that ignores extreme outliers.
+            - **Outliers (Mild;Severe)**: How many rounds were significantly faster/slower than average.
+            - **OPS**: Operations Per Second (1 / Mean).
+            - **Rounds**: Total number of independent measurements taken.
+            
+            *(The numbers in parentheses, e.g. \`(1.58)\`, represent how many times slower that mode was compared to the absolute fastest mode)*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            })
