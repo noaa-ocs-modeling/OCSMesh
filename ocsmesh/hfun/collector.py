@@ -2649,21 +2649,30 @@ class HfunCollector(BaseHfun):
             if loop_idx in stage1_results:
                 npz_path = stage1_results[loop_idx]
                 data = np.load(npz_path, allow_pickle=False)
-                coords = data['coords']
+                coords = data['coords'].copy()
                 tria_raw = data['tria']
-                tria = tria_raw if tria_raw.size > 0 else None
+                tria = tria_raw.copy() if tria_raw.size > 0 else None
                 quad_raw = data['quad']
-                quad = quad_raw if quad_raw.size > 0 else None
-                values = data['values']
+                quad = quad_raw.copy() if quad_raw.size > 0 else None
+                values = data['values'].copy()
                 crs_str = str(data['crs'])
                 crs = (CRS.from_user_input(crs_str)
                        if crs_str else None)
+                       
+                # Necessary for windows : Close the NpzFile handle before deleting
+                data.close()
+                del data
                 meshdata_hfun = MeshData(
                     coords=coords, tria=tria,
                     quad=quad, values=values, crs=crs
                 )
                 # Clean up intermediate .npz — data is in memory now
-                os.remove(npz_path)
+                try:
+                    os.remove(npz_path)
+                except OSError:
+                    _logger.debug(
+                        f"Could not remove temp file {npz_path}"
+                    )
             else:
                 # Worker failed for this index — skip
                 continue
