@@ -527,8 +527,15 @@ class TestHfunCollectorExecution(unittest.TestCase):
         meshdata_parallel = hfun_parallel.meshdata()
 
         # --- COMPARISON ---
-        # Mesh topology may differ slightly due to floating point,
-        # but aggregate statistics must match
+        # Node count must match
+        self.assertEqual(
+            len(meshdata_serial.coords),
+            len(meshdata_parallel.coords))
+        # Coordinates must match
+        npt.assert_allclose(
+            meshdata_serial.coords,
+            meshdata_parallel.coords, rtol=1e-5)
+        # Aggregate value statistics must match
         npt.assert_allclose(
             np.min(meshdata_serial.values),
             np.min(meshdata_parallel.values), rtol=1e-5)
@@ -580,6 +587,12 @@ class TestHfunCollectorExecution(unittest.TestCase):
         meshdata_parallel = hfun_parallel.meshdata()
 
         # --- COMPARISON ---
+        self.assertEqual(
+            len(meshdata_serial.coords),
+            len(meshdata_parallel.coords))
+        npt.assert_allclose(
+            meshdata_serial.coords,
+            meshdata_parallel.coords, rtol=1e-5)
         npt.assert_allclose(
             np.min(meshdata_serial.values),
             np.min(meshdata_parallel.values), rtol=1e-5)
