@@ -1,12 +1,11 @@
+"""Shared fixtures for benchmark tests."""
+
 import gc
-import shutil
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from ocsmesh import Hfun, Raster
+from ocsmesh import Raster
 from ocsmesh.utils import raster_from_numpy
 
 

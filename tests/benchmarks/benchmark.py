@@ -8,8 +8,7 @@ This is ideal for benchmarks so they don't slow down normal unit test runs.
 
 Uses ``pytest-benchmark`` to measure the full ``hfun.meshdata()``
 pipeline under different execution configurations. Results are
-consumed by ``github-action-benchmark`` in CI to post comparison
-tables directly as PR comments.
+parsed by the CI workflow and posted as PR comments.
 
 Run locally::
 

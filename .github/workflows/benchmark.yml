@@ -36,37 +36,85 @@ jobs:
           -v
 
       - name: Post benchmark results to PR
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: pytest
-          output-file-path: output.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # Comment-only mode — no gh-pages branch needed
-          auto-push: false
-          save-data-file: false
-          comment-always: true
-          # Flag benchmarks that are >=150% slower than baseline
-          alert-threshold: '150%'
-          comment-on-alert: true
-
-      - name: Post metrics explanation to PR
         uses: actions/github-script@v7
         if: github.event_name == 'pull_request'
         with:
           script: |
-            const body = `### 📊 Benchmark Metrics Explained
-            - **Min / Max / Mean / Median**: Raw execution times in seconds across all rounds.
-            - **StdDev**: Standard Deviation. A lower value means the runs were very consistent.
-            - **IQR**: Interquartile Range, another variance measure that ignores extreme outliers.
-            - **Outliers (Mild;Severe)**: How many rounds were significantly faster/slower than average.
-            - **OPS**: Operations Per Second (1 / Mean).
-            - **Rounds**: Total number of independent measurements taken.
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('output.json', 'utf8'));
             
-            *(The numbers in parentheses, e.g. \`(1.58)\`, represent how many times slower that mode was compared to the absolute fastest mode)*`;
+            const fullSha = context.payload.pull_request.head.sha;
+            const shortSha = fullSha.substring(0, 7);
+            const branch = context.payload.pull_request.head.ref;
             
-            github.rest.issues.createComment({
+            // Fetch commit message
+            const { data: commitData } = await github.rest.git.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: fullSha,
+            });
+            const commitMsg = commitData.message.split('\n')[0];
+            
+            // Hidden marker to identify this comment for future updates
+            const marker = '<!-- ocsmesh-benchmark-results -->';
+            
+            // Find fastest mean to calculate ratios
+            const minMean = Math.min(...data.benchmarks.map(b => b.stats.mean));
+            
+            let body = `${marker}\n`;
+            body += `### Performance Benchmark Results\n\n`;
+            body += `| | |\n`;
+            body += `|---|---|\n`;
+            body += `| **Branch** | \`${branch}\` |\n`;
+            body += `| **Commit** | \`${shortSha}\` — ${commitMsg} |\n\n`;
+            body += `| Mode | Mean Time | Min | Max | StdDev | OPS |\n`;
+            body += `|------|-----------|-----|-----|--------|-----|\n`;
+            
+            data.benchmarks.forEach(b => {
+              const name = b.name.replace('test_meshdata_pipeline[', '').replace(']', '');
+              
+              const mean = b.stats.mean.toFixed(2);
+              const min = b.stats.min.toFixed(2);
+              const max = b.stats.max.toFixed(2);
+              const stddev = b.stats.stddev.toFixed(3);
+              const ops = b.stats.ops.toFixed(3);
+              
+              const ratio = (b.stats.mean / minMean).toFixed(2);
+              const ratioStr = ratio === "1.00" ? "(fastest)" : `(${ratio}x slower)`;
+              const meanStr = `**${mean}s** ${ratioStr}`;
+              
+              body += `| **${name}** | ${meanStr} | ${min}s | ${max}s | ${stddev} | ${ops} |\n`;
+            });
+            
+            body += `\n<br>\n\n`;
+            body += `<sub>\n`;
+            body += `<b>Metrics:</b> `;
+            body += `<b>Mean / Min / Max</b>: execution times in seconds. `;
+            body += `<b>StdDev</b>: variance between runs. `;
+            body += `<b>OPS</b>: operations per second (1 / Mean). `;
+            body += `<i>Parentheses show relative speed compared to the fastest mode.</i>\n`;
+            body += `</sub>`;
+            
+            // Find existing benchmark comment by marker
+            const { data: comments } = await github.rest.issues.listComments({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: body
-            })
+            });
+            const existing = comments.find(c => c.body.includes(marker));
+            
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body,
+              });
+            }
