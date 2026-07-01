@@ -2662,6 +2662,8 @@ class HfunCollector(BaseHfun):
                     coords=coords, tria=tria,
                     quad=quad, values=values, crs=crs
                 )
+                # Clean up intermediate .npz — data is in memory now
+                os.remove(npz_path)
             else:
                 # Worker failed for this index — skip
                 continue
