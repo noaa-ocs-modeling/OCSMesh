@@ -758,12 +758,16 @@ def _meshdata_task_worker(task: dict):
         tria_data = (meshdata_result.tria
                      if meshdata_result.tria is not None
                      else np.array([]))
+        quad_data = (meshdata_result.quad
+                     if meshdata_result.quad is not None
+                     else np.array([]))
         crs_str = (str(meshdata_result.crs)
                    if meshdata_result.crs else "")
         np.savez(
             output_path,
             coords=meshdata_result.coords,
             tria=tria_data,
+            quad=quad_data,
             values=meshdata_result.values,
             crs=np.array(crs_str)
         )
@@ -2648,13 +2652,15 @@ class HfunCollector(BaseHfun):
                 coords = data['coords']
                 tria_raw = data['tria']
                 tria = tria_raw if tria_raw.size > 0 else None
+                quad_raw = data['quad']
+                quad = quad_raw if quad_raw.size > 0 else None
                 values = data['values']
                 crs_str = str(data['crs'])
                 crs = (CRS.from_user_input(crs_str)
                        if crs_str else None)
                 meshdata_hfun = MeshData(
                     coords=coords, tria=tria,
-                    values=values, crs=crs
+                    quad=quad, values=values, crs=crs
                 )
             else:
                 # Worker failed for this index — skip
