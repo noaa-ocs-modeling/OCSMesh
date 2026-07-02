@@ -61,12 +61,15 @@ jobs:
             // Find fastest mean to calculate ratios
             const minMean = Math.min(...data.benchmarks.map(b => b.stats.mean));
             
+            const rounds = data.benchmarks[0].stats.rounds;
+            
             let body = `${marker}\n`;
             body += `### Performance Benchmark Results\n\n`;
             body += `| | |\n`;
             body += `|---|---|\n`;
             body += `| **Branch** | \`${branch}\` |\n`;
-            body += `| **Commit** | \`${shortSha}\` — ${commitMsg} |\n\n`;
+            body += `| **Commit** | \`${shortSha}\` — ${commitMsg} |\n`;
+            body += `| **Rounds** | ${rounds} |\n\n`;
             body += `| Mode | Mean Time | Min | Max | StdDev | OPS |\n`;
             body += `|------|-----------|-----|-----|--------|-----|\n`;
             
@@ -85,6 +88,23 @@ jobs:
               
               body += `| **${name}** | ${meanStr} | ${min}s | ${max}s | ${stddev} | ${ops} |\n`;
             });
+            
+            // Numerical equivalence check status
+            body += `\n`;
+            try {
+              const eq = JSON.parse(fs.readFileSync('equivalence_result.json', 'utf8'));
+              body += `**Numerical Equivalence:** PASS — \`${eq.first_mode}\` vs \`${eq.second_mode}\` (tolerance: ${eq.rtol})\n\n`;
+              body += `| Metric | ${eq.first_mode} | ${eq.second_mode} | Relative Diff |\n`;
+              body += `|--------|${'-'.repeat(eq.first_mode.length + 2)}|${'-'.repeat(eq.second_mode.length + 2)}|----------------|\n`;
+              
+              const c = eq.checks;
+              body += `| **Nodes** | ${c.num_nodes.first} | ${c.num_nodes.second} | ${c.num_nodes.match ? 'exact match' : 'MISMATCH'} |\n`;
+              body += `| **Min** | ${c.min.first.toFixed(6)} | ${c.min.second.toFixed(6)} | ${c.min.rel_diff.toExponential(2)} |\n`;
+              body += `| **Max** | ${c.max.first.toFixed(6)} | ${c.max.second.toFixed(6)} | ${c.max.rel_diff.toExponential(2)} |\n`;
+              body += `| **Mean** | ${c.mean.first.toFixed(6)} | ${c.mean.second.toFixed(6)} | ${c.mean.rel_diff.toExponential(2)} |\n`;
+            } catch (e) {
+              body += `**Numerical Equivalence:** status unavailable (equivalence_result.json not found)\n`;
+            }
             
             body += `\n<br>\n\n`;
             body += `<sub>\n`;
