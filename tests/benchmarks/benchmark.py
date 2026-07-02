@@ -10,7 +10,7 @@ parsed by the CI workflow and posted as PR comments.
 
 Run locally::
 
-    pytest tests/benchmarks/benchmark.py --benchmark-only -v
+    pytest tests/benchmarks/benchmark.py -v
 
 Generate JSON for CI::
 
