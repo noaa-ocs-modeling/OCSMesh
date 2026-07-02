@@ -3,8 +3,6 @@ Benchmarks for the meshdata() pipeline.
 
 NOTE: Since this file is named `benchmark.py` (and does not start with `test_`),
 pytest won't discover it automatically if you just run `pytest tests/`.
-It will only run if you specifically pass the file path: `pytest tests/benchmarks/benchmark.py`.
-This is ideal for benchmarks so they don't slow down normal unit test runs.
 
 Uses ``pytest-benchmark`` to measure the full ``hfun.meshdata()``
 pipeline under different execution configurations. Results are
@@ -28,7 +26,6 @@ from ocsmesh import Hfun
 
 # ─── Benchmark Configuration ────────────────────────────────────────
 # Edit rounds here to control how many times each mode is measured.
-# Higher rounds = more stable statistics but slower CI.
 BENCHMARK_ROUNDS = 3
 
 # Dictionary to cache the first result to assert numerical equivalence
@@ -40,6 +37,7 @@ BENCHMARK_CASES = ["serial", "parallel"]
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────
+# TODO: this can be extended to cover more refinement scenarios.
 
 def _build_hfun(raster_list, execution_mode):
     """Create an Hfun with 3 refinements and the given execution_mode."""
@@ -83,8 +81,8 @@ def test_meshdata_pipeline(benchmark, benchmark_raster_list, exec_mode):
     mean_val = float(np.mean(meshdata.values))
     
     if not _CACHED_RESULTS:
-        _CACHED_RESULTS["mean_val"] = mean_val
-    else:
+        _CACHED_RESULTS["mean_val"] = mean_val # cache the first result for comparison.
+    else: # compare with cached result
         npt.assert_allclose(
             _CACHED_RESULTS["mean_val"], 
             mean_val, 

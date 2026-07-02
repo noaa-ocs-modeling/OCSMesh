@@ -16,9 +16,6 @@ def benchmark_raster_list(tmp_path_factory):
     Layout is a 2x2 grid covering [0,1] x [0,1].  Each tile spans
     60% of each axis (50% base + 10% overlap per edge), giving 20%
     overlap between adjacent tiles.
-
-    Scope is ``module`` so rasters are created once and shared by
-    all benchmark tests in the same file.
     """
 
     tdir = tmp_path_factory.mktemp("benchmark_rasters")
