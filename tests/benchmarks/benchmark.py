@@ -33,7 +33,7 @@ BENCHMARK_ROUNDS = 3
 
 # Relative tolerance for the numerical equivalence check
 EQUIVALENCE_RTOL = 1e-5
-
+# TODO: Make this configurable via pytest command line option
 # Path to write equivalence check results for CI reporting
 _EQUIVALENCE_OUTPUT = Path("equivalence_result.json")
 
