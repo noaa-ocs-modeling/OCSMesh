@@ -34,19 +34,21 @@ BENCHMARK_ROUNDS = 3
 # Relative tolerance for the numerical equivalence check
 EQUIVALENCE_RTOL = 1e-5
 
-# Dictionary to cache the first result to assert numerical equivalence
-_CACHED_RESULTS = {}
-
 # Path to write equivalence check results for CI reporting
 _EQUIVALENCE_OUTPUT = Path("equivalence_result.json")
 
 
 # ─── Test Case Definitions ──────────────────────────────────────────
+# The first entry is used as the
+# baseline for all equivalence comparisons.
 BENCHMARK_CASES = ["serial", "parallel"]
 
 
+# ─── Collected Results ──────────────────────────────────────────────
+_RESULTS = {}
+
+
 # ─── Helpers ─────────────────────────────────────────────────────────
-# TODO: this can be extended to cover more refinement scenarios.
 
 def _build_hfun(raster_list, execution_mode):
     """Create an Hfun with 3 refinements and the given execution_mode."""
@@ -61,30 +63,82 @@ def _build_hfun(raster_list, execution_mode):
     return hfun
 
 
-def _write_equivalence_result(status, first_mode, second_mode, checks, rtol):
-    """Write equivalence check outcome to a JSON file for CI reporting.
+def _extract_stats(meshdata):
+    """Extract comparable statistics from a meshdata result."""
+
+    return {
+        "num_nodes": len(meshdata.coords),
+        "min": float(np.min(meshdata.values)),
+        "max": float(np.max(meshdata.values)),
+        "mean": float(np.mean(meshdata.values)),
+        "coords": meshdata.coords,
+    }
+
+
+def _rel_diff(a, b):
+    """Compute the relative difference between two scalars."""
+
+    return abs(a - b) / abs(a) if a != 0 else 0.0
+
+
+def _compare_stats(baseline, current):
+    """Compare two stat dicts and return a per-metric check summary.
 
     Parameters
     ----------
-    status : str
-        'pass' or 'fail'.
-    first_mode, second_mode : str
-        The execution modes being compared.
-    checks : dict
-        Per-metric comparison results, e.g.
-        {"num_nodes": {"first": 100, "second": 100, "match": True}, ...}
-    rtol : float
-        Relative tolerance used for floating-point comparisons.
+    baseline, current : dict
+        Output of ``_extract_stats``.
+
+    Returns
+    -------
+    dict
+        Per-metric check results suitable for JSON serialization.
     """
 
-    result = {
-        "status": status,
-        "first_mode": first_mode,
-        "second_mode": second_mode,
-        "rtol": rtol,
-        "checks": checks,
+    return {
+        "num_nodes": {
+            "baseline": baseline["num_nodes"],
+            "current": current["num_nodes"],
+            "match": baseline["num_nodes"] == current["num_nodes"],
+        },
+        "min": {
+            "baseline": baseline["min"],
+            "current": current["min"],
+            "rel_diff": _rel_diff(baseline["min"], current["min"]),
+        },
+        "max": {
+            "baseline": baseline["max"],
+            "current": current["max"],
+            "rel_diff": _rel_diff(baseline["max"], current["max"]),
+        },
+        "mean": {
+            "baseline": baseline["mean"],
+            "current": current["mean"],
+            "rel_diff": _rel_diff(baseline["mean"], current["mean"]),
+        },
     }
-    _EQUIVALENCE_OUTPUT.write_text(json.dumps(result, indent=2))
+
+
+def _assert_stats_equal(baseline, current, mode_label, rtol):
+    """Assert that two stat dicts are numerically equivalent."""
+
+    assert baseline["num_nodes"] == current["num_nodes"], (
+        f"[{mode_label}] Node count mismatch: "
+        f"{baseline['num_nodes']} vs {current['num_nodes']}"
+    )
+
+    npt.assert_allclose(
+        baseline["coords"], current["coords"],
+        rtol=rtol,
+        err_msg=f"[{mode_label}] Coordinates mismatch",
+    )
+
+    for metric in ("min", "max", "mean"):
+        npt.assert_allclose(
+            baseline[metric], current[metric],
+            rtol=rtol,
+            err_msg=f"[{mode_label}] {metric} value mismatch",
+        )
 
 
 # ─── Benchmarks ──────────────────────────────────────────────────────
@@ -96,6 +150,8 @@ def test_meshdata_pipeline(benchmark, benchmark_raster_list, exec_mode):
 
     The ``benchmark_raster_list`` fixture (from conftest.py) provides
     4 tiled rasters with 20% overlap, created once per module.
+
+    Results are stored in ``_RESULTS`` for the equivalence test below.
     """
 
     def run_meshdata():
@@ -112,79 +168,39 @@ def test_meshdata_pipeline(benchmark, benchmark_raster_list, exec_mode):
     assert len(meshdata.coords) > 0
     assert np.all(np.isfinite(meshdata.values))
 
-    # Cache results from the first mode for cross-mode comparison
-    stats = {
-        "num_nodes": len(meshdata.coords),
-        "min": float(np.min(meshdata.values)),
-        "max": float(np.max(meshdata.values)),
-        "mean": float(np.mean(meshdata.values)),
-        "coords": meshdata.coords,
+    # Store for cross-mode comparison
+    _RESULTS[exec_mode] = _extract_stats(meshdata)
+
+
+# ─── Equivalence ─────────────────────────────────────────────────────
+
+def test_numerical_equivalence():
+    """Verify that all execution modes produce identical meshdata.
+
+    Runs after all parametrized benchmarks. Uses the first entry in
+    ``BENCHMARK_CASES`` as the baseline and compares every other mode
+    against it. Writes a detailed JSON report for the CI workflow.
+    """
+
+    assert len(_RESULTS) == len(BENCHMARK_CASES), (
+        f"Expected results for {BENCHMARK_CASES}, "
+        f"got results for {list(_RESULTS.keys())}"
+    )
+
+    baseline_mode = BENCHMARK_CASES[0]
+    baseline = _RESULTS[baseline_mode]
+
+    comparisons = {}
+    for mode in BENCHMARK_CASES[1:]:
+        current = _RESULTS[mode]
+        comparisons[mode] = _compare_stats(baseline, current)
+        _assert_stats_equal(baseline, current, mode, EQUIVALENCE_RTOL)
+
+    # Write report for CI
+    report = {
+        "status": "pass",
+        "baseline": baseline_mode,
+        "rtol": EQUIVALENCE_RTOL,
+        "comparisons": comparisons,
     }
-
-    if not _CACHED_RESULTS:
-        _CACHED_RESULTS["mode"] = exec_mode
-        _CACHED_RESULTS["stats"] = stats
-    else:
-        cached = _CACHED_RESULTS["stats"]
-
-        # Build per-metric check results for CI reporting
-        checks = {
-            "num_nodes": {
-                "first": cached["num_nodes"],
-                "second": stats["num_nodes"],
-                "match": cached["num_nodes"] == stats["num_nodes"],
-            },
-            "min": {
-                "first": cached["min"],
-                "second": stats["min"],
-                "rel_diff": abs(cached["min"] - stats["min"]) / abs(cached["min"]) if cached["min"] != 0 else 0.0,
-            },
-            "max": {
-                "first": cached["max"],
-                "second": stats["max"],
-                "rel_diff": abs(cached["max"] - stats["max"]) / abs(cached["max"]) if cached["max"] != 0 else 0.0,
-            },
-            "mean": {
-                "first": cached["mean"],
-                "second": stats["mean"],
-                "rel_diff": abs(cached["mean"] - stats["mean"]) / abs(cached["mean"]) if cached["mean"] != 0 else 0.0,
-            },
-        }
-
-        _write_equivalence_result(
-            status="pass",
-            first_mode=_CACHED_RESULTS["mode"],
-            second_mode=exec_mode,
-            checks=checks,
-            rtol=EQUIVALENCE_RTOL,
-        )
-
-        # Node count must match exactly
-        assert cached["num_nodes"] == stats["num_nodes"], (
-            f"Node count mismatch: {cached['num_nodes']} vs {stats['num_nodes']}"
-        )
-
-        # Coordinates must match within tolerance
-        npt.assert_allclose(
-            cached["coords"], stats["coords"],
-            rtol=EQUIVALENCE_RTOL,
-            err_msg=f"Coordinates mismatch in {exec_mode} mode",
-        )
-
-        # Value statistics must match within tolerance
-        npt.assert_allclose(
-            cached["min"], stats["min"],
-            rtol=EQUIVALENCE_RTOL,
-            err_msg=f"Min value mismatch in {exec_mode} mode",
-        )
-        npt.assert_allclose(
-            cached["max"], stats["max"],
-            rtol=EQUIVALENCE_RTOL,
-            err_msg=f"Max value mismatch in {exec_mode} mode",
-        )
-        npt.assert_allclose(
-            cached["mean"], stats["mean"],
-            rtol=EQUIVALENCE_RTOL,
-            err_msg=f"Mean value mismatch in {exec_mode} mode",
-        )
-
+    _EQUIVALENCE_OUTPUT.write_text(json.dumps(report, indent=2))
