@@ -14,7 +14,7 @@ Run locally::
 
 Generate JSON for CI::
 
-    pytest tests/benchmarks/benchmark.py --benchmark-only --benchmark-json output.json
+    pytest tests/benchmarks/benchmark.py --benchmark-json output.json
 """
 
 import json
