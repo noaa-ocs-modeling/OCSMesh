@@ -69,7 +69,7 @@ jobs:
             body += `|---|---|\n`;
             body += `| **Branch** | \`${branch}\` |\n`;
             body += `| **Commit** | \`${shortSha}\` — ${commitMsg} |\n`;
-            body += `| **Rounds** | ${rounds} |\n\n`;
+            body += `| **Rounds "Runs"** | ${rounds} |\n\n`;
             body += `| Mode | Mean Time | Min | Max | StdDev | OPS |\n`;
             body += `|------|-----------|-----|-----|--------|-----|\n`;
             
@@ -108,7 +108,7 @@ jobs:
             
             body += `\n<br>\n\n`;
             body += `<sub>\n`;
-            body += `<b>Metrics:</b> `;
+            body += `<b>Performance Metrics:</b> `;
             body += `<b>Mean / Min / Max</b>: execution times in seconds. `;
             body += `<b>StdDev</b>: variance between runs. `;
             body += `<b>OPS</b>: operations per second (1 / Mean). `;
