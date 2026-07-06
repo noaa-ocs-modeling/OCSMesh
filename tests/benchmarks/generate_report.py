@@ -34,7 +34,7 @@ def generate_report(benchmark_path, equivalence_path, output_path):
 
     lines = []
     lines.append("=================================================================")
-    lines.append("  Meshdata() Profiling Report")
+    lines.append("  Benchmark Report")
     lines.append("=================================================================\n")
     lines.append(f"Date            : {now}")
     lines.append(f"Rounds          : {rounds}\n\n")
