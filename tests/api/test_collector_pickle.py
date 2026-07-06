@@ -513,6 +513,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
         # --- SERIAL ---
         hfun_serial = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.execution_mode = 'serial'
         hfun_serial.add_topo_bound_constraint(
             value=100, upper_bound=5, lower_bound=-5, value_type='min')
         meshdata_serial = hfun_serial.meshdata()
@@ -571,6 +572,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
 
         # --- SERIAL ---
         hfun_serial = Hfun(single_raster, base_mesh=base_mesh, nprocs=2, hmin=10, hmax=1000)
+        hfun_serial.execution_mode = 'serial'
         hfun_serial.add_topo_bound_constraint(
             value=100, upper_bound=5, lower_bound=-5, value_type='min')
         meshdata_serial = hfun_serial.meshdata()
