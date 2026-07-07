@@ -10,7 +10,7 @@ import numpy as np
 import numpy.testing as npt
 from shapely import geometry
 
-from ocsmesh import Hfun, Raster
+from ocsmesh import Hfun, Mesh, Raster
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.utils import raster_from_numpy
 
@@ -527,6 +527,103 @@ class TestHfunCollectorExecution(unittest.TestCase):
         # nodes to make sure their mean is close to the target size.
         values = hfun.get_values()
         self.assertIsNotNone(values)
+
+    def test_serial_vs_parallel_calculate_and_write_hfun_to_disk_equivalence(self):
+        """
+        Ensure serial and parallel _calculate_and_write_hfun_to_disk() produce
+        numerically equivalent composite meshdata results.
+
+        This validates the full end-to-end pipeline: meshdata generation,
+        overlap clipping, and .2dm write/read round-trip.
+        """
+        nprocs = 2
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_serial.execution_mode = 'serial'
+        hfun_serial.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_serial = hfun_serial.meshdata()
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(self.raster_list, nprocs=nprocs, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_parallel = hfun_parallel.meshdata()
+
+        # --- COMPARISON ---
+        # Node count must match
+        self.assertEqual(
+            len(meshdata_serial.coords),
+            len(meshdata_parallel.coords))
+        # Coordinates must match
+        npt.assert_allclose(
+            meshdata_serial.coords,
+            meshdata_parallel.coords, rtol=1e-5)
+        # Aggregate value statistics must match
+        npt.assert_allclose(
+            np.min(meshdata_serial.values),
+            np.min(meshdata_parallel.values), rtol=1e-5)
+        npt.assert_allclose(
+            np.max(meshdata_serial.values),
+            np.max(meshdata_parallel.values), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(meshdata_serial.values),
+            np.mean(meshdata_parallel.values), rtol=1e-5)
+
+
+    def test_parallel_calculate_and_write_hfun_single_raster(self):
+        """
+        Verify parallel path works correctly with a single raster
+        (edge case — only one worker task).
+        """
+        single_raster = [Raster(self.dem1_path)]
+
+        hfun = Hfun(single_raster, nprocs=2, hmin=10, hmax=1000)
+        hfun.execution_mode = 'parallel'
+        meshdata = hfun.meshdata()
+        self.assertIsNotNone(meshdata)
+        self.assertGreater(len(meshdata.coords), 0)
+
+    def test_parallel_calculate_and_write_hfun_with_base_mesh(self):
+        """
+        Verify that HfunMesh (e.g. from base_mesh) successfully routes
+        through the parallel worker and produces identical results to serial.
+        """
+        single_raster = [Raster(self.dem1_path)]
+
+        # 1. Create a quick base mesh
+        hfun_base = Hfun(single_raster, hmin=50, hmax=500)
+        base_mesh = Mesh(hfun_base.meshdata())
+
+        # --- SERIAL ---
+        hfun_serial = Hfun(single_raster, base_mesh=base_mesh, nprocs=2, hmin=10, hmax=1000)
+        hfun_serial.execution_mode = 'serial'
+        hfun_serial.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_serial = hfun_serial.meshdata()
+
+        # --- PARALLEL ---
+        hfun_parallel = Hfun(single_raster, base_mesh=base_mesh, nprocs=2, hmin=10, hmax=1000)
+        hfun_parallel.execution_mode = 'parallel'
+        hfun_parallel.add_topo_bound_constraint(
+            value=100, upper_bound=5, lower_bound=-5, value_type='min')
+        meshdata_parallel = hfun_parallel.meshdata()
+
+        # --- COMPARISON ---
+        self.assertEqual(
+            len(meshdata_serial.coords),
+            len(meshdata_parallel.coords))
+        npt.assert_allclose(
+            meshdata_serial.coords,
+            meshdata_parallel.coords, rtol=1e-5)
+        npt.assert_allclose(
+            np.min(meshdata_serial.values),
+            np.min(meshdata_parallel.values), rtol=1e-5)
+        npt.assert_allclose(
+            np.mean(meshdata_serial.values),
+            np.mean(meshdata_parallel.values), rtol=1e-5)
 
 
 if __name__ == '__main__':
