@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Command line interface &mdash; ocsmesh 2.1.2 documentation</title>
+  <title>Command line interface &mdash; ocsmesh 2.2.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -47,24 +47,24 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Command line interface</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.__main__-dummy_documentation-positional-arguments">Positional Arguments</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.__main__-dummy_documentation-named-arguments">Named Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh-named-arguments">Named Arguments</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#Sub-commands">Sub-commands</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#geom">geom</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#positional-arguments">Positional Arguments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#named-arguments">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh-geom">geom</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-geom-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-geom-named-arguments">Named Arguments</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#Sub-commands_repeat1">Sub-commands</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#hfun">hfun</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#positional-arguments_repeat2">Positional Arguments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#named-arguments_repeat2">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh-hfun">hfun</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-hfun-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-hfun-named-arguments">Named Arguments</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#Sub-commands_repeat2">Sub-commands</a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="#scripts">scripts</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#positional-arguments_repeat4">Positional Arguments</a></li>
-<li class="toctree-l4"><a class="reference internal" href="#named-arguments_repeat4">Named Arguments</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh-scripts">scripts</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-scripts-positional-arguments">Positional Arguments</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#ocsmesh-scripts-named-arguments">Named Arguments</a></li>
 <li class="toctree-l4"><a class="reference internal" href="#Sub-commands_repeat3">Sub-commands</a></li>
 </ul>
 </li>
@@ -100,22 +100,22 @@
              
   <section id="command-line-interface">
 <h1>Command line interface<a class="headerlink" href="#command-line-interface" title="Permalink to this heading"></a></h1>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">ocsmesh</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
+<div class="highlight-default notranslate" id="ocsmesh"><div class="highlight"><pre><span></span><span class="n">usage</span><span class="p">:</span> <span class="n">ocsmesh</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
                <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
                <span class="p">[</span><span class="o">--</span><span class="n">chunk</span><span class="o">-</span><span class="n">size</span> <span class="n">CHUNK_SIZE</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">overlap</span> <span class="n">OVERLAP</span><span class="p">]</span>
                <span class="p">{</span><span class="n">geom</span><span class="p">,</span><span class="n">hfun</span><span class="p">,</span><span class="n">scripts</span><span class="p">}</span> <span class="o">...</span>
 </pre></div>
 </div>
-<section id="ocsmesh.__main__-dummy_documentation-positional-arguments">
-<h2>Positional Arguments<a class="headerlink" href="#ocsmesh.__main__-dummy_documentation-positional-arguments" title="Permalink to this heading"></a></h2>
+<section id="ocsmesh-positional-arguments">
+<span id="ocsmesh.__main__-dummy_documentation-positional-arguments"></span><h2>Positional Arguments<a class="headerlink" href="#ocsmesh-positional-arguments" title="Permalink to this heading"></a></h2>
 <dl class="option-list">
 <dt><kbd>command</kbd></dt>
 <dd><p>Possible choices: geom, hfun, scripts</p>
 </dd>
 </dl>
 </section>
-<section id="ocsmesh.__main__-dummy_documentation-named-arguments">
-<h2>Named Arguments<a class="headerlink" href="#ocsmesh.__main__-dummy_documentation-named-arguments" title="Permalink to this heading"></a></h2>
+<section id="ocsmesh-named-arguments">
+<span id="ocsmesh.__main__-dummy_documentation-named-arguments"></span><h2>Named Arguments<a class="headerlink" href="#ocsmesh-named-arguments" title="Permalink to this heading"></a></h2>
 <dl class="option-list">
 <dt><kbd>--log-level</kbd></dt>
 <dd><p>Possible choices: info, debug, warning</p>
@@ -139,8 +139,8 @@
 </section>
 <section id="Sub-commands">
 <h2>Sub-commands<a class="headerlink" href="#Sub-commands" title="Permalink to this heading"></a></h2>
-<section id="geom">
-<h3>geom<a class="headerlink" href="#geom" title="Permalink to this heading"></a></h3>
+<section id="ocsmesh-geom">
+<span id="geom"></span><h3>geom<a class="headerlink" href="#ocsmesh-geom" title="Permalink to this heading"></a></h3>
 <p>Perform operations related to domain creation and modification.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">geom</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
              <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
@@ -148,16 +148,16 @@
              <span class="p">{</span><span class="n">build</span><span class="p">}</span> <span class="o">...</span>
 </pre></div>
 </div>
-<section id="positional-arguments">
-<h4>Positional Arguments<a class="headerlink" href="#positional-arguments" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-geom-positional-arguments">
+<span id="-positional-arguments"></span><h4>Positional Arguments<a class="headerlink" href="#ocsmesh-geom-positional-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>geom_cmd</kbd></dt>
 <dd><p>Possible choices: build</p>
 </dd>
 </dl>
 </section>
-<section id="named-arguments">
-<h4>Named Arguments<a class="headerlink" href="#named-arguments" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-geom-named-arguments">
+<span id="-named-arguments"></span><h4>Named Arguments<a class="headerlink" href="#ocsmesh-geom-named-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>--log-level</kbd></dt>
 <dd><p>Possible choices: info, debug, warning</p>
@@ -181,8 +181,8 @@
 </section>
 <section id="Sub-commands_repeat1">
 <h4>Sub-commands<a class="headerlink" href="#Sub-commands_repeat1" title="Permalink to this heading"></a></h4>
-<section id="build">
-<h5>build<a class="headerlink" href="#build" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-geom-build">
+<span id="build"></span><h5>build<a class="headerlink" href="#ocsmesh-geom-build" title="Permalink to this heading"></a></h5>
 <p>Build command for domain definition</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">geom</span> <span class="n">build</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
                    <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
@@ -193,16 +193,16 @@
                    <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat1">
-<h6>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat1" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-geom-build-positional-arguments">
+<span id="-positional-arguments_repeat1"></span><h6>Positional Arguments<a class="headerlink" href="#ocsmesh-geom-build-positional-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>dem</kbd></dt>
 <dd><p>Digital elevation model list to be used in geometry creation</p>
 </dd>
 </dl>
 </section>
-<section id="named-arguments_repeat1">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat1" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-geom-build-named-arguments">
+<span id="-named-arguments_repeat1"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-geom-build-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--log-level</kbd></dt>
 <dd><p>Possible choices: info, debug, warning</p>
@@ -251,8 +251,8 @@
 </section>
 </section>
 </section>
-<section id="hfun">
-<h3>hfun<a class="headerlink" href="#hfun" title="Permalink to this heading"></a></h3>
+<section id="ocsmesh-hfun">
+<span id="hfun"></span><h3>hfun<a class="headerlink" href="#ocsmesh-hfun" title="Permalink to this heading"></a></h3>
 <p>Perform operations related to size function creation and modification.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">hfun</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
              <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
@@ -260,16 +260,16 @@
              <span class="p">{</span><span class="n">build</span><span class="p">}</span> <span class="o">...</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat2">
-<h4>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat2" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-hfun-positional-arguments">
+<span id="-positional-arguments_repeat2"></span><h4>Positional Arguments<a class="headerlink" href="#ocsmesh-hfun-positional-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>hfun_cmd</kbd></dt>
 <dd><p>Possible choices: build</p>
 </dd>
 </dl>
 </section>
-<section id="named-arguments_repeat2">
-<h4>Named Arguments<a class="headerlink" href="#named-arguments_repeat2" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-hfun-named-arguments">
+<span id="-named-arguments_repeat2"></span><h4>Named Arguments<a class="headerlink" href="#ocsmesh-hfun-named-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>--log-level</kbd></dt>
 <dd><p>Possible choices: info, debug, warning</p>
@@ -293,8 +293,8 @@
 </section>
 <section id="Sub-commands_repeat2">
 <h4>Sub-commands<a class="headerlink" href="#Sub-commands_repeat2" title="Permalink to this heading"></a></h4>
-<section id="build_repeat1">
-<h5>build<a class="headerlink" href="#build_repeat1" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-hfun-build">
+<span id="build_repeat1"></span><h5>build<a class="headerlink" href="#ocsmesh-hfun-build" title="Permalink to this heading"></a></h5>
 <p>Build command for mesh size definition</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">hfun</span> <span class="n">build</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">log</span><span class="o">-</span><span class="n">level</span> <span class="p">{</span><span class="n">info</span><span class="p">,</span><span class="n">debug</span><span class="p">,</span><span class="n">warning</span><span class="p">}]</span> <span class="p">[</span><span class="o">--</span><span class="n">nprocs</span> <span class="n">NPROCS</span><span class="p">]</span>
                    <span class="p">[</span><span class="o">--</span><span class="n">geom</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">GEOM_NPROCS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">hfun</span><span class="o">-</span><span class="n">nprocs</span> <span class="n">HFUN_NPROCS</span><span class="p">]</span>
@@ -305,16 +305,16 @@
                    <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat3">
-<h6>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat3" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-hfun-build-positional-arguments">
+<span id="-positional-arguments_repeat3"></span><h6>Positional Arguments<a class="headerlink" href="#ocsmesh-hfun-build-positional-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>dem</kbd></dt>
 <dd><p>Digital elevation model list to be used in size function creation</p>
 </dd>
 </dl>
 </section>
-<section id="named-arguments_repeat3">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat3" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-hfun-build-named-arguments">
+<span id="-named-arguments_repeat3"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-hfun-build-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--log-level</kbd></dt>
 <dd><p>Possible choices: info, debug, warning</p>
@@ -365,24 +365,24 @@
 </section>
 </section>
 </section>
-<section id="scripts">
-<h3>scripts<a class="headerlink" href="#scripts" title="Permalink to this heading"></a></h3>
+<section id="ocsmesh-scripts">
+<span id="scripts"></span><h3>scripts<a class="headerlink" href="#ocsmesh-scripts" title="Permalink to this heading"></a></h3>
 <p>Access to experimental OCSMesh scripts.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">loglevel</span> <span class="n">LOGLEVEL</span><span class="p">]</span>
                 <span class="p">{</span><span class="n">remesh_by_shape</span><span class="p">,</span><span class="n">remesh_by_dem</span><span class="p">,</span><span class="n">mesh_upgrader</span><span class="p">,</span><span class="n">subset_n_combine</span><span class="p">}</span>
                 <span class="o">...</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat4">
-<h4>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat4" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-scripts-positional-arguments">
+<span id="-positional-arguments_repeat4"></span><h4>Positional Arguments<a class="headerlink" href="#ocsmesh-scripts-positional-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>scripts_cmd</kbd></dt>
 <dd><p>Possible choices: remesh_by_shape, remesh_by_dem, mesh_upgrader, subset_n_combine</p>
 </dd>
 </dl>
 </section>
-<section id="named-arguments_repeat4">
-<h4>Named Arguments<a class="headerlink" href="#named-arguments_repeat4" title="Permalink to this heading"></a></h4>
+<section id="ocsmesh-scripts-named-arguments">
+<span id="-named-arguments_repeat4"></span><h4>Named Arguments<a class="headerlink" href="#ocsmesh-scripts-named-arguments" title="Permalink to this heading"></a></h4>
 <dl class="option-list">
 <dt><kbd>--loglevel</kbd></dt>
 <dd></dd>
@@ -390,8 +390,8 @@
 </section>
 <section id="Sub-commands_repeat3">
 <h4>Sub-commands<a class="headerlink" href="#Sub-commands_repeat3" title="Permalink to this heading"></a></h4>
-<section id="remesh_by_shape">
-<h5>remesh_by_shape<a class="headerlink" href="#remesh_by_shape" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-scripts-remesh_by_shape">
+<span id="remesh_by_shape"></span><h5>remesh_by_shape<a class="headerlink" href="#ocsmesh-scripts-remesh_by_shape" title="Permalink to this heading"></a></h5>
 <p>Locally refine an existing input mesh based on input DEMs within the region specified by input shape and cut-off depth.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">remesh_by_shape</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="ow">in</span><span class="o">-</span><span class="n">crs</span> <span class="n">IN_CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">shape</span> <span class="n">SHAPE</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">u</span><span class="p">]</span>
                                 <span class="p">[</span><span class="o">--</span><span class="n">cutoff</span> <span class="n">CUTOFF</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">factor</span> <span class="n">FACTOR</span><span class="p">]</span>
@@ -404,15 +404,15 @@
                                 <span class="n">mesh</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat5">
-<h6>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat5" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-remesh_by_shape-positional-arguments">
+<span id="-positional-arguments_repeat5"></span><h6>Positional Arguments<a class="headerlink" href="#ocsmesh-scripts-remesh_by_shape-positional-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>mesh</kbd></dt>
 <dd></dd>
 </dl>
 </section>
-<section id="named-arguments_repeat5">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat5" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-remesh_by_shape-named-arguments">
+<span id="-named-arguments_repeat5"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-scripts-remesh_by_shape-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--in-crs</kbd></dt>
 <dd><p>Default: <code class="docutils literal notranslate"><span class="pre">'EPSG:4326'</span></code></p>
@@ -458,8 +458,8 @@
 </dl>
 </section>
 </section>
-<section id="remesh_by_dem">
-<h5>remesh_by_dem<a class="headerlink" href="#remesh_by_dem" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-scripts-remesh_by_dem">
+<span id="remesh_by_dem"></span><h5>remesh_by_dem<a class="headerlink" href="#ocsmesh-scripts-remesh_by_dem" title="Permalink to this heading"></a></h5>
 <p>Locally refine an existing input mesh based on input DEMs</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">remesh_by_dem</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">--</span><span class="n">mesh</span> <span class="n">MESH</span> <span class="p">[</span><span class="o">--</span><span class="n">mesh</span><span class="o">-</span><span class="n">crs</span> <span class="n">MESH_CRS</span><span class="p">]</span>
                               <span class="p">[</span><span class="o">--</span><span class="n">contour</span> <span class="n">CONTOUR_DEFN</span> <span class="p">[</span><span class="n">CONTOUR_DEFN</span> <span class="o">...</span><span class="p">]]</span>
@@ -472,15 +472,15 @@
                               <span class="n">dem</span> <span class="p">[</span><span class="n">dem</span> <span class="o">...</span><span class="p">]</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat6">
-<h6>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat6" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-remesh_by_dem-positional-arguments">
+<span id="-positional-arguments_repeat6"></span><h6>Positional Arguments<a class="headerlink" href="#ocsmesh-scripts-remesh_by_dem-positional-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>dem</kbd></dt>
 <dd></dd>
 </dl>
 </section>
-<section id="named-arguments_repeat6">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat6" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-remesh_by_dem-named-arguments">
+<span id="-named-arguments_repeat6"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-scripts-remesh_by_dem-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--mesh</kbd></dt>
 <dd></dd>
@@ -532,15 +532,15 @@
 </dl>
 </section>
 </section>
-<section id="mesh_upgrader">
-<h5>mesh_upgrader<a class="headerlink" href="#mesh_upgrader" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-scripts-mesh_upgrader">
+<span id="mesh_upgrader"></span><h5>mesh_upgrader<a class="headerlink" href="#ocsmesh-scripts-mesh_upgrader" title="Permalink to this heading"></a></h5>
 <p>Create a new mesh based on a base-mesh and input DEMs.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">mesh_upgrader</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="o">--</span><span class="n">basemesh</span> <span class="n">BASEMESH</span> <span class="o">--</span><span class="n">demlo</span> <span class="p">[</span><span class="n">DEMLO</span> <span class="o">...</span><span class="p">]</span>
                               <span class="o">--</span><span class="n">demhi</span> <span class="p">[</span><span class="n">DEMHI</span> <span class="o">...</span><span class="p">]</span> <span class="o">--</span><span class="n">out</span> <span class="n">OUT</span>
 </pre></div>
 </div>
-<section id="named-arguments_repeat7">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat7" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-mesh_upgrader-named-arguments">
+<span id="-named-arguments_repeat7"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-scripts-mesh_upgrader-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--basemesh</kbd></dt>
 <dd></dd>
@@ -553,8 +553,8 @@
 </dl>
 </section>
 </section>
-<section id="subset_n_combine">
-<h5>subset_n_combine<a class="headerlink" href="#subset_n_combine" title="Permalink to this heading"></a></h5>
+<section id="ocsmesh-scripts-subset_n_combine">
+<span id="subset_n_combine"></span><h5>subset_n_combine<a class="headerlink" href="#ocsmesh-scripts-subset_n_combine" title="Permalink to this heading"></a></h5>
 <p>Subset and combine the two input meshes based on the region of interset</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ocsmesh</span> <span class="n">scripts</span> <span class="n">subset_n_combine</span> <span class="p">[</span><span class="o">-</span><span class="n">h</span><span class="p">]</span> <span class="p">[</span><span class="o">--</span><span class="n">rasters</span> <span class="n">RASTERS</span> <span class="p">[</span><span class="n">RASTERS</span> <span class="o">...</span><span class="p">]]</span>
                                  <span class="p">[</span><span class="o">-</span><span class="n">o</span> <span class="n">DIRECTORY</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">a</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">c</span> <span class="n">CRS</span><span class="p">]</span> <span class="p">[</span><span class="o">-</span><span class="n">d</span> <span class="n">CUTOFF</span><span class="p">]</span>
@@ -564,8 +564,8 @@
                                  <span class="n">fine_mesh</span> <span class="n">coarse_mesh</span> <span class="n">region_of_interset</span>
 </pre></div>
 </div>
-<section id="positional-arguments_repeat7">
-<h6>Positional Arguments<a class="headerlink" href="#positional-arguments_repeat7" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-subset_n_combine-positional-arguments">
+<span id="-positional-arguments_repeat7"></span><h6>Positional Arguments<a class="headerlink" href="#ocsmesh-scripts-subset_n_combine-positional-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>fine_mesh</kbd></dt>
 <dd><p>Path to the fine mesh</p>
@@ -578,8 +578,8 @@
 </dd>
 </dl>
 </section>
-<section id="named-arguments_repeat8">
-<h6>Named Arguments<a class="headerlink" href="#named-arguments_repeat8" title="Permalink to this heading"></a></h6>
+<section id="ocsmesh-scripts-subset_n_combine-named-arguments">
+<span id="-named-arguments_repeat8"></span><h6>Named Arguments<a class="headerlink" href="#ocsmesh-scripts-subset_n_combine-named-arguments" title="Permalink to this heading"></a></h6>
 <dl class="option-list">
 <dt><kbd>--rasters</kbd></dt>
 <dd><p>List of rasters used for calculating depth cutoff</p>
