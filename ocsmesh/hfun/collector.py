@@ -18,6 +18,7 @@ import warnings
 import tempfile
 from pathlib import Path
 from time import time
+import multiprocessing
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
 from typing import (
@@ -75,6 +76,122 @@ RASTER_CONSTR = (
 )
 
 _logger = logging.getLogger(__name__)
+
+# Optional MPI support — mpi4py is not required for single-machine use
+try:
+    from mpi4py import MPI
+    _HAS_MPI = True
+except ImportError:
+    _HAS_MPI = False
+
+
+def _is_mpi_active():
+    """Check if we're running under an MPI launcher with >1 rank."""
+    if not _HAS_MPI:
+        return False
+    try:
+        comm = MPI.COMM_WORLD
+        return comm.Get_size() > 1
+    except Exception:
+        return False
+
+
+def _configure_mpi_environment():
+    """Set environment variables for safe MPI + multiprocessing coexistence.
+
+    Prevents numerical libraries (NumPy/SciPy via OpenBLAS/MKL) from
+    spawning internal threads inside Pool workers, which would cause
+    core oversubscription on top of MPI.
+    """
+    for var in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
+        os.environ.setdefault(var, '1')
+
+
+# Under MPI, 'fork' copies the parent's MPI communicator state into Pool
+# children, causing deadlocks or silent corruption. 'spawn' starts each
+# worker from a clean interpreter with no inherited MPI state.
+# See: https://docs.nersc.gov/development/languages/python/parallel-python/
+if _is_mpi_active():
+    try:
+        multiprocessing.set_start_method('spawn', force=False)
+    except RuntimeError:
+        current = multiprocessing.get_start_method()
+        if current != 'spawn':
+            warnings.warn(
+                f"multiprocessing start method is '{current}', but MPI "
+                f"requires 'spawn' to avoid deadlocks.",
+                UserWarning
+            )
+
+
+def _mpi_dispatch(tasks, worker_fn):
+    """Distribute tasks across MPI ranks using scatter/gather.
+
+    Must be called on ALL ranks (it's a collective operation).
+    Rank 0 provides the actual tasks list; other ranks pass None.
+
+    Parameters
+    ----------
+    tasks : list of dict or None
+        On rank 0: list of task dicts to distribute.
+        On other ranks: ignored (should be None).
+    worker_fn : callable
+        The worker function to apply to each task.
+
+    Returns
+    -------
+    list of dict or None
+        On rank 0: flattened list of all results from all ranks.
+        On other ranks: None.
+
+    Note
+    ----
+    Results are NOT returned in original task order. Callers should
+    use task identifiers (e.g. 'original_index') for lookup.
+    """
+    # Normalize to empty list so scatter()
+    # always receives a valid object to avoid relying on mpi4py's
+    # handling of None on non-root ranks.
+    if tasks is None:
+        tasks = []
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    # Rank 0 partitions tasks into chunks using round-robin
+    # NOTE : using round-robin gives better load balancing in most scenarios.
+
+    if rank == 0:
+        chunks = [[] for _ in range(size)]
+        for i, task in enumerate(tasks):
+            chunks[i % size].append(task)
+    else:
+        chunks = None
+
+    # Scatter: each rank gets its chunk
+    my_chunk = comm.scatter(chunks, root=0)
+
+    # Each rank processes its chunk.
+    my_results = []
+    for task in my_chunk:
+        try:
+            my_results.append(worker_fn(task))
+        except Exception as e:
+            _logger.error(f"Rank {rank} worker failed: {e}")
+            my_results.append({
+                'status': 'error',
+                'original_index': task.get('original_index', -1),
+                'error': str(e)
+            })
+
+    # Gather: rank 0 collects all results
+    all_results = comm.gather(my_results, root=0)
+
+    if rank == 0:
+        # Flatten the list of lists
+        return [r for chunk_results in all_results for r in chunk_results]
+    return None
 
 class _RefinementContourInfoCollector:
     """Collection for contour refinement specification
