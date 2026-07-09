@@ -1018,6 +1018,8 @@ class HfunCollector(BaseHfun):
 
          # Add a persistent working directory for this instance's outputs
         self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
+        # TODO: Prove this fix is needed
+        # self._creator_pid = os.getpid()
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -1139,6 +1141,13 @@ class HfunCollector(BaseHfun):
     def __del__(self):
         if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
             shutil.rmtree(self._work_dir, ignore_errors=True)
+            # TODO: Prove this fix is needed
+        # if (hasattr(self, '_work_dir')
+        #         and hasattr(self, '_creator_pid')
+        #         and os.getpid() == self._creator_pid
+        #         and os.path.exists(self._work_dir)):
+            # shutil.rmtree(self._work_dir, ignore_errors=True)
+
 
 
     def meshdata(self, **kwargs) -> MeshData:
