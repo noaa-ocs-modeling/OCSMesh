@@ -97,13 +97,16 @@ def _is_mpi_active():
 
 
 def _configure_mpi_environment():
-    """Set environment variables for safe MPI + multiprocessing coexistence.
+    # TODO: Review if this is necessary. It is a safety net for now.
+    """Safety net for MPI + numerical library thread pinning.
 
-    Prevents numerical libraries (NumPy/SciPy via OpenBLAS/MKL) from
-    spawning internal threads inside Pool workers, which would cause
-    core oversubscription on top of MPI.
+    The primary thread pinning happens in ``ocsmesh/__init__.py``
+    (before NumPy is imported). This function serves as a fallback
+    for edge cases where collector.py is imported directly without
+    going through the package ``__init__``.
     """
-    for var in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
+    from ocsmesh import _MPI_THREAD_PIN_VARS
+    for var in _MPI_THREAD_PIN_VARS:
         os.environ.setdefault(var, '1')
 
 
@@ -2125,10 +2128,31 @@ class HfunCollector(BaseHfun):
         Parameters
         ----------
         mode : str
-            The desired mode. Must be either 'serial' or 'parallel'.
+            The desired mode. Must be 'serial', 'parallel', or 'mpi'.
         """
-        if mode not in ['serial', 'parallel']:
-            raise ValueError("Execution must be either 'serial' or 'parallel'")
+        if mode not in ['serial', 'parallel', 'mpi']:
+            raise ValueError(
+                "Execution mode must be 'serial', 'parallel', or 'mpi'"
+            )
+
+        if mode == 'mpi':
+            if not _HAS_MPI:
+                warnings.warn(
+                    "mpi4py is not installed. Falling back to 'parallel' "
+                    "mode. Install mpi4py for MPI support: "
+                    "pip install ocsmesh[mpi]",
+                    UserWarning
+                )
+                mode = 'parallel'
+            elif not _is_mpi_active():
+                warnings.warn(
+                    "MPI mode requested but no MPI environment detected. "
+                    "Falling back to 'parallel' mode.",
+                    UserWarning
+                )
+                mode = 'parallel'
+            else:
+                _configure_mpi_environment()
 
         if mode == 'parallel' and (self._nprocs is None or self._nprocs <= 1):
             warnings.warn(
