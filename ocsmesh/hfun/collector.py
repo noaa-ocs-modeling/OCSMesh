@@ -196,6 +196,71 @@ def _mpi_dispatch(tasks, worker_fn):
         return [r for chunk_results in all_results for r in chunk_results]
     return None
 
+
+# ── MPI Tag Constants ──────────────────────────────────────────────
+# Rank 0 broadcasts one of these tags before each collective call
+# so that workers in mpi_worker_loop() know which function to
+# participate in. Add new tags here as more methods get MPI support.
+# TODO : move that to a config file or enum if more tags are added in the future.
+_MPI_TAG_MESHDATA = 'meshdata'
+_MPI_TAG_DONE = 'DONE'
+
+
+def mpi_worker_loop():
+    """Worker ranks call this once to participate in ALL MPI collectives.
+
+    Workers enter a loop, waiting for Rank 0 to broadcast a tag that
+    tells them which collective operation is about to happen. When
+    Rank 0 broadcasts 'DONE', workers exit the loop and return.
+
+    Typical user script::
+
+        from mpi4py import MPI
+        from ocsmesh import Hfun
+        from ocsmesh.hfun.collector import mpi_worker_loop
+
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        if rank == 0:
+            hfun = Hfun(raster_list)
+            hfun.execution_mode = 'mpi'
+            result = hfun.meshdata()   # Rank 0 drives all collectives
+        else:
+            mpi_worker_loop()          # Workers participate automatically
+    """
+    if not _HAS_MPI:
+        raise RuntimeError("mpi4py is not installed")
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    if rank == 0:
+        raise RuntimeError(
+            "mpi_worker_loop() must only be called by worker ranks "
+            "(rank != 0)."
+        )
+
+    _logger.debug(f"Rank {rank}: entering mpi_worker_loop")
+
+    while True:
+        # Wait for Rank 0 to broadcast the next operation tag.
+        # This is a collective bcast — all ranks must participate.
+        tag = comm.bcast(None, root=0)
+        _logger.debug(f"Rank {rank}: received tag '{tag}'")
+
+        if tag == _MPI_TAG_DONE:
+            _logger.debug(f"Rank {rank}: received DONE, exiting loop")
+            break
+        # TODO: this can be mapped easily instead of elif chain
+        elif tag == _MPI_TAG_MESHDATA:
+            # Participate in the meshdata scatter/gather collective
+            _mpi_dispatch(None, _meshdata_task_worker)
+        else:
+            _logger.warning(
+                f"Rank {rank}: unknown MPI tag '{tag}', skipping"
+            )
+
 class _RefinementContourInfoCollector:
     """Collection for contour refinement specification
 
