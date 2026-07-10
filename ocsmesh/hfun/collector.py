@@ -2663,11 +2663,14 @@ class HfunCollector(BaseHfun):
             each input.
         """
 
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
-            _logger.info("Writing hfun to disk using PARALLEL method.")
+        if self.execution_mode == 'mpi':
+            _logger.info("Calculate & Writing hfun to disk using MPI method.")
+            return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
+        elif self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Calculate & Writing hfun to disk using PARALLEL method.")
             return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
         else:
-            _logger.info("Writing hfun to disk using SERIAL method.")
+            _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
             return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
 
 
