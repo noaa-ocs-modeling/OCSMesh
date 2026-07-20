@@ -27,9 +27,32 @@ _MPI_THREAD_PIN_VARS = (
     'MKL_NUM_THREADS',           # Intel MKL (conda numpy)
     'OPENBLAS_NUM_THREADS',      # OpenBLAS (pip numpy)
 )
+
+# TODO: Consider another approach like a context manager.
 if any(var in os.environ for var in _MPI_ENV_HINTS):
+    # Pin numerical library threads to 1 to prevent oversubscription
     for _var in _MPI_THREAD_PIN_VARS:
         os.environ.setdefault(_var, '1')
+
+    # Force 'spawn' start method for multiprocessing. Under MPI,
+    # 'fork' copies the MPI communicator state into Pool children,
+    # causing deadlocks or silent corruption. Must be set here
+    # before any import triggers multiprocessing initialization.
+    import multiprocessing as _mp
+    try:
+        _mp.set_start_method('spawn', force=False)
+    except RuntimeError:
+        # Already set — check if it's safe
+        if _mp.get_start_method() != 'spawn':
+            import warnings
+            warnings.warn(
+                f"multiprocessing start method is "
+                f"'{_mp.get_start_method()}', but MPI requires "
+                f"'spawn' to avoid deadlocks. Call "
+                f"multiprocessing.set_start_method('spawn') before "
+                f"importing ocsmesh.",
+                UserWarning
+            )
 
 from .internal import MeshData
 from .raster import Raster

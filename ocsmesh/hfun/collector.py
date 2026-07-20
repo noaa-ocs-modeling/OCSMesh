@@ -95,6 +95,11 @@ def _is_mpi_active():
     except Exception:
         return False
 
+# NOTE: multiprocessing.set_start_method('spawn') is handled in
+# ocsmesh/__init__.py (before any import can initialize the context).
+# Thread pinning (_MPI_THREAD_PIN_VARS) is also handled there.
+# The _configure_mpi_environment() function below is a fallback
+# for direct imports that bypass __init__.py.
 
 def _configure_mpi_environment():
     # TODO: Review if this is necessary. It is a safety net for now.
@@ -108,23 +113,6 @@ def _configure_mpi_environment():
     from ocsmesh import _MPI_THREAD_PIN_VARS
     for var in _MPI_THREAD_PIN_VARS:
         os.environ.setdefault(var, '1')
-
-
-# Under MPI, 'fork' copies the parent's MPI communicator state into Pool
-# children, causing deadlocks or silent corruption. 'spawn' starts each
-# worker from a clean interpreter with no inherited MPI state.
-# See: https://docs.nersc.gov/development/languages/python/parallel-python/
-if _is_mpi_active():
-    try:
-        multiprocessing.set_start_method('spawn', force=False)
-    except RuntimeError:
-        current = multiprocessing.get_start_method()
-        if current != 'spawn':
-            warnings.warn(
-                f"multiprocessing start method is '{current}', but MPI "
-                f"requires 'spawn' to avoid deadlocks.",
-                UserWarning
-            )
 
 
 def _mpi_dispatch(tasks, worker_fn):
@@ -1084,7 +1072,7 @@ class HfunCollector(BaseHfun):
          # Add a persistent working directory for this instance's outputs
         self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
         # TODO: Prove this fix is needed
-        # self._creator_pid = os.getpid()
+        self._creator_pid = os.getpid()
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -1204,14 +1192,14 @@ class HfunCollector(BaseHfun):
 
 
     def __del__(self):
-        if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
+        # if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
+        #     shutil.rmtree(self._work_dir, ignore_errors=True)
+        #     # TODO: Prove this fix is needed
+        if (hasattr(self, '_work_dir')
+                and hasattr(self, '_creator_pid')
+                and os.getpid() == self._creator_pid
+                and os.path.exists(self._work_dir)):
             shutil.rmtree(self._work_dir, ignore_errors=True)
-            # TODO: Prove this fix is needed
-        # if (hasattr(self, '_work_dir')
-        #         and hasattr(self, '_creator_pid')
-        #         and os.getpid() == self._creator_pid
-        #         and os.path.exists(self._work_dir)):
-            # shutil.rmtree(self._work_dir, ignore_errors=True)
 
 
 
