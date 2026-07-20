@@ -77,20 +77,38 @@ RASTER_CONSTR = (
 
 _logger = logging.getLogger(__name__)
 
-# Optional MPI support — mpi4py is not required for single-machine use
-try:
-    from mpi4py import MPI
-    _HAS_MPI = True
-except ImportError:
-    _HAS_MPI = False
+# MPI support is optional
+_MPI = None
+_MPI_IMPORT_ATTEMPTED = False
+
+
+def _get_mpi():
+    """Lazy-import mpi4py.MPI. Returns the module or None."""
+    global _MPI, _MPI_IMPORT_ATTEMPTED
+    if not _MPI_IMPORT_ATTEMPTED:
+        _MPI_IMPORT_ATTEMPTED = True
+        try:
+            from mpi4py import MPI
+            _MPI = MPI
+        except ImportError:
+            pass
+    return _MPI
+
+
+def _get_mpi_comm():
+    """Return MPI.COMM_WORLD if available, else None."""
+    MPI = _get_mpi()
+    if MPI is None:
+        return None
+    return MPI.COMM_WORLD
 
 
 def _is_mpi_active():
     """Check if we're running under an MPI launcher with >1 rank."""
-    if not _HAS_MPI:
+    comm = _get_mpi_comm()
+    if comm is None:
         return False
     try:
-        comm = MPI.COMM_WORLD
         return comm.Get_size() > 1
     except Exception:
         return False
@@ -146,7 +164,7 @@ def _mpi_dispatch(tasks, worker_fn):
     if tasks is None:
         tasks = []
 
-    comm = MPI.COMM_WORLD
+    comm = _get_mpi_comm()
     rank = comm.Get_rank()
     size = comm.Get_size()
 
@@ -217,10 +235,9 @@ def mpi_worker_loop():
         else:
             mpi_worker_loop()          # Workers participate automatically
     """
-    if not _HAS_MPI:
+    comm = _get_mpi_comm()
+    if comm is None:
         raise RuntimeError("mpi4py is not installed")
-
-    comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
     if rank == 0:
@@ -2198,7 +2215,7 @@ class HfunCollector(BaseHfun):
             )
 
         if mode == 'mpi':
-            if not _HAS_MPI:
+            if _get_mpi() is None:
                 warnings.warn(
                     "mpi4py is not installed. Falling back to 'parallel' "
                     "mode. Install mpi4py for MPI support: "
