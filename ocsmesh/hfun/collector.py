@@ -256,8 +256,8 @@ def mpi_worker_loop():
         if tag == _MPI_TAG_DONE:
             _logger.debug(f"Rank {rank}: received DONE, exiting loop")
             break
-        # TODO: this can be mapped easily instead of elif chain
-        elif tag == _MPI_TAG_MESHDATA:
+        # TODO: this can be mapped easily instead of if chain
+        if tag == _MPI_TAG_MESHDATA:
             # Participate in the meshdata scatter/gather collective
             _mpi_dispatch(None, _meshdata_task_worker)
         else:
@@ -1998,8 +1998,8 @@ class HfunCollector(BaseHfun):
                 }
 
 
-        # Same style as other functions 
-        # (Can be refactored to be a shared function that 
+        # Same style as other functions
+        # (Can be refactored to be a shared function that
         # accept needed parameters to make code cleaner)
         # in another PR
         for in_idx, data in hfuns_to_process.items():
@@ -2032,8 +2032,8 @@ class HfunCollector(BaseHfun):
             results = p.map(_constraints_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
-        # Same style as other functions 
-        # (Can be refactored to be a shared function that 
+        # Same style as other functions
+        # (Can be refactored to be a shared function that
         # accept needed parameters to make code cleaner)
         # in another PR
         # Phase 3: INTEGRATION
@@ -2880,7 +2880,7 @@ class HfunCollector(BaseHfun):
                 crs_str = str(data['crs'])
                 crs = (CRS.from_user_input(crs_str)
                        if crs_str else None)
-                       
+
                 # Necessary for windows : Close the NpzFile handle before deleting
                 data.close()
                 del data
