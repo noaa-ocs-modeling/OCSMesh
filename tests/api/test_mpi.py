@@ -97,8 +97,8 @@ class TestMPIModeProperty(unittest.TestCase):
             hfun.execution_mode = 'mpi'
         self.assertIn('Falling back', str(cm.warning))
 
-    @patch('ocsmesh.hfun.collector._HAS_MPI', False)
-    def test_mpi_mode_fallback_no_mpi4py(self):
+    @patch('ocsmesh.hfun.collector._get_mpi', return_value=None)
+    def test_mpi_mode_fallback_no_mpi4py(self, _mock_get_mpi):
         """Setting mode='mpi' without mpi4py falls back with warning."""
         hfun = Hfun(self.raster_list, nprocs=2)
         with self.assertWarns(UserWarning) as cm:
