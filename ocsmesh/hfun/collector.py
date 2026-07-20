@@ -18,7 +18,6 @@ import warnings
 import tempfile
 from pathlib import Path
 from time import time
-import multiprocessing
 from multiprocessing import Pool, cpu_count
 from copy import copy, deepcopy
 from typing import (
@@ -2668,10 +2667,10 @@ class HfunCollector(BaseHfun):
             each input.
         """
 
-        if self.execution_mode == 'mpi':
-            _logger.info("Calculate & Writing hfun to disk using MPI method.")
-            return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
-        elif self.execution_mode == 'parallel' and self._nprocs > 1:
+        # if self.execution_mode == 'mpi':
+        #     _logger.info("Calculate & Writing hfun to disk using MPI method.")
+        #     return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
             _logger.info("Calculate & Writing hfun to disk using PARALLEL method.")
             return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
         else:
