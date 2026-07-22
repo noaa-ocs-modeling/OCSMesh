@@ -7,12 +7,12 @@ Tests that REQUIRE mpiexec are in TestMPIWriteHfun.
 Running instructions:
 
     # Unit tests (no mpiexec needed)
-    PYTHONPATH=. python -m pytest tests/api/test_mpi.py::TestMPIModeProperty -v
+    PYTHONPATH=. python -m pytest tests/api/test_mpi_integration.py::TestMPIModeProperty -v
 
     # MPI integration tests (require mpiexec; all ranks compute,
     # so use n>=2 for actual parallelism)
     PYTHONPATH=. mpiexec -n 2 python -m pytest tests/api/test_mpi_integration.py::TestMPIWriteHfun -v -s
-    PYTHONPATH=. mpiexec -n 4 python -m pytest tests/api/test_mpi.py::TestMPIWriteHfun -v -s
+    PYTHONPATH=. mpiexec -n 4 python -m pytest tests/api/test_mpi_integration.py::TestMPIWriteHfun -v -s
 """
 
 import unittest
@@ -29,9 +29,7 @@ import numpy.testing as npt
 from ocsmesh import Hfun, Raster
 from ocsmesh.utils import raster_from_numpy
 from ocsmesh.hfun.collector import (
-    mpi_scatter_gather,
-    mpi_stop_workers,
-    mpi_worker_loop,
+    mpi_worker_loop
 )
 
 try:
