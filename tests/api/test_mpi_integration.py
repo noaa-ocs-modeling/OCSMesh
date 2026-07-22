@@ -1,8 +1,6 @@
 """
 MPI tests for HfunCollector (scatter/gather with self-describing tasks).
 
-Tests that do NOT require mpirun are in TestMPIModeProperty.
-Tests that REQUIRE mpirun are in TestMPIWriteHfun.
 Tests that do NOT require mpiexec are in TestMPIModeProperty.
 Tests that REQUIRE mpiexec are in TestMPIWriteHfun.
 
