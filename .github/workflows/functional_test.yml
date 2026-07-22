@@ -123,3 +123,7 @@ jobs:
     - name: Run Python API tests
       shell: bash -el {0}
       run: python -m unittest discover tests
+
+    - name: Run MPI Integration tests
+      shell: bash -el {0}
+      run: mpiexec -n 2 python -m pytest tests/api/test_mpi_integration.py -v -s
