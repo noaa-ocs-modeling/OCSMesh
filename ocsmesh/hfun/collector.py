@@ -132,91 +132,160 @@ def _configure_mpi_environment():
         os.environ.setdefault(var, '1')
 
 
-def _mpi_dispatch(tasks, worker_fn):
-    """Distribute tasks across MPI ranks using scatter/gather.
+# ── MPI Scatter/Gather Infrastructure ──────────────────────────────
+#
+# Design: self-describing tasks + scatter/gather collectives.
+#
+# Each task dict carries an 'op' key (e.g. 'meshdata') that names the
+# worker function to call. The _MPI_WORKER_REGISTRY (defined after the
+# worker functions below) maps op names to functions. This eliminates
+# the need for a separate bcast coordination channel.
+#
+# Three functions, each with one job:
+#   _run_tasks(chunk)         — execute a chunk of tasks via registry
+#   mpi_scatter_gather(tasks) — Rank 0's side: one scatter/gather round
+#   mpi_worker_loop()         — workers' side: loop until sentinel
+#   mpi_stop_workers()        — Rank 0 sends sentinel to exit workers
+#
+# Adding a new MPI operation requires only:
+#   1. Write a _*_task_worker(task) function
+#   2. Add it to _MPI_WORKER_REGISTRY
 
-    Must be called on ALL ranks (it's a collective operation).
-    Rank 0 provides the actual tasks list; other ranks pass None.
+
+def _run_tasks(chunk):
+    """Execute a chunk of self-describing task dicts using the worker registry.
+
+    Each task dict must have an 'op' key naming the worker function
+    to call (e.g. 'meshdata'). The function is looked up from
+    _MPI_WORKER_REGISTRY. Exceptions are caught per-task and returned
+    as structured error dicts — a single task failure does NOT kill the
+    rank or abort other tasks in the chunk.
+
+    This is the shared processing logic used by both
+    mpi_scatter_gather() (Rank 0 side) and mpi_worker_loop()
+    (worker side).
 
     Parameters
     ----------
-    tasks : list of dict or None
-        On rank 0: list of task dicts to distribute.
-        On other ranks: ignored (should be None).
-    worker_fn : callable
-        The worker function to apply to each task.
+    chunk : list of dict
+        Task dicts to execute. Each must contain 'op' and
+        'original_index'.
 
     Returns
     -------
-    list of dict or None
-        On rank 0: flattened list of all results from all ranks.
-        On other ranks: None.
-
-    Note
-    ----
-    Results are NOT returned in original task order. Callers should
-    use task identifiers (e.g. 'original_index') for lookup.
+    list of dict
+        One result dict per task (success or structured error).
     """
-    # Normalize to empty list so scatter()
-    # always receives a valid object to avoid relying on mpi4py's
-    # handling of None on non-root ranks.
-    if tasks is None:
-        tasks = []
+    # ── Safety checks ──
+    if not isinstance(chunk, list):
+        raise TypeError(
+            f"_run_tasks expects a list of task dicts, "
+            f"got {type(chunk).__name__}"
+        )
 
-    comm = _get_mpi_comm()
-    rank = comm.Get_rank()
-    size = comm.Get_size()
+    results = []
+    for task in chunk:
+        # Look up worker function from registry
+        op = task.get('op') if isinstance(task, dict) else None
+        worker_fn = _MPI_WORKER_REGISTRY.get(op)
 
-    # Rank 0 partitions tasks into chunks using round-robin
-    # NOTE : using round-robin gives better load balancing in most scenarios.
+        if worker_fn is None:
+            _logger.error(f"No worker registered for op '{op}'")
+            results.append({
+                'status': 'error',
+                'original_index': task.get('original_index', -1)
+                                  if isinstance(task, dict) else -1,
+                'error': f"No worker registered for op '{op}'",
+            })
+            continue
 
-    if rank == 0:
-        chunks = [[] for _ in range(size)]
-        for i, task in enumerate(tasks):
-            chunks[i % size].append(task)
-    else:
-        chunks = None
-
-    # Scatter: each rank gets its chunk
-    my_chunk = comm.scatter(chunks, root=0)
-
-    # Each rank processes its chunk.
-    my_results = []
-    for task in my_chunk:
         try:
-            my_results.append(worker_fn(task))
+            result = worker_fn(task)
+            results.append(result)
         except Exception as e:
-            _logger.error(f"Rank {rank} worker failed: {e}")
-            my_results.append({
+            _logger.error(f"Task failed (op='{op}'): {e}")
+            results.append({
                 'status': 'error',
                 'original_index': task.get('original_index', -1),
-                'error': str(e)
+                'error': str(e),
             })
 
-    # Gather: rank 0 collects all results
+    return results
+
+
+def mpi_scatter_gather(tasks):
+    """Distribute self-describing tasks across all MPI ranks (one round).
+
+    Rank 0 calls this to run one scatter/gather round. It partitions
+    tasks via round-robin, scatters chunks to all ranks (including
+    itself), processes its own chunk, and gathers results from everyone.
+
+    Workers must be inside mpi_worker_loop() — they participate in the
+    same scatter/gather collectives from their side of the loop.
+
+    Parameters
+    ----------
+    tasks : list of dict
+        Task dicts to distribute. Each must contain:
+        - 'op': str — worker function name (key in _MPI_WORKER_REGISTRY)
+        - 'original_index': int — for result reassociation
+
+    Returns
+    -------
+    list of dict
+        Flattened list of all results from all ranks (including Rank 0).
+        Order is NOT guaranteed — use 'original_index' to reassociate.
+    """
+    # ── Safety checks ──
+    comm = _get_mpi_comm()
+    if comm is None:
+        raise RuntimeError("mpi4py is not available")
+
+    rank = comm.Get_rank()
+    if rank != 0:
+        raise RuntimeError(
+            "mpi_scatter_gather() must only be called by Rank 0. "
+            "Worker ranks should be in mpi_worker_loop()."
+        )
+
+    if not isinstance(tasks, list):
+        raise TypeError(
+            f"mpi_scatter_gather expects a list of task dicts, "
+            f"got {type(tasks).__name__}"
+        )
+
+    size = comm.Get_size()
+
+    # ── Partition tasks via round-robin ──
+    # Round-robin distributes tasks across ranks as evenly as possible.
+    # Task i goes to rank (i % size). All ranks compute, including Rank 0.
+    chunks = [[] for _ in range(size)]
+    for i, task in enumerate(tasks):
+        chunks[i % size].append(task)
+
+    # ── Scatter: each rank (including Rank 0) gets its chunk ──
+    my_chunk = comm.scatter(chunks, root=0)
+
+    # ── Process: Rank 0 runs its own chunk (not wasted) ──
+    my_results = _run_tasks(my_chunk)
+
+    # ── Gather: collect results from all ranks ──
     all_results = comm.gather(my_results, root=0)
 
-    if rank == 0:
-        # Flatten the list of lists
-        return [r for chunk_results in all_results for r in chunk_results]
-    return None
-
-
-# ── MPI Tag Constants ──────────────────────────────────────────────
-# Rank 0 broadcasts one of these tags before each collective call
-# so that workers in mpi_worker_loop() know which function to
-# participate in. Add new tags here as more methods get MPI support.
-# TODO : move that to a config file or enum if more tags are added in the future.
-_MPI_TAG_MESHDATA = 'meshdata'
-_MPI_TAG_DONE = 'DONE'
+    # Flatten list-of-lists into single result list
+    return [r for chunk_results in all_results for r in chunk_results]
 
 
 def mpi_worker_loop():
-    """Worker ranks call this once to participate in ALL MPI collectives.
+    """Worker event loop — participate in MPI scatter/gather rounds.
 
-    Workers enter a loop, waiting for Rank 0 to broadcast a tag that
-    tells them which collective operation is about to happen. When
-    Rank 0 broadcasts 'DONE', workers exit the loop and return.
+    Non-zero ranks call this ONCE at the start of their script. The
+    worker loops on scatter/gather: each round it receives a chunk of
+    self-describing tasks, executes them via _run_tasks(), and returns
+    results via gather.
+
+    When Rank 0 calls mpi_stop_workers(), it scatters None to every
+    rank. Workers detect the None sentinel and exit the loop cleanly.
 
     Typical user script::
 
@@ -225,45 +294,81 @@ def mpi_worker_loop():
         from ocsmesh.hfun.collector import mpi_worker_loop
 
         comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-
-        if rank == 0:
+        if comm.Get_rank() == 0:
             hfun = Hfun(raster_list)
             hfun.execution_mode = 'mpi'
-            result = hfun.meshdata()   # Rank 0 drives all collectives
+            result = hfun.meshdata()   # triggers scatter/gather rounds
         else:
-            mpi_worker_loop()          # Workers participate automatically
+            mpi_worker_loop()          # participates automatically
     """
+    # ── Safety checks ──
     comm = _get_mpi_comm()
     if comm is None:
-        raise RuntimeError("mpi4py is not installed")
-    rank = comm.Get_rank()
+        raise RuntimeError(
+            "mpi4py is not installed. Cannot enter worker loop."
+        )
 
+    rank = comm.Get_rank()
     if rank == 0:
         raise RuntimeError(
             "mpi_worker_loop() must only be called by worker ranks "
-            "(rank != 0)."
+            "(rank != 0). Rank 0 drives the computation via "
+            "mpi_scatter_gather()."
         )
 
     _logger.debug(f"Rank {rank}: entering mpi_worker_loop")
 
     while True:
-        # Wait for Rank 0 to broadcast the next operation tag.
-        # This is a collective bcast — all ranks must participate.
-        tag = comm.bcast(None, root=0)
-        _logger.debug(f"Rank {rank}: received tag '{tag}'")
+        # ── Scatter: receive chunk from Rank 0 (collective) ──
+        # This blocks until Rank 0 calls scatter — either from
+        # mpi_scatter_gather() (task round) or mpi_stop_workers()
+        # (sentinel).
+        my_chunk = comm.scatter(None, root=0)
 
-        if tag == _MPI_TAG_DONE:
-            _logger.debug(f"Rank {rank}: received DONE, exiting loop")
-            break
-        # TODO: this can be mapped easily instead of if chain
-        if tag == _MPI_TAG_MESHDATA:
-            # Participate in the meshdata scatter/gather collective
-            _mpi_dispatch(None, _meshdata_task_worker)
-        else:
-            _logger.warning(
-                f"Rank {rank}: unknown MPI tag '{tag}', skipping"
+        # ── Sentinel check: None means Rank 0 is done ──
+        if my_chunk is None:
+            _logger.debug(
+                f"Rank {rank}: received sentinel, exiting loop"
             )
+            break
+
+        # ── Process chunk using shared execution logic ──
+        my_results = _run_tasks(my_chunk)
+
+        # ── Gather: return results to Rank 0 (collective) ──
+        comm.gather(my_results, root=0)
+
+    _logger.debug(f"Rank {rank}: mpi_worker_loop exited cleanly")
+
+
+def mpi_stop_workers():
+    """Signal all workers to exit mpi_worker_loop.
+
+    Rank 0 calls this after all MPI operations are complete. It scatters
+    None to every rank — workers detect the None sentinel and break out
+    of their loop.
+
+    Must be called exactly once, after the last mpi_scatter_gather()
+    call.
+    """
+    # ── Safety checks ──
+    comm = _get_mpi_comm()
+    if comm is None:
+        raise RuntimeError("mpi4py is not available")
+
+    rank = comm.Get_rank()
+    if rank != 0:
+        raise RuntimeError(
+            "mpi_stop_workers() must only be called by Rank 0."
+        )
+
+    size = comm.Get_size()
+    _logger.debug(
+        f"Rank 0: sending sentinel to {size - 1} worker(s)"
+    )
+
+    # Scatter None to every rank — workers see None and break
+    comm.scatter([None] * size, root=0)
 
 class _RefinementContourInfoCollector:
     """Collection for contour refinement specification
@@ -935,7 +1040,7 @@ def _meshdata_task_worker(task: dict):
                 # HfunMesh.meshdata() doesn't accept kwargs like stride
                 meshdata_result = deepcopy(worker_hfun.meshdata())
         else:
-            raise ValueError(f"Unknown task type: {type}")
+            raise ValueError(f"Unknown task type: {task_type}")
 
         # Reproject to EPSG:4326 (same as serial path)
         if hasattr(meshdata_result, "crs"):
@@ -972,6 +1077,19 @@ def _meshdata_task_worker(task: dict):
             'original_index': original_index,
             'error': str(e)
         }
+
+
+# ── MPI Worker Registry ───────────────────────────────────────────
+# Maps operation name → worker function.
+# Each task dict carries an 'op' key (e.g. 'meshdata') that
+# _run_tasks() uses to look up the correct function here.
+#
+# To add a new MPI-enabled operation:
+#   1. Write a _*_task_worker(task) function above
+#   2. Add it to this dict
+_MPI_WORKER_REGISTRY = {
+    'meshdata': _meshdata_task_worker,
+}
 
 
 class HfunCollector(BaseHfun):
