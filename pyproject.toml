@@ -41,6 +41,7 @@ ocsmesh = "ocsmesh.__main__:main"
 [project.optional-dependencies]
 gmsh = ["gmsh"]
 triangle = ["triangle"]
+mpi = ["mpi4py"]
 testing = ['pylint>=2.14','triangle','gmsh','pytest-benchmark']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
