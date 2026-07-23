@@ -164,9 +164,9 @@ class MPITaskRunner:
     - Individual TAG_STOP per worker (no collective shutdown)
     - Sequential fallback when size == 1 or no MPI
 
-    Adding a new MPI operation requires only:
+    Adding a new MPI operation requires:
       1. Write a `_*_task_worker(task)` function
-      2. Register it in `MPITaskRunner._worker_registry()`
+      2. Register it in `MPITaskRunner._worker_registry()`: `{'my_op': _my_op_task_worker}`
     """
 
     # Message tags for the manager/worker protocol.
@@ -176,11 +176,6 @@ class MPITaskRunner:
         'RESULT': 2,   # worker → rank 0 : task succeeded (result dict)
         'ERROR':  3,   # worker → rank 0 : task raised / structured failure
         'STOP':   4,   # rank 0 → worker : no more work, leave the loop
-    }
-
-    # Operation names used in the task 'op' field.
-    _OPS = {
-        'MESHDATA': 'meshdata',
     }
 
     @staticmethod
@@ -193,7 +188,7 @@ class MPITaskRunner:
         MPI-enabled operations.
         """
         return {
-            MPITaskRunner._OPS['MESHDATA']: _meshdata_task_worker,
+            'meshdata': _meshdata_task_worker,
         }
 
     @staticmethod
@@ -3236,7 +3231,7 @@ class HfunCollector(BaseHfun):
             )
             if isinstance(hfun, HfunRaster):
                 task = {
-                    'op': MPITaskRunner._OPS['MESHDATA'],
+                    'op': 'meshdata',
                     'type': 'raster',
                     'original_index': loop_idx,
                     'topo_path': hfun._raster.path,
@@ -3250,7 +3245,7 @@ class HfunCollector(BaseHfun):
                 # HfunMesh and other types are picklable —
                 # send the object directly to the worker
                 task = {
-                    'op': MPITaskRunner._OPS['MESHDATA'],
+                    'op': 'meshdata',
                     'type': 'mesh',
                     'original_index': loop_idx,
                     'hfun_obj': deepcopy(hfun),
