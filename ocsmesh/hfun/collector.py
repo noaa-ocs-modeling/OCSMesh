@@ -3171,31 +3171,31 @@ class HfunCollector(BaseHfun):
 
         return path_list
 
-    # TODO: refactor this with the parallel method instead of duplicated code.
+     # TODO: refactor this with the parallel method instead of duplicated code.
     def _calculate_and_write_hfun_to_disk_mpi(
             self,
             out_path: Union[str, Path],
             **kwargs
             ) -> List[Union[str, Path]]:
-        """MPI path for writing hfun to disk.
+        """MPI path for writing hfun to disk (dynamic send/recv).
 
         Same two-stage design as the parallel variant, but Stage 1 uses
-        MPI scatter/gather via mpi_scatter_gather() instead of
-        multiprocessing.Pool. The existing _meshdata_task_worker is
-        reused unchanged.
+        MPITaskRunner.dispatch() to dynamically stream tasks to idle
+        workers via point-to-point send/recv. The existing
+        _meshdata_task_worker is reused unchanged.
 
-        Stage 1 (MPI, scatter/gather): Rank 0 partitions meshdata tasks
-           across all ranks (including itself) via round-robin. Each
-           rank reads its input from the shared filesystem and writes
-           a .npz result back.
+        Stage 1 (MPI, dynamic): Rank 0 streams meshdata tasks to
+           workers on demand. Each worker reads its input from the
+           shared filesystem and writes a .npz result back.
 
         Stage 2 (Sequential, Rank 0 only): Load .npz results in
            priority order, clip overlaps, clamp hmin/hmax, write .2dm.
 
-        Error policy: if ANY task fails, workers are still released
-        (via mpi_stop_workers), then a single aggregated RuntimeError
-        is raised. Stage 2 is skipped — we never silently emit a
-        partial mesh built from only the surviving tiles.
+        Error policy: if ANY task fails, a single aggregated
+        RuntimeError is raised and Stage 2 is skipped; we never
+        silently emit a partial mesh built from only the surviving
+        tiles. Worker shutdown is handled by MPITaskRunner.run()'s
+        finally block, not here.
 
         Shared-filesystem requirement: workers exchange paths to .npz
         files under self._work_dir. On a multi-node job that directory
@@ -3225,9 +3225,9 @@ class HfunCollector(BaseHfun):
         if self._base_mesh and self._base_as_hfun:
             hfun_list = [*self._hfun_list[::-1], self._base_mesh]
 
-        # ========== STAGE 1: MPI scatter/gather meshdata() ==========
+        # ========== STAGE 1: MPI dynamic meshdata() ==========
         # Build tasks — same as parallel variant, plus 'op' key so
-        # _run_tasks() knows which worker function to call.
+        # the worker loop knows which function to call.
         tasks = []
         for loop_idx, hfun in enumerate(hfun_list):
             npz_path = os.path.join(
@@ -3236,7 +3236,7 @@ class HfunCollector(BaseHfun):
             )
             if isinstance(hfun, HfunRaster):
                 task = {
-                    'op': 'meshdata',
+                    'op': MPITaskRunner._OPS['MESHDATA'],
                     'type': 'raster',
                     'original_index': loop_idx,
                     'topo_path': hfun._raster.path,
@@ -3250,7 +3250,7 @@ class HfunCollector(BaseHfun):
                 # HfunMesh and other types are picklable —
                 # send the object directly to the worker
                 task = {
-                    'op': 'meshdata',
+                    'op': MPITaskRunner._OPS['MESHDATA'],
                     'type': 'mesh',
                     'original_index': loop_idx,
                     'hfun_obj': deepcopy(hfun),
@@ -3259,21 +3259,18 @@ class HfunCollector(BaseHfun):
                 }
             tasks.append(task)
 
-        # ── Scatter/gather dispatch (Rank 0 side) ──
-        # Workers are in mpi_worker_loop() — they participate in the
-        # same scatter/gather collectives from their side.
-        comm = _get_mpi_comm()
+        # ── Dynamic point-to-point dispatch (Rank 0 only) ──
+        # Workers are in MPITaskRunner._run_worker() — they receive
+        # tasks individually via recv() and return results via send().
+        # Shutdown is handled by runner.run()'s finally block.
+        runner = MPITaskRunner()
         _logger.info(
-            f"Stage 1 (MPI): distributing {len(tasks)} meshdata() "
-            f"tasks across {comm.Get_size()} rank(s)"
+            f"Stage 1 (MPI/dynamic): streaming {len(tasks)} meshdata() "
+            f"tasks to {max(runner.size - 1, 1)} worker rank(s)"
         )
 
-        results = mpi_scatter_gather(tasks)
-        _logger.info("Stage 1 (MPI): all meshdata() tasks returned.")
-
-        # Release workers from mpi_worker_loop() BEFORE error handling.
-        # If we raised first, workers would block forever at scatter.
-        mpi_stop_workers()
+        results = runner.dispatch(tasks)
+        _logger.info("Stage 1 (MPI/dynamic): all meshdata() tasks returned.")
 
         # ── Aggregate results & enforce fail-fast error policy ──
         stage1_results = {}
@@ -3285,8 +3282,11 @@ class HfunCollector(BaseHfun):
                        if isinstance(result, dict) else -1)
                 err = (result.get('error') if isinstance(result, dict)
                        else repr(result))
+                wrk = (result.get('worker_rank', '?')
+                       if isinstance(result, dict) else '?')
                 _logger.error(
-                    f"meshdata task failed for loop index {idx}: {err}"
+                    f"meshdata task failed for loop index {idx} "
+                    f"(worker rank {wrk}): {err}"
                 )
                 continue
             stage1_results[result['original_index']] = result['output_path']
@@ -3296,6 +3296,7 @@ class HfunCollector(BaseHfun):
             # that would produce a mesh silently missing tiles.
             summary = "; ".join(
                 f"idx={f.get('original_index', -1)} "
+                f"rank={f.get('worker_rank', '?')} "
                 f"err={f.get('error', 'unknown')}"
                 for f in failures if isinstance(f, dict)
             )
