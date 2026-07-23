@@ -10,7 +10,7 @@ import numpy as np
 import numpy.testing as npt
 
 from ocsmesh import Hfun, Raster
-from ocsmesh.hfun.collector import mpi_worker_loop
+from ocsmesh.hfun.collector import MPITaskRunner
 from ocsmesh.utils import raster_from_numpy
 
 try:
@@ -43,7 +43,10 @@ def _create_test_rasters(base_dir):
 
 @unittest.skipUnless(HAS_MPI and _is_under_mpiexec(), "Requires mpiexec with >1 rank")
 class TestMPIWriteHfun(unittest.TestCase):
-    """Test meshdata() write path under MPI using worker loop."""
+    """Test meshdata() write path under MPI using MPITaskRunner.
+
+    Run with: mpiexec -n 2 python -m pytest tests/api/test_mpi_write_hfun.py -v -s
+    """
 
     def setUp(self):
         comm = MPI.COMM_WORLD
@@ -69,11 +72,19 @@ class TestMPIWriteHfun(unittest.TestCase):
             except (PermissionError, FileNotFoundError):
                 pass
 
+    # ────────────────────────────────────────────────────────────────
+    # Send/recv tests — all ranks call MPITaskRunner.run()
+    #
+    # Rank 0 runs user_fn (which calls hfun.meshdata() internally).
+    # Workers enter the point-to-point recv/execute/send loop and
+    # exit when Rank 0 finishes (via TAG_STOP in finally block).
+    # ────────────────────────────────────────────────────────────────
+
     def test_mpi_write_hfun_basic(self):
         """Basic smoke test: MPI meshdata() produces valid output."""
-        comm = MPI.COMM_WORLD
+        runner = MPITaskRunner()
 
-        if self.rank == 0:
+        def main():
             print("\n[Rank 0] Creating Hfun and calling meshdata()...", flush=True)
             hfun = Hfun(self.raster_list, nprocs=1, hmin=10, hmax=1000)
             hfun.execution_mode = "mpi"
@@ -83,18 +94,23 @@ class TestMPIWriteHfun(unittest.TestCase):
             self.assertIsNotNone(meshdata)
             self.assertTrue(len(meshdata.values) > 0)
             self.assertTrue(len(meshdata.coords) > 0)
-        else:
-            print(f"[Rank {self.rank}] Entering mpi_worker_loop()...", flush=True)
-            mpi_worker_loop()
-            print(f"[Rank {self.rank}] mpi_worker_loop() returned.", flush=True)
+            return meshdata
 
-        comm.Barrier()
+        result = runner.run(main)
+
+        if self.rank == 0:
+            self.assertIsNotNone(result)
+        else:
+            self.assertIsNone(result)
+
+        MPI.COMM_WORLD.Barrier()
 
     def test_serial_vs_mpi_write_hfun_equivalence(self):
         """Numerical equivalence: serial meshdata == MPI meshdata."""
-        comm = MPI.COMM_WORLD
+        runner = MPITaskRunner()
 
-        if self.rank == 0:
+        def main():
+            # ── SERIAL baseline ──
             print("\n[Rank 0] Running serial baseline...", flush=True)
             hfun_serial = Hfun(self.raster_list, nprocs=2, hmin=10, hmax=1000)
             hfun_serial.execution_mode = "serial"
@@ -104,6 +120,7 @@ class TestMPIWriteHfun(unittest.TestCase):
             values_serial = meshdata_serial.values
             print(f"[Rank 0] Serial: {len(values_serial)} nodes", flush=True)
 
+            # ── MPI execution ──
             print("[Rank 0] Running MPI execution...", flush=True)
             hfun_mpi = Hfun(self.raster_list, nprocs=2, hmin=10, hmax=1000)
             hfun_mpi.execution_mode = "mpi"
@@ -113,6 +130,7 @@ class TestMPIWriteHfun(unittest.TestCase):
             values_mpi = meshdata_mpi.values
             print(f"[Rank 0] MPI: {len(values_mpi)} nodes", flush=True)
 
+            # ── COMPARE ──
             self.assertAlmostEqual(
                 len(values_serial), len(values_mpi), delta=len(values_serial) * 0.01
             )
@@ -120,12 +138,10 @@ class TestMPIWriteHfun(unittest.TestCase):
             npt.assert_allclose(np.max(values_serial), np.max(values_mpi), rtol=1e-5)
             npt.assert_allclose(np.mean(values_serial), np.mean(values_mpi), rtol=1e-5)
             print("[Rank 0] Serial and MPI results match!", flush=True)
-        else:
-            print(f"[Rank {self.rank}] Entering mpi_worker_loop()...", flush=True)
-            mpi_worker_loop()
-            print(f"[Rank {self.rank}] mpi_worker_loop() returned.", flush=True)
 
-        comm.Barrier()
+        runner.run(main)
+
+        MPI.COMM_WORLD.Barrier()
 
 
 if __name__ == "__main__":
