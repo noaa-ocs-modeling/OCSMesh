@@ -11,11 +11,13 @@ without having to worry about the details of merging the output size
 functions defined on each DEM or mesh.
 """
 import os
+import sys
 import shutil
 import gc
 import logging
 import warnings
 import tempfile
+import traceback
 from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
@@ -133,243 +135,370 @@ def _configure_mpi_environment():
         os.environ.setdefault(var, '1')
 
 
-# ── MPI Scatter/Gather Infrastructure ──────────────────────────────
-#
-# Design: self-describing tasks + scatter/gather collectives.
-#
-# Each task dict carries an 'op' key (e.g. 'meshdata') that names the
-# worker function to call. The _MPI_WORKER_REGISTRY (defined after the
-# worker functions below) maps op names to functions. This eliminates
-# the need for a separate bcast coordination channel.
-#
-# Three functions, each with one job:
-#   _run_tasks(chunk)         — execute a chunk of tasks via registry
-#   mpi_scatter_gather(tasks) — Rank 0's side: one scatter/gather round
-#   mpi_worker_loop()         — workers' side: loop until sentinel
-#   mpi_stop_workers()        — Rank 0 sends sentinel to exit workers
-#
-# Adding a new MPI operation requires only:
-#   1. Write a _*_task_worker(task) function
-#   2. Add it to _MPI_WORKER_REGISTRY
+class MPITaskRunner:
+    """Dynamic manager/worker MPI task runner.
 
+    Encapsulates all MPI dispatch logic. Called identically by all
+    ranks — zero rank checks in user code.
 
-def _run_tasks(chunk):
-    """Execute a chunk of self-describing task dicts using the worker registry.
+    User script::
 
-    Each task dict must have an 'op' key naming the worker function
-    to call (e.g. 'meshdata'). The function is looked up from
-    _MPI_WORKER_REGISTRY. Exceptions are caught per-task and returned
-    as structured error dicts — a single task failure does NOT kill the
-    rank or abort other tasks in the chunk.
+        from ocsmesh.hfun.collector import MPITaskRunner
 
-    This is the shared processing logic used by both
-    mpi_scatter_gather() (Rank 0 side) and mpi_worker_loop()
-    (worker side).
+        runner = MPITaskRunner()
 
-    Parameters
-    ----------
-    chunk : list of dict
-        Task dicts to execute. Each must contain 'op' and
-        'original_index'.
-
-    Returns
-    -------
-    list of dict
-        One result dict per task (success or structured error).
-    """
-    # ── Safety checks ──
-    if not isinstance(chunk, list):
-        raise TypeError(
-            f"_run_tasks expects a list of task dicts, "
-            f"got {type(chunk).__name__}"
-        )
-
-    results = []
-    for task in chunk:
-        # Look up worker function from registry
-        op = task.get('op') if isinstance(task, dict) else None
-        worker_fn = _MPI_WORKER_REGISTRY.get(op)
-
-        if worker_fn is None:
-            _logger.error(f"No worker registered for op '{op}'")
-            results.append({
-                'status': 'error',
-                'original_index': task.get('original_index', -1)
-                                  if isinstance(task, dict) else -1,
-                'error': f"No worker registered for op '{op}'",
-            })
-            continue
-
-        try:
-            result = worker_fn(task)
-            results.append(result)
-        except Exception as e:
-            _logger.error(f"Task failed (op='{op}'): {e}")
-            results.append({
-                'status': 'error',
-                'original_index': task.get('original_index', -1),
-                'error': str(e),
-            })
-
-    return results
-
-
-def mpi_scatter_gather(tasks):
-    """Distribute self-describing tasks across all MPI ranks (one round).
-
-    Rank 0 calls this to run one scatter/gather round. It partitions
-    tasks via round-robin, scatters chunks to all ranks (including
-    itself), processes its own chunk, and gathers results from everyone.
-
-    Workers must be inside mpi_worker_loop() — they participate in the
-    same scatter/gather collectives from their side of the loop.
-
-    Parameters
-    ----------
-    tasks : list of dict
-        Task dicts to distribute. Each must contain:
-        - 'op': str — worker function name (key in _MPI_WORKER_REGISTRY)
-        - 'original_index': int — for result reassociation
-
-    Returns
-    -------
-    list of dict
-        Flattened list of all results from all ranks (including Rank 0).
-        Order is NOT guaranteed — use 'original_index' to reassociate.
-    """
-    # ── Safety checks ──
-    comm = _get_mpi_comm()
-    if comm is None:
-        raise RuntimeError("mpi4py is not available")
-
-    rank = comm.Get_rank()
-    if rank != 0:
-        raise RuntimeError(
-            "mpi_scatter_gather() must only be called by Rank 0. "
-            "Worker ranks should be in mpi_worker_loop()."
-        )
-
-    if not isinstance(tasks, list):
-        raise TypeError(
-            f"mpi_scatter_gather expects a list of task dicts, "
-            f"got {type(tasks).__name__}"
-        )
-
-    size = comm.Get_size()
-
-    # ── Partition tasks via round-robin ──
-    # Round-robin distributes tasks across ranks as evenly as possible.
-    # Task i goes to rank (i % size). All ranks compute, including Rank 0.
-    chunks = [[] for _ in range(size)]
-    for i, task in enumerate(tasks):
-        chunks[i % size].append(task)
-
-    # ── Scatter: each rank (including Rank 0) gets its chunk ──
-    my_chunk = comm.scatter(chunks, root=0)
-
-    # ── Process: Rank 0 runs its own chunk (not wasted) ──
-    my_results = _run_tasks(my_chunk)
-
-    # ── Gather: collect results from all ranks ──
-    all_results = comm.gather(my_results, root=0)
-
-    # Flatten list-of-lists into single result list
-    return [r for chunk_results in all_results for r in chunk_results]
-
-
-def mpi_worker_loop():
-    """Worker event loop — participate in MPI scatter/gather rounds.
-
-    Non-zero ranks call this ONCE at the start of their script. The
-    worker loops on scatter/gather: each round it receives a chunk of
-    self-describing tasks, executes them via _run_tasks(), and returns
-    results via gather.
-
-    When Rank 0 calls mpi_stop_workers(), it scatters None to every
-    rank. Workers detect the None sentinel and exit the loop cleanly.
-
-    Typical user script::
-
-        from mpi4py import MPI
-        from ocsmesh import Hfun
-        from ocsmesh.hfun.collector import mpi_worker_loop
-
-        comm = MPI.COMM_WORLD
-        if comm.Get_rank() == 0:
+        def main():
             hfun = Hfun(raster_list)
             hfun.execution_mode = 'mpi'
-            result = hfun.meshdata()   # triggers scatter/gather rounds
-        else:
-            mpi_worker_loop()          # participates automatically
+            return hfun.meshdata()
+
+        result = runner.run(main)  # All ranks call this
+
+    Features
+    --------
+    - Dynamic on-demand scheduling (fast ranks pull more work)
+    - Rank 0 = dedicated coordinator
+    - Soft-fail: worker exceptions → structured error dicts,
+      worker stays alive for more tasks
+    - Global excepthook prevents zombie cloud/HPC processes
+    - Individual TAG_STOP per worker (no collective shutdown)
+    - Sequential fallback when size == 1 or no MPI
+
+    Adding a new MPI operation requires only:
+      1. Write a `_*_task_worker(task)` function
+      2. Register it in `MPITaskRunner._worker_registry()`
     """
-    # ── Safety checks ──
-    comm = _get_mpi_comm()
-    if comm is None:
-        raise RuntimeError(
-            "mpi4py is not installed. Cannot enter worker loop."
-        )
 
-    rank = comm.Get_rank()
-    if rank == 0:
-        raise RuntimeError(
-            "mpi_worker_loop() must only be called by worker ranks "
-            "(rank != 0). Rank 0 drives the computation via "
-            "mpi_scatter_gather()."
-        )
+    # Message tags for the manager/worker protocol.
+    # Using a dict keeps them grouped and discoverable.
+    _TAGS = {
+        'TASK':   1,   # rank 0 → worker : here is a task dict
+        'RESULT': 2,   # worker → rank 0 : task succeeded (result dict)
+        'ERROR':  3,   # worker → rank 0 : task raised / structured failure
+        'STOP':   4,   # rank 0 → worker : no more work, leave the loop
+    }
 
-    _logger.debug(f"Rank {rank}: entering mpi_worker_loop")
+    # Operation names used in the task 'op' field.
+    _OPS = {
+        'MESHDATA': 'meshdata',
+    }
 
-    while True:
-        # ── Scatter: receive chunk from Rank 0 (collective) ──
-        # This blocks until Rank 0 calls scatter — either from
-        # mpi_scatter_gather() (task round) or mpi_stop_workers()
-        # (sentinel).
-        my_chunk = comm.scatter(None, root=0)
+    @staticmethod
+    def _worker_registry():
+        """Map operation name → worker function.
 
-        # ── Sentinel check: None means Rank 0 is done ──
-        if my_chunk is None:
-            _logger.debug(
-                f"Rank {rank}: received sentinel, exiting loop"
+        Built lazily (at call time) rather than at import time so it can
+        reference worker functions defined later in this module without a
+        forward-reference NameError. Extend this dict to add new
+        MPI-enabled operations.
+        """
+        return {
+            MPITaskRunner._OPS['MESHDATA']: _meshdata_task_worker,
+        }
+
+    @staticmethod
+    def install_mpi_excepthook():
+        """Override ``sys.excepthook`` to abort all MPI ranks on uncaught exception.
+
+        When an uncaught exception propagates to the top of the stack on any
+        rank, this hook writes a traceback to stderr and calls
+        ``comm.Abort(1)`` to kill ALL processes across ALL nodes immediately.
+        This prevents zombie cloud/HPC instances that keep running while
+        blocked in a ``recv()``.
+
+        Only triggers on truly uncaught exceptions; normal task failures are
+        caught by the worker loop and returned as structured error dicts.
+        """
+        MPI = _get_mpi()
+        if MPI is None:
+            return
+
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        def _mpi_excepthook(exctype, value, tb):
+            sys.stderr.write(
+                f"\n[CRITICAL] Uncaught exception on Rank {rank}:\n"
             )
-            break
+            traceback.print_exception(exctype, value, tb, file=sys.stderr)
+            sys.stderr.flush()
+            comm.Abort(1)
 
-        # ── Process chunk using shared execution logic ──
-        my_results = _run_tasks(my_chunk)
+        sys.excepthook = _mpi_excepthook
 
-        # ── Gather: return results to Rank 0 (collective) ──
-        comm.gather(my_results, root=0)
+    def __init__(self):
+        """Initialize MPI state and install global safety net."""
+        comm = _get_mpi_comm()
+        if comm is not None:
+            self.comm = comm
+            self.rank = comm.Get_rank()
+            self.size = comm.Get_size()
+        else:
+            self.comm = None
+            self.rank = 0
+            self.size = 1
 
-    _logger.debug(f"Rank {rank}: mpi_worker_loop exited cleanly")
+        # Install global safety net for multi-rank jobs
+        if self.comm is not None and self.size > 1:
+            self.install_mpi_excepthook()
 
+    # ── Public API ─────────────────────────────────────────────────
 
-def mpi_stop_workers():
-    """Signal all workers to exit mpi_worker_loop.
+    def run(self, user_fn):
+        """Execute user_fn on Rank 0, worker loop on all other ranks.
 
-    Rank 0 calls this after all MPI operations are complete. It scatters
-    None to every rank — workers detect the None sentinel and break out
-    of their loop.
+        All ranks call this identically. Rank 0 runs *user_fn* (which
+        internally calls :meth:`dispatch` for MPI work). Workers enter
+        the recv/execute/send loop and exit when Rank 0 finishes.
 
-    Must be called exactly once, after the last mpi_scatter_gather()
-    call.
-    """
-    # ── Safety checks ──
-    comm = _get_mpi_comm()
-    if comm is None:
-        raise RuntimeError("mpi4py is not available")
+        Workers are always released in the ``finally`` block — even if
+        *user_fn* raises an exception.
 
-    rank = comm.Get_rank()
-    if rank != 0:
-        raise RuntimeError(
-            "mpi_stop_workers() must only be called by Rank 0."
+        Parameters
+        ----------
+        user_fn : callable
+            The function to run on Rank 0. Must accept no arguments.
+
+        Returns
+        -------
+        any
+            Return value of *user_fn* on Rank 0, ``None`` on workers.
+        """
+        # ── Safety check ──
+        if not callable(user_fn):
+            raise TypeError(
+                f"MPITaskRunner.run() expects a callable, "
+                f"got {type(user_fn).__name__}"
+            )
+
+        # Single rank or no MPI: just run directly
+        if self.comm is None or self.size == 1:
+            return user_fn()
+
+        if self.rank == 0:
+            try:
+                return user_fn()
+            finally:
+                # Always release workers, even on exception
+                self._shutdown_workers()
+        else:
+            self._run_worker()
+            return None
+
+    def dispatch(self, tasks):
+        """Rank-0-only: stream tasks dynamically to idle workers.
+
+        Seeds one task per worker, then refills each worker as soon as
+        it returns a result — a central work queue with on-demand
+        assignment. Returns the list of result/error dicts (order is
+        NOT the task order; use ``'original_index'`` to reassociate).
+
+        Rank 0 does not compute any task here (dedicated coordinator).
+
+        Parameters
+        ----------
+        tasks : list of dict
+            Self-describing task dicts, each with an ``'op'`` key.
+
+        Returns
+        -------
+        list of dict
+            One result (or structured error) dict per task.
+        """
+        # ── Safety checks ──
+        if self.comm is None:
+            raise RuntimeError("mpi4py is not available")
+        if self.rank != 0:
+            raise RuntimeError(
+                "dispatch() must only be called by Rank 0."
+            )
+        if not isinstance(tasks, list):
+            raise TypeError(
+                f"dispatch() expects a list of task dicts, "
+                f"got {type(tasks).__name__}"
+            )
+
+        # Degenerate case: no workers (size == 1)
+        # Run tasks locally so single-rank runs stay correct.
+        if self.size == 1:
+            return self._run_tasks_locally(tasks)
+
+        results = []
+        task_iter = iter(tasks)
+        inflight = 0  # tasks currently being processed by workers
+
+        # ── Seed: give each worker one task to start ──
+        for worker in range(1, self.size):
+            task = next(task_iter, None)
+            if task is None:
+                break  # fewer tasks than workers
+            self.comm.send(task, dest=worker, tag=self._TAGS['TASK'])
+            inflight += 1
+
+        # ── Refill: as each worker reports back, hand it the next ──
+        MPI = _get_mpi()
+        while inflight > 0:
+            status = MPI.Status()
+            message = self.comm.recv(
+                source=MPI.ANY_SOURCE,
+                tag=MPI.ANY_TAG,
+                status=status,
+            )
+            worker = status.Get_source()
+            inflight -= 1
+            results.append(message)
+
+            next_task = next(task_iter, None)
+            if next_task is not None:
+                self.comm.send(
+                    next_task, dest=worker, tag=self._TAGS['TASK'])
+                inflight += 1
+
+        return results
+
+    # ── Internal ───────────────────────────────────────────────────
+
+    def _run_worker(self):
+        """Worker recv/execute/send loop (point-to-point).
+
+        Each non-zero rank calls this ONCE. The worker blocks in a
+        ``recv`` until rank 0 either hands it a task (``TAG_TASK``) or
+        tells it to stop (``TAG_STOP``). After running a task it sends
+        the result back and loops again.
+
+        A blocking ``recv`` is the correct idle-wait primitive: the
+        worker sleeps inside MPI without busy-polling and is woken only
+        when a message addressed to it arrives.
+        """
+        # ── Safety checks ──
+        if self.rank == 0:
+            raise RuntimeError(
+                "_run_worker() must only be called by worker ranks."
+            )
+
+        MPI = _get_mpi()
+        registry = self._worker_registry()
+        _logger.debug(
+            f"Rank {self.rank}: entering point-to-point worker loop"
         )
 
-    size = comm.Get_size()
-    _logger.debug(
-        f"Rank 0: sending sentinel to {size - 1} worker(s)"
-    )
+        while True:
+            # Block until rank 0 sends us something. ANY_TAG lets a
+            # single recv distinguish a task from a stop signal.
+            status = MPI.Status()
+            message = self.comm.recv(
+                source=0, tag=MPI.ANY_TAG, status=status)
+            tag = status.Get_tag()
 
-    # Scatter None to every rank — workers see None and break
-    comm.scatter([None] * size, root=0)
+            if tag == self._TAGS['STOP']:
+                _logger.debug(
+                    f"Rank {self.rank}: received STOP, leaving loop"
+                )
+                break
+
+            if tag != self._TAGS['TASK']:
+                # Defensive: unknown control tag. Report and keep
+                # serving so a protocol slip does not silently hang.
+                _logger.warning(
+                    f"Rank {self.rank}: unexpected tag {tag!r}; "
+                    f"ignoring message"
+                )
+                continue
+
+            task = message
+            op = task.get('op') if isinstance(task, dict) else None
+            worker_fn = registry.get(op)
+
+            if worker_fn is None:
+                # Unknown operation → structured error, worker stays.
+                self.comm.send(
+                    {
+                        'status': 'error',
+                        'original_index': (
+                            task.get('original_index', -1)
+                            if isinstance(task, dict) else -1),
+                        'op': op,
+                        'worker_rank': self.rank,
+                        'error': f"No worker registered for op "
+                                 f"{op!r}",
+                        'traceback': '',
+                    },
+                    dest=0, tag=self._TAGS['ERROR'],
+                )
+                continue
+
+            try:
+                result = worker_fn(task)
+                # Some worker functions catch their own exceptions
+                # and return {'status': 'error', ...}. Route those
+                # through the error channel too.
+                if (isinstance(result, dict)
+                        and result.get('status') == 'error'):
+                    result.setdefault('worker_rank', self.rank)
+                    self.comm.send(
+                        result, dest=0, tag=self._TAGS['ERROR'])
+                else:
+                    self.comm.send(
+                        result, dest=0, tag=self._TAGS['RESULT'])
+            except Exception as exc:
+                # Task blew up — NOT an MPI rank failure. Catch it,
+                # report it, keep the worker available for more tasks.
+                self.comm.send(
+                    {
+                        'status': 'error',
+                        'original_index': (
+                            task.get('original_index', -1)
+                            if isinstance(task, dict) else -1),
+                        'op': op,
+                        'worker_rank': self.rank,
+                        'error': repr(exc),
+                        'traceback': traceback.format_exc(),
+                    },
+                    dest=0, tag=self._TAGS['ERROR'],
+                )
+
+        _logger.debug(
+            f"Rank {self.rank}: worker loop exited cleanly"
+        )
+
+    def _shutdown_workers(self):
+        """Send TAG_STOP to each worker individually.
+
+        Individual sends (not a collective) mean each worker exits
+        independently — if one already crashed, the others still
+        receive their stop signal cleanly.
+        """
+        _logger.debug(
+            f"Rank 0: sending STOP to {self.size - 1} worker(s)"
+        )
+        for worker in range(1, self.size):
+            self.comm.send(None, dest=worker, tag=self._TAGS['STOP'])
+
+    def _run_tasks_locally(self, tasks):
+        """Fallback for single-rank: run tasks without MPI."""
+        registry = self._worker_registry()
+        results = []
+        for task in tasks:
+            fn = registry.get(task.get('op'))
+            if fn is None:
+                results.append({
+                    'status': 'error',
+                    'original_index': task.get('original_index', -1),
+                    'error': f"No worker registered for op "
+                             f"{task.get('op')!r}",
+                })
+                continue
+            try:
+                results.append(fn(task))
+            except Exception as exc:
+                results.append({
+                    'status': 'error',
+                    'original_index': task.get('original_index', -1),
+                    'error': repr(exc),
+                    'traceback': traceback.format_exc(),
+                })
+        return results
+
 
 class _RefinementContourInfoCollector:
     """Collection for contour refinement specification
@@ -1079,18 +1208,6 @@ def _meshdata_task_worker(task: dict):
             'error': str(e)
         }
 
-
-# ── MPI Worker Registry ───────────────────────────────────────────
-# Maps operation name → worker function.
-# Each task dict carries an 'op' key (e.g. 'meshdata') that
-# _run_tasks() uses to look up the correct function here.
-#
-# To add a new MPI-enabled operation:
-#   1. Write a _*_task_worker(task) function above
-#   2. Add it to this dict
-_MPI_WORKER_REGISTRY = {
-    'meshdata': _meshdata_task_worker,
-}
 
 
 class HfunCollector(BaseHfun):
