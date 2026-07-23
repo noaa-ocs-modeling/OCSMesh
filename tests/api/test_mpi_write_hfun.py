@@ -1,4 +1,4 @@
-"""MPI integration tests for Hfun write path (requires mpiexec with >1 rank)."""
+"""MPI integration tests for Hfun write path and failure scenarios (requires mpiexec with >1 rank)."""
 
 import gc
 import shutil
@@ -43,7 +43,7 @@ def _create_test_rasters(base_dir):
 
 @unittest.skipUnless(HAS_MPI and _is_under_mpiexec(), "Requires mpiexec with >1 rank")
 class TestMPIWriteHfun(unittest.TestCase):
-    """Test meshdata() write path under MPI using MPITaskRunner.
+    """Test meshdata() write path and failure scenarios under MPI using MPITaskRunner.
 
     Run with: mpiexec -n 2 python -m pytest tests/api/test_mpi_write_hfun.py -v -s
     """
@@ -74,10 +74,6 @@ class TestMPIWriteHfun(unittest.TestCase):
 
     # ────────────────────────────────────────────────────────────────
     # Send/recv tests — all ranks call MPITaskRunner.run()
-    #
-    # Rank 0 runs user_fn (which calls hfun.meshdata() internally).
-    # Workers enter the point-to-point recv/execute/send loop and
-    # exit when Rank 0 finishes (via TAG_STOP in finally block).
     # ────────────────────────────────────────────────────────────────
 
     def test_mpi_write_hfun_basic(self):
@@ -141,6 +137,60 @@ class TestMPIWriteHfun(unittest.TestCase):
 
         runner.run(main)
 
+        MPI.COMM_WORLD.Barrier()
+
+    # ────────────────────────────────────────────────────────────────
+    # Failure Scenarios Tests
+    # ────────────────────────────────────────────────────────────────
+
+    def test_mpi_worker_task_failure_soft_fail(self):
+        """Worker task exception returns structured error dict and leaves worker active for next task."""
+        runner = MPITaskRunner()
+
+        def main():
+            # 1. Dispatch a bad task that causes worker exception (nonexistent file)
+            bad_task = {
+                'op': 'meshdata',
+                'type': 'raster',
+                'original_index': 0,
+                'topo_path': '/non/existent/path/dem.tif',
+                'hfun_input_path': '/non/existent/path/tmp.hfun',
+                'output_path': '/non/existent/path/out.npz',
+                'hmin': 10,
+                'hmax': 1000,
+                'meshdata_kwargs': {}
+            }
+            results_bad = runner.dispatch([bad_task])
+            self.assertEqual(len(results_bad), 1)
+            self.assertEqual(results_bad[0]['status'], 'error')
+            self.assertIn('error', results_bad[0])
+            self.assertIn('worker_rank', results_bad[0])
+
+            # 2. Dispatch a valid task immediately after to prove worker is still alive
+            valid_hfun = Hfun(self.raster_list, nprocs=1, hmin=10, hmax=1000)
+            valid_hfun.execution_mode = "mpi"
+            meshdata = valid_hfun.meshdata()
+            self.assertIsNotNone(meshdata)
+            self.assertTrue(len(meshdata.values) > 0)
+
+        runner.run(main)
+        MPI.COMM_WORLD.Barrier()
+
+    def test_mpi_worker_unregistered_op_soft_fail(self):
+        """Unregistered operation returns error dict without killing worker rank."""
+        runner = MPITaskRunner()
+
+        def main():
+            invalid_op_task = {
+                'op': 'invalid_op_name',
+                'original_index': 0,
+            }
+            results = runner.dispatch([invalid_op_task])
+            self.assertEqual(len(results), 1)
+            self.assertEqual(results[0]['status'], 'error')
+            self.assertIn("No worker registered for op 'invalid_op_name'", results[0]['error'])
+
+        runner.run(main)
         MPI.COMM_WORLD.Barrier()
 
 

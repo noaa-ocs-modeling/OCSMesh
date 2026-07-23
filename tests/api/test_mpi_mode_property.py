@@ -1,15 +1,17 @@
-"""Unit tests for MPI execution mode property behavior (no mpiexec required)."""
+"""Unit tests for MPI execution mode property behavior and excepthook (no mpiexec required)."""
 
 import gc
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 
 from ocsmesh import Hfun, Raster
+from ocsmesh.hfun.collector import MPITaskRunner
 from ocsmesh.utils import raster_from_numpy
 
 
@@ -69,6 +71,40 @@ class TestMPIModeProperty(unittest.TestCase):
         hfun = Hfun(self.raster_list, nprocs=2)
         with self.assertRaises(ValueError):
             hfun.execution_mode = "distributed"
+
+
+class TestMPIExcepthookUnit(unittest.TestCase):
+    """Unit tests for install_mpi_excepthook behavior using mocks."""
+
+    @patch("ocsmesh.hfun.collector._get_mpi")
+    def test_excepthook_installed_and_aborts_comm(self, mock_get_mpi):
+        mock_comm = MagicMock()
+        mock_comm.Get_rank.return_value = 1
+        mock_mpi = MagicMock()
+        mock_mpi.COMM_WORLD = mock_comm
+        mock_get_mpi.return_value = mock_mpi
+
+        original_excepthook = sys.excepthook
+        try:
+            MPITaskRunner.install_mpi_excepthook()
+            self.assertNotEqual(sys.excepthook, original_excepthook)
+
+            # Trigger the installed excepthook
+            with patch("sys.stderr"):
+                sys.excepthook(ValueError, ValueError("test error"), None)
+
+            mock_comm.Abort.assert_called_once_with(1)
+        finally:
+            sys.excepthook = original_excepthook
+
+    @patch("ocsmesh.hfun.collector._get_mpi", return_value=None)
+    def test_excepthook_no_op_when_no_mpi(self, mock_get_mpi):
+        original_excepthook = sys.excepthook
+        try:
+            MPITaskRunner.install_mpi_excepthook()
+            self.assertEqual(sys.excepthook, original_excepthook)
+        finally:
+            sys.excepthook = original_excepthook
 
 
 if __name__ == "__main__":
