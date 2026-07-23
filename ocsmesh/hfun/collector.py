@@ -435,7 +435,7 @@ class MPITaskRunner:
                 else:
                     self.comm.send(
                         result, dest=0, tag=self._TAGS['RESULT'])
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 # Task blew up — NOT an MPI rank failure. Catch it,
                 # report it, keep the worker available for more tasks.
                 self.comm.send(
@@ -485,7 +485,7 @@ class MPITaskRunner:
                 continue
             try:
                 results.append(fn(task))
-            except Exception as exc:
+            except Exception as exc:  # pylint: disable=broad-exception-caught
                 results.append({
                     'status': 'error',
                     'original_index': task.get('original_index', -1),

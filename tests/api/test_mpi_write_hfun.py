@@ -1,4 +1,4 @@
-"""MPI integration tests for Hfun write path and failure scenarios (requires mpiexec with >1 rank)."""
+"""MPI integration tests for Hfun write path and failure scenarios (requires mpiexec)."""
 
 import gc
 import shutil
@@ -144,7 +144,7 @@ class TestMPIWriteHfun(unittest.TestCase):
     # ────────────────────────────────────────────────────────────────
 
     def test_mpi_worker_task_failure_soft_fail(self):
-        """Worker task exception returns structured error dict and leaves worker active for next task."""
+        """Worker task exception returns error dict and leaves worker active for next task."""
         runner = MPITaskRunner()
 
         def main():
