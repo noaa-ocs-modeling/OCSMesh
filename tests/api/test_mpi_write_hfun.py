@@ -13,19 +13,16 @@ from ocsmesh import Hfun, Raster
 from ocsmesh.hfun.collector import MPITaskRunner
 from ocsmesh.utils import raster_from_numpy
 
-try:
+import os
+
+# Importing mpi4py calls MPI_Init in C, which segfaults on CI runners
+# without a working MPI fabric. Guard by checking env vars that mpiexec sets.
+if any(v in os.environ for v in ('PMI_RANK', 'OMPI_COMM_WORLD_RANK')):
     from mpi4py import MPI
-
-    HAS_MPI = True
-except ImportError:
-    HAS_MPI = False
-
-
-def _is_under_mpiexec():
-    """True only when running under mpiexec with >1 rank."""
-    if not HAS_MPI:
-        return False
-    return MPI.COMM_WORLD.Get_size() > 1
+    _MPI_READY = MPI.COMM_WORLD.Get_size() > 1
+else:
+    MPI = None  # type: ignore[assignment]
+    _MPI_READY = False
 
 
 def _create_test_rasters(base_dir):
@@ -41,7 +38,7 @@ def _create_test_rasters(base_dir):
     return [Raster(dem1_path), Raster(dem2_path)]
 
 
-@unittest.skipUnless(HAS_MPI and _is_under_mpiexec(), "Requires mpiexec with >1 rank")
+@unittest.skipUnless(_MPI_READY, "Requires mpiexec with >1 rank")
 class TestMPIWriteHfun(unittest.TestCase):
     """Test meshdata() write path and failure scenarios under MPI using MPITaskRunner.
 
