@@ -1203,11 +1203,13 @@ def _meshdata_task_worker(task: dict):
             'original_index': original_index,
             'output_path': str(output_path) + '.npz'
         }
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return {
             'status': 'error',
             'original_index': original_index,
-            'error': str(e)
+            'op': task.get('op'),
+            'error': repr(e),
+            'traceback': traceback.format_exc(),
         }
 
 
