@@ -1166,11 +1166,10 @@ def _meshdata_task_worker(task: dict):
             # HfunMesh is picklable — use the object directly
             worker_hfun = task['hfun_obj']
             try:
-                meshdata_result = deepcopy(
-                    worker_hfun.meshdata(**meshdata_kwargs))
+                meshdata_result = worker_hfun.meshdata(**meshdata_kwargs)
             except TypeError:
                 # HfunMesh.meshdata() doesn't accept kwargs like stride
-                meshdata_result = deepcopy(worker_hfun.meshdata())
+                meshdata_result = worker_hfun.meshdata()
         else:
             raise ValueError(f"Unknown task type: {task_type}")
 
