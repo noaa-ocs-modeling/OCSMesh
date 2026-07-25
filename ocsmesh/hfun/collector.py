@@ -299,6 +299,13 @@ class MPITaskRunner:
         -------
         list of dict
             One result (or structured error) dict per task.
+        Notes
+        -----
+        Must be called from within the callable passed to :meth:`run`.
+        Calling this method standalone without ``run()`` will cause workers
+        to hang permanently — ``run()`` is responsible for both entering
+        the worker recv loop and guaranteeing shutdown via its ``finally``
+        block.
         """
         # ── Safety checks ──
         if self.comm is None:
