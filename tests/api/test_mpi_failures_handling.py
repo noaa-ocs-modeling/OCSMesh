@@ -86,6 +86,10 @@ class TestMPIFailuresHandling(unittest.TestCase):
 
         def main():
             raster = self.raster_list[0]
+
+            # ── BAD TASK ────────────────────────────────────────────
+            # Definition: Uses a valid/registered operation ('op': 'meshdata'),
+            # but passes non-existent file paths.
             bad_task = {
                 'op': 'meshdata',
                 'type': 'raster',
@@ -145,6 +149,10 @@ class TestMPIFailuresHandling(unittest.TestCase):
 
         def main():
             raster = self.raster_list[0]
+
+            # ── INVALID TASK ────────────────────────────────────────
+            # Definition: Uses an operation name ('op': 'nonexistent_operation')
+            # that is NOT registered in MPITaskRunner._worker_registry().
             invalid_task = {
                 'op': 'nonexistent_operation',
                 'original_index': 0,
