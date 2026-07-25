@@ -1446,9 +1446,7 @@ class HfunCollector(BaseHfun):
 
 
     def __del__(self):
-        # if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
-        #     shutil.rmtree(self._work_dir, ignore_errors=True)
-        #     # TODO: Prove this fix is needed
+        # TODO: Prove this fix is needed
         if (hasattr(self, '_work_dir')
                 and hasattr(self, '_creator_pid')
                 and os.getpid() == self._creator_pid
