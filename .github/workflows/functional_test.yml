@@ -131,3 +131,7 @@ jobs:
     - name: Run MPI Integration tests (mpiexec)
       shell: bash -el {0}
       run: mpiexec -n 2 python -m pytest tests/api/test_mpi_write_hfun.py -v -s
+
+    - name: Run MPI Failure Handling tests (mpiexec -n 2)
+      shell: bash -el {0}
+      run: mpiexec -n 2 python -m pytest tests/api/test_mpi_failures_handling.py -v -s
