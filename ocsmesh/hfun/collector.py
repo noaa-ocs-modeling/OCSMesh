@@ -3053,6 +3053,8 @@ class HfunCollector(BaseHfun):
         # ========== STAGE 1: PARALLEL meshdata() ==========
         tasks = []
         for loop_idx, hfun in enumerate(hfun_list):
+            # NOTE: np.savez appends .npz automatically; output_path here does not
+            # include the extension. The returned path in the result dict adds it.
             npz_path = os.path.join(
                 self._work_dir,
                 f"meshdata_stage1_{pid}_{loop_idx}"
@@ -3232,6 +3234,8 @@ class HfunCollector(BaseHfun):
         # the worker loop knows which function to call.
         tasks = []
         for loop_idx, hfun in enumerate(hfun_list):
+            # NOTE: np.savez appends .npz automatically; output_path here does not
+            # include the extension. The returned path in the result dict adds it.
             npz_path = os.path.join(
                 self._work_dir,
                 f"meshdata_stage1_{pid}_{loop_idx}"
