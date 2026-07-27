@@ -189,6 +189,7 @@ class MPITaskRunner:
         """
         return {
             'meshdata': _meshdata_task_worker,
+            'check_shared_fs': _check_shared_fs_task_worker,
         }
 
     @staticmethod
@@ -357,6 +358,94 @@ class MPITaskRunner:
                 inflight += 1
 
         return results
+
+    def verify_shared_filesystem(self, work_dir: Union[str, Path]):
+        """Rank 0 only: verify all workers can access and write to work_dir.
+
+        On multi-node HPC jobs, default temporary directories (like /tmp)
+        live on node-local disks. If workers are on separate physical nodes
+        from Rank 0, intermediate file operations will fail. This method
+        dispatches lightweight test tasks to confirm cross-node read visibility
+        and write permissions before any computationally expensive work begins.
+
+        Parameters
+        ----------
+        work_dir : path-like
+            The working directory path to test across all worker ranks.
+
+        Raises
+        ------
+        RuntimeError
+            If any worker rank fails to read from or write to `work_dir`.
+        """
+        if self.comm is None or self.size <= 1:
+            return
+        if self.rank != 0:
+            raise RuntimeError(
+                "verify_shared_filesystem() must only be called by Rank 0."
+            )
+
+        work_dir_str = str(work_dir)
+        pid = os.getpid()
+        _logger.info(
+            f"Verifying shared filesystem visibility across "
+            f"{self.size - 1} worker rank(s)..."
+        )
+        rank0_test_file = os.path.join(
+            work_dir_str, f".mpi_fs_check_{pid}.tmp"
+        )
+        with open(rank0_test_file, 'w') as f:
+            f.write("rank0_ok")
+
+        try:
+            check_tasks = [
+                {
+                    'op': 'check_shared_fs',
+                    'original_index': idx,
+                    'work_dir': work_dir_str,
+                    'test_read_file': rank0_test_file,
+                    'worker_rank': idx + 1,
+                }
+                for idx in range(self.size - 1)
+            ]
+            check_results = self.dispatch(check_tasks)
+        finally:
+            if os.path.exists(rank0_test_file):
+                try:
+                    os.remove(rank0_test_file)
+                except OSError:
+                    pass
+
+        check_failures = [
+            res for res in check_results
+            if not isinstance(res, dict) or res.get('status') == 'error'
+        ]
+        if check_failures:
+            first_err = (
+                check_failures[0].get('error', repr(check_failures[0]))
+                if isinstance(check_failures[0], dict)
+                else repr(check_failures[0])
+            )
+            wrk = (
+                check_failures[0].get('worker_rank', '?')
+                if isinstance(check_failures[0], dict)
+                else '?'
+            )
+            raise RuntimeError(
+                f"\n[MPI Shared Filesystem Error] Worker rank {wrk} failed "
+                f"to access or write to working directory "
+                f"'{work_dir_str}':\n  {first_err}\n\n"
+                f"On multi-node HPC/cluster jobs, intermediate files must "
+                f"be created on a shared parallel filesystem (such as "
+                f"Lustre, GPFS, or NFS) visible to all nodes, rather than "
+                f"node-local /tmp.\n\n"
+                f"--> ACTION REQUIRED: Set the TMPDIR environment variable "
+                f"to point to your shared network filesystem before "
+                f"running OCSMesh:\n"
+                f"    export TMPDIR=/scratch/$USER\n"
+                f"    # or export TMPDIR=/lustre/..."
+            )
+        _logger.info("Shared filesystem check passed across all worker ranks.")
 
     # ── Internal ───────────────────────────────────────────────────
 
@@ -1207,6 +1296,54 @@ def _meshdata_task_worker(task: dict):
             'status': 'error',
             'original_index': original_index,
             'op': task.get('op'),
+            'error': repr(e),
+            'traceback': traceback.format_exc(),
+        }
+
+
+def _check_shared_fs_task_worker(task: dict):
+    """Worker task that validates cross-node shared filesystem access.
+
+    Verifies that this worker rank can both read a file created by Rank 0
+    in `work_dir` (proving cross-node read visibility) and create a new
+    file in `work_dir` (proving write permissions).
+    """
+    original_index = task.get('original_index', -1)
+    work_dir = task['work_dir']
+    test_read_file = task['test_read_file']
+    worker_rank = task.get('worker_rank', -1)
+
+    try:
+        # 1. Check read visibility of Rank 0's test file
+        if not (os.path.exists(test_read_file) and os.access(test_read_file, os.R_OK)):
+            raise FileNotFoundError(
+                f"Rank {worker_rank} cannot see/read Rank 0 test file: {test_read_file}"
+            )
+
+        # 2. Check write permission by creating and removing a temporary test file
+        worker_test_file = os.path.join(
+            work_dir, f".mpi_fs_write_test_rank_{worker_rank}_{os.getpid()}.tmp"
+        )
+        with open(worker_test_file, 'w') as f:
+            f.write(f"write_ok_from_rank_{worker_rank}")
+        if os.path.exists(worker_test_file):
+            os.remove(worker_test_file)
+        else:
+            raise FileNotFoundError(
+                f"Rank {worker_rank} wrote file {worker_test_file} but cannot see it."
+            )
+
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'worker_rank': worker_rank,
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'op': task.get('op'),
+            'worker_rank': worker_rank,
             'error': repr(e),
             'traceback': traceback.format_exc(),
         }
@@ -3269,6 +3406,10 @@ class HfunCollector(BaseHfun):
         # tasks individually via recv() and return results via send().
         # Shutdown is handled by runner.run()'s finally block.
         runner = MPITaskRunner()
+
+        # ── Pre-flight validation: verify shared filesystem across ranks ──
+        runner.verify_shared_filesystem(self._work_dir)
+
         _logger.info(
             f"Stage 1 (MPI/dynamic): streaming {len(tasks)} meshdata() "
             f"tasks to {max(runner.size - 1, 1)} worker rank(s)"
