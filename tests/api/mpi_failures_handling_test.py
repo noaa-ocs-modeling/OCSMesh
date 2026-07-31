@@ -15,12 +15,14 @@ from ocsmesh.mpi import MPIExecutor
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.utils import raster_from_numpy
 
-try:
-    from mpi4py import MPI
+from ocsmesh.mpi import _is_mpi_env_detected
 
-    IS_UNDER_MPIEXEC = MPI.COMM_WORLD.Get_size() > 1
-except ImportError:
-    IS_UNDER_MPIEXEC = False
+IS_UNDER_MPIEXEC = _is_mpi_env_detected()
+if IS_UNDER_MPIEXEC:
+    try:
+        from mpi4py import MPI
+    except ImportError:
+        IS_UNDER_MPIEXEC = False
 
 
 def _create_test_rasters(base_dir):
