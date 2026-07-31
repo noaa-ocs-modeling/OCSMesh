@@ -10,7 +10,6 @@ import numpy as np
 import numpy.testing as npt
 
 from ocsmesh import Hfun, Raster
-from ocsmesh.hfun.collector import MPITaskRunner
 from ocsmesh.utils import raster_from_numpy
 
 try:
@@ -31,14 +30,12 @@ def _create_test_rasters(base_dir):
     raster_from_numpy(dem1_path, dem_data, (grid_x, grid_y), 4326)
     raster_from_numpy(dem2_path, dem_data.copy(), (grid_x, grid_y), 4326)
 
-    return [Raster(dem1_path), Raster(dem2_path)]
-
 
 @unittest.skipUnless(IS_UNDER_MPIEXEC, "Requires mpiexec with >1 rank")
 class TestMPIWriteHfun(unittest.TestCase):
-    """Test meshdata() write path under MPI using MPITaskRunner.
+    """Test meshdata() write path under MPI.
 
-    Run with: mpiexec -n 2 python -m pytest tests/api/test_mpi_write_hfun.py -v -s
+    Run with: mpiexec -n 2 python -m pytest tests/api/mpi_write_hfun_test.py -v -s
     """
 
     def setUp(self):
@@ -47,12 +44,16 @@ class TestMPIWriteHfun(unittest.TestCase):
 
         if self.rank == 0:
             self.tdir = Path(tempfile.mkdtemp())
-            self.raster_list = _create_test_rasters(self.tdir)
+            _create_test_rasters(self.tdir)
         else:
             self.tdir = None
-            self.raster_list = None
 
         self.tdir = comm.bcast(self.tdir, root=0)
+        comm.Barrier()
+
+        dem1_path = self.tdir / "dem1.tif"
+        dem2_path = self.tdir / "dem2.tif"
+        self.raster_list = [Raster(dem1_path), Raster(dem2_path)]
 
     def tearDown(self):
         comm = MPI.COMM_WORLD
@@ -67,61 +68,50 @@ class TestMPIWriteHfun(unittest.TestCase):
 
     def test_mpi_write_hfun_basic(self):
         """Basic smoke test: MPI meshdata() produces valid output."""
-        runner = MPITaskRunner()
+        hfun = Hfun(self.raster_list, nprocs=1, hmin=10, hmax=1000)
+        hfun.execution_mode = "mpi"
+        meshdata = hfun.meshdata()
 
-        def main():
-            hfun = Hfun(self.raster_list, nprocs=1, hmin=10, hmax=1000)
-            hfun.execution_mode = "mpi"
-            meshdata = hfun.meshdata()
-
+        if self.rank == 0:
             self.assertIsNotNone(meshdata)
             self.assertTrue(len(meshdata.values) > 0)
             self.assertTrue(len(meshdata.coords) > 0)
-            return meshdata
-
-        result = runner.run(main)
-
-        if self.rank == 0:
-            self.assertIsNotNone(result)
         else:
-            self.assertIsNone(result)
+            self.assertIsNone(meshdata)
 
         MPI.COMM_WORLD.Barrier()
 
     def test_serial_vs_mpi_write_hfun_equivalence(self):
         """Numerical equivalence: serial meshdata == MPI meshdata."""
-        runner = MPITaskRunner()
+        # ── SERIAL baseline ──
+        hfun_serial = Hfun(
+            self.raster_list, nprocs=2, hmin=10, hmax=1000
+        )
+        hfun_serial.execution_mode = "serial"
+        hfun_serial.add_subtidal_flow_limiter(
+            hmin=50, lower_bound=-5, upper_bound=5
+        )
+        hfun_serial.add_constant_value(
+            value=200, lower_bound=5, upper_bound=10
+        )
+        meshdata_serial = hfun_serial.meshdata()
 
-        def main():
-            # ── SERIAL baseline ──
-            hfun_serial = Hfun(
-                self.raster_list, nprocs=2, hmin=10, hmax=1000
-            )
-            hfun_serial.execution_mode = "serial"
-            hfun_serial.add_subtidal_flow_limiter(
-                hmin=50, lower_bound=-5, upper_bound=5
-            )
-            hfun_serial.add_constant_value(
-                value=200, lower_bound=5, upper_bound=10
-            )
-            meshdata_serial = hfun_serial.meshdata()
+        # ── MPI execution ──
+        hfun_mpi = Hfun(
+            self.raster_list, nprocs=2, hmin=10, hmax=1000
+        )
+        hfun_mpi.execution_mode = "mpi"
+        hfun_mpi.add_subtidal_flow_limiter(
+            hmin=50, lower_bound=-5, upper_bound=5
+        )
+        hfun_mpi.add_constant_value(
+            value=200, lower_bound=5, upper_bound=10
+        )
+        meshdata_mpi = hfun_mpi.meshdata()
+
+        if self.rank == 0:
             values_serial = meshdata_serial.values
-
-            # ── MPI execution ──
-            hfun_mpi = Hfun(
-                self.raster_list, nprocs=2, hmin=10, hmax=1000
-            )
-            hfun_mpi.execution_mode = "mpi"
-            hfun_mpi.add_subtidal_flow_limiter(
-                hmin=50, lower_bound=-5, upper_bound=5
-            )
-            hfun_mpi.add_constant_value(
-                value=200, lower_bound=5, upper_bound=10
-            )
-            meshdata_mpi = hfun_mpi.meshdata()
             values_mpi = meshdata_mpi.values
-
-            # ── COMPARE ──
             self.assertAlmostEqual(
                 len(values_serial), len(values_mpi),
                 delta=len(values_serial) * 0.01,
@@ -136,7 +126,6 @@ class TestMPIWriteHfun(unittest.TestCase):
                 np.mean(values_serial), np.mean(values_mpi), rtol=1e-5
             )
 
-        runner.run(main)
         MPI.COMM_WORLD.Barrier()
 
 
