@@ -52,8 +52,15 @@ def _get_mpi():
     return _MPI
 
 
+def _is_mpi_env_detected():
+    """Check if environment variables indicate an MPI launcher (mpiexec, srun, etc.)."""
+    return any(var in os.environ for var in _MPI_ENV_HINTS)
+
+
 def _get_mpi_comm():
-    """Return MPI.COMM_WORLD if available, else None."""
+    """Return MPI.COMM_WORLD if running under an MPI launcher and mpi4py is available, else None."""
+    if not _is_mpi_env_detected():
+        return None
     MPI = _get_mpi()
     if MPI is None:
         return None
@@ -92,7 +99,7 @@ def _configure_mpi_environment():
     and sets the multiprocessing start method to 'spawn' to avoid fork
     deadlocks with open MPI communicators.
     """
-    if any(var in os.environ for var in _MPI_ENV_HINTS):
+    if _is_mpi_env_detected():
         for var in _MPI_THREAD_PIN_VARS:
             os.environ.setdefault(var, '1')
 
@@ -175,7 +182,7 @@ class MPIExecutor:
 
     Usage inside a collector::
 
-        executor = MPIExecutor()  # Singleton — always the same instance
+        executor = MPIExecutor()  # always returns the Singleton
         return executor.execute(
             lambda: self._my_pipeline_mpi(executor, **kwargs)
         )
@@ -204,6 +211,9 @@ class MPIExecutor:
     """
 
     _instance = None
+    _registered_ops = {
+        'check_shared_fs': _check_shared_fs_task_worker,
+    }
 
     # Message tags for the manager/worker protocol.
     # Using a dict keeps them grouped and discoverable.
@@ -236,11 +246,6 @@ class MPIExecutor:
             self.rank = 0
             self.size = 1
 
-        # Built-in ops (generic, not collector-specific)
-        self._worker_ops = {
-            'check_shared_fs': _check_shared_fs_task_worker,
-        }
-
         # Install global safety net for multi-rank jobs
         if self.comm is not None and self.size > 1:
             self.install_mpi_excepthook()
@@ -261,12 +266,11 @@ class MPIExecutor:
         fn : callable
             Worker function: ``fn(task_dict) -> result_dict``.
         """
-        instance = cls()  # triggers Singleton creation if needed
-        instance._worker_ops[name] = fn
+        cls._registered_ops[name] = fn
 
     def _worker_registry(self):
         """Return the current operation -> function mapping."""
-        return dict(self._worker_ops)
+        return dict(self._registered_ops)
 
     # ── Global Safety Net ─────────────────────────────────────────
 
