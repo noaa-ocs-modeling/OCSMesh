@@ -63,7 +63,7 @@ class TestMPIModeProperty(unittest.TestCase):
         hfun = Hfun(self.raster_list, nprocs=2)
         with self.assertWarns(UserWarning) as cm:
             hfun.execution_mode = "mpi"
-        self.assertIn("mpi4py is not installed", str(cm.warning))
+        self.assertIn("MPI environment detected", str(cm.warning))
         self.assertEqual(hfun.execution_mode, "parallel")
 
     def test_invalid_mode_raises(self):

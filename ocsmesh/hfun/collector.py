@@ -78,10 +78,10 @@ RASTER_CONSTR = (
 
 _logger = logging.getLogger(__name__)
 
+# pylint: disable=wrong-import-position
 from ocsmesh.mpi import (
     MPIExecutor,
     _get_mpi,
-    _get_mpi_comm,
     _is_mpi_active,
     _configure_mpi_environment,
 )
@@ -2511,12 +2511,12 @@ class HfunCollector(BaseHfun):
         if self.execution_mode == 'mpi':
             _logger.info("Calculate & Writing hfun to disk using MPI method.")
             return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
-        elif self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode == 'parallel' and self._nprocs > 1:
             _logger.info("Calculate & Writing hfun to disk using PARALLEL method.")
             return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
-        else:
-            _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
-            return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
+
+        _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
+        return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
 
 
     def _calculate_and_write_hfun_to_disk_serial(

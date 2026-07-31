@@ -1,5 +1,7 @@
 """MPI integration tests for failure handling and soft-fail recovery (requires mpiexec -n 2)."""
 
+# pylint: disable=c-extension-no-member,protected-access
+
 import gc
 import shutil
 import tempfile

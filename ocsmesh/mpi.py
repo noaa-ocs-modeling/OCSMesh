@@ -25,10 +25,11 @@ import logging
 import os
 import sys
 import traceback
-from pathlib import Path
-from typing import Union
+import traceback
 
 _logger = logging.getLogger(__name__)
+
+# pylint: disable=c-extension-no-member,import-outside-toplevel
 
 # ── MPI lazy import ────────────────────────────────────────────────
 # mpi4py is an optional dependency. These helpers let the rest of
@@ -40,7 +41,7 @@ _MPI_IMPORT_ATTEMPTED = False
 
 def _get_mpi():
     """Lazy-import mpi4py.MPI. Returns the module or None."""
-    global _MPI, _MPI_IMPORT_ATTEMPTED
+    global _MPI, _MPI_IMPORT_ATTEMPTED  # pylint: disable=global-statement
     if not _MPI_IMPORT_ATTEMPTED:
         _MPI_IMPORT_ATTEMPTED = True
         try:
@@ -66,7 +67,7 @@ def _is_mpi_active():
         return False
     try:
         return comm.Get_size() > 1
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return False
 
 
@@ -221,7 +222,7 @@ class MPIExecutor:
 
     def __init__(self):
         """Initialize MPI state and install global safety net."""
-        if self._initialized:
+        if getattr(self, '_initialized', False):
             return
         self._initialized = True
 
@@ -312,7 +313,7 @@ class MPIExecutor:
                 pass
             comm.Abort(1)
 
-        _mpi_excepthook._is_mpi_hook = True  # for idempotency
+        _mpi_excepthook._is_mpi_hook = True  # pylint: disable=protected-access,attribute-defined-outside-init
         sys.excepthook = _mpi_excepthook
 
     # ── Public API ────────────────────────────────────────────────
@@ -756,4 +757,3 @@ class MPIExecutor:
                     'traceback': traceback.format_exc(),
                 })
         return results
-

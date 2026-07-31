@@ -1,5 +1,7 @@
 """MPI integration tests for Hfun write path (requires mpiexec)."""
 
+# pylint: disable=c-extension-no-member
+
 import gc
 import shutil
 import tempfile

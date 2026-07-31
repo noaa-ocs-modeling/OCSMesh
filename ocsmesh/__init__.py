@@ -12,6 +12,7 @@ from importlib import util
 from .mpi import _configure_mpi_environment
 _configure_mpi_environment()
 
+# pylint: disable=wrong-import-position
 from .internal import MeshData
 from .raster import Raster
 from .mesh import Mesh
