@@ -80,7 +80,6 @@ _logger = logging.getLogger(__name__)
 
 from ocsmesh.mpi import (
     MPIExecutor,
-    MPITaskRunner,
     _get_mpi,
     _get_mpi_comm,
     _is_mpi_active,
