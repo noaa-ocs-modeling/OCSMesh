@@ -3405,6 +3405,8 @@ class HfunCollector(BaseHfun):
         # Workers are in MPITaskRunner._run_worker() — they receive
         # tasks individually via recv() and return results via send().
         # Shutdown is handled by runner.run()'s finally block.
+
+        #TODO: All the MPI code to be refactored and reused between all MPI method.
         runner = MPITaskRunner()
 
         # ── Pre-flight validation: verify shared filesystem across ranks ──
