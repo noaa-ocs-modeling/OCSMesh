@@ -100,9 +100,12 @@ class TestMPIExcepthookUnit(unittest.TestCase):
 
     @patch("ocsmesh.mpi._get_mpi", return_value=None)
     def test_excepthook_no_op_when_no_mpi(self, mock_get_mpi):
+        """install_mpi_excepthook should be a no-op when MPI is unavailable."""
         original_excepthook = sys.excepthook
         try:
-            sys.excepthook = sys.__excepthook__
+            # No reset here — we're verifying that install_mpi_excepthook
+            # leaves sys.excepthook completely untouched when _get_mpi()
+            # returns None.
             MPIExecutor.install_mpi_excepthook()
             self.assertEqual(sys.excepthook, original_excepthook)
         finally:
