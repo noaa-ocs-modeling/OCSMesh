@@ -86,9 +86,7 @@ class TestMPIExcepthookUnit(unittest.TestCase):
 
         original_excepthook = sys.excepthook
         try:
-            # Reset excepthook attribute if previously patched
-            if hasattr(sys.excepthook, '_is_mpi_hook'):
-                delattr(sys.excepthook, '_is_mpi_hook')
+            sys.excepthook = sys.__excepthook__
             MPIExecutor.install_mpi_excepthook()
             self.assertNotEqual(sys.excepthook, original_excepthook)
 
@@ -104,8 +102,7 @@ class TestMPIExcepthookUnit(unittest.TestCase):
     def test_excepthook_no_op_when_no_mpi(self, mock_get_mpi):
         original_excepthook = sys.excepthook
         try:
-            if hasattr(sys.excepthook, '_is_mpi_hook'):
-                delattr(sys.excepthook, '_is_mpi_hook')
+            sys.excepthook = sys.__excepthook__
             MPIExecutor.install_mpi_excepthook()
             self.assertEqual(sys.excepthook, original_excepthook)
         finally:
