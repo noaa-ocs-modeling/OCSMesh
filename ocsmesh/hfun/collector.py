@@ -83,6 +83,7 @@ from ocsmesh.mpi import (
     MPIExecutor,
     _get_mpi,
     _is_mpi_active,
+    _is_mpi_env_detected,
     _configure_mpi_environment,
 )
 
@@ -1055,20 +1056,65 @@ class HfunCollector(BaseHfun):
             mesh_engine='gmsh', stride=...).
         """
         if self.execution_mode == 'mpi':
-            executor = MPIExecutor()
-            return executor.execute(
-                lambda: self._meshdata_mpi_pipeline(**kwargs)
-            )
+            return self._meshdata_mpi_pipeline(**kwargs)
 
         return self._meshdata_pipeline(**kwargs)
 
     def _meshdata_mpi_pipeline(self, **kwargs) -> MeshData:
-        """Full meshdata pipeline — only Rank 0 executes this.
+        """Full meshdata pipeline — all ranks call collectively.
 
-        Workers are in _run_worker() for the entire duration,
-        available for ANY executor.submit() call.
+        Only MPIExecutor.run() is collective (all ranks participate).
+        All other stages are rank-0-only for now, with comments marking
+        future MPI candidates. Workers skip straight to the run() call,
+        then return None.
         """
-        return self._meshdata_pipeline(**kwargs)
+        is_manager = MPIExecutor.is_manager()
+
+        if self._method == 'exact':
+            # TODO(mpi): _apply_features could be distributed in the
+            # future (each rank applies features to a subset of hfuns).
+            # For now, rank 0 only.
+            if is_manager:
+                self._apply_features()
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # ── COLLECTIVE: all ranks participate here ──
+                # MPIExecutor.run() inside this call handles the
+                # rank split (rank 0 dispatches, workers recv).
+                hfun_path_list = self._calculate_and_write_hfun_to_disk(
+                    temp_dir, **kwargs
+                )
+
+                # Workers got [] from run() — nothing left to do.
+                if not hfun_path_list:
+                    return None
+
+                # TODO(mpi): _get_hfun_composite reads .2dm files and
+                # vstacks coordinates. Could be distributed in the future.
+                # For now, rank 0 only.
+                composite_hfun = self._get_hfun_composite(hfun_path_list)
+
+        elif self._method == 'fast':
+            # TODO(mpi): fast method not yet MPI-enabled.
+            # For now, rank 0 only. Workers return None.
+            if not is_manager:
+                return None
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                rast = self._create_big_raster(temp_dir)
+                hfun = self._apply_features_fast(rast)
+                composite_hfun = self._get_hfun_composite_fast(
+                    hfun, **kwargs
+                )
+                del rast
+                del hfun
+
+        else:
+            raise ValueError(
+                f"Invalid method specified: {self._method}"
+            )
+
+        return composite_hfun
 
     def _meshdata_pipeline(self, **kwargs) -> MeshData:
         # Just dummy object
@@ -2056,7 +2102,16 @@ class HfunCollector(BaseHfun):
             )
 
         if mode == 'mpi':
-            if _get_mpi() is None:
+            if not _is_mpi_env_detected():
+                # Not running under mpiexec/srun — can't use MPI.
+                warnings.warn(
+                    "MPI mode requested but no MPI environment detected "
+                    "(no mpiexec/srun). Falling back to 'parallel' mode.",
+                    UserWarning
+                )
+                mode = 'parallel'
+            elif _get_mpi() is None:
+                # Under MPI launcher but mpi4py not installed.
                 warnings.warn(
                     "mpi4py is not installed. Falling back to 'parallel' "
                     "mode. Install mpi4py for MPI support: "
@@ -2065,8 +2120,9 @@ class HfunCollector(BaseHfun):
                 )
                 mode = 'parallel'
             elif not _is_mpi_active():
+                # mpi4py available but only 1 rank — pointless.
                 warnings.warn(
-                    "MPI mode requested but no MPI environment detected. "
+                    "MPI mode requested but only 1 rank detected. "
                     "Falling back to 'parallel' mode.",
                     UserWarning
                 )
@@ -2869,15 +2925,19 @@ class HfunCollector(BaseHfun):
                 }
             tasks.append(task)
 
-        # ── Dynamic point-to-point dispatch (Rank 0 only) ──
-        # Workers are in MPIExecutor._run_worker() — they receive
-        # tasks individually via recv() and return results via send().
-        # Shutdown is handled by executor.execute()'s finally block.
-
-        executor = MPIExecutor()
-        raw_results = executor.submit(
+        # ── Collective dispatch via MPIExecutor.run() ──
+        # All ranks reach here with the same task list.
+        # Inside run(): rank 0 dispatches tasks to workers,
+        # workers enter recv loop. Returns results on rank 0,
+        # None on workers.
+        raw_results = MPIExecutor.run(
             tasks, work_dir=self._work_dir, fail_fast=True
         )
+
+        # Workers get None from run() — nothing left for them to do.
+        if raw_results is None:
+            return []
+
         stage1_results = {
             idx: res['output_path'] for idx, res in raw_results.items()
         }
