@@ -250,6 +250,19 @@ class MPIExecutor:
         if self.comm is not None and self.size > 1:
             self.install_mpi_excepthook()
 
+    # ── Rank Queries ──────────────────────────────────────────────
+
+    @classmethod
+    def is_manager(cls):
+        """Return True if this process is rank 0 (or not running under MPI).
+
+        Convenience check so callers don't need to instantiate the
+        singleton just to inspect rank. Safe to call from any context:
+        returns True when MPI is not active (serial fallback).
+        """
+        instance = cls()
+        return instance.rank == 0
+
     # ── Registration ──────────────────────────────────────────────
 
     @classmethod
@@ -321,6 +334,44 @@ class MPIExecutor:
         sys.excepthook = _mpi_excepthook
 
     # ── Public API ────────────────────────────────────────────────
+
+    @classmethod
+    def run(cls, tasks, work_dir=None, fail_fast=True):
+        """All ranks call collectively. Dispatch tasks, return results.
+
+        Single-call entry point that merges :meth:`execute` and
+        :meth:`submit`. Starts a worker session, dispatches all tasks,
+        shuts workers down, and returns aggregated results on Rank 0
+        (``None`` on workers).
+
+        Design note: all ranks execute the calling code *before* this
+        method is reached. This is intentional — it keeps every rank
+        available for future MPI work in pre-dispatch stages (e.g.
+        distributed task building, parallel feature application).
+        The ``execute()`` pattern locks workers into a recv loop early,
+        preventing this.
+
+        Parameters
+        ----------
+        tasks : list of dict
+            Task dicts, each with ``'op'`` and ``'original_index'`` keys.
+        work_dir : path-like or None, default=None
+            If provided, verify shared filesystem before dispatching.
+        fail_fast : bool, default=True
+            Stop sending new tasks on first error.
+
+        Returns
+        -------
+        dict or None
+            ``{original_index: result_dict}`` on Rank 0; ``None`` on
+            worker ranks.
+        """
+        instance = cls()
+        return instance.execute(
+            lambda: instance.submit(
+                tasks, work_dir=work_dir, fail_fast=fail_fast
+            )
+        )
 
     def execute(self, pipeline_fn):
         """Execute pipeline_fn on Rank 0, worker loop on all other ranks.

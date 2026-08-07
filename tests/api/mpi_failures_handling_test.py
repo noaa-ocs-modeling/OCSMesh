@@ -67,16 +67,16 @@ class TestMPIFailuresHandling(unittest.TestCase):
         else:
             self.tdir = None
 
+        # bcast is collective — all ranks are synchronized when it returns.
         self.tdir = comm.bcast(self.tdir, root=0)
-        comm.Barrier()
 
         dem1_path = self.tdir / "dem1.tif"
         dem2_path = self.tdir / "dem2.tif"
         self.raster_list = [Raster(dem1_path), Raster(dem2_path)]
 
     def tearDown(self):
-        comm = MPI.COMM_WORLD
-        comm.Barrier()
+        # No barrier needed — execute() already synchronized
+        # all ranks before returning (workers exit recv loop on STOP).
         self.raster_list = None
         gc.collect()
         if self.rank == 0:
@@ -146,7 +146,6 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(successes[0]['original_index'], 1)
 
         executor.execute(pipeline)
-        MPI.COMM_WORLD.Barrier()
 
     def test_unregistered_op_recovery(self):
         """Worker survives an unregistered op and processes the next task."""
@@ -200,7 +199,6 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(successes[0]['original_index'], 1)
 
         executor.execute(pipeline)
-        MPI.COMM_WORLD.Barrier()
 
 
 if __name__ == "__main__":

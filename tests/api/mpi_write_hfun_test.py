@@ -52,16 +52,16 @@ class TestMPIWriteHfun(unittest.TestCase):
         else:
             self.tdir = None
 
+        # bcast is collective — all ranks are synchronized when it returns.
         self.tdir = comm.bcast(self.tdir, root=0)
-        comm.Barrier()
 
         dem1_path = self.tdir / "dem1.tif"
         dem2_path = self.tdir / "dem2.tif"
         self.raster_list = [Raster(dem1_path), Raster(dem2_path)]
 
     def tearDown(self):
-        comm = MPI.COMM_WORLD
-        comm.Barrier()
+        # No barrier needed — MPIExecutor.run() already synchronized
+        # all ranks before returning (workers exit recv loop on STOP).
         self.raster_list = None
         gc.collect()
         if self.rank == 0:
@@ -82,8 +82,6 @@ class TestMPIWriteHfun(unittest.TestCase):
             self.assertTrue(len(meshdata.coords) > 0)
         else:
             self.assertIsNone(meshdata)
-
-        MPI.COMM_WORLD.Barrier()
 
     def test_serial_vs_mpi_write_hfun_equivalence(self):
         """Numerical equivalence: serial meshdata == MPI meshdata."""
@@ -129,8 +127,6 @@ class TestMPIWriteHfun(unittest.TestCase):
             npt.assert_allclose(
                 np.mean(values_serial), np.mean(values_mpi), rtol=1e-5
             )
-
-        MPI.COMM_WORLD.Barrier()
 
 
 if __name__ == "__main__":
