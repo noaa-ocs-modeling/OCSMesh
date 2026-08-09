@@ -2844,7 +2844,7 @@ class HfunCollector(BaseHfun):
         """MPI path for writing hfun to disk (dynamic send/recv).
 
         Same two-stage design as the parallel variant, but Stage 1 uses
-        MPIExecutor.submit() to dynamically stream tasks to idle
+        MPIExecutor.run() to dynamically stream tasks to idle
         workers via point-to-point send/recv. The existing
         _meshdata_task_worker is reused unchanged.
 
@@ -2858,7 +2858,7 @@ class HfunCollector(BaseHfun):
         Error policy: if ANY task fails, a single aggregated
         RuntimeError is raised and Stage 2 is skipped; we never
         silently emit a partial mesh built from only the surviving
-        tiles. Worker shutdown is handled by MPIExecutor.execute()'s
+        tiles. Worker shutdown is handled by MPIExecutor.run()'s
         finally block, not here.
 
         Shared-filesystem requirement: workers exchange paths to .npz
