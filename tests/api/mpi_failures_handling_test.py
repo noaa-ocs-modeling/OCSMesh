@@ -145,7 +145,7 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(len(successes), 1)
             self.assertEqual(successes[0]['original_index'], 1)
 
-        executor.execute(pipeline)
+        executor._execute(pipeline)
 
     def test_unregistered_op_recovery(self):
         """Worker survives an unregistered op and processes the next task."""
@@ -198,7 +198,7 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(len(successes), 1)
             self.assertEqual(successes[0]['original_index'], 1)
 
-        executor.execute(pipeline)
+        executor._execute(pipeline)
 
 
 if __name__ == "__main__":
