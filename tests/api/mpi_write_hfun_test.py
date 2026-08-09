@@ -12,6 +12,8 @@ import numpy as np
 import numpy.testing as npt
 
 from ocsmesh import Hfun, Raster
+from ocsmesh.mpi import MPIExecutor
+from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.utils import raster_from_numpy
 
 from ocsmesh.mpi import _is_mpi_env_detected
@@ -127,6 +129,74 @@ class TestMPIWriteHfun(unittest.TestCase):
             npt.assert_allclose(
                 np.mean(values_serial), np.mean(values_mpi), rtol=1e-5
             )
+
+    def test_run_classmethod_workers_in_recv_loop(self):
+        """Simple test to verify that workers are in their recv loop when run() is called. "No deadlock"
+        """
+        raster = self.raster_list[0] if self.raster_list else None
+
+        if MPIExecutor.is_manager() and raster is not None:
+            valid_hfun = HfunRaster(
+                raster=raster, hmin=10, hmax=1000
+            )
+            out_path = str(self.tdir / "run_recv_test")
+            tasks = [{
+                'op': 'meshdata',
+                'type': 'raster',
+                'original_index': 0,
+                'topo_path': raster.path,
+                'hfun_input_path': valid_hfun.tmpfile,
+                'output_path': out_path,
+                'hmin': 10,
+                'hmax': 1000,
+                'meshdata_kwargs': {}
+            }]
+        else:
+            tasks = [{'op': 'meshdata', 'original_index': 0}]
+
+        # No work_dir → submit() skips verify_shared_filesystem(),
+        # goes straight to _dispatch().
+        result = MPIExecutor.run(tasks)
+
+        if MPIExecutor.is_manager():
+            self.assertIsNotNone(result)
+            self.assertIn(0, result)
+        else:
+            self.assertIsNone(result)
+
+    def test_verify_shared_fs_inside_run(self):
+        """Simple test to verify that workers are in their recv loop when run() is called with work_dir. "NO Deadlock"
+        """
+        raster = self.raster_list[0] if self.raster_list else None
+
+        if MPIExecutor.is_manager() and raster is not None:
+            valid_hfun = HfunRaster(
+                raster=raster, hmin=10, hmax=1000
+            )
+            out_path = str(self.tdir / "fs_check_test")
+            tasks = [{
+                'op': 'meshdata',
+                'type': 'raster',
+                'original_index': 0,
+                'topo_path': raster.path,
+                'hfun_input_path': valid_hfun.tmpfile,
+                'output_path': out_path,
+                'hmin': 10,
+                'hmax': 1000,
+                'meshdata_kwargs': {}
+            }]
+        else:
+            tasks = [{'op': 'meshdata', 'original_index': 0}]
+
+        # work_dir=self.tdir → submit() calls verify_shared_filesystem()
+        # which fires its own _dispatch(check_tasks) BEFORE the main dispatch.
+        result = MPIExecutor.run(tasks, work_dir=self.tdir)
+
+        if MPIExecutor.is_manager():
+            self.assertIsNotNone(result)
+            self.assertIn(0, result)
+        else:
+            self.assertIsNone(result)
 
 
 if __name__ == "__main__":
