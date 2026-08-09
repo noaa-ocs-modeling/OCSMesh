@@ -36,6 +36,17 @@ _logger = logging.getLogger(__name__)
 
 _MPI = None
 _MPI_IMPORT_ATTEMPTED = False
+_MPI_ENV_HINTS = (
+    'OMPI_COMM_WORLD_SIZE',     # Open MPI
+    'PMI_SIZE',                  # MPICH / Cray
+    'MPI_LOCALNRANKS',           # Intel MPI
+    'SLURM_NTASKS',              # SLURM (srun)
+)
+_MPI_THREAD_PIN_VARS = (
+    'OMP_NUM_THREADS',           # OpenMP (generic)
+    'MKL_NUM_THREADS',           # Intel MKL (conda numpy)
+    'OPENBLAS_NUM_THREADS',      # OpenBLAS (pip numpy)
+)
 
 
 def _get_mpi():
@@ -75,19 +86,6 @@ def _is_mpi_active():
         return comm.Get_size() > 1
     except Exception:  # pylint: disable=broad-exception-caught
         return False
-
-
-_MPI_ENV_HINTS = (
-    'OMPI_COMM_WORLD_SIZE',     # Open MPI
-    'PMI_SIZE',                  # MPICH / Cray
-    'MPI_LOCALNRANKS',           # Intel MPI
-    'SLURM_NTASKS',              # SLURM (srun)
-)
-_MPI_THREAD_PIN_VARS = (
-    'OMP_NUM_THREADS',           # OpenMP (generic)
-    'MKL_NUM_THREADS',           # Intel MKL (conda numpy)
-    'OPENBLAS_NUM_THREADS',      # OpenBLAS (pip numpy)
-)
 
 
 def _configure_mpi_environment():
