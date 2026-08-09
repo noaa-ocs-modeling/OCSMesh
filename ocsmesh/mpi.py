@@ -11,11 +11,12 @@ Typical collector usage::
     # Register domain-specific worker functions at import time
     MPIExecutor.register_op('meshdata', _meshdata_task_worker)
 
-    # Inside the collector method:
-    executor = MPIExecutor()  # always returns the Singleton
-    result = executor.execute(
-        lambda: self._pipeline_mpi(executor, **kwargs)
-    )
+    # Inside the collector method (all ranks call collectively):
+    results = MPIExecutor.run(tasks, work_dir=self._work_dir)
+
+``run()`` is the only public entry point for dispatching tasks.
+``_execute()`` and ``_submit()`` are private — calling them directly
+bypasses the worker recv loop setup and causes deadlocks.
 
 Users never interact with this module directly. They simply set
 ``hfun.execution_mode = 'mpi'`` and call ``hfun.meshdata()``.
@@ -179,15 +180,14 @@ class MPIExecutor:
 
     Usage inside a collector::
 
-        executor = MPIExecutor()  # always returns the Singleton
-        return executor.execute(
-            lambda: self._my_pipeline_mpi(executor, **kwargs)
+        results = MPIExecutor.run(
+            tasks, work_dir=self._work_dir
         )
 
-    Inside the pipeline function, call :meth:`submit` one or more
-    times to dispatch batches of tasks to idle workers::
-
-        results = executor.submit(tasks, work_dir=self._work_dir)
+    ``run()`` is the only public entry point for dispatching tasks.
+    ``_execute()`` and ``_submit()`` are private — calling them
+    directly bypasses the worker recv loop setup, which caused
+    deadlocks (see PR review Issue #1 and #2).
 
     Features
     --------
@@ -336,17 +336,15 @@ class MPIExecutor:
     def run(cls, tasks, work_dir=None, fail_fast=True):
         """All ranks call collectively. Dispatch tasks, return results.
 
-        Single-call entry point that merges :meth:`execute` and
-        :meth:`submit`. Starts a worker session, dispatches all tasks,
-        shuts workers down, and returns aggregated results on Rank 0
-        (``None`` on workers).
+        Single-call entry point — the only public way to dispatch MPI
+        tasks. Internally calls ``_execute()`` + ``_submit()``, which
+        are private to prevent misuse (calling them directly bypasses
+        worker recv loop setup and causes deadlocks).
 
         Design note: all ranks execute the calling code *before* this
         method is reached. This is intentional — it keeps every rank
         available for future MPI work in pre-dispatch stages (e.g.
         distributed task building, parallel feature application).
-        The ``execute()`` pattern locks workers into a recv loop early,
-        preventing this.
 
         Parameters
         ----------
@@ -364,14 +362,18 @@ class MPIExecutor:
             worker ranks.
         """
         instance = cls()
-        return instance.execute(
-            lambda: instance.submit(
+        return instance._execute(
+            lambda: instance._submit(
                 tasks, work_dir=work_dir, fail_fast=fail_fast
             )
         )
 
-    def execute(self, pipeline_fn):
+    def _execute(self, pipeline_fn):
         """Execute pipeline_fn on Rank 0, worker loop on all other ranks.
+
+        Private — must only be called via :meth:`run`. Calling directly
+        requires the caller to guarantee workers enter this method
+        collectively, which is error-prone and caused deadlocks
 
         All ranks must call this collectively.  Rank 0 runs
         ``pipeline_fn()`` inside a try/finally that guarantees
@@ -379,16 +381,11 @@ class MPIExecutor:
         or exception.  Workers enter :meth:`_run_worker` and block
         until they receive ``TAG_STOP``.
 
-        Workers remain alive for the entire duration of ``pipeline_fn``,
-        available for multiple :meth:`submit` calls. This allows a
-        pipeline to distribute different operations (meshdata, features,
-        contours, etc.) across the same worker pool in sequence.
-
         Parameters
         ----------
         pipeline_fn : callable
             A zero-argument callable that contains the Rank-0-only
-            pipeline logic. Must call :meth:`submit` for distributed
+            pipeline logic. Must call :meth:`_submit` for distributed
             work. The return value is passed through on Rank 0.
 
         Returns
@@ -402,7 +399,7 @@ class MPIExecutor:
             if callable(pipeline_fn):
                 return pipeline_fn()
             raise TypeError(
-                f"MPIExecutor.execute() expects a callable, "
+                f"MPIExecutor._execute() expects a callable, "
                 f"got {type(pipeline_fn).__name__}"
             )
 
@@ -415,12 +412,13 @@ class MPIExecutor:
             self._run_worker()
             return None
 
-    def submit(self, tasks, work_dir=None, fail_fast=True):
+    def _submit(self, tasks, work_dir=None, fail_fast=True):
         """Verify filesystem, dispatch tasks, aggregate results, raise on failure.
 
-        This is the main entry point for collectors to run distributed
-        tasks. Encapsulates the full lifecycle: pre-flight filesystem
-        check -> dynamic dispatch -> result aggregation -> error reporting.
+        Private — must only be called from within ``_execute()``'s
+        pipeline_fn. Calling outside ``_execute()`` means workers
+        are not in their recv loop, and ``_dispatch()`` will deadlock
+
 
         Parameters
         ----------
