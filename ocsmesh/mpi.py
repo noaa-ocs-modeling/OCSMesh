@@ -25,7 +25,6 @@ import logging
 import os
 import sys
 import traceback
-import traceback
 
 _logger = logging.getLogger(__name__)
 
