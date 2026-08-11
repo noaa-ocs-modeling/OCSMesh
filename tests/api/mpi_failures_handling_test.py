@@ -1,5 +1,7 @@
 """MPI integration tests for failure handling and soft-fail recovery (requires mpiexec -n 2)."""
 
+# pylint: disable=c-extension-no-member,protected-access
+
 import gc
 import shutil
 import tempfile
@@ -9,16 +11,18 @@ from pathlib import Path
 import numpy as np
 
 from ocsmesh import Raster
-from ocsmesh.hfun.collector import MPITaskRunner
+from ocsmesh.mpi import MPIExecutor
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.utils import raster_from_numpy
 
-try:
-    from mpi4py import MPI
+from ocsmesh.mpi import _is_mpi_env_detected
 
-    IS_UNDER_MPIEXEC = MPI.COMM_WORLD.Get_size() > 1
-except ImportError:
-    IS_UNDER_MPIEXEC = False
+IS_UNDER_MPIEXEC = _is_mpi_env_detected()
+if IS_UNDER_MPIEXEC:
+    try:
+        from mpi4py import MPI
+    except ImportError:
+        IS_UNDER_MPIEXEC = False
 
 
 def _create_test_rasters(base_dir):
@@ -31,15 +35,13 @@ def _create_test_rasters(base_dir):
     raster_from_numpy(dem1_path, dem_data, (grid_x, grid_y), 4326)
     raster_from_numpy(dem2_path, dem_data.copy(), (grid_x, grid_y), 4326)
 
-    return [Raster(dem1_path), Raster(dem2_path)]
-
 
 @unittest.skipUnless(IS_UNDER_MPIEXEC, "Requires mpiexec with >1 rank")
 class TestMPIFailuresHandling(unittest.TestCase):
     """Worker soft-fail and recovery tests — require exactly 2 MPI ranks (-n 2).
 
     With exactly 1 worker (n=2), dispatching [bad_task, good_task] in a
-    single runner.dispatch() call forces the same worker to handle both.
+    single executor._dispatch() call forces the same worker to handle both.
     If the good task succeeds, the worker survived the failure.
 
     If executed with n != 2 under mpiexec, setUp() fails explicitly with a
@@ -61,16 +63,20 @@ class TestMPIFailuresHandling(unittest.TestCase):
 
         if self.rank == 0:
             self.tdir = Path(tempfile.mkdtemp())
-            self.raster_list = _create_test_rasters(self.tdir)
+            _create_test_rasters(self.tdir)
         else:
             self.tdir = None
-            self.raster_list = None
 
+        # bcast is collective — all ranks are synchronized when it returns.
         self.tdir = comm.bcast(self.tdir, root=0)
 
+        dem1_path = self.tdir / "dem1.tif"
+        dem2_path = self.tdir / "dem2.tif"
+        self.raster_list = [Raster(dem1_path), Raster(dem2_path)]
+
     def tearDown(self):
-        comm = MPI.COMM_WORLD
-        comm.Barrier()
+        # No barrier needed — execute() already synchronized
+        # all ranks before returning (workers exit recv loop on STOP).
         self.raster_list = None
         gc.collect()
         if self.rank == 0:
@@ -81,10 +87,10 @@ class TestMPIFailuresHandling(unittest.TestCase):
 
     def test_task_exception_recovery(self):
         """Worker survives a task exception and processes the next task."""
-        runner = MPITaskRunner()
+        executor = MPIExecutor()
         out_path = str(self.tdir / "recovery_test")
 
-        def main():
+        def pipeline():
             raster = self.raster_list[0]
 
             # ── BAD TASK ────────────────────────────────────────────
@@ -118,7 +124,7 @@ class TestMPIFailuresHandling(unittest.TestCase):
             }
 
             # Single dispatch — 1 worker handles both sequentially
-            results = runner.dispatch([bad_task, good_task])
+            results = executor._dispatch([bad_task, good_task])
 
             self.assertEqual(len(results), 2)
 
@@ -139,20 +145,19 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(len(successes), 1)
             self.assertEqual(successes[0]['original_index'], 1)
 
-        runner.run(main)
-        MPI.COMM_WORLD.Barrier()
+        executor._execute(pipeline)
 
     def test_unregistered_op_recovery(self):
         """Worker survives an unregistered op and processes the next task."""
-        runner = MPITaskRunner()
+        executor = MPIExecutor()
         out_path = str(self.tdir / "unreg_recovery_test")
 
-        def main():
+        def pipeline():
             raster = self.raster_list[0]
 
             # ── INVALID TASK ────────────────────────────────────────
             # Definition: Uses an operation name ('op': 'nonexistent_operation')
-            # that is NOT registered in MPITaskRunner._worker_registry().
+            # that is NOT registered in MPIExecutor._worker_registry().
             invalid_task = {
                 'op': 'nonexistent_operation',
                 'original_index': 0,
@@ -173,7 +178,7 @@ class TestMPIFailuresHandling(unittest.TestCase):
                 'meshdata_kwargs': {}
             }
 
-            results = runner.dispatch([invalid_task, good_task])
+            results = executor._dispatch([invalid_task, good_task])
 
             self.assertEqual(len(results), 2)
 
@@ -193,8 +198,7 @@ class TestMPIFailuresHandling(unittest.TestCase):
             self.assertEqual(len(successes), 1)
             self.assertEqual(successes[0]['original_index'], 1)
 
-        runner.run(main)
-        MPI.COMM_WORLD.Barrier()
+        executor._execute(pipeline)
 
 
 if __name__ == "__main__":
