@@ -11,11 +11,13 @@ without having to worry about the details of merging the output size
 functions defined on each DEM or mesh.
 """
 import os
+import sys
 import shutil
 import gc
 import logging
 import warnings
 import tempfile
+import traceback
 from pathlib import Path
 from time import time
 from multiprocessing import Pool, cpu_count
@@ -75,6 +77,519 @@ RASTER_CONSTR = (
 )
 
 _logger = logging.getLogger(__name__)
+
+# TODO: review if we can make this cleaner
+# MPI support is optional
+_MPI = None
+_MPI_IMPORT_ATTEMPTED = False
+
+
+def _get_mpi():
+    """Lazy-import mpi4py.MPI. Returns the module or None."""
+    global _MPI, _MPI_IMPORT_ATTEMPTED
+    if not _MPI_IMPORT_ATTEMPTED:
+        _MPI_IMPORT_ATTEMPTED = True
+        try:
+            from mpi4py import MPI
+            _MPI = MPI
+        except ImportError:
+            pass
+    return _MPI
+
+
+def _get_mpi_comm():
+    """Return MPI.COMM_WORLD if available, else None."""
+    MPI = _get_mpi()
+    if MPI is None:
+        return None
+    return MPI.COMM_WORLD
+
+
+def _is_mpi_active():
+    """Check if we're running under an MPI launcher with >1 rank."""
+    comm = _get_mpi_comm()
+    if comm is None:
+        return False
+    try:
+        return comm.Get_size() > 1
+    except Exception:
+        return False
+
+# NOTE: multiprocessing.set_start_method('spawn') is handled in
+# ocsmesh/__init__.py (before any import can initialize the context).
+# Thread pinning (_MPI_THREAD_PIN_VARS) is also handled there.
+# The _configure_mpi_environment() function below is a fallback
+# for direct imports that bypass __init__.py.
+
+def _configure_mpi_environment():
+    # TODO: Review if this is necessary. It is a safety net for now.
+    """Safety net for MPI + numerical library thread pinning.
+
+    The primary thread pinning happens in ``ocsmesh/__init__.py``
+    (before NumPy is imported). This function serves as a fallback
+    for edge cases where collector.py is imported directly without
+    going through the package ``__init__``.
+    """
+    from ocsmesh import _MPI_THREAD_PIN_VARS
+    for var in _MPI_THREAD_PIN_VARS:
+        os.environ.setdefault(var, '1')
+
+
+class MPITaskRunner:
+    """Dynamic manager/worker MPI task runner.
+
+    Encapsulates all MPI dispatch logic. Called identically by all
+    ranks — zero rank checks in user code.
+
+    User script::
+
+        from ocsmesh.hfun.collector import MPITaskRunner
+
+        runner = MPITaskRunner()
+
+        def main():
+            hfun = Hfun(raster_list)
+            hfun.execution_mode = 'mpi'
+            return hfun.meshdata()
+
+        result = runner.run(main)  # All ranks call this
+
+    Features
+    --------
+    - Dynamic on-demand scheduling (fast ranks pull more work)
+    - Rank 0 = dedicated coordinator
+    - Soft-fail: worker exceptions → structured error dicts,
+      worker stays alive for more tasks
+    - Global excepthook prevents zombie cloud/HPC processes
+    - Individual TAG_STOP per worker (no collective shutdown)
+    - Sequential fallback when size == 1 or no MPI
+
+    Adding a new MPI operation requires:
+      1. Write a `_*_task_worker(task)` function
+      2. Register it in `MPITaskRunner._worker_registry()`: `{'my_op': _my_op_task_worker}`
+    """
+
+    # Message tags for the manager/worker protocol.
+    # Using a dict keeps them grouped and discoverable.
+    _TAGS = {
+        'TASK':   1,   # rank 0 → worker : here is a task dict
+        'RESULT': 2,   # worker → rank 0 : task succeeded (result dict)
+        'ERROR':  3,   # worker → rank 0 : task raised / structured failure
+        'STOP':   4,   # rank 0 → worker : no more work, leave the loop
+    }
+
+    @staticmethod
+    def _worker_registry():
+        """Map operation name → worker function.
+
+        Built lazily (at call time) rather than at import time so it can
+        reference worker functions defined later in this module without a
+        forward-reference NameError. Extend this dict to add new
+        MPI-enabled operations.
+        """
+        return {
+            'meshdata': _meshdata_task_worker,
+            'check_shared_fs': _check_shared_fs_task_worker,
+        }
+
+    @staticmethod
+    def install_mpi_excepthook():
+        """Override ``sys.excepthook`` to abort all MPI ranks on uncaught exception.
+
+        When an uncaught exception propagates to the top of the stack on any
+        rank, this hook writes a traceback to stderr and calls
+        ``comm.Abort(1)`` to kill ALL processes across ALL nodes immediately.
+        This prevents zombie cloud/HPC instances that keep running while
+        blocked in a ``recv()``.
+
+        Only triggers on truly uncaught exceptions; normal task failures are
+        caught by the worker loop and returned as structured error dicts.
+        """
+        MPI = _get_mpi()
+        if MPI is None:
+            return
+
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+
+        def _mpi_excepthook(exctype, value, tb):
+            sys.stderr.write(
+                f"\n[CRITICAL] Uncaught exception on Rank {rank}:\n"
+            )
+            traceback.print_exception(exctype, value, tb, file=sys.stderr)
+            sys.stderr.flush()
+            comm.Abort(1)
+
+        sys.excepthook = _mpi_excepthook
+
+    def __init__(self):
+        """Initialize MPI state and install global safety net."""
+        comm = _get_mpi_comm()
+        if comm is not None:
+            self.comm = comm
+            self.rank = comm.Get_rank()
+            self.size = comm.Get_size()
+        else:
+            self.comm = None
+            self.rank = 0
+            self.size = 1
+
+        # Install global safety net for multi-rank jobs
+        if self.comm is not None and self.size > 1:
+            self.install_mpi_excepthook()
+
+    # ── Public API ─────────────────────────────────────────────────
+
+    def run(self, user_fn):
+        """Execute user_fn on Rank 0, worker loop on all other ranks.
+
+        All ranks call this identically. Rank 0 runs *user_fn* (which
+        internally calls :meth:`dispatch` for MPI work). Workers enter
+        the recv/execute/send loop and exit when Rank 0 finishes.
+
+        Workers are always released in the ``finally`` block — even if
+        *user_fn* raises an exception.
+
+        Parameters
+        ----------
+        user_fn : callable
+            The function to run on Rank 0. Must accept no arguments.
+
+        Returns
+        -------
+        any
+            Return value of *user_fn* on Rank 0, ``None`` on workers.
+        """
+        # ── Safety check ──
+        if not callable(user_fn):
+            raise TypeError(
+                f"MPITaskRunner.run() expects a callable, "
+                f"got {type(user_fn).__name__}"
+            )
+
+        # Single rank or no MPI: just run directly
+        if self.comm is None or self.size == 1:
+            return user_fn()
+
+        if self.rank == 0:
+            try:
+                return user_fn()
+            finally:
+                # Always release workers, even on exception
+                self._shutdown_workers()
+        else:
+            self._run_worker()
+            return None
+
+    def dispatch(self, tasks):
+        """Rank-0-only: stream tasks dynamically to idle workers.
+
+        Seeds one task per worker, then refills each worker as soon as
+        it returns a result — a central work queue with on-demand
+        assignment. Returns the list of result/error dicts (order is
+        NOT the task order; use ``'original_index'`` to reassociate).
+
+        Rank 0 does not compute any task here (dedicated coordinator).
+
+        Parameters
+        ----------
+        tasks : list of dict
+            Self-describing task dicts, each with an ``'op'`` key.
+
+        Returns
+        -------
+        list of dict
+            One result (or structured error) dict per task.
+        Notes
+        -----
+        Must be called from within the callable passed to :meth:`run`.
+        Calling this method standalone without ``run()`` will cause workers
+        to hang permanently — ``run()`` is responsible for both entering
+        the worker recv loop and guaranteeing shutdown via its ``finally``
+        block.
+        """
+        # ── Safety checks ──
+        if self.comm is None:
+            raise RuntimeError("mpi4py is not available")
+        if self.rank != 0:
+            raise RuntimeError(
+                "dispatch() must only be called by Rank 0."
+            )
+        if not isinstance(tasks, list):
+            raise TypeError(
+                f"dispatch() expects a list of task dicts, "
+                f"got {type(tasks).__name__}"
+            )
+
+        # Degenerate case: no workers (size == 1)
+        # Run tasks locally so single-rank runs stay correct.
+        if self.size == 1:
+            return self._run_tasks_locally(tasks)
+
+        results = []
+        task_iter = iter(tasks)
+        inflight = 0  # tasks currently being processed by workers
+
+        # ── Seed: give each worker one task to start ──
+        for worker in range(1, self.size):
+            task = next(task_iter, None)
+            if task is None:
+                break  # fewer tasks than workers
+            self.comm.send(task, dest=worker, tag=self._TAGS['TASK'])
+            inflight += 1
+
+        # ── Refill: as each worker reports back, hand it the next ──
+        MPI = _get_mpi()
+        while inflight > 0:
+            status = MPI.Status()
+            message = self.comm.recv(
+                source=MPI.ANY_SOURCE,
+                tag=MPI.ANY_TAG,
+                status=status,
+            )
+            worker = status.Get_source()
+            inflight -= 1
+            results.append(message)
+
+            next_task = next(task_iter, None)
+            if next_task is not None:
+                self.comm.send(
+                    next_task, dest=worker, tag=self._TAGS['TASK'])
+                inflight += 1
+
+        return results
+
+    def verify_shared_filesystem(self, work_dir: Union[str, Path]):
+        """Rank 0 only: verify all workers can access and write to work_dir.
+
+        On multi-node HPC jobs, default temporary directories (like /tmp)
+        live on node-local disks. If workers are on separate physical nodes
+        from Rank 0, intermediate file operations will fail. This method
+        dispatches lightweight test tasks to confirm cross-node read visibility
+        and write permissions before any computationally expensive work begins.
+
+        Parameters
+        ----------
+        work_dir : path-like
+            The working directory path to test across all worker ranks.
+
+        Raises
+        ------
+        RuntimeError
+            If any worker rank fails to read from or write to `work_dir`.
+        """
+        if self.comm is None or self.size <= 1:
+            return
+        if self.rank != 0:
+            raise RuntimeError(
+                "verify_shared_filesystem() must only be called by Rank 0."
+            )
+
+        work_dir_str = str(work_dir)
+        pid = os.getpid()
+        _logger.info(
+            f"Verifying shared filesystem visibility across "
+            f"{self.size - 1} worker rank(s)..."
+        )
+        rank0_test_file = os.path.join(
+            work_dir_str, f".mpi_fs_check_{pid}.tmp"
+        )
+        with open(rank0_test_file, 'w') as f:
+            f.write("rank0_ok")
+
+        try:
+            check_tasks = [
+                {
+                    'op': 'check_shared_fs',
+                    'original_index': idx,
+                    'work_dir': work_dir_str,
+                    'test_read_file': rank0_test_file,
+                    'worker_rank': idx + 1,
+                }
+                for idx in range(self.size - 1)
+            ]
+            check_results = self.dispatch(check_tasks)
+        finally:
+            if os.path.exists(rank0_test_file):
+                try:
+                    os.remove(rank0_test_file)
+                except OSError:
+                    pass
+
+        check_failures = [
+            res for res in check_results
+            if not isinstance(res, dict) or res.get('status') == 'error'
+        ]
+        if check_failures:
+            first_err = (
+                check_failures[0].get('error', repr(check_failures[0]))
+                if isinstance(check_failures[0], dict)
+                else repr(check_failures[0])
+            )
+            wrk = (
+                check_failures[0].get('worker_rank', '?')
+                if isinstance(check_failures[0], dict)
+                else '?'
+            )
+            raise RuntimeError(
+                f"\n[MPI Shared Filesystem Error] Worker rank {wrk} failed "
+                f"to access or write to working directory "
+                f"'{work_dir_str}':\n  {first_err}\n\n"
+                f"On multi-node HPC/cluster jobs, intermediate files must "
+                f"be created on a shared parallel filesystem (such as "
+                f"Lustre, GPFS, or NFS) visible to all nodes, rather than "
+                f"node-local /tmp.\n\n"
+                f"--> ACTION REQUIRED: Set the TMPDIR environment variable "
+                f"to point to your shared network filesystem before "
+                f"running OCSMesh:\n"
+                f"    export TMPDIR=/scratch/$USER\n"
+                f"    # or export TMPDIR=/lustre/..."
+            )
+        _logger.info("Shared filesystem check passed across all worker ranks.")
+
+    # ── Internal ───────────────────────────────────────────────────
+
+    def _run_worker(self):
+        """Worker recv/execute/send loop (point-to-point).
+
+        Each non-zero rank calls this ONCE. The worker blocks in a
+        ``recv`` until rank 0 either hands it a task (``TAG_TASK``) or
+        tells it to stop (``TAG_STOP``). After running a task it sends
+        the result back and loops again.
+
+        A blocking ``recv`` is the correct idle-wait primitive: the
+        worker sleeps inside MPI without busy-polling and is woken only
+        when a message addressed to it arrives.
+        """
+        # ── Safety checks ──
+        if self.rank == 0:
+            raise RuntimeError(
+                "_run_worker() must only be called by worker ranks."
+            )
+
+        MPI = _get_mpi()
+        registry = self._worker_registry()
+        _logger.debug(
+            f"Rank {self.rank}: entering point-to-point worker loop"
+        )
+
+        while True:
+            # Block until rank 0 sends us something. ANY_TAG lets a
+            # single recv distinguish a task from a stop signal.
+            status = MPI.Status()
+            message = self.comm.recv(
+                source=0, tag=MPI.ANY_TAG, status=status)
+            tag = status.Get_tag()
+
+            if tag == self._TAGS['STOP']:
+                _logger.debug(
+                    f"Rank {self.rank}: received STOP, leaving loop"
+                )
+                break
+
+            if tag != self._TAGS['TASK']:
+                # Defensive: unknown control tag. Report and keep
+                # serving so a protocol slip does not silently hang.
+                _logger.warning(
+                    f"Rank {self.rank}: unexpected tag {tag!r}; "
+                    f"ignoring message"
+                )
+                continue
+
+            task = message
+            op = task.get('op') if isinstance(task, dict) else None
+            worker_fn = registry.get(op)
+
+            if worker_fn is None:
+                # Unknown operation → structured error, worker stays.
+                self.comm.send(
+                    {
+                        'status': 'error',
+                        'original_index': (
+                            task.get('original_index', -1)
+                            if isinstance(task, dict) else -1),
+                        'op': op,
+                        'worker_rank': self.rank,
+                        'error': f"No worker registered for op "
+                                 f"{op!r}",
+                        'traceback': '',
+                    },
+                    dest=0, tag=self._TAGS['ERROR'],
+                )
+                continue
+
+            try:
+                result = worker_fn(task)
+                # Some worker functions catch their own exceptions
+                # and return {'status': 'error', ...}. Route those
+                # through the error channel too.
+                if (isinstance(result, dict)
+                        and result.get('status') == 'error'):
+                    result.setdefault('worker_rank', self.rank)
+                    self.comm.send(
+                        result, dest=0, tag=self._TAGS['ERROR'])
+                else:
+                    self.comm.send(
+                        result, dest=0, tag=self._TAGS['RESULT'])
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                # Task blew up — NOT an MPI rank failure. Catch it,
+                # report it, keep the worker available for more tasks.
+                self.comm.send(
+                    {
+                        'status': 'error',
+                        'original_index': (
+                            task.get('original_index', -1)
+                            if isinstance(task, dict) else -1),
+                        'op': op,
+                        'worker_rank': self.rank,
+                        'error': repr(exc),
+                        'traceback': traceback.format_exc(),
+                    },
+                    dest=0, tag=self._TAGS['ERROR'],
+                )
+
+        _logger.debug(
+            f"Rank {self.rank}: worker loop exited cleanly"
+        )
+
+    def _shutdown_workers(self):
+        """Send TAG_STOP to each worker individually.
+
+        Individual sends (not a collective) mean each worker exits
+        independently — if one already crashed, the others still
+        receive their stop signal cleanly.
+        """
+        _logger.debug(
+            f"Rank 0: sending STOP to {self.size - 1} worker(s)"
+        )
+        for worker in range(1, self.size):
+            self.comm.send(None, dest=worker, tag=self._TAGS['STOP'])
+
+    def _run_tasks_locally(self, tasks):
+        """Fallback for single-rank: run tasks without MPI."""
+        registry = self._worker_registry()
+        results = []
+        for task in tasks:
+            fn = registry.get(task.get('op'))
+            if fn is None:
+                results.append({
+                    'status': 'error',
+                    'original_index': task.get('original_index', -1),
+                    'error': f"No worker registered for op "
+                             f"{task.get('op')!r}",
+                })
+                continue
+            try:
+                results.append(fn(task))
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                results.append({
+                    'status': 'error',
+                    'original_index': task.get('original_index', -1),
+                    'error': repr(exc),
+                    'traceback': traceback.format_exc(),
+                })
+        return results
+
 
 class _RefinementContourInfoCollector:
     """Collection for contour refinement specification
@@ -740,13 +1255,12 @@ def _meshdata_task_worker(task: dict):
             # HfunMesh is picklable — use the object directly
             worker_hfun = task['hfun_obj']
             try:
-                meshdata_result = deepcopy(
-                    worker_hfun.meshdata(**meshdata_kwargs))
+                meshdata_result = deepcopy(worker_hfun.meshdata(**meshdata_kwargs))
             except TypeError:
                 # HfunMesh.meshdata() doesn't accept kwargs like stride
                 meshdata_result = deepcopy(worker_hfun.meshdata())
         else:
-            raise ValueError(f"Unknown task type: {type}")
+            raise ValueError(f"Unknown task type: {task_type}")
 
         # Reproject to EPSG:4326 (same as serial path)
         if hasattr(meshdata_result, "crs"):
@@ -777,12 +1291,63 @@ def _meshdata_task_worker(task: dict):
             'original_index': original_index,
             'output_path': str(output_path) + '.npz'
         }
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught
         return {
             'status': 'error',
             'original_index': original_index,
-            'error': str(e)
+            'op': task.get('op'),
+            'error': repr(e),
+            'traceback': traceback.format_exc(),
         }
+
+
+def _check_shared_fs_task_worker(task: dict):
+    """Worker task that validates cross-node shared filesystem access.
+
+    Verifies that this worker rank can both read a file created by Rank 0
+    in `work_dir` (proving cross-node read visibility) and create a new
+    file in `work_dir` (proving write permissions).
+    """
+    original_index = task.get('original_index', -1)
+    work_dir = task['work_dir']
+    test_read_file = task['test_read_file']
+    worker_rank = task.get('worker_rank', -1)
+
+    try:
+        # 1. Check read visibility of Rank 0's test file
+        if not (os.path.exists(test_read_file) and os.access(test_read_file, os.R_OK)):
+            raise FileNotFoundError(
+                f"Rank {worker_rank} cannot see/read Rank 0 test file: {test_read_file}"
+            )
+
+        # 2. Check write permission by creating and removing a temporary test file
+        worker_test_file = os.path.join(
+            work_dir, f".mpi_fs_write_test_rank_{worker_rank}_{os.getpid()}.tmp"
+        )
+        with open(worker_test_file, 'w') as f:
+            f.write(f"write_ok_from_rank_{worker_rank}")
+        if os.path.exists(worker_test_file):
+            os.remove(worker_test_file)
+        else:
+            raise FileNotFoundError(
+                f"Rank {worker_rank} wrote file {worker_test_file} but cannot see it."
+            )
+
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'worker_rank': worker_rank,
+        }
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'op': task.get('op'),
+            'worker_rank': worker_rank,
+            'error': repr(e),
+            'traceback': traceback.format_exc(),
+        }
+
 
 
 class HfunCollector(BaseHfun):
@@ -898,6 +1463,8 @@ class HfunCollector(BaseHfun):
 
          # Add a persistent working directory for this instance's outputs
         self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
+        # TODO: Prove this fix is needed
+        self._creator_pid = os.getpid()
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = cpu_count() if nprocs == -1 else nprocs
@@ -1017,8 +1584,13 @@ class HfunCollector(BaseHfun):
 
 
     def __del__(self):
-        if hasattr(self, '_work_dir') and os.path.exists(self._work_dir):
+        # TODO: Prove this fix is needed
+        if (hasattr(self, '_work_dir')
+                and hasattr(self, '_creator_pid')
+                and os.getpid() == self._creator_pid
+                and os.path.exists(self._work_dir)):
             shutil.rmtree(self._work_dir, ignore_errors=True)
+
 
 
     def meshdata(self, **kwargs) -> MeshData:
@@ -1800,8 +2372,8 @@ class HfunCollector(BaseHfun):
                 }
 
 
-        # Same style as other functions 
-        # (Can be refactored to be a shared function that 
+        # Same style as other functions
+        # (Can be refactored to be a shared function that
         # accept needed parameters to make code cleaner)
         # in another PR
         for in_idx, data in hfuns_to_process.items():
@@ -1834,8 +2406,8 @@ class HfunCollector(BaseHfun):
             results = p.map(_constraints_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
-        # Same style as other functions 
-        # (Can be refactored to be a shared function that 
+        # Same style as other functions
+        # (Can be refactored to be a shared function that
         # accept needed parameters to make code cleaner)
         # in another PR
         # Phase 3: INTEGRATION
@@ -2008,10 +2580,31 @@ class HfunCollector(BaseHfun):
         Parameters
         ----------
         mode : str
-            The desired mode. Must be either 'serial' or 'parallel'.
+            The desired mode. Must be 'serial', 'parallel', or 'mpi'.
         """
-        if mode not in ['serial', 'parallel']:
-            raise ValueError("Execution must be either 'serial' or 'parallel'")
+        if mode not in ['serial', 'parallel', 'mpi']:
+            raise ValueError(
+                "Execution mode must be 'serial', 'parallel', or 'mpi'"
+            )
+
+        if mode == 'mpi':
+            if _get_mpi() is None:
+                warnings.warn(
+                    "mpi4py is not installed. Falling back to 'parallel' "
+                    "mode. Install mpi4py for MPI support: "
+                    "pip install ocsmesh[mpi]",
+                    UserWarning
+                )
+                mode = 'parallel'
+            elif not _is_mpi_active():
+                warnings.warn(
+                    "MPI mode requested but no MPI environment detected. "
+                    "Falling back to 'parallel' mode.",
+                    UserWarning
+                )
+                mode = 'parallel'
+            else:
+                _configure_mpi_environment()
 
         if mode == 'parallel' and (self._nprocs is None or self._nprocs <= 1):
             warnings.warn(
@@ -2447,12 +3040,14 @@ class HfunCollector(BaseHfun):
             List of individual file path for mesh size function of
             each input.
         """
-
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
-            _logger.info("Writing hfun to disk using PARALLEL method.")
+        if self.execution_mode == 'mpi':
+            _logger.info("Calculate & Writing hfun to disk using MPI method.")
+            return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
+        elif self.execution_mode == 'parallel' and self._nprocs > 1:
+            _logger.info("Calculate & Writing hfun to disk using PARALLEL method.")
             return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
         else:
-            _logger.info("Writing hfun to disk using SERIAL method.")
+            _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
             return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
 
 
@@ -2594,6 +3189,8 @@ class HfunCollector(BaseHfun):
         # ========== STAGE 1: PARALLEL meshdata() ==========
         tasks = []
         for loop_idx, hfun in enumerate(hfun_list):
+            # NOTE: np.savez appends .npz automatically; output_path here does not
+            # include the extension. The returned path in the result dict adds it.
             npz_path = os.path.join(
                 self._work_dir,
                 f"meshdata_stage1_{pid}_{loop_idx}"
@@ -2658,7 +3255,7 @@ class HfunCollector(BaseHfun):
                 crs_str = str(data['crs'])
                 crs = (CRS.from_user_input(crs_str)
                        if crs_str else None)
-                       
+
                 # Necessary for windows : Close the NpzFile handle before deleting
                 data.close()
                 del data
@@ -2714,6 +3311,220 @@ class HfunCollector(BaseHfun):
 
         return path_list
 
+     # TODO: refactor this with the parallel method instead of duplicated code.
+    def _calculate_and_write_hfun_to_disk_mpi(
+            self,
+            out_path: Union[str, Path],
+            **kwargs
+            ) -> List[Union[str, Path]]:
+        """MPI path for writing hfun to disk (dynamic send/recv).
+
+        Same two-stage design as the parallel variant, but Stage 1 uses
+        MPITaskRunner.dispatch() to dynamically stream tasks to idle
+        workers via point-to-point send/recv. The existing
+        _meshdata_task_worker is reused unchanged.
+
+        Stage 1 (MPI, dynamic): Rank 0 streams meshdata tasks to
+           workers on demand. Each worker reads its input from the
+           shared filesystem and writes a .npz result back.
+
+        Stage 2 (Sequential, Rank 0 only): Load .npz results in
+           priority order, clip overlaps, clamp hmin/hmax, write .2dm.
+
+        Error policy: if ANY task fails, a single aggregated
+        RuntimeError is raised and Stage 2 is skipped; we never
+        silently emit a partial mesh built from only the surviving
+        tiles. Worker shutdown is handled by MPITaskRunner.run()'s
+        finally block, not here.
+
+        Shared-filesystem requirement: workers exchange paths to .npz
+        files under self._work_dir. On a multi-node job that directory
+        MUST live on a filesystem visible to every node (e.g.
+        Lustre/GPFS/NFS).
+
+        Parameters
+        ----------
+        out_path : path-like
+            Directory for final .2dm output files.
+        **kwargs : dict
+            Arguments for hfun.meshdata() (e.g. stride).
+
+        Returns
+        -------
+        list of path-like
+            List of .2dm file paths.
+        """
+
+        out_dir = Path(out_path)
+        path_list = []
+        file_counter = 0
+        pid = os.getpid()
+        bbox_list = []
+
+        hfun_list = self._hfun_list[::-1]
+        if self._base_mesh and self._base_as_hfun:
+            hfun_list = [*self._hfun_list[::-1], self._base_mesh]
+
+        # ========== STAGE 1: MPI dynamic meshdata() ==========
+        # Build tasks — same as parallel variant, plus 'op' key so
+        # the worker loop knows which function to call.
+        tasks = []
+        for loop_idx, hfun in enumerate(hfun_list):
+            # NOTE: np.savez appends .npz automatically; output_path here does not
+            # include the extension. The returned path in the result dict adds it.
+            npz_path = os.path.join(
+                self._work_dir,
+                f"meshdata_stage1_{pid}_{loop_idx}"
+            )
+            if isinstance(hfun, HfunRaster):
+                task = {
+                    'op': 'meshdata',
+                    'type': 'raster',
+                    'original_index': loop_idx,
+                    'topo_path': hfun._raster.path,
+                    'hfun_input_path': hfun.tmpfile,
+                    'output_path': npz_path,
+                    'hmin': hfun._hmin,
+                    'hmax': hfun._hmax,
+                    'meshdata_kwargs': kwargs
+                }
+            else:
+                # HfunMesh and other types are picklable —
+                # send the object directly to the worker
+                task = {
+                    'op': 'meshdata',
+                    'type': 'mesh',
+                    'original_index': loop_idx,
+                    'hfun_obj': deepcopy(hfun),
+                    'output_path': npz_path,
+                    'meshdata_kwargs': kwargs
+                }
+            tasks.append(task)
+
+        # ── Dynamic point-to-point dispatch (Rank 0 only) ──
+        # Workers are in MPITaskRunner._run_worker() — they receive
+        # tasks individually via recv() and return results via send().
+        # Shutdown is handled by runner.run()'s finally block.
+
+        #TODO: All the MPI code to be refactored and reused between all MPI method.
+        runner = MPITaskRunner()
+
+        # ── Pre-flight validation: verify shared filesystem across ranks ──
+        runner.verify_shared_filesystem(self._work_dir)
+
+        _logger.info(
+            f"Stage 1 (MPI/dynamic): streaming {len(tasks)} meshdata() "
+            f"tasks to {max(runner.size - 1, 1)} worker rank(s)"
+        )
+
+        results = runner.dispatch(tasks)
+        _logger.info("Stage 1 (MPI/dynamic): all meshdata() tasks returned.")
+
+        # ── Aggregate results & enforce fail-fast error policy ──
+        stage1_results = {}
+        failures = []
+        for result in results:
+            if not isinstance(result, dict) or result.get('status') == 'error':
+                failures.append(result)
+                idx = (result.get('original_index', -1)
+                       if isinstance(result, dict) else -1)
+                err = (result.get('error') if isinstance(result, dict)
+                       else repr(result))
+                wrk = (result.get('worker_rank', '?')
+                       if isinstance(result, dict) else '?')
+                _logger.error(
+                    f"meshdata task failed for loop index {idx} "
+                    f"(worker rank {wrk}): {err}"
+                )
+                continue
+            stage1_results[result['original_index']] = result['output_path']
+
+        if failures:
+            # Do NOT proceed to Stage 2 with a partial result set —
+            # that would produce a mesh silently missing tiles.
+            summary = "; ".join(
+                f"idx={f.get('original_index', -1)} "
+                f"rank={f.get('worker_rank', '?')} "
+                f"err={f.get('error', 'unknown')}"
+                for f in failures if isinstance(f, dict)
+            )
+            raise RuntimeError(
+                f"{len(failures)} of {len(tasks)} MPI meshdata task(s) "
+                f"failed; aborting without writing output. "
+                f"Details: {summary}"
+            )
+
+        # ========== STAGE 2: SEQUENTIAL overlap clip + write ==========
+        # Identical to the parallel variant.
+        _logger.info("Stage 2: Sequential overlap clipping and .2dm write")
+        for loop_idx in range(len(hfun_list)):
+            if loop_idx in stage1_results:
+                npz_path = stage1_results[loop_idx]
+                data = np.load(npz_path, allow_pickle=False)
+                coords = data['coords'].copy()
+                tria_raw = data['tria']
+                tria = tria_raw.copy() if tria_raw.size > 0 else None
+                quad_raw = data['quad']
+                quad = quad_raw.copy() if quad_raw.size > 0 else None
+                values = data['values'].copy()
+                crs_str = str(data['crs'])
+                crs = (CRS.from_user_input(crs_str)
+                       if crs_str else None)
+
+                # Close NpzFile handle before deleting
+                data.close()
+                del data
+                meshdata_hfun = MeshData(
+                    coords=coords, tria=tria,
+                    quad=quad, values=values, crs=crs
+                )
+                # Clean up intermediate .npz — data is in memory now
+                try:
+                    os.remove(npz_path)
+                except OSError:
+                    _logger.debug(
+                        f"Could not remove temp file {npz_path}"
+                    )
+            else:
+                # Worker failed for this index — skip
+                continue
+
+            # Clip against all previously-accumulated bounding boxes
+            _logger.info("Removing bounds from hfun mesh...")
+            for ibox in bbox_list:
+                meshdata_hfun = utils.clip_mesh_by_shape(
+                    meshdata_hfun,
+                    ibox,
+                    use_box_only=True,
+                    fit_inside=True,
+                    inverse=True)
+
+            if len(meshdata_hfun.coords) == 0:
+                _logger.debug("Hfun ignored due to overlap")
+                continue
+
+            # Check meshdata_hfun.value against hmin & hmax
+            hmin = self._size_info['hmin']
+            hmax = self._size_info['hmax']
+            if hmin:
+                meshdata_hfun.values[
+                    meshdata_hfun.values < hmin] = hmin
+            if hmax:
+                meshdata_hfun.values[
+                    meshdata_hfun.values > hmax] = hmax
+
+            mesh = Mesh(meshdata_hfun)
+            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
+            file_counter = file_counter + 1
+            _logger.info(f'write mesh {file_counter} to file...')
+            file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
+            mesh.write(file_path, format='2dm')
+            path_list.append(file_path)
+            _logger.info('Done writing 2dm file.')
+            del mesh
+            gc.collect()
+
+        return path_list
 
 
     def _get_hfun_composite(

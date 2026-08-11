@@ -123,3 +123,15 @@ jobs:
     - name: Run Python API tests
       shell: bash -el {0}
       run: python -m unittest discover tests
+
+    - name: Run MPI mode-property tests (non-mpi launcher)
+      shell: bash -el {0}
+      run: python -m pytest tests/api/test_mpi_mode_property.py -v
+
+    - name: Run MPI Integration tests (mpiexec)
+      shell: bash -el {0}
+      run: mpiexec -n 2 python -m pytest tests/api/mpi_write_hfun_test.py -v -s
+
+    - name: Run MPI Failure Handling tests (mpiexec -n 2)
+      shell: bash -el {0}
+      run: mpiexec -n 2 python -m pytest tests/api/mpi_failures_handling_test.py -v -s
