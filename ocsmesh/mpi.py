@@ -97,21 +97,43 @@ def _configure_mpi_environment():
     and sets the multiprocessing start method to 'spawn' to avoid fork
     deadlocks with open MPI communicators.
     """
-    if _is_mpi_env_detected():
+    import multiprocessing as mp
+    import sys
+
+    mpi_detected = _is_mpi_env_detected()
+    print(
+        f"[ocsmesh._configure_mpi_environment] "
+        f"mpi_detected={mpi_detected}  "
+        f"current_start_method={mp.get_start_method(allow_none=True)}",
+        file=sys.stderr, flush=True
+    )
+
+    if mpi_detected:
         for var in _MPI_THREAD_PIN_VARS:
             os.environ.setdefault(var, '1')
 
-        import multiprocessing as mp
         try:
             mp.set_start_method('spawn', force=True)
-        except RuntimeError:
-            if mp.get_start_method() != 'spawn':
+            print(
+                f"[ocsmesh._configure_mpi_environment] "
+                f"start_method set to 'spawn'",
+                file=sys.stderr, flush=True
+            )
+        except RuntimeError as e:
+            current = mp.get_start_method(allow_none=True)
+            print(
+                f"[ocsmesh._configure_mpi_environment] "
+                f"WARNING: could not set 'spawn' (current='{current}'): {e}",
+                file=sys.stderr, flush=True
+            )
+            if current != 'spawn':
                 import warnings
                 warnings.warn(
-                    f"multiprocessing start method is '{mp.get_start_method()}', "
-                    f"but MPI requires 'spawn' to avoid deadlocks. Call "
-                    f"multiprocessing.set_start_method('spawn') before "
-                    f"importing ocsmesh.",
+                    f"Could not set multiprocessing start method to 'spawn' "
+                    f"(current: '{current}'). Pool workers will use '{current}' "
+                    f"and may inherit SLURM MPI env vars, causing PMI_Init "
+                    f"errors. Ensure 'import ocsmesh' occurs before any "
+                    f"multiprocessing.Pool is created.",
                     UserWarning
                 )
 
