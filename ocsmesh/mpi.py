@@ -97,35 +97,20 @@ def _configure_mpi_environment():
     and sets the multiprocessing start method to 'spawn' to avoid fork
     deadlocks with open MPI communicators.
     """
-    import multiprocessing as mp
-    import sys
-
-    mpi_detected = _is_mpi_env_detected()
-    print(
-        f"[ocsmesh._configure_mpi_environment] "
-        f"mpi_detected={mpi_detected}  "
-        f"current_start_method={mp.get_start_method(allow_none=True)}",
-        file=sys.stderr, flush=True
-    )
-
-    if mpi_detected:
+    if _is_mpi_env_detected():
         for var in _MPI_THREAD_PIN_VARS:
             os.environ.setdefault(var, '1')
 
+        import multiprocessing as mp
+        # Use force=True so we override whatever was set by earlier imports
+        # (numpy, scipy, etc. may have already triggered the default 'fork').
+        # If the context has already been *used* (a Pool/Process was created),
+        # force=True raises RuntimeError — in that case we cannot change it
+        # and simply warn. But at import time this should never be the case.
         try:
             mp.set_start_method('spawn', force=True)
-            print(
-                f"[ocsmesh._configure_mpi_environment] "
-                f"start_method set to 'spawn'",
-                file=sys.stderr, flush=True
-            )
-        except RuntimeError as e:
+        except RuntimeError:
             current = mp.get_start_method(allow_none=True)
-            print(
-                f"[ocsmesh._configure_mpi_environment] "
-                f"WARNING: could not set 'spawn' (current='{current}'): {e}",
-                file=sys.stderr, flush=True
-            )
             if current != 'spawn':
                 import warnings
                 warnings.warn(
