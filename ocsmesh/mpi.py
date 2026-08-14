@@ -103,7 +103,7 @@ def _configure_mpi_environment():
 
         import multiprocessing as mp
         try:
-            mp.set_start_method('spawn', force=False)
+            mp.set_start_method('spawn', force=True)
         except RuntimeError:
             if mp.get_start_method() != 'spawn':
                 import warnings
