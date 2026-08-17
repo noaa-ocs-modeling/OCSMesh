@@ -1224,6 +1224,15 @@ class HfunRaster(BaseHfun, Raster):
                             points.extend(linestring.coords)
                 _logger.info(f'Point concatenation took {time()-start}.')
 
+                # No feature points intersect this window (e.g. add_channel
+                # detected no channels on this tile). There is nothing to
+                # refine here, so skip the KDTree/query which would otherwise
+                # raise "data must be of shape (n, m)" on an empty array.
+                if len(points) == 0:
+                    _logger.info(
+                        'No feature points in this window; skipping.')
+                    continue
+
                 _logger.info('Generating KDTree...')
                 start = time()
                 tree = cKDTree(np.array(points))
