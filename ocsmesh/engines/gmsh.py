@@ -279,17 +279,24 @@ class GmshEngine(BaseMeshEngine):
         view_tag = gmsh.view.add("hfun_sizing")
 
         # 2. Prepare data [x, y, z, val]
+        # gmsh.view.addListData expects a flat sequence [x0,y0,z0,v0, x1,...].
+        # Previously this used data_block.ravel().tolist() which converts a
+        # numpy array to a Python list of floats — for large sizing fields
+        # (e.g. 65 M points) this allocates ~2 GB of Python objects and stalls
+        # or OOMs Pool workers. Using numpy's tobytes() + frombuffer() avoids
+        # the Python-object overhead: the data stays as a contiguous C array and
+        # is passed directly to the gmsh C extension as a memoryview / buffer.
         n_pts = len(coords)
-        try:
-            z_col = np.zeros((n_pts, 1))
-            val_col = values.reshape(-1, 1)
-            # Flatten to list
-            data_block = np.hstack((coords, z_col, val_col))
-            flat_data = data_block.ravel().tolist()
-        except Exception:
-            flat_data = []
-            for (x, y), h in zip(coords, values):
-                flat_data.extend([x, y, 0.0, float(h)])
+        z_col = np.zeros((n_pts, 1), dtype=np.float64)
+        val_col = values.reshape(-1, 1).astype(np.float64)
+        coords_f64 = coords.astype(np.float64)
+        # Stack into (n_pts, 4) array [x, y, z, val], ensure C-contiguous.
+        data_block = np.ascontiguousarray(
+            np.hstack((coords_f64, z_col, val_col))
+        )
+        # Pass the raw numpy array directly — gmsh's Python API accepts any
+        # sequence; a 1-D numpy array avoids the .tolist() copy entirely.
+        flat_data = data_block.ravel()
 
         # 3. Upload data
         gmsh.view.addListData(view_tag, "SP", n_pts, flat_data)

@@ -304,6 +304,40 @@ class HfunRaster(BaseHfun, Raster):
         # Factory handles loading the specific engine module (abstraction safe)
         engine = get_mesh_engine(mesh_engine, **mesh_options)
 
+        # Auto-compute stride when not provided by the caller.
+        #
+        # Why this matters:
+        #   1/9" CUDEM tiles at ~3 m/pixel resolution produce ~65 M points per
+        #   tile window. Passing all of them to gmsh.view.addListData() requires
+        #   building a Python list of ~260 M floats (≈2 GB RAM per worker). With
+        #   15+ workers in a Pool this stalls or OOMs the job entirely.
+        #
+        # The fix: subsample the sizing field so it has roughly 2 sample points
+        # per minimum-element interval. Gmsh interpolates the background field
+        # spatially, so sub-metre precision in the sizing function is wasted —
+        # gmsh only needs enough points to capture the spatial gradient of the
+        # size function (set by hmin and expansion_rate). A stride of
+        #   stride = int(hmin / dem_res_m / 2)
+        # keeps ~2 samples per hmin and is always >= 1.
+        #
+        # For hmin=1000 m and CUDEM 1/9" (≈3 m/px): stride ≈ 166 → ~2,400
+        # points per tile instead of 65 M. For coarser DEMs (e.g. GEBCO 15"
+        # ≈ 460 m/px): stride = 1 (no subsampling needed, field is already small).
+        #
+        # Resolution estimate: 1 degree ≈ 111,000 m at mid-latitudes. This is
+        # accurate to ~0.5 % for the STOFS domain and is intentionally a simple
+        # approximation to avoid a pyproj round-trip per tile. Callers can always
+        # pass an explicit stride= to override.
+        if stride is None and self.hmin is not None:
+            dem_res_m = abs(self.dx) * 111_000  # degrees → metres (approx)
+            if dem_res_m > 0:
+                stride = max(1, int(self.hmin / dem_res_m / 2))
+                _logger.info(
+                    f"Auto-computed stride={stride} "
+                    f"(hmin={self.hmin} m, dem_res≈{dem_res_m:.1f} m/px, "
+                    f"dx={self.dx:.6f} deg)"
+                )
+
         tria_list = []
         coords_list = []
         values_list = []
