@@ -295,6 +295,12 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = [window]
 
         _logger.info(f'Configuring engine: {mesh_engine}...')
+        # For gmsh, default the boundary representation to 'adapt' so the
+        # boundary vertices are resampled to match the hfun resolution
+        # (improves background mesh quality). Callers can still override.
+        # TriangleOptions does not accept this kwarg, so gate on engine.
+        if mesh_engine == 'gmsh':
+            mesh_options.setdefault('bnd_representation', 'adapt')
         # Factory handles loading the specific engine module (abstraction safe)
         engine = get_mesh_engine(mesh_engine, **mesh_options)
 

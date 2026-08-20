@@ -1805,7 +1805,7 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not support fast hfun method")
 
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             # TopoFuncConstraint stores a lambda which cannot be pickled
             # for multiprocessing.Pool — fall back to serial in that case.
             has_func_constraint = any(
@@ -2144,7 +2144,7 @@ class HfunCollector(BaseHfun):
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             _logger.info("Applying flow limiters using PARALLEL method.")
             self._apply_flow_limiters_parallel()
         else:
@@ -2316,7 +2316,7 @@ class HfunCollector(BaseHfun):
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             _logger.info("Applying constant values using PARALLEL method.")
             self._apply_const_val_parallel()
         else:
