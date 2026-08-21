@@ -54,6 +54,19 @@ _logger = logging.getLogger(__name__)
 tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
+# Maximum number of points to pass to the gmsh background sizing field
+# (gmsh.view.addListData) per window.  gmsh interpolates the field
+# spatially so it does not need full-raster density — capping at 1 M
+# points is sufficient for any practical hmin/hmax range and prevents
+# the job from hanging or OOM-killing workers on large tiles such as
+# a global GEBCO background (~114 M points at stride=1).
+# Resolution-based auto-stride (computed in meshdata()) handles fine DEMs
+# like CUDEM 1/9"; this cap handles the orthogonal case where the tile is
+# geographically large rather than fine-resolution.
+# Callers can override per-call via the explicit stride= argument.
+_GMSH_MAX_SIZING_PTS: int = 1_000_000
+
+
 class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
 
@@ -352,6 +365,34 @@ class HfunRaster(BaseHfun, Raster):
             # --- Stride Logic (Optional Optimization) ---
             # If stride is provided, we read a subset of data to save memory
             step = stride if stride is not None else 1
+
+            # Per-window point-count cap: if the strided field still exceeds
+            # _GMSH_MAX_SIZING_PTS, increase step further. This protects
+            # against geographically large tiles (e.g. a global GEBCO
+            # background) where the resolution-based auto-stride computes
+            # stride=1 (correct — the DEM is coarse) but the tile covers such
+            # a large geographic extent that total points are still ~100 M+.
+            # Only applied when using gmsh (the engine that uses the sizing
+            # field); triangle builds its own triangulation and is unaffected.
+            if mesh_engine == 'gmsh':
+                n_pts_strided = (win.height // step) * (win.width // step)
+                if n_pts_strided > _GMSH_MAX_SIZING_PTS:
+                    import math as _math
+                    step = max(
+                        step,
+                        _math.ceil(
+                            _math.sqrt(
+                                win.height * win.width / _GMSH_MAX_SIZING_PTS
+                            )
+                        )
+                    )
+                    _logger.info(
+                        f"Window {i_win+1}/{len(iter_windows)}: stride "
+                        f"increased to {step} to cap gmsh sizing field at "
+                        f"≤{_GMSH_MAX_SIZING_PTS:,} pts "
+                        f"(tile {win.width}×{win.height} px, "
+                        f"was {n_pts_strided:,} pts)"
+                    )
 
             # Read window
             start = time()
