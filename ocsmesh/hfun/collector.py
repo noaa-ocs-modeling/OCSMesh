@@ -1916,7 +1916,10 @@ class HfunCollector(BaseHfun):
         # Phase 2: EXECUTION
         _logger.info(
             f"Start parallel execution for {len(tasks)} constraint tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_constraints_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2276,7 +2279,10 @@ class HfunCollector(BaseHfun):
         # and waits for them to complete the heavy computational work.
 
         _logger.info(f"Start parallel execution for {len(tasks)} flow limiter tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_flow_limiter_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2427,7 +2433,10 @@ class HfunCollector(BaseHfun):
 
             # Phase 2: EXECUTION
         _logger.info(f"Start parallel execution for {len(tasks)} const. value tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_const_val_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2747,9 +2756,12 @@ class HfunCollector(BaseHfun):
         if tasks:
             _logger.info(
                 f"Stage 1: Launching {len(tasks)} parallel "
-                f"meshdata() calls with {self._nprocs} workers"
+                f"meshdata() calls with {min(self._nprocs, len(tasks))} workers"
             )
-            with Pool(processes=self._nprocs) as p:
+            # Cap workers at the number of tasks: spawning more workers than
+            # tasks wastes spawn time and memory with idle processes.
+            n_workers = min(self._nprocs, len(tasks))
+            with Pool(processes=n_workers) as p:
                 results = p.map(_meshdata_task_worker, tasks)
             _logger.info("Stage 1: All meshdata() calls complete.")
 
