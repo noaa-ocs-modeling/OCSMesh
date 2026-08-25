@@ -6,6 +6,7 @@ import gc
 import logging
 import os
 from multiprocessing.pool import Pool
+import math
 import operator
 import pathlib
 import tempfile
@@ -64,7 +65,7 @@ os.makedirs(tmpdir, exist_ok=True)
 # like CUDEM 1/9"; this cap handles the orthogonal case where the tile is
 # geographically large rather than fine-resolution.
 # Callers can override per-call via the explicit stride= argument.
-_GMSH_MAX_SIZING_PTS: int = 1_000_000
+_GMSH_MAX_SIZING_PTS: int = 10_000_000
 
 
 class HfunInputRaster:
@@ -341,6 +342,8 @@ class HfunRaster(BaseHfun, Raster):
         # accurate to ~0.5 % for the STOFS domain and is intentionally a simple
         # approximation to avoid a pyproj round-trip per tile. Callers can always
         # pass an explicit stride= to override.
+        #
+        # NOTE: WHAT IF THE DEM IS NOT IN DEGREES AND/OR UNITS AS IN FT NOT METERS?
         if stride is None and self.hmin is not None:
             dem_res_m = abs(self.dx) * 111_000  # degrees → metres (approx)
             if dem_res_m > 0:
@@ -377,11 +380,10 @@ class HfunRaster(BaseHfun, Raster):
             if mesh_engine == 'gmsh':
                 n_pts_strided = (win.height // step) * (win.width // step)
                 if n_pts_strided > _GMSH_MAX_SIZING_PTS:
-                    import math as _math
                     step = max(
                         step,
-                        _math.ceil(
-                            _math.sqrt(
+                        math.ceil(
+                            math.sqrt(
                                 win.height * win.width / _GMSH_MAX_SIZING_PTS
                             )
                         )

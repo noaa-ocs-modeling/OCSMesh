@@ -2281,6 +2281,7 @@ class HfunCollector(BaseHfun):
         _logger.info(f"Start parallel execution for {len(tasks)} flow limiter tasks")
         # Cap workers at the number of tasks: spawning more workers than tasks
         # wastes spawn time and memory with idle processes.
+        # TODO: ABSTRACT IT INTO A FUNCTION IN UTILS TO USE ANYWHERE WE SPAWN
         n_workers = min(self._nprocs, len(tasks))
         with Pool(processes=n_workers) as p:
             results = p.map(_flow_limiter_task_worker, tasks)
