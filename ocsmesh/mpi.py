@@ -51,12 +51,18 @@ _MPI_THREAD_PIN_VARS = (
 
 
 def _get_mpi():
-    """Lazy-import mpi4py.MPI. Returns the module or None."""
+    """Lazy-import mpi4py.MPI. Returns the module or None.
+
+    Never call this from a multiprocessing.Pool worker process — the workers
+    run without a PMI server so MPI_Init will abort with 'PMI_Init returned 14'.
+    Workers inherit SLURM env vars (SLURM_NTASKS etc.) even under 'spawn', so
+    _is_mpi_env_detected() returns True in workers, but MPI cannot be initialized.
+    """
     global _MPI, _MPI_IMPORT_ATTEMPTED  # pylint: disable=global-statement
     if not _MPI_IMPORT_ATTEMPTED:
         _MPI_IMPORT_ATTEMPTED = True
         try:
-            from mpi4py import MPI
+            from mpi4py import MPI  # noqa: import triggers MPI_Init on first COMM_WORLD access
             _MPI = MPI
         except ImportError:
             pass
@@ -69,9 +75,26 @@ def _is_mpi_env_detected():
 
 
 def _get_mpi_comm():
-    """Return MPI.COMM_WORLD if running under an MPI launcher and mpi4py is available, else None."""
+    """Return MPI.COMM_WORLD if running under an MPI launcher and mpi4py is available, else None.
+
+    Returns None if we are not the main MPI process (i.e. a Pool worker).
+    Pool workers inherit SLURM env vars so _is_mpi_env_detected() returns True,
+    but they have no PMI server and cannot initialize MPI.
+    We detect this by checking whether we were spawned by multiprocessing
+    (the 'spawn' start method sets PYTHONPATH/etc, but more reliably the
+    current process name differs from the main process).
+    """
     if not _is_mpi_env_detected():
         return None
+
+    # Guard: if we are inside a multiprocessing Pool worker, do NOT attempt
+    # MPI_Init. Workers are spawned processes — they have no PMI server even
+    # though they inherit SLURM_NTASKS from the parent.
+    import multiprocessing as _mp
+    current = _mp.current_process()
+    if current.name != 'MainProcess':
+        return None
+
     MPI = _get_mpi()
     if MPI is None:
         return None
@@ -102,16 +125,23 @@ def _configure_mpi_environment():
             os.environ.setdefault(var, '1')
 
         import multiprocessing as mp
+        # Use force=True so we override whatever was set by earlier imports
+        # (numpy, scipy, etc. may have already triggered the default 'fork').
+        # If the context has already been *used* (a Pool/Process was created),
+        # force=True raises RuntimeError — in that case we cannot change it
+        # and simply warn. But at import time this should never be the case.
         try:
-            mp.set_start_method('spawn', force=False)
+            mp.set_start_method('spawn', force=True)
         except RuntimeError:
-            if mp.get_start_method() != 'spawn':
+            current = mp.get_start_method(allow_none=True)
+            if current != 'spawn':
                 import warnings
                 warnings.warn(
-                    f"multiprocessing start method is '{mp.get_start_method()}', "
-                    f"but MPI requires 'spawn' to avoid deadlocks. Call "
-                    f"multiprocessing.set_start_method('spawn') before "
-                    f"importing ocsmesh.",
+                    f"Could not set multiprocessing start method to 'spawn' "
+                    f"(current: '{current}'). Pool workers will use '{current}' "
+                    f"and may inherit SLURM MPI env vars, causing PMI_Init "
+                    f"errors. Ensure 'import ocsmesh' occurs before any "
+                    f"multiprocessing.Pool is created.",
                     UserWarning
                 )
 

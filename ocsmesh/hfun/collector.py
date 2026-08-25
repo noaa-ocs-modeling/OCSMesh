@@ -1009,7 +1009,7 @@ class HfunCollector(BaseHfun):
                             clip_shape = ops.transform(
                                     transformer.transform, clip_shape)
                         try:
-                            in_item.clip(clip_shape)
+                            raster.clip(clip_shape)
                         except ValueError as err:
                             # This raster does not intersect shape
                             _logger.debug(err)
@@ -1805,7 +1805,7 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not support fast hfun method")
 
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             # TopoFuncConstraint stores a lambda which cannot be pickled
             # for multiprocessing.Pool — fall back to serial in that case.
             has_func_constraint = any(
@@ -1916,7 +1916,10 @@ class HfunCollector(BaseHfun):
         # Phase 2: EXECUTION
         _logger.info(
             f"Start parallel execution for {len(tasks)} constraint tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_constraints_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2144,7 +2147,7 @@ class HfunCollector(BaseHfun):
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             _logger.info("Applying flow limiters using PARALLEL method.")
             self._apply_flow_limiters_parallel()
         else:
@@ -2276,7 +2279,11 @@ class HfunCollector(BaseHfun):
         # and waits for them to complete the heavy computational work.
 
         _logger.info(f"Start parallel execution for {len(tasks)} flow limiter tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        # TODO: ABSTRACT IT INTO A FUNCTION IN UTILS TO USE ANYWHERE WE SPAWN
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_flow_limiter_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2316,7 +2323,7 @@ class HfunCollector(BaseHfun):
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
+        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
             _logger.info("Applying constant values using PARALLEL method.")
             self._apply_const_val_parallel()
         else:
@@ -2427,7 +2434,10 @@ class HfunCollector(BaseHfun):
 
             # Phase 2: EXECUTION
         _logger.info(f"Start parallel execution for {len(tasks)} const. value tasks")
-        with Pool(processes=self._nprocs) as p:
+        # Cap workers at the number of tasks: spawning more workers than tasks
+        # wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        with Pool(processes=n_workers) as p:
             results = p.map(_const_val_task_worker, tasks)
         _logger.info("Parallel execution finished.")
 
@@ -2747,9 +2757,12 @@ class HfunCollector(BaseHfun):
         if tasks:
             _logger.info(
                 f"Stage 1: Launching {len(tasks)} parallel "
-                f"meshdata() calls with {self._nprocs} workers"
+                f"meshdata() calls with {min(self._nprocs, len(tasks))} workers"
             )
-            with Pool(processes=self._nprocs) as p:
+            # Cap workers at the number of tasks: spawning more workers than
+            # tasks wastes spawn time and memory with idle processes.
+            n_workers = min(self._nprocs, len(tasks))
+            with Pool(processes=n_workers) as p:
                 results = p.map(_meshdata_task_worker, tasks)
             _logger.info("Stage 1: All meshdata() calls complete.")
 
