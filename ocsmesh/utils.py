@@ -1523,17 +1523,45 @@ def merge_meshdata(
     return composite_mesh
 
 
+def run_starmap(pool, func, iterable):
+    """Run `func(*args)` for each item, using `pool` when one exists."""
+
+    if pool is None:
+        return [func(*args) for args in iterable]
+    return pool.starmap(func, iterable)
+
+
 def add_pool_args(func):
+    """Give a function `nprocs=`/`pool=` kwargs and hand it a `pool`.
+
+    Three ways to call the wrapped function:
+
+    - `pool=<Pool>`  -> reuse that pool (no new processes are started)
+    - `nprocs=N`     -> create a pool of N processes just for this call
+    - `nprocs=1`     -> no pool at all, `pool=None` is passed instead
+
+    That last case matters: a `multiprocessing.Pool` worker is a daemon
+    process, and a daemon process is not allowed to start child processes.
+    So code running inside a worker must ask for `nprocs=1` and get `None`
+    back, otherwise Python raises
+    "daemonic processes are not allowed to have children".
+    """
+
     def wrapper(*args, nprocs=None, pool=None, **kwargs):
         if pool is not None:
-            rv = func(*args, **kwargs, pool=pool)
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            with Pool(processes=nprocs) as new_pool:
-                rv = func(*args, **kwargs, pool=new_pool)
-            new_pool.join()
+            return func(*args, **kwargs, pool=pool)
+
+        # Check nprocs
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = cpu_count() if nprocs == -1 else nprocs
+
+        if nprocs <= 1:
+            # Sequential: no child process, so this is safe inside a worker.
+            return func(*args, **kwargs, pool=None)
+
+        with Pool(processes=nprocs) as new_pool:
+            rv = func(*args, **kwargs, pool=new_pool)
+        new_pool.join()
         return rv
     return wrapper
 
