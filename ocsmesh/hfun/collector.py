@@ -206,6 +206,11 @@ class _RefinementContourCollector:
                 self._container.append((feather_path, crs_path))
 
 
+    @property
+    def files(self) -> List[Tuple[Path, Path]]:
+        return list(self._container)
+
+
     def __iter__(self) -> gpd.GeoDataFrame:
         """Iterator method for this collection object
 
@@ -714,6 +719,95 @@ def _constraints_task_worker(task: dict):
     }
 
 
+def _contours_task_worker(task: dict):
+    """
+    A self-contained worker for applying contour refinements to a single
+    HfunRaster.
+
+    The coordinator has already extracted the contours to feather files on
+    disk, so this worker only needs plain paths: it rebuilds the HfunRaster
+    inside the child process (raster handles cannot be pickled), replays
+    every contour line onto it, and saves the result to a new file.
+    """
+
+    # 1. Unpack the simple, pickleable task description
+    original_index = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path = task['output_path']
+    global_hmin = task['global_hmin']
+    global_hmax = task['global_hmax']
+    contour_files = task['contour_files']
+
+    try:
+        # 2. Create the necessary Raster and HfunRaster instances INSIDE
+        #    the worker.
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
+        )
+        # Taken from the rebuilt object rather than sent in the task, so
+        # it is exactly the CRS the serial path would compare against.
+        hfun_crs = worker_hfun.crs
+
+        # 3. Replay every contour line onto this raster.
+        for feather_path, crs_path in contour_files:
+            gdf = gpd.read_feather(feather_path)
+            with open(crs_path) as fp:
+                # Read the CRS the same way _RefinementContourCollector
+                # does, so serial and parallel see identical input.
+                gdf = gdf.set_crs(
+                    CRS.from_json(fp.read()), allow_override=True)
+
+            # Built once per file: creating a Transformer is expensive and
+            # every row in the file shares the same source CRS.
+            transformer = None
+            if not gdf.crs.equals(hfun_crs):
+                _logger.info("Reprojecting feature...")
+                transformer = Transformer.from_crs(
+                    gdf.crs, hfun_crs, always_xy=True)
+
+            for row in gdf.itertuples():
+                _logger.debug(row)
+                shape = row.geometry
+                # Checked before any CRS work: reprojecting an empty
+                # GeometryCollection raises.
+                if isinstance(shape, GeometryCollection):
+                    continue
+                if transformer is not None:
+                    shape = ops.transform(transformer.transform, shape)
+
+                # nprocs=1 -> add_pool_args passes pool=None -> no child
+                # process. Required: we are already inside a daemon worker.
+                worker_hfun.add_feature(**{
+                    'feature': shape,
+                    'expansion_rate': row.expansion_rate,
+                    'target_size': row.target_size,
+                    'nprocs': 1
+                })
+
+        # 4. Save the final state to the designated output path.
+        worker_hfun.save(output_path)
+
+        # 5. Return a simple result dictionary.
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path
+        }
+
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc()
+        }
+
+
 def _meshdata_task_worker(task: dict):
     """Worker that calls hfun.meshdata() on a single hfun entry.
 
@@ -849,13 +943,14 @@ class HfunCollector(BaseHfun):
         gradient of the topography within the region between
         specified by lower and upper bound on topography.
         This refinement is only applied on rasters with specified
-        indices. The index is w.r.t the full input list for collector
-        object creation.
+        indices. The index counts raster inputs only, in the order
+        they were passed to the collector.
     add_constant_value(...)
         Add fixed size mesh refinement in the region specified by
         upper and lower bounds on topography.  This refinement is
-        only applied on rasters with specified indices. The index is
-        w.r.t the full input list for collector object creation.
+        only applied on rasters with specified indices. The index
+        counts raster inputs only, in the order they were passed to
+        the collector.
 
     Notes
     -----
@@ -1956,7 +2051,42 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_contours(self, apply_to: Optional[SizeFuncList] = None) -> None:
-        """Internal: apply specified constraints.
+        """Internal: dispatch contour application to serial or parallel.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which contours must be applied. If `None`
+            all inputs are used to apply the calculated contours.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_contours_serial :
+        _apply_contours_parallel :
+        """
+
+        # The 'fast' method builds a throw-away big raster that is not in
+        # self._hfun_list, so the parallel path (which writes results back
+        # by list position) cannot be used for it.
+        if (self._method != 'fast'
+                and self.execution_mode in ('parallel', 'mpi')
+                and self._nprocs > 1):
+            _logger.info("Applying contours using PARALLEL method.")
+            self._apply_contours_parallel(apply_to)
+        else:
+            _logger.info("Applying contours using SERIAL method.")
+            self._apply_contours_serial(apply_to)
+
+
+    def _apply_contours_serial(
+            self,
+            apply_to: Optional[SizeFuncList] = None
+            ) -> None:
+        """Internal: apply specified contours one size function at a time.
 
         Parameters
         ----------
@@ -2014,13 +2144,165 @@ class HfunCollector(BaseHfun):
                             })
             p.join()
 
-            # hfun objects cause issue with pickling
-            # -> cannot be passed to pool
-#            with Pool(processes=self._nprocs) as p:
-#                p.starmap(
-#                    _apply_contours_worker,
-#                    [(hfun, self._contour_coll, self._nprocs)
-#                     for hfun in apply_to])
+
+    def _apply_contours_parallel(
+            self,
+            apply_to: Optional[SizeFuncList] = None
+            ) -> None:
+        """Internal: apply specified contours in parallel.
+
+        Uses the same 3-phase pattern as ``_apply_flow_limiters_parallel``:
+
+        1. **Preparation** — extract the contours once on the coordinator,
+           then build one pickleable task dict per raster size function.
+        2. **Execution** — ``Pool.map()`` sends tasks to
+           ``_contours_task_worker`` processes.
+        3. **Integration** — replace ``self._hfun_list`` entries with new
+           ``HfunRaster`` objects built from the worker output files.
+
+        Mesh size functions and the base mesh are handled on the
+        coordinator, because only rasters can be rebuilt from a file path
+        inside a worker.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which contours must be applied. If `None`
+            all inputs are used to apply the calculated contours.
+
+        Returns
+        -------
+        None
+        """
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if apply_to is None:
+            mesh_hfun_list = [
+                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            if self._base_mesh and self._base_as_hfun:
+                mesh_hfun_list.insert(0, self._base_mesh)
+            apply_to = [*mesh_hfun_list, *raster_hfun_list]
+
+        # apply_to can hold objects that are NOT in self._hfun_list (the
+        # base mesh is one), so we match by object identity instead of by
+        # position. Anything we cannot look up, or that is not a raster,
+        # stays on the coordinator.
+        # A dict also means the same hfun listed twice becomes one task,
+        # which keeps two workers from writing the same output file.
+        idx_by_id = {id(h): i for i, h in enumerate(self._hfun_list)}
+        parallel_targets = {}
+        serial_targets = []
+        for hfun in apply_to:
+            idx = idx_by_id.get(id(hfun))
+            if idx is not None and isinstance(hfun, HfunRaster):
+                parallel_targets[idx] = hfun
+            else:
+                serial_targets.append(hfun)
+
+        # The worker rebuilds a bare HfunRaster, so any constraint already
+        # attached to the original would be silently dropped. Safe today
+        # because _apply_features runs contours first and constraints last.
+        if any(h._constraints  # pylint: disable=W0212
+               for h in parallel_targets.values()):
+            raise RuntimeError(
+                "_apply_contours_parallel cannot run after constraints "
+                "have been added; contours must be applied first.")
+
+        # Contours go under _work_dir rather than a local temp dir: an MPI
+        # job spreads over nodes, and /tmp is not shared between them.
+        contour_dir = os.path.join(self._work_dir, 'contours')
+        os.makedirs(contour_dir, exist_ok=True)
+
+        try:
+            # Phase 1: PREPARATION (Coordinator)
+            # Contours are ONLY extracted from raster sources
+            self._contour_coll.calculate(raster_hfun_list, contour_dir)
+            contour_file_list = self._contour_coll.files
+
+            tasks = []
+            for idx, hfun in parallel_targets.items():
+                task = {
+                    'original_index': idx,
+                    'hfun_input_path': hfun.tmpfile,
+                    'topo_input_path': hfun._raster.path,  # pylint: disable=W0212
+                    'output_path': os.path.join(
+                        self._work_dir, f"contours_result_{idx}.tif"),
+                    'global_hmin': hfun._hmin,  # pylint: disable=W0212
+                    'global_hmax': hfun._hmax,  # pylint: disable=W0212
+                    'contour_files': contour_file_list,
+                }
+                tasks.append(task)
+
+            if not tasks:
+                _logger.info("No contour tasks to execute.")
+            else:
+                # Phase 2: EXECUTION
+                _logger.info(
+                    f"Start parallel execution for {len(tasks)} contour tasks")
+                # Cap workers at the number of tasks: spawning more workers
+                # than tasks wastes spawn time and memory with idle processes.
+                n_workers = min(self._nprocs, len(tasks))
+                with Pool(processes=n_workers) as p:
+                    results = p.map(_contours_task_worker, tasks)
+                _logger.info("Parallel execution finished.")
+
+                # Fail fast. Skipping a failed task would leave a size
+                # function quietly missing its contours, which is worse
+                # than stopping here.
+                failures = [r for r in results if r['status'] == 'error']
+                if failures:
+                    msgs = [f"  idx {r['original_index']}: {r['error']}"
+                            for r in failures]
+                    raise RuntimeError(
+                        f"{len(failures)} contour worker(s) failed:\n"
+                        + "\n".join(msgs))
+
+                # Phase 3: INTEGRATION
+                for result in results:
+                    idx = result['original_index']
+                    original_hfun = self._hfun_list[idx]
+                    _logger.info(
+                        f"Update HfunCollector with contour raster at idx {idx}.")
+                    self._hfun_list[idx] = HfunRaster(
+                        raster=original_hfun.raster,
+                        hmin=original_hfun.hmin,
+                        hmax=original_hfun.hmax,
+                        verbosity=original_hfun.verbosity,
+                        initial_value=result['output_path']
+                    )
+
+            # Mesh size functions and the base mesh, done here. This has to
+            # happen before contour_dir is deleted, because iterating
+            # _contour_coll re-reads the feather files from disk.
+            if serial_targets:
+                with Pool(processes=self._nprocs) as p:
+                    for hfun in serial_targets:
+                        for gdf in self._contour_coll:
+                            for row in gdf.itertuples():
+                                _logger.debug(row)
+                                shape = row.geometry
+                                if isinstance(shape, GeometryCollection):
+                                    continue
+                                # NOTE: CRS check is done AFTER
+                                # GeometryCollection check because
+                                # gdf.to_crs results in an error in case
+                                # of empty GeometryCollection
+                                if not gdf.crs.equals(hfun.crs):
+                                    _logger.info("Reprojecting feature...")
+                                    transformer = Transformer.from_crs(
+                                        gdf.crs, hfun.crs, always_xy=True)
+                                    shape = ops.transform(
+                                            transformer.transform, shape)
+                                hfun.add_feature(**{
+                                    'feature': shape,
+                                    'expansion_rate': row.expansion_rate,
+                                    'target_size': row.target_size,
+                                    'pool': p
+                                })
+        finally:
+            shutil.rmtree(contour_dir, ignore_errors=True)
+
 
     def _apply_channels(self, apply_to: Optional[SizeFuncList] = None) -> None:
         """Internal: apply specified channel refinements.
@@ -2218,14 +2500,22 @@ class HfunCollector(BaseHfun):
         # First, group all applicable refinement rules by the HfunRaster they apply to.
         # This is more efficient than creating a separate task for every single rule.
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        # Two counters on purpose:
+        #   raster_idx -> counts rasters only. This is what the user's
+        #                 `source_index` refers to, same as the serial path.
+        #   hfun_idx   -> the real slot in _hfun_list, used to put the result
+        #                 back. If we used raster_idx for this, a mesh size
+        #                 function earlier in the list would be overwritten.
+        raster_idx = -1
+        for hfun_idx, hfun in enumerate(self._hfun_list):
+            if not isinstance(hfun, HfunRaster):
+                continue
+            raster_idx += 1
 
-        for in_idx, hfun in enumerate(raster_hfun_list):
             limiter_rules_for_this_hfun = []
             for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
                 # Check if the rule applies to this specific hfun instance
-                if src_idx is None or in_idx in src_idx:
+                if src_idx is None or raster_idx in src_idx:
                     limiter_rules_for_this_hfun.append({
                     'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
                     'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
@@ -2235,7 +2525,7 @@ class HfunCollector(BaseHfun):
 
             # If any rules were found, mark this HfunRaster for processing.
             if limiter_rules_for_this_hfun:
-                hfuns_to_process[in_idx] = {
+                hfuns_to_process[hfun_idx] = {
                     'hfun': hfun,
                     'rules': limiter_rules_for_this_hfun
                 }
@@ -2389,13 +2679,18 @@ class HfunCollector(BaseHfun):
 
         # Group all applicable constant value rules by the HfunRaster they apply to.
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        # Two counters, same reason as in _apply_flow_limiters_parallel:
+        # raster_idx matches the user's `source_index` (rasters only),
+        # hfun_idx is the real slot in _hfun_list we write the result back to.
+        raster_idx = -1
+        for hfun_idx, hfun in enumerate(self._hfun_list):
+            if not isinstance(hfun, HfunRaster):
+                continue
+            raster_idx += 1
 
-        for in_idx, hfun in enumerate(raster_hfun_list):
             rules_for_this_hfun = []
             for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
-                if src_idx is None or in_idx in src_idx:
+                if src_idx is None or raster_idx in src_idx:
                     rules_for_this_hfun.append({
                         'value': const_val,
                         'lower_bound': ctr0.level if ctr0 else None,
@@ -2403,7 +2698,7 @@ class HfunCollector(BaseHfun):
                     })
 
             if rules_for_this_hfun:
-                hfuns_to_process[in_idx] = { 'hfun': hfun,
+                hfuns_to_process[hfun_idx] = { 'hfun': hfun,
                                             'rules': rules_for_this_hfun }
 
         # Now, create the simple task dictionaries for the pool.
