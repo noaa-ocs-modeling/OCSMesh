@@ -1232,6 +1232,12 @@ class HfunCollector(BaseHfun):
                             _logger.debug(err)
                             continue
 
+                # Workers skip HfunRaster construction to avoid blank
+                # raster writes on the shared filesystem (multi-node).
+                # Workers reconstruct HfunRaster from file paths inside
+                # the MPI worker functions instead.
+                if is_mpi_worker:
+                    continue
                 hfun = HfunRaster(in_item, **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
@@ -1265,6 +1271,9 @@ class HfunCollector(BaseHfun):
                                 _logger.debug(err)
                                 continue
 
+                    # See comment above — same guard for str/Path input.
+                    if is_mpi_worker:
+                        continue
                     hfun = HfunRaster(raster, **self._size_info)
 
                 elif in_item.endswith(
