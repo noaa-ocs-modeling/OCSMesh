@@ -24,7 +24,7 @@ if util.find_spec("colored_traceback") is not None:
     import colored_traceback
     colored_traceback.add_hook(always=True)
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir() + '/ocsmesh')) + '/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir()) + '/ocsmesh')) + '/'
 os.makedirs(tmpdir, exist_ok=True)
 
 __all__ = [

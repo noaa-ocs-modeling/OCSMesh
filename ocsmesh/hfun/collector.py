@@ -1138,7 +1138,9 @@ class HfunCollector(BaseHfun):
         # NOTE: Input Hfuns and their Rasters can get modified
 
          # Add a persistent working directory for this instance's outputs
-        self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
+        self._work_dir = tempfile.mkdtemp(
+            prefix='hfun_collector_',
+            dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
         # TODO: Prove this fix is needed
         self._creator_pid = os.getpid()
         # Check nprocs

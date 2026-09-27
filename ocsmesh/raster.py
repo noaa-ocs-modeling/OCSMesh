@@ -56,7 +56,7 @@ from ocsmesh.utils import effective_cpu_count
 _logger = logging.getLogger(__name__)
 
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 

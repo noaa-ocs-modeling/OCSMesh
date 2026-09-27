@@ -53,7 +53,7 @@ warnings.filterwarnings(
 
 _logger = logging.getLogger(__name__)
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 # Maximum number of points to pass to the gmsh background sizing field
