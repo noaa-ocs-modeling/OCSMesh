@@ -1,12 +1,14 @@
 #! python
 import re
+import os
 import tempfile
 import unittest
 from copy import deepcopy
 from pathlib import Path
 from collections.abc import Sequence
 from collections import namedtuple
-import warnings
+from unittest.mock import patch, MagicMock
+from ocsmesh.utils import effective_cpu_count, add_pool_args
 
 import numpy as np
 import geopandas as gpd
@@ -1207,6 +1209,86 @@ class TestGraphHelpers(unittest.TestCase):
         # Total edges 5. Shared 1. Boundary 4.
         self.assertEqual(len(edges2), 4)
 
+
+
+class TestEffectiveCpuCount(unittest.TestCase):
+    """Regression tests for effective_cpu_count().
+
+    Verifies that pool sizing uses the affinity-restricted core count
+    (os.sched_getaffinity) rather than the total machine core count
+    (os.cpu_count), so that OCSMesh respects SLURM/cgroup CPU pinning
+    on HPC clusters and does not create oversubscribed thread pools.
+    """
+    def test_linux_uses_sched_getaffinity(self):
+        """On Linux, effective_cpu_count() returns len(sched_getaffinity(0)).
+
+        Simulates a SLURM node where the process is pinned to 2 cores
+        out of a 64-core machine.  The result must be 2, not 64.
+        """
+
+        with patch('os.sched_getaffinity', return_value={0, 1}, create=True) as mock_aff:
+            result = effective_cpu_count()
+        mock_aff.assert_called_once_with(0)
+        self.assertEqual(result, 2)
+
+    def test_non_linux_falls_back_to_os_cpu_count(self):
+        """On platforms without sched_getaffinity, fall back to os.cpu_count().
+
+        Simulates macOS/Windows where sched_getaffinity raises AttributeError.
+        """
+
+        with patch('os.sched_getaffinity', side_effect=AttributeError, create=True):
+            with patch('os.cpu_count', return_value=8):
+                result = effective_cpu_count()
+        self.assertEqual(result, 8)
+
+    def test_add_pool_args_respects_affinity_pinning(self):
+        """add_pool_args must not spawn more threads than the affinity allows.
+
+        If a process is pinned to 1 core (e.g. one MPI rank per core),
+        the wrapper must fall back to sequential execution (pool=None)
+        rather than spinning up a thread pool.
+        """
+
+        received_pool = []
+
+        @add_pool_args
+        def dummy(pool=None):
+            received_pool.append(pool)
+
+        # Simulate a SLURM run where this rank is pinned to 1 core.
+        with patch('os.sched_getaffinity', return_value={3}, create=True):
+            dummy(use_threads=True)  # would create a 1-thread pool...
+        # ...but nprocs <= 1 must short-circuit to sequential (pool=None).
+        self.assertIsNone(received_pool[-1])
+
+    def test_heterogeneous_allocation_uses_worker_affinity(self):
+        """Worker pools must be sized by the worker's affinity, not the coordinator's.
+        
+        In heterogeneous SLURM allocations (e.g. coordinator on an 8-core node,
+        workers on 2-core nodes), if a worker receives a task with nprocs=-1,
+        add_pool_args should query the *worker's* affinity (2) rather than 
+        reusing any value computed elsewhere (e.g. a coordinator's 8).
+        """
+
+        received_pool = []
+
+        @add_pool_args
+        def dummy(pool=None):
+            received_pool.append(pool)
+
+        # Worker is pinned to 2 cores; simulate receiving nprocs=-1 from a task
+        # dict (what HfunCollector now sends in MPI mode instead of a baked-in
+        # coordinator core count).
+        with patch('os.sched_getaffinity', return_value={0, 1}, create=True), \
+             patch('ocsmesh.utils._ThreadPool') as mock_pool_cls:
+
+            mock_pool_cls.return_value.__enter__.return_value = MagicMock()
+            dummy(nprocs=-1, use_threads=True)
+        
+        # The pool must be constructed with the worker's own affinity count (2),
+        # not any externally-supplied or stale value.
+        mock_pool_cls.assert_called_once_with(processes=2)
 
 
 if __name__ == '__main__':

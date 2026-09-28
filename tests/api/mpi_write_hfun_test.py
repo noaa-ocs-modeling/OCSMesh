@@ -130,6 +130,40 @@ class TestMPIWriteHfun(unittest.TestCase):
                 np.mean(values_serial), np.mean(values_mpi), rtol=1e-5
             )
 
+    def test_mpi_hybrid_threading_equivalence(self):
+        """Hybrid MPI + multithreading equivalence: nprocs=1 vs nprocs=2 inside MPI."""
+        # ── MPI single-thread per rank (nprocs=1) ──
+        hfun_single = Hfun(
+            self.raster_list, nprocs=1, hmin=10, hmax=1000
+        )
+        hfun_single.execution_mode = "mpi"
+        hfun_single.add_subtidal_flow_limiter(
+            hmin=50, lower_bound=-5, upper_bound=5
+        )
+        hfun_single.add_constant_value(
+            value=200, lower_bound=5, upper_bound=10
+        )
+        meshdata_single = hfun_single.meshdata()
+
+        # ── MPI hybrid multi-thread per rank (nprocs=2) ──
+        hfun_hybrid = Hfun(
+            self.raster_list, nprocs=2, hmin=10, hmax=1000
+        )
+        hfun_hybrid.execution_mode = "mpi"
+        hfun_hybrid.add_subtidal_flow_limiter(
+            hmin=50, lower_bound=-5, upper_bound=5
+        )
+        hfun_hybrid.add_constant_value(
+            value=200, lower_bound=5, upper_bound=10
+        )
+        meshdata_hybrid = hfun_hybrid.meshdata()
+
+        if self.rank == 0:
+            values_single = meshdata_single.values
+            values_hybrid = meshdata_hybrid.values
+            self.assertEqual(len(values_single), len(values_hybrid))
+            npt.assert_allclose(values_single, values_hybrid, rtol=1e-5)
+
     def test_run_classmethod_workers_in_recv_loop(self):
         """Simple test to verify that workers are in their recv loop when run() is called. "No deadlock"
         """

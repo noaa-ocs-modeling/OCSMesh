@@ -51,11 +51,12 @@ from numba.types import CPointer
 
 from ocsmesh import figures
 from ocsmesh import utils
+from ocsmesh.utils import effective_cpu_count
 
 _logger = logging.getLogger(__name__)
 
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 
@@ -1117,7 +1118,7 @@ class Raster:
         """
 
         nprocs = -1 if nprocs is None else nprocs
-        nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
         dst_crs = CRS.from_user_input(dst_crs)
         transform, width, height = warp.calculate_default_transform(
             self.src.crs,

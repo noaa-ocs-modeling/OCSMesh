@@ -10,7 +10,7 @@ import os
 import pathlib
 import warnings
 from functools import lru_cache
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 from collections import defaultdict
 from copy import deepcopy
 from typing import Union, List, Tuple, Dict, Any, Optional
@@ -37,6 +37,7 @@ from shapely.ops import polygonize, linemerge
 
 
 from ocsmesh import utils
+from ocsmesh.utils import effective_cpu_count
 from ocsmesh.internal import MeshData
 from ocsmesh.raster import Raster
 from ocsmesh.mesh.base import BaseMesh
@@ -347,7 +348,7 @@ class EuclideanMesh2D(EuclideanMesh):
             raster = [raster]
 
         nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
 
         # Fix an issue on Jupyter notebook where having pool execute
         # interpolation even in case of nprocs == 1 would results in

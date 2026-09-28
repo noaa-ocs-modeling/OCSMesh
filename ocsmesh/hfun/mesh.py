@@ -220,7 +220,7 @@ class HfunMesh(BaseHfun):
             expansion_rate: Optional[float] = None,
             target_size: Optional[float] = None,
             *, # kwarg-only comes after this
-            pool: Pool,
+            pool: Optional[Pool] = None,
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -321,7 +321,7 @@ class HfunMesh(BaseHfun):
             target_size: float = None,
             max_verts=200,
             *, # kwarg-only comes after this
-            pool: Pool
+            pool: Optional[Pool] = None
     ):
         """Add refinement for specified linestring `feature`
 
@@ -392,9 +392,13 @@ class HfunMesh(BaseHfun):
 
         utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
 
+        # `pool` may be None (sequential). KDTree still needs a worker count.
+        n_workers = 1 if pool is None else pool._processes  # pylint: disable=W0212
+
         _logger.info('Repartitioning features...')
         start = time()
-        res = pool.starmap(
+        res = utils.run_starmap(
+            pool,
             utils.repartition_features,
             [(linestring, max_verts) for linestring in feature]
             )
@@ -421,7 +425,8 @@ class HfunMesh(BaseHfun):
             _logger.info(
                     f"Transform apply took {time() - start2:f}")
 
-        transformed_features = pool.starmap(
+        transformed_features = utils.run_starmap(
+            pool,
             utils.transform_linestring,
             [(linestring, target_size) for linestring in feature]
         )
@@ -452,12 +457,12 @@ class HfunMesh(BaseHfun):
         if self.hmax:
             r = (self.hmax - target_size) / (expansion_rate * target_size)
             near_dists, neighbors = tree.query(
-                xy, workers=pool._processes, distance_upper_bound=r)
+                xy, workers=n_workers, distance_upper_bound=r)
             distances = r * np.ones(len(xy))
             mask = np.logical_not(np.isinf(near_dists))
             distances[mask] = near_dists[mask]
         else:
-            distances, _ = tree.query(xy, workers=pool._processes)
+            distances, _ = tree.query(xy, workers=n_workers)
         _logger.info(f'querying kdtree took {time()-start}.')
         values = expansion_rate*target_size*distances + target_size
         # NOTE: unlike raster self.hmin is based on values of this

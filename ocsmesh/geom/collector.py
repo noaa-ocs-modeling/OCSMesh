@@ -16,7 +16,6 @@ import warnings
 import tempfile
 from numbers import Number
 from pathlib import Path
-from multiprocessing import cpu_count
 from typing import Union, Tuple, Optional, Iterable, List, Any
 
 import pandas as pd
@@ -35,6 +34,7 @@ from ocsmesh.geom.mesh import MeshGeom
 from ocsmesh.features.contour import FilledContour, Contour
 from ocsmesh.features.patch import Patch
 from ocsmesh.ops import combine_geometry
+from ocsmesh.utils import effective_cpu_count
 
 CanCreateSingleGeom = Union[Raster, BaseMesh, Polygon, MultiPolygon]
 CanCreateMultipleGeom = Iterable[Union[CanCreateSingleGeom, str]]
@@ -154,7 +154,7 @@ class GeomCollector(BaseGeom):
 
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
 
 
         self._elev_info = {'zmin':zmin, 'zmax': zmax}

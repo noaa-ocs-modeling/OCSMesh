@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 
 import geopandas as gpd
 import numpy as np
+
+from ocsmesh.features.constraint import _default_topo_func
 from shapely import geometry
 from pyproj import CRS
 
@@ -167,7 +169,7 @@ class SizeFunctionCollector(unittest.TestCase):
             method='exact'
         )
         hfun_coll.add_topo_func_constraint(
-            func=lambda i: abs(i) / 2.0,
+            func=_default_topo_func,
             upper_bound=-10,
             value_type='min',
         )
@@ -343,7 +345,7 @@ class SizeFunctionCollector(unittest.TestCase):
             method='fast'
         )
         hfun_coll.add_topo_func_constraint(
-            func=lambda i: abs(i) / 2.0,
+            func=_default_topo_func,
             upper_bound=-10,
             value_type='min',
         )

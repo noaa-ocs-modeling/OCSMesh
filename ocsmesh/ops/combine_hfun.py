@@ -1,7 +1,6 @@
 import logging
 import os
 import pathlib
-from multiprocessing import cpu_count
 from typing import Union, Sequence, List
 
 from pyproj import CRS
@@ -10,6 +9,7 @@ from ocsmesh.raster import Raster
 from ocsmesh.hfun.hfun import Hfun
 from ocsmesh.mesh.mesh import Mesh
 from ocsmesh import utils
+from ocsmesh.utils import effective_cpu_count
 
 _logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class HfunCombine:
         method = self._operation_info['method']
         nprocs = self._operation_info['nprocs']
 
-        nprocs = cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
 
         out_dir = pathlib.Path(out_file).parent
         out_dir.mkdir(exist_ok=True, parents=True)

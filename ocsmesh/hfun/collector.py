@@ -20,7 +20,7 @@ import tempfile
 import traceback
 from pathlib import Path
 from time import time
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 from copy import copy, deepcopy
 from typing import (
     Union, Sequence, List, Tuple, Iterable, Any, Optional, Callable)
@@ -46,6 +46,7 @@ from rasterio.warp import reproject, Resampling
 import rasterio
 
 from ocsmesh import utils
+from ocsmesh.utils import effective_cpu_count
 from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.hfun.raster import HfunRaster
@@ -62,6 +63,7 @@ from ocsmesh.features.constraint import (
     TopoFuncConstraint,
     CourantNumConstraint,
     RegionConstraint,
+    _default_topo_func,
 )
 
 CanCreateSingleHfun = Union[Raster, EuclideanMesh2D]
@@ -204,6 +206,11 @@ class _RefinementContourCollector:
                 with open(crs_path, 'w') as fp:
                     fp.write(crs.to_json())
                 self._container.append((feather_path, crs_path))
+
+
+    @property
+    def files(self) -> List[Tuple[Path, Path]]:
+        return list(self._container)
 
 
     def __iter__(self) -> gpd.GeoDataFrame:
@@ -494,6 +501,10 @@ class _ChannelRefineCollector:
                     fp.write(crs.to_json())
                 self._container.append((feather_path, crs_path))
 
+    @property
+    def files(self) -> List[Tuple[Path, Path]]:
+        return list(self._container)
+
     def __iter__(self):
         """Iterator method for this collection object
 
@@ -589,38 +600,44 @@ def _flow_limiter_task_worker(task: dict):
     global_hmax = task['global_hmax']
     limiter_params_list = task['limiter_params']
 
-    # Let's initialize directly from the input path.
-
-    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
-    topo_raster = Raster(topo_input_path)
-    worker_hfun = HfunRaster(
-        raster=topo_raster,
-        hmin=global_hmin,
-        hmax=global_hmax,
-        verbosity=0,
-        initial_value=hfun_input_path
-    )
-
-    # 3. Apply all the required flow limiter refinements.
-    #    Each call will modify the worker_hfun's internal state (_tmpfile).
-    for params in limiter_params_list:
-        worker_hfun.add_subtidal_flow_limiter(
-            hmin=params['hmin'],
-            hmax=params['hmax'],
-            lower_bound=params['zmin'],
-            upper_bound=params['zmax']
+    try:
+        # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
         )
 
-    # 4. Explicitly save the final state of the worker's
-    #    object to the designated output path.
-    worker_hfun.save(output_path)
+        # 3. Apply all the required flow limiter refinements.
+        #    Each call will modify the worker_hfun's internal state (_tmpfile).
+        for params in limiter_params_list:
+            worker_hfun.add_subtidal_flow_limiter(
+                hmin=params['hmin'],
+                hmax=params['hmax'],
+                lower_bound=params['zmin'],
+                upper_bound=params['zmax']
+            )
 
-    # 5. The work is done. Return the simple result dictionary.
-    return {
-        'status': 'success',
-        'original_index': original_index,
-        'output_path': output_path
-    }
+        # 4. Explicitly save the final state of the worker's
+        #    object to the designated output path.
+        worker_hfun.save(output_path)
+
+        # 5. The work is done. Return the simple result dictionary.
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path
+        }
+
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc(),
+        }
 
 
 def _const_val_task_worker(task: dict):
@@ -639,35 +656,43 @@ def _const_val_task_worker(task: dict):
     global_hmax = task['global_hmax']
     const_val_rules = task['const_val_rules']
 
-    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
-    #    This is the "Wrap Existing Painting" mode.
-    topo_raster = Raster(topo_input_path)
-    worker_hfun = HfunRaster(
-        raster=topo_raster,
-        hmin=global_hmin,
-        hmax=global_hmax,
-        verbosity=0,
-        initial_value=hfun_input_path
-    )
-
-    # 3. Apply all the required constant value refinements for this raster.
-    for rule in const_val_rules:
-        worker_hfun.add_constant_value(
-            value=rule['value'],
-            lower_bound=rule['lower_bound'],
-            upper_bound=rule['upper_bound']
+    try:
+        # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+        #    This is the "Wrap Existing Painting" mode.
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
         )
 
-    # 4. Explicitly save the final state of the worker's object to the
-    #    designated output path.
-    worker_hfun.save(output_path)
+        # 3. Apply all the required constant value refinements for this raster.
+        for rule in const_val_rules:
+            worker_hfun.add_constant_value(
+                value=rule['value'],
+                lower_bound=rule['lower_bound'],
+                upper_bound=rule['upper_bound']
+            )
 
-    # 5. The work is done. Return a simple result dictionary.
-    return {
-        'status': 'success',
-        'original_index': original_index,
-        'output_path': output_path
-    }
+        # 4. Explicitly save the final state of the worker's object to the
+        #    designated output path.
+        worker_hfun.save(output_path)
+
+        # 5. The work is done. Return a simple result dictionary.
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path
+        }
+
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc(),
+        }
 
 
 def _constraints_task_worker(task: dict):
@@ -689,29 +714,219 @@ def _constraints_task_worker(task: dict):
     global_hmax = task['global_hmax']
     constraint_list = task['constraint_list']
 
-    # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
-    topo_raster = Raster(topo_input_path)
-    worker_hfun = HfunRaster(
-        raster=topo_raster,
-        hmin=global_hmin,
-        hmax=global_hmax,
-        verbosity=0,
-        initial_value=hfun_input_path
-    )
+    try:
+        # 2. Create the necessary Raster and HfunRaster instances INSIDE the worker.
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
+        )
 
-    # 3. Apply the constraint objects using the existing HfunRaster method.
-    #    This handles windowed processing, hmin/hmax clamping, etc.
-    worker_hfun.apply_constraints(constraint_list)
+        # 3. Apply the constraint objects using the existing HfunRaster method.
+        #    This handles windowed processing, hmin/hmax clamping, etc.
+        worker_hfun.apply_constraints(constraint_list)
 
-    # 4. Save the final state to the designated output path.
-    worker_hfun.save(output_path)
+        # 4. Save the final state to the designated output path.
+        worker_hfun.save(output_path)
 
-    # 5. Return a simple result dictionary.
-    return {
-        'status': 'success',
-        'original_index': original_index,
-        'output_path': output_path
-    }
+        # 5. Return a simple result dictionary.
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path
+        }
+
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc(),
+        }
+
+
+
+def _user_shapes_task_worker(task: dict):
+    """Apply user-provided shape refinements to a single HfunRaster.
+
+    Handles both patch (MultiPolygon → add_patch) and line-feature
+    (MultiLineString → add_feature) refinements. The coordinator resolves
+    each definition to a ``(shape, CRS, size_info)`` triple and places it
+    directly in the task dict — Shapely geometries are natively pickleable
+    and all ranks share the same Python/MPI environment.
+
+    Registered under two op keys (``'patch'`` and ``'linefeature'``). The
+    correct method and kwarg are selected via ``task['method_name']`` and
+    ``task['shape_kwarg']``, so no per-kind wrapper is needed.
+
+    ``size_info`` keys are always exactly ``{'expansion_rate', 'target_size'}``,
+    verified at the call sites in :meth:`HfunCollector._resolve_and_build_shape_tasks`.
+    They do not overlap with the fixed kwargs ``nprocs`` and ``use_threads``.
+    """
+
+    original_index  = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path     = task['output_path']
+    global_hmin     = task['global_hmin']
+    global_hmax     = task['global_hmax']
+    shapes          = task['shapes']       # list[(geometry, CRS, size_info dict)]
+    method_name     = task['method_name']  # 'add_patch' | 'add_feature'
+    shape_kwarg     = task['shape_kwarg']  # 'multipolygon' | 'feature'
+    worker_nprocs   = task.get('worker_nprocs', 1)
+
+    try:
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path)
+
+        apply_shape = getattr(worker_hfun, method_name)
+
+        for shape, shape_crs, size_info in shapes:
+            if not shape_crs.equals(worker_hfun.crs):
+                transformer = Transformer.from_crs(
+                    shape_crs, worker_hfun.crs, always_xy=True)
+                shape = ops.transform(transformer.transform, shape)
+            # use_threads=True: routes add_feature (called internally by
+            # add_patch when expansion_rate is set) through _ThreadPool.
+            # _ThreadPool uses threads — not child processes — so this is
+            # legal inside a daemon worker.  The @add_pool_args decorator
+            # (utils.py) has an explicit current_process().daemon guard
+            # that would fall back to sequential; use_threads bypasses
+            # that path entirely and is always safe here.
+            apply_shape(**{
+                shape_kwarg: shape,
+                'nprocs': worker_nprocs,
+                'use_threads': True,
+                **size_info,  # only 'expansion_rate', 'target_size'
+            })
+
+        worker_hfun.save(output_path)
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path,
+        }
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc(),
+        }
+
+
+def _replay_shapes_task_worker(task: dict, method_name: str, shape_kwarg: str):
+    """
+    A self-contained worker for applying one refinement kind to a single
+    HfunRaster.
+
+    The coordinator has already extracted the shapes to feather files on
+    disk, so this worker only needs plain paths: it rebuilds the HfunRaster
+    inside the child process (raster handles cannot be pickled), replays
+    every shape onto it, and saves the result to a new file.
+
+    ``method_name`` is the ``HfunRaster`` method to call (``add_feature``
+    for contours, ``add_patch`` for channels) and ``shape_kwarg`` is the
+    name that method uses for the geometry argument.
+    """
+
+    # 1. Unpack the simple, pickleable task description
+    original_index = task['original_index']
+    hfun_input_path = task['hfun_input_path']
+    topo_input_path = task['topo_input_path']
+    output_path = task['output_path']
+    global_hmin = task['global_hmin']
+    global_hmax = task['global_hmax']
+    shape_files = task['shape_files']
+    worker_nprocs = task.get('worker_nprocs', 1)
+
+    try:
+        # 2. Create the necessary Raster and HfunRaster instances INSIDE
+        #    the worker.
+        topo_raster = Raster(topo_input_path)
+        worker_hfun = HfunRaster(
+            raster=topo_raster,
+            hmin=global_hmin,
+            hmax=global_hmax,
+            verbosity=0,
+            initial_value=hfun_input_path
+        )
+        # Taken from the rebuilt object rather than sent in the task, so
+        # it is exactly the CRS the serial path would compare against.
+        hfun_crs = worker_hfun.crs
+        apply_shape = getattr(worker_hfun, method_name)
+
+        # 3. Replay every shape onto this raster.
+        for feather_path, crs_path in shape_files:
+            gdf = gpd.read_feather(feather_path)
+            with open(crs_path) as fp:
+                # Read the CRS the same way the collector does, so serial
+                # and parallel see identical input.
+                gdf = gdf.set_crs(
+                    CRS.from_json(fp.read()), allow_override=True)
+
+            # Built once per file: creating a Transformer is expensive and
+            # every row in the file shares the same source CRS.
+            transformer = None
+            if not gdf.crs.equals(hfun_crs):
+                _logger.info("Reprojecting feature...")
+                transformer = Transformer.from_crs(
+                    gdf.crs, hfun_crs, always_xy=True)
+
+            for row in gdf.itertuples():
+                _logger.debug(row)
+                shape = row.geometry
+                # Checked before any CRS work: reprojecting an empty
+                # GeometryCollection raises.
+                if isinstance(shape, GeometryCollection):
+                    continue
+                if transformer is not None:
+                    shape = ops.transform(transformer.transform, shape)
+
+                # use_threads=True -> _ThreadPool uses threads instead
+                # of processes, eliminating pickling overhead. Safe
+                # here because the heavy work (NumPy, cKDTree, GEOS)
+                # releases the GIL.
+                apply_shape(**{
+                    shape_kwarg: shape,
+                    'expansion_rate': row.expansion_rate,
+                    'target_size': row.target_size,
+                    'nprocs': worker_nprocs,
+                    'use_threads': True
+                })
+
+        # 4. Save the final state to the designated output path.
+        worker_hfun.save(output_path)
+
+        # 5. Return a simple result dictionary.
+        return {
+            'status': 'success',
+            'original_index': original_index,
+            'output_path': output_path
+        }
+
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': original_index,
+            'error': traceback.format_exc()
+        }
+
+
+def _contours_task_worker(task: dict):
+    """Apply contour refinements to a single HfunRaster."""
+    return _replay_shapes_task_worker(task, 'add_feature', 'feature')
+
+
+def _channels_task_worker(task: dict):
+    """Apply channel refinements to a single HfunRaster."""
+    return _replay_shapes_task_worker(task, 'add_patch', 'multipolygon')
 
 
 def _meshdata_task_worker(task: dict):
@@ -800,6 +1015,13 @@ def _meshdata_task_worker(task: dict):
 
 # Register collector-specific MPI operations
 MPIExecutor.register_op('meshdata', _meshdata_task_worker)
+MPIExecutor.register_op('contours', _contours_task_worker)
+MPIExecutor.register_op('channels', _channels_task_worker)
+MPIExecutor.register_op('flow_limiter', _flow_limiter_task_worker)
+MPIExecutor.register_op('const_val', _const_val_task_worker)
+MPIExecutor.register_op('constraints', _constraints_task_worker)
+MPIExecutor.register_op('patch', _user_shapes_task_worker)
+MPIExecutor.register_op('linefeature', _user_shapes_task_worker)
 
 
 
@@ -849,13 +1071,14 @@ class HfunCollector(BaseHfun):
         gradient of the topography within the region between
         specified by lower and upper bound on topography.
         This refinement is only applied on rasters with specified
-        indices. The index is w.r.t the full input list for collector
-        object creation.
+        indices. The index counts raster inputs only, in the order
+        they were passed to the collector.
     add_constant_value(...)
         Add fixed size mesh refinement in the region specified by
         upper and lower bounds on topography.  This refinement is
-        only applied on rasters with specified indices. The index is
-        w.r.t the full input list for collector object creation.
+        only applied on rasters with specified indices. The index
+        counts raster inputs only, in the order they were passed to
+        the collector.
 
     Notes
     -----
@@ -915,12 +1138,14 @@ class HfunCollector(BaseHfun):
         # NOTE: Input Hfuns and their Rasters can get modified
 
          # Add a persistent working directory for this instance's outputs
-        self._work_dir = tempfile.mkdtemp(prefix='hfun_collector_')
+        self._work_dir = tempfile.mkdtemp(
+            prefix='hfun_collector_',
+            dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
         # TODO: Prove this fix is needed
         self._creator_pid = os.getpid()
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
-        nprocs = cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
 
         self._applied = False
         self._size_info = {'hmin': hmin, 'hmax': hmax}
@@ -963,6 +1188,19 @@ class HfunCollector(BaseHfun):
         #
         # TODO: CRS considerations
 
+        # MPI: only rank 0 clips tiles to avoid N×M temporary-file writes
+        # that can overwhelm shared filesystem metadata servers.
+        #
+        # Workers still build _hfun_list (with unclipped HfunRaster objects)
+        # so that serial/parallel Hfun objects constructed inside an mpiexec
+        # job continue to work correctly on all ranks. The memory used by
+        # this redundant work is freed when execution_mode is set to 'mpi'.
+        #
+        # TODO: A cleaner fix would be to know the execution mode upfront
+        # (e.g. by passing it to __init__) so workers could skip building
+        # _hfun_list entirely instead of building it and dropping it later.
+        is_mpi_worker = _is_mpi_active() and not MPIExecutor.is_manager()
+
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
 
@@ -977,21 +1215,29 @@ class HfunCollector(BaseHfun):
                             self._base_shape_crs, in_item.crs, always_xy=True)
                         clip_shape = ops.transform(
                                 transformer.transform, clip_shape)
-                    try:
-                        in_item.clip(clip_shape)
-                    except ValueError as err:
-                        # This raster does not intersect shape
-                        _logger.debug(err)
-                        continue
+                    if not is_mpi_worker:
+                        try:
+                            in_item.clip(clip_shape)
+                        except ValueError as err:
+                            # This raster does not intersect shape
+                            _logger.debug(err)
+                            continue
 
                 elif self._base_mesh:
-                    try:
-                        in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
-                    except ValueError as err:
-                        # This raster does not intersect shape
-                        _logger.debug(err)
-                        continue
+                    if not is_mpi_worker:
+                        try:
+                            in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
+                        except ValueError as err:
+                            # This raster does not intersect shape
+                            _logger.debug(err)
+                            continue
 
+                # Workers skip HfunRaster construction to avoid blank
+                # raster writes on the shared filesystem (multi-node).
+                # Workers reconstruct HfunRaster from file paths inside
+                # the MPI worker functions instead.
+                if is_mpi_worker:
+                    continue
                 hfun = HfunRaster(in_item, **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
@@ -1008,21 +1254,26 @@ class HfunCollector(BaseHfun):
                                 self._base_shape_crs, raster.crs, always_xy=True)
                             clip_shape = ops.transform(
                                     transformer.transform, clip_shape)
-                        try:
-                            raster.clip(clip_shape)
-                        except ValueError as err:
-                            # This raster does not intersect shape
-                            _logger.debug(err)
-                            continue
+                        if not is_mpi_worker:
+                            try:
+                                raster.clip(clip_shape)
+                            except ValueError as err:
+                                # This raster does not intersect shape
+                                _logger.debug(err)
+                                continue
 
                     elif self._base_mesh:
-                        try:
-                            raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
-                        except ValueError as err:
-                            # This raster does not intersect shape
-                            _logger.debug(err)
-                            continue
+                        if not is_mpi_worker:
+                            try:
+                                raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
+                            except ValueError as err:
+                                # This raster does not intersect shape
+                                _logger.debug(err)
+                                continue
 
+                    # See comment above — same guard for str/Path input.
+                    if is_mpi_worker:
+                        continue
                     hfun = HfunRaster(raster, **self._size_info)
 
                 elif in_item.endswith(
@@ -1071,11 +1322,7 @@ class HfunCollector(BaseHfun):
         is_manager = MPIExecutor.is_manager()
 
         if self._method == 'exact':
-            # TODO(mpi): _apply_features could be distributed in the
-            # future (each rank applies features to a subset of hfuns).
-            # For now, rank 0 only.
-            if is_manager:
-                self._apply_features()
+            self._apply_features()
 
             with tempfile.TemporaryDirectory() as temp_dir:
                 # ── COLLECTIVE: all ranks participate here ──
@@ -1117,6 +1364,11 @@ class HfunCollector(BaseHfun):
         return composite_hfun
 
     def _meshdata_pipeline(self, **kwargs) -> MeshData:
+        # Under MPI, only rank 0 runs serial/parallel pipelines.
+        # NOTE: Necessary because of current is_mpi_worker checks in HfuncCollector __init__
+        if _is_mpi_active() and not MPIExecutor.is_manager():
+            return None
+
         # Just dummy object
         composite_hfun = MeshData([[0,0]])
 
@@ -1204,7 +1456,7 @@ class HfunCollector(BaseHfun):
     def add_topo_func_constraint(
             self,
             func: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]]
-                = lambda i: i / 2.0,
+                = _default_topo_func,
             upper_bound: float = np.inf,
             lower_bound: float = -np.inf,
             value_type: Literal['min', 'max'] = 'min',
@@ -1672,7 +1924,7 @@ class HfunCollector(BaseHfun):
             shapefile: Union[None, str, Path] = None,
             expansion_rate: float = 0.01,
             target_size: Optional[float] = None,
-            crs: CRS = 4326
+            crs: Union[CRS, str, int] = 4326
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -1712,7 +1964,8 @@ class HfunCollector(BaseHfun):
 
         if not line_defn:
             if shape:
-                line_defn = LineFeature(shape=shape, shape_crs=crs)
+                line_defn = LineFeature(
+                    shape=shape, shape_crs=CRS.from_user_input(crs))
 
             elif shapefile:
                 line_defn = LineFeature(shapefile=shapefile)
@@ -1770,12 +2023,21 @@ class HfunCollector(BaseHfun):
         """
 
         if not self._applied:
+            # MPI-Aware Refinements (All ranks must execute for collective dispatch)
             self._apply_contours()
+
+            # MPI-Aware Refinements (All ranks must participate for collective dispatch)
             self._apply_flow_limiters()
             self._apply_const_val()
+
+            # MPI-Aware Refinements (All ranks must participate for collective dispatch)
             self._apply_linefeatures()
             self._apply_patch()
+
+            # MPI-Aware Refinements (All ranks must execute for collective dispatch)
             self._apply_channels()
+
+            # MPI-Aware Refinements (All ranks must participate for collective dispatch)
             self._apply_constraints()
 
         self._applied = True
@@ -1786,9 +2048,9 @@ class HfunCollector(BaseHfun):
 
         Dispatches to either ``_apply_constraints_serial`` or
         ``_apply_constraints_parallel`` based on the current
-        ``execution_mode``.  When any ``TopoFuncConstraint`` is present
-        (which stores an unpickleable lambda), the parallel path falls
-        back to serial automatically with a logged warning.
+        ``execution_mode``.  All MPI ranks call this collectively so
+        that ``MPIExecutor.run()`` inside ``_apply_constraints_parallel``
+        can coordinate work across ranks.
 
         Returns
         -------
@@ -1805,24 +2067,9 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not support fast hfun method")
 
-        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
-            # TopoFuncConstraint stores a lambda which cannot be pickled
-            # for multiprocessing.Pool — fall back to serial in that case.
-            has_func_constraint = any(
-                isinstance(c, TopoFuncConstraint)
-                for _, c in self._constraint_info_coll
-            )
-            if has_func_constraint:
-                warnings.warn(
-                    "TopoFuncConstraint contains a callable that cannot "
-                    "be pickled for parallel execution. Falling back to "
-                    "serial for _apply_constraints().",
-                    UserWarning
-                )
-                self._apply_constraints_serial()
-            else:
-                _logger.info("Applying constraints using PARALLEL method.")
-                self._apply_constraints_parallel()
+        if self._can_distribute_refinements():
+            _logger.info("Applying constraints using PARALLEL method.")
+            self._apply_constraints_parallel()
         else:
             _logger.info("Applying constraints using SERIAL method.")
             self._apply_constraints_serial()
@@ -1847,87 +2094,91 @@ class HfunCollector(BaseHfun):
 
         Uses the same 3-phase pattern as ``_apply_flow_limiters_parallel``:
 
-        1. **Preparation** — build one pickleable task dict per raster,
-           containing file paths + the list of applicable ``Constraint``
-           objects.
-        2. **Execution** — ``Pool.map()`` sends tasks to
-           ``_constraints_task_worker`` processes.
+        1. **Preparation** — coordinator (Rank 0) builds one pickleable
+           task dict per raster, containing file paths + the list of
+           applicable ``Constraint`` objects.
+        2. **Execution** — tasks go to ``MPIExecutor.run()`` in 'mpi'
+           mode, or to ``Pool.map()`` in 'parallel' mode. Worker ranks
+           return early after the collective ``MPIExecutor.run()`` call.
         3. **Integration** — replace ``self._hfun_list`` entries with new
            ``HfunRaster`` objects built from the worker output files.
 
         Notes
         -----
-        This method must **not** be called when any constraint is a
-        ``TopoFuncConstraint`` because its internal lambda is not
-        pickleable.  The dispatcher ``_apply_constraints()`` handles
-        this check.
+        ``TopoFuncConstraint`` used to store an unpickleable lambda.  This
+        has been replaced with ``_default_topo_func`` (a named module-level
+        function), and user-supplied lambdas are now rejected with a clear
+        error at construction time.  All constraint types are therefore
+        pickleable and can be distributed via MPI or Pool without a fallback.
 
         Returns
         -------
         None
         """
 
-        # Phase 1: PREPARATION
+        is_coordinator = (
+            self.execution_mode != 'mpi' or MPIExecutor.is_manager())
+
         tasks = []
-        hfuns_to_process = {}
+        if is_coordinator:
+            # Phase 1: PREPARATION (Coordinator only)
+            for in_idx, hfun in enumerate(self._hfun_list):
+                if not isinstance(hfun, HfunRaster):
+                    continue
 
-        for in_idx, hfun in enumerate(self._hfun_list):
-            if not isinstance(hfun, HfunRaster):
-                continue
+                constraint_list = self._constraint_info_coll.get_constraints(
+                    hfun, in_idx, per_hfun=True
+                )
 
-            constraint_list = self._constraint_info_coll.get_constraints(
-                hfun, in_idx, per_hfun=True
-            )
+                if not constraint_list:
+                    continue
 
-            if constraint_list:
-                hfuns_to_process[in_idx] = {
-                    'hfun': hfun,
-                    'constraints': constraint_list
-                }
+                hfun_input_path = hfun.tmpfile
+                topo_input_path = hfun._raster.path  # pylint: disable=W0212
+                output_path = os.path.join(
+                    self._work_dir, f"constraints_result_{in_idx}.tif")
 
+                tasks.append({
+                    'op': 'constraints',
+                    'original_index': in_idx,
+                    'hfun_input_path': hfun_input_path,
+                    'topo_input_path': topo_input_path,
+                    'output_path': output_path,
+                    'global_hmin': hfun._hmin,   # pylint: disable=W0212
+                    'global_hmax': hfun._hmax,   # pylint: disable=W0212
+                    'constraint_list': constraint_list
+                })
 
-        # Same style as other functions
-        # (Can be refactored to be a shared function that
-        # accept needed parameters to make code cleaner)
-        # in another PR
-        for in_idx, data in hfuns_to_process.items():
-            hfun = data['hfun']
-            hfun_input_path = hfun.tmpfile
-            topo_input_path = hfun._raster.path  # pylint: disable=W0212
+            if not tasks:
+                _logger.info("No constraint tasks to execute.")
 
-            output_path = os.path.join(
-                self._work_dir, f"constraints_result_{in_idx}.tif")
+        # Phase 2: EXECUTION (all ranks participate for MPI collective)
+        if self.execution_mode == 'mpi':
+            raw_results = MPIExecutor.run(
+                tasks, work_dir=self._work_dir, fail_fast=True)
+            if raw_results is None:
+                # MPI worker rank — coordinator owns results.
+                return
+            results = [raw_results[idx] for idx in sorted(raw_results)]
+        else:
+            if not tasks:
+                return
+            _logger.info(
+                f"Start parallel execution for {len(tasks)} constraint tasks")
+            n_workers = min(self._nprocs, len(tasks))
+            with Pool(processes=n_workers) as p:
+                results = p.map(_constraints_task_worker, tasks)
+            _logger.info("Parallel execution finished.")
 
-            task = {
-                'original_index': in_idx,
-                'hfun_input_path': hfun_input_path,
-                'topo_input_path': topo_input_path,
-                'output_path': output_path,
-                'global_hmin': hfun._hmin,   # pylint: disable=W0212
-                'global_hmax': hfun._hmax,   # pylint: disable=W0212
-                'constraint_list': data['constraints']
-            }
-            tasks.append(task)
+            failures = [r for r in results if r['status'] == 'error']
+            if failures:
+                msgs = [f"  idx {r['original_index']}: {r['error']}"
+                        for r in failures]
+                raise RuntimeError(
+                    f"{len(failures)} constraint worker(s) failed:\n"
+                    + "\n".join(msgs))
 
-        if not tasks:
-            _logger.info("No constraint tasks to execute.")
-            return
-
-        # Phase 2: EXECUTION
-        _logger.info(
-            f"Start parallel execution for {len(tasks)} constraint tasks")
-        # Cap workers at the number of tasks: spawning more workers than tasks
-        # wastes spawn time and memory with idle processes.
-        n_workers = min(self._nprocs, len(tasks))
-        with Pool(processes=n_workers) as p:
-            results = p.map(_constraints_task_worker, tasks)
-        _logger.info("Parallel execution finished.")
-
-        # Same style as other functions
-        # (Can be refactored to be a shared function that
-        # accept needed parameters to make code cleaner)
-        # in another PR
-        # Phase 3: INTEGRATION
+        # Phase 3: INTEGRATION (coordinator only)
         new_hfun_objects = {}
         for result in results:
             if result['status'] == 'error':
@@ -1956,7 +2207,37 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_contours(self, apply_to: Optional[SizeFuncList] = None) -> None:
-        """Internal: apply specified constraints.
+        """Internal: dispatch contour application to serial or parallel.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which contours must be applied. If `None`
+            all inputs are used to apply the calculated contours.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_contours_serial :
+        _apply_shape_refinements :
+        """
+
+        if self._can_distribute_refinements():
+            _logger.info("Applying contours using PARALLEL method.")
+            self._apply_shape_refinements('contours', apply_to)
+        else:
+            _logger.info("Applying contours using SERIAL method.")
+            self._apply_contours_serial(apply_to)
+
+
+    def _apply_contours_serial(
+            self,
+            apply_to: Optional[SizeFuncList] = None
+            ) -> None:
+        """Internal: apply specified contours one size function at a time.
 
         Parameters
         ----------
@@ -2014,15 +2295,330 @@ class HfunCollector(BaseHfun):
                             })
             p.join()
 
-            # hfun objects cause issue with pickling
-            # -> cannot be passed to pool
-#            with Pool(processes=self._nprocs) as p:
-#                p.starmap(
-#                    _apply_contours_worker,
-#                    [(hfun, self._contour_coll, self._nprocs)
-#                     for hfun in apply_to])
+
+    # collector attribute, HfunRaster method, geometry kwarg name
+    _SHAPE_REFINEMENTS = {
+        'contours': ('_contour_coll', 'add_feature', 'feature'),
+        'channels': ('_channels_coll', 'add_patch', 'multipolygon'),
+    }
+
+    def _can_distribute_refinements(self) -> bool:
+        """True when contours/channels may go through the task path.
+
+        The 'fast' method builds a throw-away big raster that is not in
+        ``self._hfun_list``, so the task path (which writes results back
+        by list position) cannot be used for it.
+        """
+
+        if self._method == 'fast':
+            return False
+        if self.execution_mode == 'mpi':
+            # nprocs sizes the intra-rank Pool; tile distribution is
+            # across ranks, so nprocs == 1 is still a valid MPI run.
+            return True
+        return self.execution_mode == 'parallel' and self._nprocs > 1
+
+    def _split_refinement_targets(self, apply_to):
+        """Split size functions into distributable rasters and the rest.
+
+        Returns ``(raster_hfun_list, {index: hfun}, [hfun, ...])``.
+        """
+
+        raster_hfun_list = [
+            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+        if apply_to is None:
+            mesh_hfun_list = [
+                i for i in self._hfun_list if isinstance(i, HfunMesh)]
+            if self._base_mesh and self._base_as_hfun:
+                mesh_hfun_list.insert(0, self._base_mesh)
+            apply_to = [*mesh_hfun_list, *raster_hfun_list]
+
+        # apply_to can hold objects that are NOT in self._hfun_list (the
+        # base mesh is one), so we match by object identity instead of by
+        # position. Anything we cannot look up, or that is not a raster,
+        # stays on the coordinator.
+        # A dict also means the same hfun listed twice becomes one task,
+        # which keeps two workers from writing the same output file.
+        idx_by_id = {id(h): i for i, h in enumerate(self._hfun_list)}
+        parallel_targets = {}
+        serial_targets = []
+        for hfun in apply_to:
+            idx = idx_by_id.get(id(hfun))
+            if idx is not None and isinstance(hfun, HfunRaster):
+                parallel_targets[idx] = hfun
+            else:
+                serial_targets.append(hfun)
+
+        return raster_hfun_list, parallel_targets, serial_targets
+
+    def _resolve_and_build_shape_tasks(
+            self, apply_to, defn_coll, resolver_method,
+            op_name, method_name, shape_kwarg):
+        """Coordinator-only: resolve shape definitions and build MPI task dicts.
+
+        Returns (tasks, resolved_shapes, parallel_targets, serial_targets).
+
+        ``resolved_shapes`` is assigned once and referenced in every task dict.
+        mpi4py will re-pickle it per task (each task dict is independent), so
+        large or numerous geometries could add serialization overhead. If
+        Config F benchmarks show lower-than-expected hybrid utilization, replace
+        with a ``comm.bcast(resolved_shapes, root=0)`` broadcast and lightweight
+        index references in each task dict.
+        """
+        # raster_hfun_list (first element) is only needed by contours/channels
+        # for the coll.calculate() raster-extraction step. User-provided shapes
+        # (patch, linefeature) have no extraction step — discarding it is correct.
+        _, parallel_targets, serial_targets = \
+            self._split_refinement_targets(apply_to)
+
+        resolved_shapes = []
+        for defn, size_info in defn_coll:
+            shape, shape_crs = getattr(defn, resolver_method)()
+            resolved_shapes.append((shape, shape_crs, size_info))
+
+        tasks = [
+            {
+                'op':              op_name,
+                'original_index':  idx,
+                'hfun_input_path': hfun.tmpfile,
+                'topo_input_path': hfun._raster.path,
+                'output_path':     os.path.join(
+                    self._work_dir, f'{op_name}_result_{idx}.tif'),
+                'global_hmin':     hfun._hmin,
+                'global_hmax':     hfun._hmax,
+                'shapes':          resolved_shapes,   # same list object, not a copy
+                'method_name':     method_name,
+                'shape_kwarg':     shape_kwarg,
+                'worker_nprocs':   -1 if self.execution_mode == 'mpi' else 1,
+            }
+            for idx, hfun in parallel_targets.items()
+        ]
+
+        return tasks, resolved_shapes, parallel_targets, serial_targets
+
+    def _dispatch_refinement_tasks(self, kind, tasks):
+        """Run prepared refinement tasks via MPI ranks or a local Pool.
+
+        Returns the result dicts on the coordinator, or ``None`` on an
+        MPI worker rank. ``MPIExecutor.run()`` is collective, so every
+        rank must reach it — including ranks holding no tasks.
+        """
+
+        if self.execution_mode == 'mpi':
+            raw_results = MPIExecutor.run(
+                tasks, work_dir=self._work_dir, fail_fast=True)
+            if raw_results is None:
+                return None
+            return [raw_results[idx] for idx in sorted(raw_results)]
+
+        if not tasks:
+            return []
+
+        _logger.info(
+            f"Start parallel execution for {len(tasks)} {kind} tasks")
+        # Cap workers at the number of tasks: spawning more workers
+        # than tasks wastes spawn time and memory with idle processes.
+        n_workers = min(self._nprocs, len(tasks))
+        worker = MPIExecutor.get_op(kind)
+        if worker is None:
+            raise ValueError(
+                f"No worker registered for op {kind!r}. "
+                f"Call MPIExecutor.register_op({kind!r}, fn) at module load time.")
+        with Pool(processes=n_workers) as p:
+            results = p.map(worker, tasks)
+        _logger.info("Parallel execution finished.")
+
+        # Fail fast. Skipping a failed task would leave a size function
+        # quietly missing its refinement, which is worse than stopping.
+        failures = [r for r in results if r['status'] == 'error']
+        if failures:
+            msgs = [f"  idx {r['original_index']}: {r['error']}"
+                    for r in failures]
+            raise RuntimeError(
+                f"{len(failures)} {kind} worker(s) failed:\n"
+                + "\n".join(msgs))
+        return results
+
+    def _integrate_refinement_results(self, kind, results):
+        """Replace refined size functions with the worker output files."""
+
+        for result in results:
+            idx = result['original_index']
+            original_hfun = self._hfun_list[idx]
+            _logger.info(
+                f"Update HfunCollector with {kind} raster at idx {idx}.")
+            self._hfun_list[idx] = HfunRaster(
+                raster=original_hfun.raster,
+                hmin=original_hfun.hmin,
+                hmax=original_hfun.hmax,
+                verbosity=original_hfun.verbosity,
+                initial_value=result['output_path']
+            )
+
+    def _apply_shape_refinements(
+            self,
+            kind: str,
+            apply_to: Optional[SizeFuncList] = None
+            ) -> None:
+        """Internal: apply contours or channels through the task path.
+
+        Uses the same 3-phase pattern as ``_apply_flow_limiters_parallel``:
+
+        1. **Preparation** — extract the shapes once on the coordinator,
+           then build one pickleable task dict per raster size function.
+        2. **Execution** — the tasks go to ``Pool.map()`` in 'parallel'
+           mode, or to ``MPIExecutor.run()`` in 'mpi' mode, where each
+           rank refines a different raster.
+        3. **Integration** — replace ``self._hfun_list`` entries with new
+           ``HfunRaster`` objects built from the worker output files.
+
+        Mesh size functions and the base mesh are handled on the
+        coordinator, because only rasters can be rebuilt from a file path
+        inside a worker.
+
+        Parameters
+        ----------
+        kind : {'contours', 'channels'}
+            Which refinement collection to apply.
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which the refinement must be applied. If
+            `None` all inputs are used.
+
+        Returns
+        -------
+        None
+        """
+
+        coll_attr, method_name, shape_kwarg = self._SHAPE_REFINEMENTS[kind]
+        coll = getattr(self, coll_attr)
+        # On worker ranks the coordinator's task list is the one that
+        # counts, so they skip preparation and go straight to the
+        # collective dispatch.
+        is_coordinator = (self.execution_mode != 'mpi'
+                          or MPIExecutor.is_manager())
+
+        tasks = []
+        serial_targets = []
+        shape_dir = None
+        try:
+            if is_coordinator:
+                # Phase 1: PREPARATION (Coordinator)
+                (raster_hfun_list, parallel_targets,
+                 serial_targets) = self._split_refinement_targets(apply_to)
+
+                # The worker rebuilds a bare HfunRaster, so any constraint
+                # already attached to the original would be silently
+                # dropped. Safe today because _apply_features runs
+                # contours/channels first and constraints last.
+                if any(h._constraints  # pylint: disable=W0212
+                       for h in parallel_targets.values()):
+                    raise RuntimeError(
+                        f"_apply_shape_refinements({kind!r}) cannot run "
+                        f"after constraints have been added; refinements "
+                        f"must be applied first.")
+
+                # Shapes go under _work_dir rather than a local temp dir:
+                # an MPI job spreads over nodes, and /tmp is not shared
+                # between them.
+                shape_dir = os.path.join(self._work_dir, kind)
+                os.makedirs(shape_dir, exist_ok=True)
+
+                # Shapes are ONLY extracted from raster sources
+                coll.calculate(raster_hfun_list, shape_dir)
+                shape_file_list = coll.files
+
+                tasks = [
+                    {
+                        'op': kind,
+                        'original_index': idx,
+                        'hfun_input_path': hfun.tmpfile,
+                        'topo_input_path': hfun._raster.path,  # pylint: disable=W0212
+                        'output_path': os.path.join(
+                            self._work_dir, f"{kind}_result_{idx}.tif"),
+                        'global_hmin': hfun._hmin,  # pylint: disable=W0212
+                        'global_hmax': hfun._hmax,  # pylint: disable=W0212
+                        'shape_files': shape_file_list,
+                        'worker_nprocs': -1 if self.execution_mode == 'mpi' else 1
+                    }
+                    for idx, hfun in parallel_targets.items()
+                ]
+                if not tasks:
+                    _logger.info(f"No {kind} tasks to execute.")
+
+            # Phase 2: EXECUTION
+            results = self._dispatch_refinement_tasks(kind, tasks)
+            if results is None:
+                # MPI worker rank — the coordinator owns the results.
+                return
+
+            # Phase 3: INTEGRATION
+            self._integrate_refinement_results(kind, results)
+
+            # Mesh size functions and the base mesh, done here. This has to
+            # happen before shape_dir is deleted, because iterating the
+            # collection re-reads the feather files from disk.
+            if serial_targets:
+                with Pool(processes=self._nprocs) as p:
+                    for hfun in serial_targets:
+                        apply_shape = getattr(hfun, method_name)
+                        for gdf in coll:
+                            for row in gdf.itertuples():
+                                _logger.debug(row)
+                                shape = row.geometry
+                                if isinstance(shape, GeometryCollection):
+                                    continue
+                                # NOTE: CRS check is done AFTER
+                                # GeometryCollection check because
+                                # gdf.to_crs results in an error in case
+                                # of empty GeometryCollection
+                                if not gdf.crs.equals(hfun.crs):
+                                    _logger.info("Reprojecting feature...")
+                                    transformer = Transformer.from_crs(
+                                        gdf.crs, hfun.crs, always_xy=True)
+                                    shape = ops.transform(
+                                            transformer.transform, shape)
+                                apply_shape(**{
+                                    shape_kwarg: shape,
+                                    'expansion_rate': row.expansion_rate,
+                                    'target_size': row.target_size,
+                                    'pool': p
+                                })
+        finally:
+            if shape_dir is not None:
+                shutil.rmtree(shape_dir, ignore_errors=True)
+
 
     def _apply_channels(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        """Internal: dispatch channel application to serial or parallel.
+
+        Parameters
+        ----------
+        apply_to : SizeFuncList or None, default=None
+            Size functions on which channels must be applied. If `None`
+            all inputs are used to apply the calculated channels.
+
+        Returns
+        -------
+        None
+
+        See Also
+        --------
+        _apply_channels_serial :
+        _apply_shape_refinements :
+        """
+
+        if self._can_distribute_refinements():
+            _logger.info("Applying channels using PARALLEL method.")
+            self._apply_shape_refinements('channels', apply_to)
+        else:
+            _logger.info("Applying channels using SERIAL method.")
+            self._apply_channels_serial(apply_to)
+
+
+    def _apply_channels_serial(
+            self,
+            apply_to: Optional[SizeFuncList] = None
+            ) -> None:
         """Internal: apply specified channel refinements.
 
         Parameters
@@ -2141,13 +2737,23 @@ class HfunCollector(BaseHfun):
 
         self._execution_mode = mode
 
+        # If _hfun_list was already populated in __init__ (because mode was
+        # not known yet) , clear it on worker ranks — they don't use it.
+        # TODO: A cleaner fix would be to know the execution mode upfront
+        # in __init__ to avoid allocating this redundant memory in the first place.
+        if (mode == 'mpi'
+                and _is_mpi_active()
+                and not MPIExecutor.is_manager()):
+            self._hfun_list = []
+
+
 
     def _apply_flow_limiters(self) -> None:
         """
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
+        if self._can_distribute_refinements():
             _logger.info("Applying flow limiters using PARALLEL method.")
             self._apply_flow_limiters_parallel()
         else:
@@ -2208,84 +2814,104 @@ class HfunCollector(BaseHfun):
             "This function is part of the 'exact' method and doesnt support 'fast' mode."
             )
 
-        # Phase 1: PREPARATION (Coordinator)
+        # Phase 1: PREPARATION (Coordinator only in MPI mode)
         # This phase gathers all the work that needs to be done and packages it
         # into a list of simple, pickleable tasks for the worker processes.
+        # In MPI mode, only the coordinator builds the task list — workers
+        # skip straight to MPIExecutor.run() with an empty list.
 
+        is_coordinator = (self.execution_mode != 'mpi'
+                          or MPIExecutor.is_manager())
         tasks = []
-        hfuns_to_process = {}
 
-        # First, group all applicable refinement rules by the HfunRaster they apply to.
-        # This is more efficient than creating a separate task for every single rule.
+        if is_coordinator:
+            hfuns_to_process = {}
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+            # First, group all applicable refinement rules by the HfunRaster they apply to.
+            # This is more efficient than creating a separate task for every single rule.
 
-        for in_idx, hfun in enumerate(raster_hfun_list):
-            limiter_rules_for_this_hfun = []
-            for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
-                # Check if the rule applies to this specific hfun instance
-                if src_idx is None or in_idx in src_idx:
-                    limiter_rules_for_this_hfun.append({
-                    'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
-                    'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
-                    'zmin': zmin,
-                    'zmax': zmax
-                    })
+            # Two counters on purpose:
+            #   raster_idx -> counts rasters only. This is what the user's
+            #                 `source_index` refers to, same as the serial path.
+            #   hfun_idx   -> the real slot in _hfun_list, used to put the result
+            #                 back. If we used raster_idx for this, a mesh size
+            #                 function earlier in the list would be overwritten.
+            raster_idx = -1
+            for hfun_idx, hfun in enumerate(self._hfun_list):
+                if not isinstance(hfun, HfunRaster):
+                    continue
+                raster_idx += 1
 
-            # If any rules were found, mark this HfunRaster for processing.
-            if limiter_rules_for_this_hfun:
-                hfuns_to_process[in_idx] = {
-                    'hfun': hfun,
-                    'rules': limiter_rules_for_this_hfun
+                limiter_rules_for_this_hfun = []
+                for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+                    # Check if the rule applies to this specific hfun instance
+                    if src_idx is None or raster_idx in src_idx:
+                        limiter_rules_for_this_hfun.append({
+                        'hmin': hmin if hmin is not None else self._size_info.get('hmin'),
+                        'hmax': hmax if hmax is not None else self._size_info.get('hmax'),
+                        'zmin': zmin,
+                        'zmax': zmax
+                        })
+
+                # If any rules were found, mark this HfunRaster for processing.
+                if limiter_rules_for_this_hfun:
+                    hfuns_to_process[hfun_idx] = {
+                        'hfun': hfun,
+                        'rules': limiter_rules_for_this_hfun
+                    }
+
+            # Now, create the simple task dictionaries that can be sent to the pool.
+            for in_idx, data in hfuns_to_process.items():
+                hfun = data['hfun']
+
+                # Determine the correct input file. If this raster was already processed
+                # by another step (e.g., _apply_constraints), use that output file.
+                # Otherwise, use the original hfun path.
+                hfun_input_path = hfun.tmpfile
+
+                # The path to the original, unmodified topography/DEM data.
+                topo_input_path = hfun._raster.path # pylint: disable=W0212
+
+                # Define a unique output path in our persistent working directory.
+                output_path = os.path.join(self._work_dir,
+                                           f"flow_limiter_result_{in_idx}.tif")
+
+                task = {
+                    'op': 'flow_limiter',
+                    'original_index': in_idx,
+                    'hfun_input_path': hfun_input_path,
+                    'topo_input_path': topo_input_path,
+                    'output_path': output_path,
+                    'global_hmin': hfun._hmin, # pylint: disable=W0212
+                    'global_hmax': hfun._hmax, # pylint: disable=W0212
+                    'limiter_params': data['rules']
                 }
+                tasks.append(task)
 
-        # Now, create the simple task dictionaries that can be sent to the pool.
-        for in_idx, data in hfuns_to_process.items():
-            hfun = data['hfun']
-
-            # Determine the correct input file. If this raster was already processed
-            # by another step (e.g., _apply_constraints), use that output file.
-            # Otherwise, use the original hfun path.
-            hfun_input_path = hfun.tmpfile
-
-
-            # The path to the original, unmodified topography/DEM data.
-            topo_input_path = hfun._raster.path # pylint: disable=W0212
-
-            # Define a unique output path in our persistent working directory.
-            output_path = os.path.join(self._work_dir,
-                                       f"flow_limiter_result_{in_idx}.tif")
-
-            task = {
-                'original_index': in_idx,
-                'hfun_input_path': hfun_input_path,
-                'topo_input_path': topo_input_path,
-                'output_path': output_path,
-                'global_hmin': hfun._hmin, # pylint: disable=W0212
-                'global_hmax': hfun._hmax, # pylint: disable=W0212
-                'limiter_params': data['rules']
-            }
-            tasks.append(task)
-
-
-        # If no tasks were generated, there's nothing to do.
-        if not tasks:
-            _logger.info("No flow limiter tasks to execute.")
-            return
+            if not tasks:
+                _logger.info("No flow limiter tasks to execute.")
 
         # Phase 2: EXECUTION (Distribute to Laborers)
         # This phase sends the prepared tasks to a pool of worker processes
-        # and waits for them to complete the heavy computational work.
+        # (parallel mode) or MPI ranks (mpi mode).
 
-        _logger.info(f"Start parallel execution for {len(tasks)} flow limiter tasks")
-        # Cap workers at the number of tasks: spawning more workers than tasks
-        # wastes spawn time and memory with idle processes.
-        # TODO: ABSTRACT IT INTO A FUNCTION IN UTILS TO USE ANYWHERE WE SPAWN
-        n_workers = min(self._nprocs, len(tasks))
-        with Pool(processes=n_workers) as p:
-            results = p.map(_flow_limiter_task_worker, tasks)
-        _logger.info("Parallel execution finished.")
+        if self.execution_mode == 'mpi':
+            raw_results = MPIExecutor.run(
+                tasks, work_dir=self._work_dir, fail_fast=True)
+            if raw_results is None:
+                return  # Worker rank — coordinator owns results
+            results = [raw_results[idx] for idx in sorted(raw_results)]
+        else:
+            if not tasks:
+                return
+            _logger.info(
+                f"Start parallel execution for {len(tasks)} flow limiter tasks")
+            # Cap workers at the number of tasks: spawning more workers than tasks
+            # wastes spawn time and memory with idle processes.
+            n_workers = min(self._nprocs, len(tasks))
+            with Pool(processes=n_workers) as p:
+                results = p.map(_flow_limiter_task_worker, tasks)
+            _logger.info("Parallel execution finished.")
 
         # Phase 3: INTEGRATION (Process Results)
         # This phase takes the results from the workers (which are just file paths)
@@ -2323,7 +2949,7 @@ class HfunCollector(BaseHfun):
         Dispatches to either the serial or parallel implementation based on
         the current execution mode.
         """
-        if self.execution_mode in ('parallel', 'mpi') and self._nprocs > 1:
+        if self._can_distribute_refinements():
             _logger.info("Applying constant values using PARALLEL method.")
             self._apply_const_val_parallel()
         else:
@@ -2383,63 +3009,84 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not suuport fast hfun method")
 
-       # Phase 1: PREPARATION (Coordinator)
+        # Phase 1: PREPARATION (Coordinator only in MPI mode)
+        # In MPI mode, only the coordinator builds the task list — workers
+        # skip straight to MPIExecutor.run() with an empty list.
+
+        is_coordinator = (self.execution_mode != 'mpi'
+                          or MPIExecutor.is_manager())
         tasks = []
-        hfuns_to_process = {}
 
-        # Group all applicable constant value rules by the HfunRaster they apply to.
+        if is_coordinator:
+            hfuns_to_process = {}
 
-        raster_hfun_list = [
-            i for i in self._hfun_list if isinstance(i, HfunRaster)]
+            # Group all applicable constant value rules by the HfunRaster they apply to.
 
-        for in_idx, hfun in enumerate(raster_hfun_list):
-            rules_for_this_hfun = []
-            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
-                if src_idx is None or in_idx in src_idx:
-                    rules_for_this_hfun.append({
-                        'value': const_val,
-                        'lower_bound': ctr0.level if ctr0 else None,
-                        'upper_bound': ctr1.level if ctr1 else None
-                    })
+            # Two counters, same reason as in _apply_flow_limiters_parallel:
+            # raster_idx matches the user's `source_index` (rasters only),
+            # hfun_idx is the real slot in _hfun_list we write the result back to.
+            raster_idx = -1
+            for hfun_idx, hfun in enumerate(self._hfun_list):
+                if not isinstance(hfun, HfunRaster):
+                    continue
+                raster_idx += 1
 
-            if rules_for_this_hfun:
-                hfuns_to_process[in_idx] = { 'hfun': hfun,
-                                            'rules': rules_for_this_hfun }
+                rules_for_this_hfun = []
+                for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+                    if src_idx is None or raster_idx in src_idx:
+                        rules_for_this_hfun.append({
+                            'value': const_val,
+                            'lower_bound': ctr0.level if ctr0 else None,
+                            'upper_bound': ctr1.level if ctr1 else None
+                        })
 
-        # Now, create the simple task dictionaries for the pool.
-        for in_idx, data in hfuns_to_process.items():
-            hfun = data['hfun']
-            # Determine the correct input file.If this raster was already processed
-            hfun_input_path = hfun.tmpfile
-            topo_input_path = hfun._raster.path # pylint: disable=W0212
+                if rules_for_this_hfun:
+                    hfuns_to_process[hfun_idx] = { 'hfun': hfun,
+                                                'rules': rules_for_this_hfun }
 
-            output_path = os.path.join(self._work_dir,
-                                       f"const_val_result_{in_idx}.tif")
+            # Now, create the simple task dictionaries for the pool.
+            for in_idx, data in hfuns_to_process.items():
+                hfun = data['hfun']
+                # Determine the correct input file. If this raster was already processed
+                hfun_input_path = hfun.tmpfile
+                topo_input_path = hfun._raster.path # pylint: disable=W0212
 
-            task = {
-                'original_index': in_idx,
-                'hfun_input_path': hfun_input_path,
-                'topo_input_path': topo_input_path,
-                'output_path': output_path,
-                'global_hmin': hfun._hmin, # pylint: disable=W0212
-                'global_hmax': hfun._hmax, # pylint: disable=W0212
-                'const_val_rules': data['rules']
-            }
-            tasks.append(task)
+                output_path = os.path.join(self._work_dir,
+                                           f"const_val_result_{in_idx}.tif")
 
-        if not tasks:
-            _logger.info("No constant value tasks to execute.")
-            return
+                task = {
+                    'op': 'const_val',
+                    'original_index': in_idx,
+                    'hfun_input_path': hfun_input_path,
+                    'topo_input_path': topo_input_path,
+                    'output_path': output_path,
+                    'global_hmin': hfun._hmin, # pylint: disable=W0212
+                    'global_hmax': hfun._hmax, # pylint: disable=W0212
+                    'const_val_rules': data['rules']
+                }
+                tasks.append(task)
 
+            if not tasks:
+                _logger.info("No constant value tasks to execute.")
 
-            # Phase 2: EXECUTION
-        _logger.info(f"Start parallel execution for {len(tasks)} const. value tasks")
-        # Cap workers at the number of tasks: spawning more workers than tasks
-        # wastes spawn time and memory with idle processes.
-        n_workers = min(self._nprocs, len(tasks))
-        with Pool(processes=n_workers) as p:
-            results = p.map(_const_val_task_worker, tasks)
-        _logger.info("Parallel execution finished.")
+        # Phase 2: EXECUTION
+        if self.execution_mode == 'mpi':
+            raw_results = MPIExecutor.run(
+                tasks, work_dir=self._work_dir, fail_fast=True)
+            if raw_results is None:
+                return  # Worker rank — coordinator owns results
+            results = [raw_results[idx] for idx in sorted(raw_results)]
+        else:
+            if not tasks:
+                return
+            _logger.info(
+                f"Start parallel execution for {len(tasks)} const. value tasks")
+            # Cap workers at the number of tasks: spawning more workers than tasks
+            # wastes spawn time and memory with idle processes.
+            n_workers = min(self._nprocs, len(tasks))
+            with Pool(processes=n_workers) as p:
+                results = p.map(_const_val_task_worker, tasks)
+            _logger.info("Parallel execution finished.")
 
         # Phase 3: INTEGRATION
         new_hfun_objects = {}
@@ -2456,11 +3103,11 @@ class HfunCollector(BaseHfun):
 
             # Create the new HfunRaster, ensuring we don't wipe the worker's data.
             new_hfun_objects[idx] = HfunRaster(
-            raster=original_hfun.raster, # Pass the original topography Raster object
-            hmin=original_hfun.hmin,
-            hmax=original_hfun.hmax,
-            verbosity=original_hfun.verbosity,
-            initial_value=output_path # Pass the path to the file created by the worker
+                raster=original_hfun.raster,
+                hmin=original_hfun.hmin,
+                hmax=original_hfun.hmax,
+                verbosity=original_hfun.verbosity,
+                initial_value=output_path
             )
 
         # Finally, update the main list with the newly created objects.
@@ -2470,6 +3117,14 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_patch(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        if self._can_distribute_refinements():
+            _logger.info("Applying patches using PARALLEL method.")
+            self._apply_patch_parallel(apply_to)
+        else:
+            _logger.info("Applying patches using SERIAL method.")
+            self._apply_patch_serial(apply_to)
+
+    def _apply_patch_serial(self, apply_to: Optional[SizeFuncList] = None) -> None:
         """Internal: apply the specified patch refinements.
 
         Parameters
@@ -2505,8 +3160,51 @@ class HfunCollector(BaseHfun):
                     hfun.add_patch(
                             shape, pool=p, **size_info)
 
+    def _apply_patch_parallel(self, apply_to=None):
+        is_coordinator = (
+            self.execution_mode != 'mpi' or MPIExecutor.is_manager())
 
-    def _apply_linefeatures(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        tasks = resolved_shapes = serial_targets = None
+        if is_coordinator:
+            tasks, resolved_shapes, _, serial_targets = \
+                self._resolve_and_build_shape_tasks(
+                    apply_to,
+                    self._refine_patch_info_coll,
+                    'get_multipolygon',
+                    'patch', 'add_patch', 'multipolygon')
+
+        # All ranks reach _dispatch_refinement_tasks() collectively in MPI
+        # mode — even with zero tasks — so every worker enters its recv loop
+        # and can receive TAG_STOP. The non-MPI Pool path does not have this
+        # requirement (no collective synchronisation needed) and the shared
+        # helper handles its own early-return on empty tasks.
+        results = self._dispatch_refinement_tasks('patch', tasks or [])
+        if results is None:
+            return  # MPI worker rank
+
+        self._integrate_refinement_results('patch', results)
+
+        # HfunMesh / base-mesh targets cannot be rebuilt from a file in a
+        # worker, so they always stay on the coordinator.
+        if is_coordinator and serial_targets:
+            with Pool(processes=self._nprocs) as p:
+                for hfun in serial_targets:
+                    for shape, shape_crs, size_info in resolved_shapes:
+                        if not shape_crs.equals(hfun.crs):
+                            transformer = Transformer.from_crs(
+                                shape_crs, hfun.crs, always_xy=True)
+                            shape = ops.transform(transformer.transform, shape)
+                        hfun.add_patch(shape, pool=p, **size_info)
+
+    def _apply_linefeatures(self, apply_to=None):
+        if self._can_distribute_refinements():
+            _logger.info("Applying line features using PARALLEL method.")
+            self._apply_linefeatures_parallel(apply_to)
+        else:
+            _logger.info("Applying line features using SERIAL method.")
+            self._apply_linefeatures_serial(apply_to)
+
+    def _apply_linefeatures_serial(self, apply_to: Optional[SizeFuncList] = None) -> None:
         """Internal: apply the specified line feature refinements.
 
         Parameters
@@ -2545,6 +3243,42 @@ class HfunCollector(BaseHfun):
                         pool=p,
                         **size_info
                     )
+
+    def _apply_linefeatures_parallel(self, apply_to=None):
+        is_coordinator = (
+            self.execution_mode != 'mpi' or MPIExecutor.is_manager())
+
+        tasks = resolved_shapes = serial_targets = None
+        if is_coordinator:
+            tasks, resolved_shapes, _, serial_targets = \
+                self._resolve_and_build_shape_tasks(
+                    apply_to,
+                    self._refine_line_info_coll,   # line collector, not patch
+                    'get_multiline',               # resolver method for LineFeature
+                    'linefeature',                 # op key registered in MPIExecutor
+                    'add_feature',                 # HfunRaster method name
+                    'feature')                     # kwarg name for that method
+
+        # All ranks reach _dispatch_refinement_tasks() collectively in MPI
+        # mode — even with zero tasks — so every worker enters its recv loop
+        # and can receive TAG_STOP.
+        results = self._dispatch_refinement_tasks('linefeature', tasks or [])
+        if results is None:
+            return  # MPI worker rank
+
+        self._integrate_refinement_results('linefeature', results)
+
+        # HfunMesh / base-mesh targets cannot be rebuilt from a file in a
+        # worker, so they always stay on the coordinator.
+        if is_coordinator and serial_targets:
+            with Pool(processes=self._nprocs) as p:
+                for hfun in serial_targets:
+                    for shape, shape_crs, size_info in resolved_shapes:
+                        if not shape_crs.equals(hfun.crs):
+                            transformer = Transformer.from_crs(
+                                shape_crs, hfun.crs, always_xy=True)
+                            shape = ops.transform(transformer.transform, shape)
+                        hfun.add_feature(feature=shape, pool=p, **size_info)
 
 
     def _calculate_and_write_hfun_to_disk(

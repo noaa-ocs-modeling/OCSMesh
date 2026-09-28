@@ -131,7 +131,8 @@ def _configure_mpi_environment():
         # force=True raises RuntimeError — in that case we cannot change it
         # and simply warn. But at import time this should never be the case.
         try:
-            mp.set_start_method('spawn', force=True)
+            if 'spawn' in mp.get_all_start_methods():
+                mp.set_start_method('spawn', force=True)
         except RuntimeError:
             current = mp.get_start_method(allow_none=True)
             if current != 'spawn':
@@ -307,6 +308,26 @@ class MPIExecutor:
             Worker function: ``fn(task_dict) -> result_dict``.
         """
         cls._registered_ops[name] = fn
+
+    @classmethod
+    def get_op(cls, name):
+        """Return the registered worker function for the given op name.
+
+        Public counterpart to :meth:`register_op`.  Callers should use
+        this rather than accessing ``_registered_ops`` directly so that
+        the internal storage shape can change without breaking callsites.
+
+        Parameters
+        ----------
+        name : str
+            Operation name as registered via :meth:`register_op`.
+
+        Returns
+        -------
+        callable or None
+            The registered worker function, or ``None`` if not found.
+        """
+        return cls._registered_ops.get(name)
 
     def _worker_registry(self):
         """Return the current operation -> function mapping."""

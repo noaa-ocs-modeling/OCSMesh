@@ -40,6 +40,7 @@ from ocsmesh.features.constraint import (
     Constraint,
     TopoConstConstraint,
     TopoFuncConstraint,
+    _default_topo_func,
     CourantNumConstraint,
     RegionConstraint,
     apply_constraints_wrap
@@ -52,7 +53,7 @@ warnings.filterwarnings(
 
 _logger = logging.getLogger(__name__)
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 # Maximum number of points to pass to the gmsh background sizing field
@@ -709,7 +710,7 @@ class HfunRaster(BaseHfun, Raster):
     def add_topo_func_constraint(
             self,
             func: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]]
-                = lambda i: i / 2.0,
+                = _default_topo_func,
             upper_bound: float = np.inf,
             lower_bound: float = -np.inf,
             value_type: Literal['min', 'max'] = 'min',
@@ -890,7 +891,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: Optional[float] = None,
             target_size: Optional[float] = None,
             *, # kwarg-only comes after this
-            pool: Pool,
+            pool: Optional[Pool] = None,
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -1102,7 +1103,7 @@ class HfunRaster(BaseHfun, Raster):
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
             *,
-            pool: Pool,
+            pool: Optional[Pool] = None,
             tolerance: Optional[float] = None
             ) -> None:
         """Add refinement for auto detected channels
@@ -1172,7 +1173,7 @@ class HfunRaster(BaseHfun, Raster):
             target_size: Optional[float] = None,
             max_verts: int = 200,
             *, # kwarg-only comes after this
-            pool: Pool,
+            pool: Optional[Pool] = None,
             ) -> None:
         """Add refinement for specified linestring `feature`
 
@@ -1252,6 +1253,10 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
+
+        # `pool` may be None (sequential). KDTree still needs a worker count.
+        n_workers = 1 if pool is None else pool._processes  # pylint: disable=W0212
+
         with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
@@ -1262,7 +1267,8 @@ class HfunRaster(BaseHfun, Raster):
 
                 _logger.info('Repartitioning features...')
                 start = time()
-                res = pool.starmap(
+                res = utils.run_starmap(
+                    pool,
                     utils.repartition_features,
                     [(linestring, max_verts) for linestring in feature]
                     )
@@ -1283,7 +1289,8 @@ class HfunRaster(BaseHfun, Raster):
                     _logger.info(
                             f"Transform creation took {time() - start2:f}")
                     start2 = time()
-                    win_feature = pool.starmap(
+                    win_feature = utils.run_starmap(
+                        pool,
                         ops.transform,
                         [(transformer.transform, linestring)
                          for linestring in win_feature]
@@ -1291,7 +1298,8 @@ class HfunRaster(BaseHfun, Raster):
                     _logger.info(
                             f"Transform apply took {time() - start2:f}")
 
-                transformed_features = pool.starmap(
+                transformed_features = utils.run_starmap(
+                    pool,
                     utils.transform_linestring,
                     [(linestring, target_size) for linestring in win_feature]
                 )
@@ -1331,12 +1339,12 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax:
                     r = (self.hmax - target_size) / (expansion_rate * target_size)
                     near_dists, neighbors = tree.query(
-                        xy, workers=pool._processes, distance_upper_bound=r)
+                        xy, workers=n_workers, distance_upper_bound=r)
                     distances = r * np.ones(len(xy))
                     mask = np.logical_not(np.isinf(near_dists))
                     distances[mask] = near_dists[mask]
                 else:
-                    distances, _ = tree.query(xy, workers=pool._processes)
+                    distances, _ = tree.query(xy, workers=n_workers)
                 _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(

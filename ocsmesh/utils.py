@@ -2,9 +2,11 @@ from collections import defaultdict
 from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
-from multiprocessing import cpu_count, Pool
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Pool, current_process
 from copy import deepcopy
 import logging
+import os
 import warnings
 
 from matplotlib.path import Path
@@ -1523,17 +1525,112 @@ def merge_meshdata(
     return composite_mesh
 
 
+def run_starmap(pool, func, iterable):
+    """Run `func(*args)` for each item, using `pool` when one exists."""
+
+    if pool is None:
+        return [func(*args) for args in iterable]
+    return pool.starmap(func, iterable)
+
+
+class _ThreadPool:
+    """Drop-in replacement for multiprocessing.Pool using threads.
+
+    Provides ``starmap`` and ``_processes`` so that existing code
+    (``run_starmap``, ``add_feature``) works without modification.
+
+    Because threads share the same address space, Shapely geometries
+    and NumPy arrays are passed by reference — **zero pickling**.
+    This is safe when the parallelised functions spend most of their
+    time in C extensions (NumPy, SciPy, GEOS/Shapely 2.x) that
+    release the GIL.
+    """
+
+    def __init__(self, processes: int):
+        self._processes = processes
+        self._executor = ThreadPoolExecutor(max_workers=processes)
+
+    def starmap(self, func, iterable):
+        """Emulate Pool.starmap using ThreadPoolExecutor."""
+        items = list(iterable)
+        futures = [self._executor.submit(func, *args) for args in items]
+        return [f.result() for f in futures]
+
+    # Context-manager support so ``with _ThreadPool(...) as p:`` works.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._executor.shutdown(wait=True)
+
+    def join(self):
+        """No-op — ThreadPoolExecutor.shutdown already joins."""
+
+
+def effective_cpu_count() -> int:
+    """Return the number of CPU cores actually available to this process.
+
+    On Linux (including HPC nodes managed by SLURM/cgroups/taskset),
+    ``os.sched_getaffinity(0)`` returns the *affinity mask* of the current
+    process — i.e. only the cores the scheduler has pinned it to.  This is
+    the correct value to use when sizing a thread or process pool, because
+    the machine's *total* core count (as reported by ``os.cpu_count()``) may
+    be much larger than the allocation given to this MPI rank.
+
+    Example::
+
+        # 4-rank job on a 16-core node: SLURM pins each rank to 4 cores.
+        # os.cpu_count()        → 16  (wrong — would oversubscribe)
+        # effective_cpu_count() →  4  (correct)
+
+    Falls back to ``os.cpu_count()`` on platforms that do not implement
+    ``sched_getaffinity`` (macOS, Windows).
+    """
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        # macOS / Windows: sched_getaffinity is not available.
+        return os.cpu_count() or 1
+
+
 def add_pool_args(func):
-    def wrapper(*args, nprocs=None, pool=None, **kwargs):
+    """Give a function `nprocs=`/`pool=` kwargs and hand it a `pool`.
+
+    Four ways to call the wrapped function:
+
+    - `pool=<Pool>`      -> reuse that pool (no new processes are started)
+    - `nprocs=N`         -> create a pool of N processes just for this call
+    - `nprocs=1`         -> no pool at all, `pool=None` is passed instead
+    - `use_threads=True` -> use a thread pool instead of a process pool,
+                            eliminating pickling overhead (safe when the
+                            work is in GIL-releasing C extensions)
+
+    That last case matters: a `multiprocessing.Pool` worker is a daemon
+    process, and a daemon process is not allowed to start child processes.
+    So code running inside a worker must ask for `nprocs=1` and get `None`
+    back, otherwise Python raises
+    "daemonic processes are not allowed to have children".
+    """
+
+    def wrapper(*args, nprocs=None, pool=None, use_threads=False, **kwargs):
         if pool is not None:
-            rv = func(*args, **kwargs, pool=pool)
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            with Pool(processes=nprocs) as new_pool:
-                rv = func(*args, **kwargs, pool=new_pool)
-            new_pool.join()
+            return func(*args, **kwargs, pool=pool)
+
+        # Check nprocs
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
+
+        if nprocs <= 1 or current_process().daemon:
+            # Sequential: no child process, so this is safe inside a worker.
+            return func(*args, **kwargs, pool=None)
+
+        if use_threads:
+            with _ThreadPool(processes=nprocs) as thread_pool:
+                return func(*args, **kwargs, pool=thread_pool)
+
+        with Pool(processes=nprocs) as new_pool:
+            rv = func(*args, **kwargs, pool=new_pool)
+        new_pool.join()
         return rv
     return wrapper
 
