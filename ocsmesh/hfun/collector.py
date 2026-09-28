@@ -1364,6 +1364,11 @@ class HfunCollector(BaseHfun):
         return composite_hfun
 
     def _meshdata_pipeline(self, **kwargs) -> MeshData:
+        # Under MPI, only rank 0 runs serial/parallel pipelines.
+        # NOTE: Necessary because of current is_mpi_worker checks in HfuncCollector __init__
+        if _is_mpi_active() and not MPIExecutor.is_manager():
+            return None
+
         # Just dummy object
         composite_hfun = MeshData([[0,0]])
 
