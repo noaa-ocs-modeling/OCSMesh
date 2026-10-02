@@ -299,8 +299,18 @@ class GeomCombine:
             fix: bool = True
             ) -> MultiPolygon:
 
-        multipolygon = MultiPolygon(
-                list(gpd.read_feather(path).geometry))
+        # Retry on Lustre: feather file may not be fully visible yet
+        import time as _time
+        for _attempt in range(10):
+            try:
+                multipolygon = MultiPolygon(
+                        list(gpd.read_feather(path).geometry))
+                break
+            except Exception as _e:
+                if _attempt < 9:
+                    _time.sleep(1.0)
+                else:
+                    raise
 
         if fix:
             multipolygon = self._get_valid_multipolygon(
@@ -313,9 +323,17 @@ class GeomCombine:
             path: Union[str, os.PathLike],
             ) -> gpd.GeoDataFrame:
 
-        gdf = gpd.read_feather(path)
-
-        return gdf
+        # Retry on Lustre: feather file may not be fully visible yet
+        import time as _time
+        for _attempt in range(10):
+            try:
+                gdf = gpd.read_feather(path)
+                return gdf
+            except Exception as _e:
+                if _attempt < 9:
+                    _time.sleep(1.0)
+                else:
+                    raise
 
 
     def _process_priority(

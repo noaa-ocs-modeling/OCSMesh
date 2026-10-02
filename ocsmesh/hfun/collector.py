@@ -998,10 +998,29 @@ def _meshdata_task_worker(task: dict):
             crs=np.array(crs_str)
         )
 
+        # Force filesystem sync before returning — critical on Lustre/GPFS
+        # where write buffering can cause the coordinator (rank 0) to not
+        # see the file immediately after np.savez returns.
+        actual_path = str(output_path) + '.npz'
+        try:
+            with open(actual_path, 'rb') as _fh:
+                os.fsync(_fh.fileno())
+        except OSError:
+            pass  # fsync not supported on all filesystems — best effort
+
+        # Verify the file actually exists and has non-zero size
+        if not os.path.exists(actual_path) or os.path.getsize(actual_path) == 0:
+            raise RuntimeError(
+                f"Worker: npz file missing or empty after savez+fsync: "
+                f"{actual_path} "
+                f"(exists={os.path.exists(actual_path)}, "
+                f"size={os.path.getsize(actual_path) if os.path.exists(actual_path) else -1})"
+            )
+
         return {
             'status': 'success',
             'original_index': original_index,
-            'output_path': str(output_path) + '.npz'
+            'output_path': actual_path
         }
     except Exception as e:  # pylint: disable=broad-exception-caught
         return {
@@ -1138,11 +1157,31 @@ class HfunCollector(BaseHfun):
         # NOTE: Input Hfuns and their Rasters can get modified
 
          # Add a persistent working directory for this instance's outputs
-        self._work_dir = tempfile.mkdtemp(
-            prefix='hfun_collector_',
-            dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
-        # TODO: Prove this fix is needed
+        # CRITICAL: all MPI ranks must share the SAME _work_dir path.
+        # tempfile.mkdtemp() creates a DIFFERENT directory on each rank,
+        # so we create it on rank 0 and broadcast the path to workers.
+        from ocsmesh.mpi import MPIExecutor, _is_mpi_active, _get_mpi
+        if _is_mpi_active():
+            _mpi = _get_mpi()
+            _comm = _mpi.COMM_WORLD
+            if _comm.Get_rank() == 0:
+                _work_dir_path = tempfile.mkdtemp(
+                    prefix='hfun_collector_',
+                    dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
+            else:
+                _work_dir_path = None
+            self._work_dir = _comm.bcast(_work_dir_path, root=0)
+            # Workers must create the directory if it does not exist yet
+            # (bcast is fast but mkdtemp only runs on rank 0)
+            os.makedirs(self._work_dir, exist_ok=True)
+        else:
+            self._work_dir = tempfile.mkdtemp(
+                prefix='hfun_collector_',
+                dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
         self._creator_pid = os.getpid()
+        # Cache for meshdata() result — prevents MeshDriver from re-running
+        # the MPI dispatch when meshdata() was already called externally.
+        self._cached_meshdata = None
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = effective_cpu_count() if nprocs == -1 else nprocs
@@ -1288,7 +1327,12 @@ class HfunCollector(BaseHfun):
 
 
     def __del__(self):
-        # TODO: Prove this fix is needed
+        # CRITICAL: only rank 0 (manager) deletes _work_dir.
+        # All MPI ranks share the same _work_dir via bcast. If worker
+        # ranks delete it they destroy files rank 0 still needs to read.
+        from ocsmesh.mpi import MPIExecutor, _is_mpi_active
+        if _is_mpi_active() and not MPIExecutor.is_manager():
+            return
         if (hasattr(self, '_work_dir')
                 and hasattr(self, '_creator_pid')
                 and os.getpid() == self._creator_pid
@@ -1306,10 +1350,22 @@ class HfunCollector(BaseHfun):
             Arguments passed down to the underlying Hfun classes (e.g.
             mesh_engine='gmsh', stride=...).
         """
-        if self.execution_mode == 'mpi':
-            return self._meshdata_mpi_pipeline(**kwargs)
+        # Return cached result if already computed.
+        # This prevents MeshDriver from re-running the expensive MPI
+        # dispatch when meshdata() was already called before driver.run().
+        if hasattr(self, '_cached_meshdata') and self._cached_meshdata is not None:
+            return self._cached_meshdata
 
-        return self._meshdata_pipeline(**kwargs)
+        if self.execution_mode == 'mpi':
+            result = self._meshdata_mpi_pipeline(**kwargs)
+        else:
+            result = self._meshdata_pipeline(**kwargs)
+
+        # Cache on rank 0 (workers return None — do not cache None)
+        if result is not None:
+            self._cached_meshdata = result
+
+        return result
 
     def _meshdata_mpi_pipeline(self, **kwargs) -> MeshData:
         """Full meshdata pipeline — all ranks call collectively.
@@ -3516,6 +3572,24 @@ class HfunCollector(BaseHfun):
             # Load the meshdata from Stage 1 result
             if loop_idx in stage1_results:
                 npz_path = stage1_results[loop_idx]
+                # Lustre metadata latency: file may not be visible on rank 0
+                # immediately after worker writes it. Retry with backoff.
+                _max_retries = 30
+                _retry_delay = 1.0   # seconds
+                for _attempt in range(_max_retries):
+                    if os.path.exists(npz_path):
+                        break
+                    import time as _time
+                    _logger.debug(
+                        f"Stage 2: waiting for {npz_path} "
+                        f"(attempt {_attempt+1}/{_max_retries})"
+                    )
+                    _time.sleep(_retry_delay)
+                else:
+                    raise FileNotFoundError(
+                        f"Stage 2: worker output not visible after "
+                        f"{_max_retries * _retry_delay:.1f}s: {npz_path}"
+                    )
                 data = np.load(npz_path, allow_pickle=False)
                 coords = data['coords'].copy()
                 tria_raw = data['tria']
@@ -3695,6 +3769,24 @@ class HfunCollector(BaseHfun):
         for loop_idx in range(len(hfun_list)):
             if loop_idx in stage1_results:
                 npz_path = stage1_results[loop_idx]
+                # Lustre metadata latency: file may not be visible on rank 0
+                # immediately after worker writes it. Retry with backoff.
+                _max_retries = 30
+                _retry_delay = 1.0   # seconds
+                for _attempt in range(_max_retries):
+                    if os.path.exists(npz_path):
+                        break
+                    import time as _time
+                    _logger.debug(
+                        f"Stage 2: waiting for {npz_path} "
+                        f"(attempt {_attempt+1}/{_max_retries})"
+                    )
+                    _time.sleep(_retry_delay)
+                else:
+                    raise FileNotFoundError(
+                        f"Stage 2: worker output not visible after "
+                        f"{_max_retries * _retry_delay:.1f}s: {npz_path}"
+                    )
                 data = np.load(npz_path, allow_pickle=False)
                 coords = data['coords'].copy()
                 tria_raw = data['tria']
