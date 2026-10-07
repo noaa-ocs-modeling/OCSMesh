@@ -78,6 +78,14 @@ class GmshEngine(BaseMeshEngine):
         seed: Optional[MeshData] = None,
     ) -> MeshData:
 
+        # Fix invalid geometries before union to prevent GEOSException
+        try:
+            from shapely.validation import make_valid
+            shape = shape.apply(
+                lambda g: make_valid(g) if not g.is_valid else g
+            )
+        except Exception:
+            pass
         combined_shape = shape.union_all()
         if combined_shape.is_empty:
             raise ValueError("Input shape is empty.")
@@ -88,6 +96,15 @@ class GmshEngine(BaseMeshEngine):
                              "Hfun resolution (Engine-side)...")
                 temp_series = gpd.GeoSeries([combined_shape], crs=shape.crs)
                 resampled_series = utils.resample_geom_by_hfun(temp_series, sizing)
+                # Fix any invalid geometries before union_all to prevent
+                # GEOSException TopologyException on Lustre/HPC runs.
+                try:
+                    from shapely.validation import make_valid
+                    resampled_series = resampled_series.apply(
+                        lambda g: make_valid(g) if not g.is_valid else g
+                    )
+                except Exception:
+                    pass
                 combined_shape = resampled_series.union_all()
             elif sizing is None:
                 _logger.warning("'adapt' boundary requested but no Hfun provided. "

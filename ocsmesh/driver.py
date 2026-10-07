@@ -104,7 +104,12 @@ class MeshDriver:
         # (Needed for adaptation step and engine generation)
         sizing: Optional[MeshData] = None
         if self._hfun is not None:
-            sizing = copy.deepcopy(self._hfun.meshdata())
+            # Use cached meshdata if available (avoids re-running MPI dispatch
+            # when meshdata() was already called before MeshDriver.run())
+            if hasattr(self._hfun, '_cached_meshdata') and self._hfun._cached_meshdata is not None:
+                sizing = copy.deepcopy(self._hfun._cached_meshdata)
+            else:
+                sizing = copy.deepcopy(self._hfun.meshdata())
 
             # Align Hfun CRS with Calculation CRS
             if calc_crs is None:
