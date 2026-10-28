@@ -104,10 +104,10 @@ class MeshDriver:
         # (Needed for adaptation step and engine generation)
         sizing: Optional[MeshData] = None
         if self._hfun is not None:
-            # Use cached meshdata if available (avoids re-running MPI dispatch
-            # when meshdata() was already called before MeshDriver.run())
-            if hasattr(self._hfun, '_cached_meshdata') and self._hfun._cached_meshdata is not None:
-                sizing = copy.deepcopy(self._hfun._cached_meshdata)
+            # Reuse meshdata the user already computed, as long as no
+            # refinement was added since (avoids re-running the dispatch)
+            if hasattr(self._hfun, '_current_meshdata'):
+                sizing = self._hfun._current_meshdata()  # pylint: disable=protected-access
             else:
                 sizing = copy.deepcopy(self._hfun.meshdata())
 

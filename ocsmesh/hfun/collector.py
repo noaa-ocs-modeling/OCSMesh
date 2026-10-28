@@ -1047,6 +1047,11 @@ def _task_topo_path(hfun: HfunRaster) -> str:
     return str(hfun.raster.tmpfile)
 
 
+def _kwargs_key(kwargs: dict) -> tuple:
+    """Hashable, order-independent key for meshdata() kwargs."""
+    return tuple(sorted((k, repr(v)) for k, v in kwargs.items()))
+
+
 def _raise_on_failures(kind: str, results: list) -> None:
     """Fail fast on worker errors from a local ``Pool``.
 
@@ -1210,9 +1215,13 @@ class HfunCollector(BaseHfun):
                 prefix='hfun_collector_',
                 dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
         self._creator_pid = os.getpid()
-        # Cache for meshdata() result — prevents MeshDriver from re-running
-        # the MPI dispatch when meshdata() was already called externally.
-        self._cached_meshdata = None
+        # meshdata() cache: (key, result). The key holds _state_version,
+        # which every add_* call bumps, and the meshdata() kwargs, so a
+        # cached result is reused only for the same inputs. MPI workers
+        # cache their None too: a repeated call must not re-enter the
+        # collective dispatch on workers while rank 0 returns the cache.
+        self._state_version = 0
+        self._meshdata_cache = None
         # Check nprocs
         nprocs = -1 if nprocs is None else nprocs
         nprocs = effective_cpu_count() if nprocs == -1 else nprocs
@@ -1381,22 +1390,38 @@ class HfunCollector(BaseHfun):
             Arguments passed down to the underlying Hfun classes (e.g.
             mesh_engine='gmsh', stride=...).
         """
-        # Return cached result if already computed.
-        # This prevents MeshDriver from re-running the expensive MPI
-        # dispatch when meshdata() was already called before driver.run().
-        if hasattr(self, '_cached_meshdata') and self._cached_meshdata is not None:
-            return self._cached_meshdata
+        # Reuse the result while neither the refinements nor the kwargs
+        # changed (MeshDriver calls meshdata() again after the user did).
+        key = (self._state_version, _kwargs_key(kwargs))
+        if self._meshdata_cache is not None and self._meshdata_cache[0] == key:
+            return deepcopy(self._meshdata_cache[1])
 
         if self.execution_mode == 'mpi':
             result = self._meshdata_mpi_pipeline(**kwargs)
         else:
             result = self._meshdata_pipeline(**kwargs)
 
-        # Cache on rank 0 (workers return None — do not cache None)
-        if result is not None:
-            self._cached_meshdata = result
-
+        # Keep a private copy: callers may modify the returned object
+        # (e.g. utils.reproject works in place).
+        self._meshdata_cache = (key, deepcopy(result))
         return result
+
+    def _current_meshdata(self) -> Optional[MeshData]:
+        """meshdata() for MeshDriver: reuse the cached result whatever
+        kwargs produced it, as long as no refinement was added since.
+
+        Decided on every rank alike (MPI workers cached None), so the
+        workers enter the collective dispatch only if rank 0 does.
+        """
+        cache = self._meshdata_cache
+        if cache is not None and cache[0][0] == self._state_version:
+            return deepcopy(cache[1])
+        return self.meshdata()
+
+    def _invalidate(self) -> None:
+        """Mark the refinements as not applied and the cache as stale."""
+        self._applied = False
+        self._state_version += 1
 
     def _meshdata_mpi_pipeline(self, **kwargs) -> MeshData:
         """Full meshdata pipeline — all ranks call collectively.
@@ -1530,7 +1555,7 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
+        self._invalidate()
 
         constraint_defn = TopoConstConstraint(
             value, upper_bound, lower_bound, value_type, rate)
@@ -1587,7 +1612,7 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
+        self._invalidate()
 
         constraint_defn = TopoFuncConstraint(
             func, upper_bound, lower_bound, value_type, rate)
@@ -1629,7 +1654,7 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
+        self._invalidate()
 
         # TODO: Validate conflicting constraints, right now last one wins
         if upper_bound is None and lower_bound is None:
@@ -1710,6 +1735,8 @@ class HfunCollector(BaseHfun):
             )
         )
 
+        self._invalidate()
+
 
     def add_contour(
             self,
@@ -1747,7 +1774,7 @@ class HfunCollector(BaseHfun):
         """
 
         # Always lazy
-        self._applied = False
+        self._invalidate()
 
         levels = []
         if isinstance(level, (list, tuple)):
@@ -1820,10 +1847,8 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
-
         # Always lazy
-        self._applied = False
+        self._invalidate()
 
         # Even a tolerance of 1 for simplifying polygon for channel
         # calculations is much faster than no simplification. 50
@@ -1885,7 +1910,7 @@ class HfunCollector(BaseHfun):
         hfun.raster.HfunRaster.add_subtidal_flow_limiter :
         """
 
-        self._applied = False
+        self._invalidate()
 
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
@@ -1931,7 +1956,7 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
+        self._invalidate()
 
         contour_defn0 = None
         contour_defn1 = None
@@ -1990,7 +2015,7 @@ class HfunCollector(BaseHfun):
         # "shape" should be in 4326 CRS. For shapefile or patch_defn
         # CRS info is included
 
-        self._applied = False
+        self._invalidate()
 
         if not patch_defn:
             if shape:
@@ -2047,7 +2072,7 @@ class HfunCollector(BaseHfun):
         None
         """
 
-        self._applied = False
+        self._invalidate()
 
         if not line_defn:
             if shape:
