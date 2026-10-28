@@ -1047,6 +1047,14 @@ def _task_topo_path(hfun: HfunRaster) -> str:
     return str(hfun.raster.tmpfile)
 
 
+def _has_valid_data(raster: Raster) -> bool:
+    """True if any pixel of band 1 is not nodata (stops at the first)."""
+    for window in raster.iter_windows():
+        if raster.src.read_masks(1, window=window).any():
+            return True
+    return False
+
+
 def _kwargs_key(kwargs: dict) -> tuple:
     """Hashable, order-independent key for meshdata() kwargs."""
     return tuple(sorted((k, repr(v)) for k, v in kwargs.items()))
@@ -1287,35 +1295,11 @@ class HfunCollector(BaseHfun):
                 hfun = in_item
             # pylint: disable=R0801
             elif isinstance(in_item, Raster):
-                if self._base_shape:
-                    clip_shape = self._base_shape
-                    if not self._base_shape_crs.equals(in_item.crs):
-                        transformer = Transformer.from_crs(
-                            self._base_shape_crs, in_item.crs, always_xy=True)
-                        clip_shape = ops.transform(
-                                transformer.transform, clip_shape)
-                    if not is_mpi_worker:
-                        try:
-                            in_item.clip(clip_shape)
-                        except ValueError as err:
-                            # This raster does not intersect shape
-                            _logger.debug(err)
-                            continue
-
-                elif self._base_mesh:
-                    if not is_mpi_worker:
-                        try:
-                            in_item.clip(self._base_mesh.mesh.get_bbox(crs=in_item.crs))
-                        except ValueError as err:
-                            # This raster does not intersect shape
-                            _logger.debug(err)
-                            continue
-
                 # Workers skip HfunRaster construction to avoid blank
                 # raster writes on the shared filesystem (multi-node).
                 # Workers reconstruct HfunRaster from file paths inside
                 # the MPI worker functions instead.
-                if is_mpi_worker:
+                if is_mpi_worker or not self._clip_to_base(in_item):
                     continue
                 hfun = HfunRaster(in_item, **self._size_info)
 
@@ -1325,33 +1309,11 @@ class HfunCollector(BaseHfun):
             elif isinstance(in_item, (str, Path)):
                 in_item = str(in_item)
                 if in_item.endswith('.tif'):
-                    raster = Raster(in_item)
-                    if self._base_shape:
-                        clip_shape = self._base_shape
-                        if not self._base_shape_crs.equals(raster.crs):
-                            transformer = Transformer.from_crs(
-                                self._base_shape_crs, raster.crs, always_xy=True)
-                            clip_shape = ops.transform(
-                                    transformer.transform, clip_shape)
-                        if not is_mpi_worker:
-                            try:
-                                raster.clip(clip_shape)
-                            except ValueError as err:
-                                # This raster does not intersect shape
-                                _logger.debug(err)
-                                continue
-
-                    elif self._base_mesh:
-                        if not is_mpi_worker:
-                            try:
-                                raster.clip(self._base_mesh.mesh.get_bbox(crs=raster.crs))
-                            except ValueError as err:
-                                # This raster does not intersect shape
-                                _logger.debug(err)
-                                continue
-
                     # See comment above — same guard for str/Path input.
                     if is_mpi_worker:
+                        continue
+                    raster = Raster(in_item)
+                    if not self._clip_to_base(raster):
                         continue
                     hfun = HfunRaster(raster, **self._size_info)
 
@@ -1365,6 +1327,41 @@ class HfunCollector(BaseHfun):
 
             self._hfun_list.append(hfun) # pylint: disable=E0606
 
+
+    def _clip_to_base(self, raster: Raster) -> bool:
+        """Clip ``raster`` to the base shape (or base mesh bbox).
+
+        Returns False when the raster must be skipped: it does not
+        intersect the base shape, or it holds no valid data there. A
+        tile that is all nodata gives no sizes, and its refinements
+        (nothing detected) used to flatten the size function to hmin.
+        """
+        if self._base_shape:
+            clip_shape = self._base_shape
+            if not self._base_shape_crs.equals(raster.crs):
+                transformer = Transformer.from_crs(
+                    self._base_shape_crs, raster.crs, always_xy=True)
+                clip_shape = ops.transform(transformer.transform, clip_shape)
+        elif self._base_mesh:
+            clip_shape = self._base_mesh.mesh.get_bbox(crs=raster.crs)
+        else:
+            clip_shape = None
+
+        if clip_shape is not None:
+            try:
+                raster.clip(clip_shape)
+            except ValueError as err:
+                # This raster does not intersect shape
+                _logger.debug(err)
+                return False
+
+        if not _has_valid_data(raster):
+            warnings.warn(
+                f"Raster {raster.path} has no valid data"
+                f"{' inside the base shape' if clip_shape is not None else ''}"
+                "; it is not used for the size function.")
+            return False
+        return True
 
     def __del__(self):
         # CRITICAL: only rank 0 (manager) deletes _work_dir.

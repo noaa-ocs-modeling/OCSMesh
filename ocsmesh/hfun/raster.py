@@ -954,6 +954,12 @@ class HfunRaster(BaseHfun, Raster):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
+        # Nothing to refine (e.g. no channels detected on this tile):
+        # leave the size function as it is.
+        if multipolygon.is_empty:
+            _logger.info('add_patch: empty shape, size function unchanged.')
+            return
+
         # For expansion_rate
         if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon.geoms]
@@ -993,6 +999,10 @@ class HfunRaster(BaseHfun, Raster):
                     # error we assume there's no overlap
                     _logger.debug(
                         'Polygons don\'t intersect with the raster')
+                    # Every window must be written: an unwritten window
+                    # of the new file reads as 0, which clamps to hmin.
+                    dst.write_band(
+                        1, self.get_values(window=window), window=window)
                     continue
                 _logger.info(
                     f'Creating mask from shape took {time()-start}.')
@@ -1246,6 +1256,8 @@ class HfunRaster(BaseHfun, Raster):
         elif isinstance(feature, MultiLineString):
             feature = list(feature.geoms)
 
+        feature = [line for line in feature if not line.is_empty]
+
         # check target size
         target_size = self.hmin if target_size is None else target_size
         if target_size is None:
@@ -1253,6 +1265,12 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
+
+        # Nothing to refine (e.g. no contour or channel on this tile):
+        # leave the size function as it is.
+        if not feature:
+            _logger.info('add_feature: empty feature, size function unchanged.')
+            return
 
         # `pool` may be None (sequential). KDTree still needs a worker count.
         n_workers = 1 if pool is None else pool._processes  # pylint: disable=W0212
@@ -1322,6 +1340,10 @@ class HfunRaster(BaseHfun, Raster):
                 if len(points) == 0:
                     _logger.info(
                         'No feature points in this window; skipping.')
+                    # Every window must be written: an unwritten window
+                    # of the new file reads as 0, which clamps to hmin.
+                    dst.write_band(
+                        1, self.get_values(window=window), window=window)
                     continue
 
                 _logger.info('Generating KDTree...')
