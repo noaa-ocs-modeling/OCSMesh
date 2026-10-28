@@ -1032,6 +1032,21 @@ def _meshdata_task_worker(task: dict):
         }
 
 
+def _task_topo_path(hfun: HfunRaster) -> str:
+    """Topography file a worker must pair with ``hfun.tmpfile``.
+
+    Workers rebuild an ``HfunRaster`` from two files: the size function
+    (``hfun.tmpfile``) and the topography it is computed from. When the
+    collector clipped the input (``base_shape``/``base_mesh``), the size
+    function is on the clipped grid, so the topography must be the clipped
+    working copy (``raster.tmpfile``), not the original DEM (``raster.path``).
+    Using the original made every depth-based refinement read elevations from
+    shifted pixels. ``tmpfile`` falls back to the original path when the
+    raster was never modified.
+    """
+    return str(hfun.raster.tmpfile)
+
+
 # Register collector-specific MPI operations
 MPIExecutor.register_op('meshdata', _meshdata_task_worker)
 MPIExecutor.register_op('contours', _contours_task_worker)
@@ -2190,7 +2205,7 @@ class HfunCollector(BaseHfun):
                     continue
 
                 hfun_input_path = hfun.tmpfile
-                topo_input_path = hfun._raster.path  # pylint: disable=W0212
+                topo_input_path = _task_topo_path(hfun)
                 output_path = os.path.join(
                     self._work_dir, f"constraints_result_{in_idx}.tif")
 
@@ -2437,7 +2452,7 @@ class HfunCollector(BaseHfun):
                 'op':              op_name,
                 'original_index':  idx,
                 'hfun_input_path': hfun.tmpfile,
-                'topo_input_path': hfun._raster.path,
+                'topo_input_path': _task_topo_path(hfun),
                 'output_path':     os.path.join(
                     self._work_dir, f'{op_name}_result_{idx}.tif'),
                 'global_hmin':     hfun._hmin,
@@ -2588,7 +2603,7 @@ class HfunCollector(BaseHfun):
                         'op': kind,
                         'original_index': idx,
                         'hfun_input_path': hfun.tmpfile,
-                        'topo_input_path': hfun._raster.path,  # pylint: disable=W0212
+                        'topo_input_path': _task_topo_path(hfun),
                         'output_path': os.path.join(
                             self._work_dir, f"{kind}_result_{idx}.tif"),
                         'global_hmin': hfun._hmin,  # pylint: disable=W0212
@@ -2926,7 +2941,7 @@ class HfunCollector(BaseHfun):
                 hfun_input_path = hfun.tmpfile
 
                 # The path to the original, unmodified topography/DEM data.
-                topo_input_path = hfun._raster.path # pylint: disable=W0212
+                topo_input_path = _task_topo_path(hfun)
 
                 # Define a unique output path in our persistent working directory.
                 output_path = os.path.join(self._work_dir,
@@ -3105,7 +3120,7 @@ class HfunCollector(BaseHfun):
                 hfun = data['hfun']
                 # Determine the correct input file. If this raster was already processed
                 hfun_input_path = hfun.tmpfile
-                topo_input_path = hfun._raster.path # pylint: disable=W0212
+                topo_input_path = _task_topo_path(hfun)
 
                 output_path = os.path.join(self._work_dir,
                                            f"const_val_result_{in_idx}.tif")
@@ -3523,7 +3538,7 @@ class HfunCollector(BaseHfun):
                 task = {
                     'type': 'raster',
                     'original_index': loop_idx,
-                    'topo_path': hfun._raster.path,
+                    'topo_path': _task_topo_path(hfun),
                     'hfun_input_path': hfun.tmpfile,
                     'output_path': npz_path,
                     'hmin': hfun._hmin,
@@ -3726,7 +3741,7 @@ class HfunCollector(BaseHfun):
                     'op': 'meshdata',
                     'type': 'raster',
                     'original_index': loop_idx,
-                    'topo_path': hfun._raster.path,
+                    'topo_path': _task_topo_path(hfun),
                     'hfun_input_path': hfun.tmpfile,
                     'output_path': npz_path,
                     'hmin': hfun._hmin,
