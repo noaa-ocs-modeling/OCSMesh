@@ -1047,6 +1047,22 @@ def _task_topo_path(hfun: HfunRaster) -> str:
     return str(hfun.raster.tmpfile)
 
 
+def _raise_on_failures(kind: str, results: list) -> None:
+    """Fail fast on worker errors from a local ``Pool``.
+
+    Skipping a failed task would leave a size function quietly missing
+    its refinement (or a tile missing from the output), which is worse
+    than stopping. ``MPIExecutor.run`` applies the same rule in 'mpi' mode.
+    """
+    failures = [r for r in results if r['status'] == 'error']
+    if failures:
+        msgs = [f"  idx {r['original_index']}: {r['error']}"
+                for r in failures]
+        raise RuntimeError(
+            f"{len(failures)} {kind} worker(s) failed:\n"
+            + "\n".join(msgs))
+
+
 # Register collector-specific MPI operations
 MPIExecutor.register_op('meshdata', _meshdata_task_worker)
 MPIExecutor.register_op('contours', _contours_task_worker)
@@ -2240,25 +2256,11 @@ class HfunCollector(BaseHfun):
             with Pool(processes=n_workers) as p:
                 results = p.map(_constraints_task_worker, tasks)
             _logger.info("Parallel execution finished.")
-
-            failures = [r for r in results if r['status'] == 'error']
-            if failures:
-                msgs = [f"  idx {r['original_index']}: {r['error']}"
-                        for r in failures]
-                raise RuntimeError(
-                    f"{len(failures)} constraint worker(s) failed:\n"
-                    + "\n".join(msgs))
+            _raise_on_failures('constraint', results)
 
         # Phase 3: INTEGRATION (coordinator only)
         new_hfun_objects = {}
         for result in results:
-            if result['status'] == 'error':
-                _logger.error(
-                    "Constraint worker %s failed: %s",
-                    result['original_index'],
-                    result['error'])
-                continue
-
             idx = result['original_index']
             output_path = result['output_path']
             original_hfun = self._hfun_list[idx]
@@ -2498,16 +2500,7 @@ class HfunCollector(BaseHfun):
         with Pool(processes=n_workers) as p:
             results = p.map(worker, tasks)
         _logger.info("Parallel execution finished.")
-
-        # Fail fast. Skipping a failed task would leave a size function
-        # quietly missing its refinement, which is worse than stopping.
-        failures = [r for r in results if r['status'] == 'error']
-        if failures:
-            msgs = [f"  idx {r['original_index']}: {r['error']}"
-                    for r in failures]
-            raise RuntimeError(
-                f"{len(failures)} {kind} worker(s) failed:\n"
-                + "\n".join(msgs))
+        _raise_on_failures(kind, results)
         return results
 
     def _integrate_refinement_results(self, kind, results):
@@ -2983,6 +2976,7 @@ class HfunCollector(BaseHfun):
             with Pool(processes=n_workers) as p:
                 results = p.map(_flow_limiter_task_worker, tasks)
             _logger.info("Parallel execution finished.")
+            _raise_on_failures('flow limiter', results)
 
         # Phase 3: INTEGRATION (Process Results)
         # This phase takes the results from the workers (which are just file paths)
@@ -2990,13 +2984,6 @@ class HfunCollector(BaseHfun):
 
         new_hfun_objects = {}
         for result in results:
-            if result['status'] == 'error':
-                _logger.error(
-                    f"Worker failed for HfunRaster at index "
-                    f"{result['original_index']}: {result['error']}"
-                )
-                continue
-
             idx = result['original_index']
             output_path = result['output_path']
             original_hfun = self._hfun_list[idx]
@@ -3158,16 +3145,11 @@ class HfunCollector(BaseHfun):
             with Pool(processes=n_workers) as p:
                 results = p.map(_const_val_task_worker, tasks)
             _logger.info("Parallel execution finished.")
+            _raise_on_failures('constant value', results)
 
         # Phase 3: INTEGRATION
         new_hfun_objects = {}
         for result in results:
-            if result['status'] == 'error':
-                _logger.error("Val worker %s failed: %s",
-                              result['original_index'],
-                              result['error'])
-                continue
-
             idx = result['original_index']
             output_path = result['output_path']
             original_hfun = self._hfun_list[idx]
@@ -3570,14 +3552,9 @@ class HfunCollector(BaseHfun):
             with Pool(processes=n_workers) as p:
                 results = p.map(_meshdata_task_worker, tasks)
             _logger.info("Stage 1: All meshdata() calls complete.")
+            _raise_on_failures('meshdata', results)
 
             for result in results:
-                if result['status'] == 'error':
-                    _logger.error(
-                        f"meshdata worker failed for loop index "
-                        f"{result['original_index']}: {result['error']}"
-                    )
-                    continue
                 stage1_results[result['original_index']] = \
                     result['output_path']
 
@@ -3631,8 +3608,10 @@ class HfunCollector(BaseHfun):
                         f"Could not remove temp file {npz_path}"
                     )
             else:
-                # Worker failed for this index — skip
-                continue
+                # Unreachable while every entry gets a stage 1 task and
+                # failures raise; never drop a size function silently.
+                raise RuntimeError(
+                    f"Stage 2: no meshdata result for entry {loop_idx}")
 
             # Clip against all previously-accumulated bounding boxes
             _logger.info("Removing bounds from hfun mesh...")
@@ -3828,8 +3807,10 @@ class HfunCollector(BaseHfun):
                         f"Could not remove temp file {npz_path}"
                     )
             else:
-                # Worker failed for this index — skip
-                continue
+                # Unreachable while every entry gets a stage 1 task and
+                # failures raise; never drop a size function silently.
+                raise RuntimeError(
+                    f"Stage 2: no meshdata result for entry {loop_idx}")
 
             # Clip against all previously-accumulated bounding boxes
             _logger.info("Removing bounds from hfun mesh...")
