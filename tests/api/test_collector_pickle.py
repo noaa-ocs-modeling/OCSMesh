@@ -260,19 +260,6 @@ class TestHfunCollectorExecution(unittest.TestCase):
         self.assertIsNotNone(meshdata)
         self.assertTrue(len(meshdata.values) > 0)
 
-    def test_topo_func_constraint_rejects_lambda(self):
-        """
-        Verify that TopoFuncConstraint rejects lambdas.
-        """
-        hfun = Hfun(self.raster_list, nprocs=2, hmin=10, hmax=1000)
-        with self.assertRaises(ValueError):
-            hfun.add_topo_func_constraint(
-                func=lambda i: abs(i) / 2.0,
-                upper_bound=-10,
-                value_type='min',
-            )
-
-
     def test_mixed_raster_mesh_constraint_filtering(self):
         """
         Verify that constraints are correctly filtered when applied to a mix of

@@ -14,6 +14,7 @@ import os
 import sys
 import shutil
 import gc
+import pickle
 import logging
 import warnings
 import tempfile
@@ -2261,13 +2262,34 @@ class HfunCollector(BaseHfun):
             raise NotImplementedError(
                 "This function does not support fast hfun method")
 
-        if self._can_distribute_refinements():
+        if (self._can_distribute_refinements()
+                and not self._constraints_picklable()):
+            # Every rank holds the same constraints, so all ranks take
+            # this branch and none waits in a collective dispatch.
+            warnings.warn(
+                "A size function constraint cannot be pickled (e.g. a"
+                " lambda passed to add_topo_func_constraint), so the"
+                " constraints are applied serially on the coordinator."
+                " Define the function at module level to distribute them.")
+            if self.execution_mode == 'mpi' and not MPIExecutor.is_manager():
+                return
+            self._apply_constraints_serial()
+        elif self._can_distribute_refinements():
             _logger.info("Applying constraints using PARALLEL method.")
             self._apply_constraints_parallel()
         else:
             _logger.info("Applying constraints using SERIAL method.")
             self._apply_constraints_serial()
 
+
+    def _constraints_picklable(self) -> bool:
+        """True when every constraint can be sent to a worker."""
+
+        try:
+            pickle.dumps([c for _, c in self._constraint_info_coll])
+        except (pickle.PicklingError, AttributeError, TypeError):
+            return False
+        return True
 
     def _apply_constraints_serial(self) -> None:
         """Internal: apply specified constraints serially.
@@ -2299,11 +2321,10 @@ class HfunCollector(BaseHfun):
 
         Notes
         -----
-        ``TopoFuncConstraint`` used to store an unpickleable lambda.  This
-        has been replaced with ``_default_topo_func`` (a named module-level
-        function), and user-supplied lambdas are now rejected with a clear
-        error at construction time.  All constraint types are therefore
-        pickleable and can be distributed via MPI or Pool without a fallback.
+        The default ``TopoFuncConstraint`` function is a module-level
+        function, so it can be pickled. A user function that cannot (a
+        lambda, a nested function) makes ``_apply_constraints`` use the
+        serial path instead.
 
         Returns
         -------
