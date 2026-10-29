@@ -621,6 +621,8 @@ class HfunRaster(BaseHfun, Raster):
             for i, window in enumerate(iter_windows):
                 hfun_values = self.get_values(band=1, window=window)
                 rast_values = self.raster.get_values(band=1, window=window)
+                nodata = self._topo_nodata(window)
+                original = hfun_values[nodata]
 
 
                 # Get locations
@@ -640,6 +642,7 @@ class HfunRaster(BaseHfun, Raster):
                 for constraint in constraint_list:
                     hfun_values = constraint.apply(
                             rast_values, hfun_values, locations=xy, crs=utm_crs)
+                hfun_values[nodata] = original
 
                 # Apply global constraints
                 if self.hmin is not None:
@@ -1381,6 +1384,15 @@ class HfunRaster(BaseHfun, Raster):
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
 
+    def _topo_nodata(self, window: rasterio.windows.Window) -> npt.NDArray[bool]:
+        """True where the input topography has no data in ``window``.
+
+        Topography-based refinements must leave these pixels alone:
+        a nodata value (e.g. -99999) is not an elevation.
+        """
+        with rasterio.open(self.raster.tmpfile) as src:
+            return src.read_masks(1, window=window) == 0
+
     def get_xy_memcache(
             self,
             window : rasterio.windows.Window,
@@ -1516,15 +1528,21 @@ class HfunRaster(BaseHfun, Raster):
                 else:
                     dx = self.dx
                     dy = self.dy
-                topobathy = self.raster.get_values(band=1, window=window)
+                topobathy = self.raster.get_values(
+                    band=1, window=window).astype(np.float64)
+                # NaN at nodata: the gradient next to a nodata pixel is
+                # then NaN (left unchanged below) instead of a huge slope
+                # towards e.g. -99999 that would force hmin there.
+                nodata = self._topo_nodata(window)
+                topobathy[nodata] = np.nan
                 dx, dy = np.gradient(topobathy, dx, dy)
-                with warnings.catch_warnings():
-                    # in case self._src.values is a masked array
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    dh = np.sqrt(dx**2 + dy**2)
-                dh = np.ma.masked_equal(dh, 0.)
-                hfun_values = np.abs((1./3.)*(topobathy/dh))
-                # values = values.filled(np.max(values))
+                dh = np.sqrt(dx**2 + dy**2)
+                # Flat (dh == 0) and nodata pixels get NaN: no size from the
+                # limiter there. A plain array, not a masked one: assigning
+                # into a masked array unmasks the element.
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    hfun_values = np.abs((1./3.)*(topobathy/dh))
+                hfun_values[~np.isfinite(hfun_values)] = np.nan
 
                 if hmin is not None:
                     hfun_values[np.where(hfun_values < hmin)] = hmin
@@ -1542,6 +1560,9 @@ class HfunRaster(BaseHfun, Raster):
                     idxs = np.where(topobathy < lower_bound)
                     hfun_values[idxs] = self.get_values(
                         band=1, window=window)[idxs]
+                unknown = np.isnan(hfun_values)
+                hfun_values[unknown] = self.get_values(
+                    band=1, window=window)[unknown]
 
 
                 # Apply global hmin and hmax
@@ -1612,9 +1633,10 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
                 hfun_values = self.get_values(band=1, window=window)
                 rast_values = self.raster.get_values(band=1, window=window)
-                hfun_values[np.where(np.logical_and(
-                    rast_values > lower_bound,
-                    rast_values < upper_bound))] = value
+                hfun_values[np.where(
+                    (rast_values > lower_bound)
+                    & (rast_values < upper_bound)
+                    & ~self._topo_nodata(window))] = value
                 hfun_values = np.minimum(
                     self.get_values(band=1, window=window),
                     hfun_values.astype(self.dtype(1)))

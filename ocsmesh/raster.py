@@ -78,6 +78,16 @@ def nbmean(values_ptr, len_values, result, data):
     return 1
 
 
+def _default_nodata(dtype: str) -> Union[int, float]:
+    """Nodata value for a raster that declares none (-99999 if it fits,
+    as in NCEI DEMs, else the smallest value of the type)."""
+    dtype = np.dtype(dtype)
+    if np.issubdtype(dtype, np.floating):
+        return -99999.0
+    info = np.iinfo(dtype)
+    return -99999 if info.min <= -99999 else int(info.min)
+
+
 class RasterPath:
     """Descriptor class for storing the path of original input raster
     """
@@ -1231,13 +1241,20 @@ class Raster:
 
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
+        # Without a declared nodata value, rasterio fills the pixels
+        # outside the shape with 0, which then reads as valid sea-level
+        # data. Declare one so they are masked like any other nodata.
+        nodata = self.src.nodata
+        if nodata is None:
+            nodata = _default_nodata(self.src.dtypes[0])
         out_image, out_transform = rasterio.mask.mask(
-            self.src, geom.geoms, crop=True)
+            self.src, geom.geoms, crop=True, nodata=nodata)
         meta_update = {
             "driver": "GTiff",
             "height": out_image.shape[1],
             "width": out_image.shape[2],
-            "transform": out_transform
+            "transform": out_transform,
+            "nodata": nodata,
             }
 
         with self.modifying_raster(**meta_update) as dest:
