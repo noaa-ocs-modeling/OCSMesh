@@ -272,6 +272,13 @@ class HfunRaster(BaseHfun, Raster):
             pathlib.Path(memfile_path).unlink(missing_ok=True)
 
 
+    def _resolution_m(self) -> float:
+        """Approximate x pixel size in metres."""
+
+        if self.crs.is_geographic:
+            return abs(self.dx) * 111_000
+        return abs(self.dx) * self.crs.axis_info[0].unit_conversion_factor
+
     def meshdata(
             self,
             window: Optional[rasterio.windows.Window] = None,
@@ -339,20 +346,17 @@ class HfunRaster(BaseHfun, Raster):
         # points per tile instead of 65 M. For coarser DEMs (e.g. GEBCO 15"
         # ≈ 460 m/px): stride = 1 (no subsampling needed, field is already small).
         #
-        # Resolution estimate: 1 degree ≈ 111,000 m at mid-latitudes. This is
-        # accurate to ~0.5 % for the STOFS domain and is intentionally a simple
-        # approximation to avoid a pyproj round-trip per tile. Callers can always
-        # pass an explicit stride= to override.
-        #
-        # NOTE: WHAT IF THE DEM IS NOT IN DEGREES AND/OR UNITS AS IN FT NOT METERS?
+        # Resolution in metres: for a geographic CRS 1 degree ≈ 111,000 m
+        # (simple and conservative: it ignores the cos(lat) shrink of dx);
+        # for a projected CRS the axis unit (m, ft, ...) is converted.
+        # Callers can always pass an explicit stride= to override.
         if stride is None and self.hmin is not None:
-            dem_res_m = abs(self.dx) * 111_000  # degrees → metres (approx)
+            dem_res_m = self._resolution_m()
             if dem_res_m > 0:
                 stride = max(1, int(self.hmin / dem_res_m / 2))
                 _logger.info(
                     f"Auto-computed stride={stride} "
-                    f"(hmin={self.hmin} m, dem_res≈{dem_res_m:.1f} m/px, "
-                    f"dx={self.dx:.6f} deg)"
+                    f"(hmin={self.hmin} m, dem_res≈{dem_res_m:.1f} m/px)"
                 )
 
         tria_list = []
