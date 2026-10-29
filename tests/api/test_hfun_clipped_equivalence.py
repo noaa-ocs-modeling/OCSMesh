@@ -73,8 +73,9 @@ class TestClippedRasterEquivalence(unittest.TestCase):
     def test_topo_constraint(self):
         self._check('topo_constraint')
 
-    def test_nothing_finer_than_hmax_outside_aoi(self):
-        """Outside the AOI the topography is nodata, so no refinement applies there."""
+    def test_no_sizes_outside_aoi(self):
+        """Outside the AOI the topography is nodata: no refinement applies
+        there, and the composite has no nodes there at all."""
         for mode in multitile.available_modes():
             stats = multitile.meshdata_stats(
                 self.paths, mode, aoi=self.aoi, configure=_depth_bands)
@@ -89,8 +90,8 @@ class TestClippedRasterEquivalence(unittest.TestCase):
             outside = ~contains_xy(self.aoi.buffer(0.01),
                                    md.coords[:, 0], md.coords[:, 1])
             with self.subTest(mode=mode):
-                self.assertTrue(outside.any())
                 self.assertEqual(int(np.sum(values[outside] < multitile.HMAX)), 0)
+                self.assertEqual(int(outside.sum()), 0)
 
 
 if __name__ == '__main__':

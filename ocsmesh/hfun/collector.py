@@ -40,6 +40,7 @@ from shapely.geometry import (
     Polygon,
     GeometryCollection,
 )
+import shapely
 from shapely import ops
 from rasterio.transform import from_origin
 from rasterio.warp import reproject, Resampling
@@ -1045,6 +1046,81 @@ def _task_topo_path(hfun: HfunRaster) -> str:
     raster was never modified.
     """
     return str(hfun.raster.tmpfile)
+
+
+class _Footprint:
+    """Where one size function provides sizes, for compositing.
+
+    Raster size functions cover the pixels where their (clipped)
+    topography has valid data, so a higher-priority tile's nodata margin
+    or clipped-away corner no longer hides a lower-priority tile there
+    (that bbox-based rule left strips of the wrong size along tile
+    edges). Other size functions cover their mesh bounding box.
+    """
+
+    def __init__(self, topo_path=None, bbox=None):
+        self._topo_path = None if topo_path is None else str(topo_path)
+        self._bbox = bbox
+        if self._topo_path is not None:
+            with rasterio.open(self._topo_path) as src:
+                self._crs = src.crs
+                self._transform = src.transform
+                self._shape = (src.height, src.width)
+
+    @classmethod
+    def of(cls, hfun, meshdata_4326: MeshData) -> '_Footprint':
+        if isinstance(hfun, HfunRaster):
+            return cls(topo_path=_task_topo_path(hfun))
+        return cls(bbox=Mesh(meshdata_4326).get_bbox(crs='EPSG:4326'))
+
+    def covers(self, lonlat: np.ndarray) -> np.ndarray:
+        """Boolean per EPSG:4326 point: is it inside this footprint?"""
+        if self._topo_path is None:
+            return shapely.intersects_xy(self._bbox, lonlat[:, 0], lonlat[:, 1])
+        x, y = lonlat[:, 0], lonlat[:, 1]
+        if not CRS.from_user_input(self._crs).equals(CRS.from_epsg(4326)):
+            x, y = Transformer.from_crs(
+                'EPSG:4326', self._crs, always_xy=True).transform(x, y)
+        inv = ~self._transform
+        col, row = inv * (np.asarray(x), np.asarray(y))
+        col, row = np.asarray(col), np.asarray(row)
+        height, width = self._shape
+        # Size function nodes lie on the raster edge too (and a round trip
+        # through UTM moves them by ~1e-7 deg): up to half a pixel outside
+        # counts as the edge pixel.
+        inside = ((col >= -0.5) & (col < width + 0.5)
+                  & (row >= -0.5) & (row < height + 0.5))
+        col = np.clip(np.floor(col), 0, width - 1).astype(np.int64)
+        row = np.clip(np.floor(row), 0, height - 1).astype(np.int64)
+        result = np.zeros(len(lonlat), dtype=bool)
+        if not inside.any():
+            return result
+        r0, r1 = row[inside].min(), row[inside].max() + 1
+        c0, c1 = col[inside].min(), col[inside].max() + 1
+        with rasterio.open(self._topo_path) as src:
+            mask = src.read_masks(
+                1, window=rasterio.windows.Window(c0, r0, c1 - c0, r1 - r0))
+        result[inside] = mask[row[inside] - r0, col[inside] - c0] > 0
+        return result
+
+
+def _keep_nodes(meshdata: MeshData, keep: np.ndarray) -> MeshData:
+    """Subset of ``meshdata`` with the nodes in ``keep`` (and the
+    elements whose nodes are all kept)."""
+    new_index = np.full(len(keep), -1, dtype=np.int64)
+    new_index[keep] = np.arange(int(keep.sum()))
+    elems = {}
+    for name in ('tria', 'quad'):
+        old = np.asarray(getattr(meshdata, name))
+        if old.size:
+            old = old[np.all(keep[old], axis=1)]
+            elems[name] = new_index[old]
+        else:
+            elems[name] = None
+    values = np.asarray(meshdata.values)
+    return MeshData(coords=np.asarray(meshdata.coords)[keep],
+                    tria=elems['tria'], quad=elems['quad'],
+                    values=values[keep], crs=meshdata.crs)
 
 
 def _has_valid_data(raster: Raster) -> bool:
@@ -3394,6 +3470,26 @@ class HfunCollector(BaseHfun):
         return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
 
 
+    @staticmethod
+    def _resolve_overlaps(meshdata_hfun, hfun, footprints):
+        """Keep the nodes where ``hfun`` provides sizes and no
+        higher-priority input (``footprints``) does.
+
+        Returns the clipped meshdata and the footprint of ``hfun``.
+        ``meshdata_hfun`` must be in EPSG:4326.
+        """
+        footprint = _Footprint.of(hfun, meshdata_hfun)
+        lonlat = np.asarray(meshdata_hfun.coords)
+        if not len(lonlat):
+            return meshdata_hfun, footprint
+        keep = (footprint.covers(lonlat) if isinstance(hfun, HfunRaster)
+                else np.ones(len(lonlat), dtype=bool))
+        for higher in footprints:
+            keep &= ~higher.covers(lonlat)
+        if not keep.all():
+            meshdata_hfun = _keep_nodes(meshdata_hfun, keep)
+        return meshdata_hfun, footprint
+
     def _calculate_and_write_hfun_to_disk_serial(
             self,
             out_path: Union[str, Path],
@@ -3422,7 +3518,7 @@ class HfunCollector(BaseHfun):
         path_list = []
         file_counter = 0
         pid = os.getpid()
-        bbox_list = []
+        footprints = []  # higher-priority entries already written
 
         hfun_list = self._hfun_list[::-1]
         if self._base_mesh and self._base_as_hfun:
@@ -3448,17 +3544,9 @@ class HfunCollector(BaseHfun):
                 if meshdata_hfun.crs != dst_crs:
                     utils.reproject(meshdata_hfun, dst_crs)
 
-            # Get all previous bbox and clip to resolve overlaps
-            # removing all tria that have NODE in bbox because it's
-            # faster and so we can resolve all overlaps
-            _logger.info("Removing bounds from hfun mesh...")
-            for ibox in bbox_list:
-                meshdata_hfun = utils.clip_mesh_by_shape(
-                    meshdata_hfun,
-                    ibox,
-                    use_box_only=True,
-                    fit_inside=True,
-                    inverse=True)
+            _logger.info("Resolving overlaps with higher-priority inputs...")
+            meshdata_hfun, footprint = self._resolve_overlaps(
+                meshdata_hfun, hfun, footprints)
 
             if len(meshdata_hfun.coords) == 0:
                 _logger.debug("Hfun ignored due to overlap")
@@ -3473,7 +3561,7 @@ class HfunCollector(BaseHfun):
                 meshdata_hfun.values[meshdata_hfun.values > hmax] = hmax
 
             mesh = Mesh(meshdata_hfun)
-            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
+            footprints.append(footprint)
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
@@ -3523,7 +3611,7 @@ class HfunCollector(BaseHfun):
         path_list = []
         file_counter = 0
         pid = os.getpid()
-        bbox_list = []
+        footprints = []  # higher-priority entries already written
 
         hfun_list = self._hfun_list[::-1]
         if self._base_mesh and self._base_as_hfun:
@@ -3635,15 +3723,9 @@ class HfunCollector(BaseHfun):
                 raise RuntimeError(
                     f"Stage 2: no meshdata result for entry {loop_idx}")
 
-            # Clip against all previously-accumulated bounding boxes
-            _logger.info("Removing bounds from hfun mesh...")
-            for ibox in bbox_list:
-                meshdata_hfun = utils.clip_mesh_by_shape(
-                    meshdata_hfun,
-                    ibox,
-                    use_box_only=True,
-                    fit_inside=True,
-                    inverse=True)
+            _logger.info("Resolving overlaps with higher-priority inputs...")
+            meshdata_hfun, footprint = self._resolve_overlaps(
+                meshdata_hfun, hfun_list[loop_idx], footprints)
 
             if len(meshdata_hfun.coords) == 0:
                 _logger.debug("Hfun ignored due to overlap")
@@ -3660,7 +3742,7 @@ class HfunCollector(BaseHfun):
                     meshdata_hfun.values > hmax] = hmax
 
             mesh = Mesh(meshdata_hfun)
-            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
+            footprints.append(footprint)
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
@@ -3720,7 +3802,7 @@ class HfunCollector(BaseHfun):
         path_list = []
         file_counter = 0
         pid = os.getpid()
-        bbox_list = []
+        footprints = []  # higher-priority entries already written
 
         hfun_list = self._hfun_list[::-1]
         if self._base_mesh and self._base_as_hfun:
@@ -3834,15 +3916,9 @@ class HfunCollector(BaseHfun):
                 raise RuntimeError(
                     f"Stage 2: no meshdata result for entry {loop_idx}")
 
-            # Clip against all previously-accumulated bounding boxes
-            _logger.info("Removing bounds from hfun mesh...")
-            for ibox in bbox_list:
-                meshdata_hfun = utils.clip_mesh_by_shape(
-                    meshdata_hfun,
-                    ibox,
-                    use_box_only=True,
-                    fit_inside=True,
-                    inverse=True)
+            _logger.info("Resolving overlaps with higher-priority inputs...")
+            meshdata_hfun, footprint = self._resolve_overlaps(
+                meshdata_hfun, hfun_list[loop_idx], footprints)
 
             if len(meshdata_hfun.coords) == 0:
                 _logger.debug("Hfun ignored due to overlap")
@@ -3859,7 +3935,7 @@ class HfunCollector(BaseHfun):
                     meshdata_hfun.values > hmax] = hmax
 
             mesh = Mesh(meshdata_hfun)
-            bbox_list.append(mesh.get_bbox(crs="EPSG:4326"))
+            footprints.append(footprint)
             file_counter = file_counter + 1
             _logger.info(f'write mesh {file_counter} to file...')
             file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
