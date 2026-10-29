@@ -32,7 +32,10 @@ class TestPoolFailFast(unittest.TestCase):
         multitile.cleanup(cls.stack)
 
     def _assert_raises(self, configure, stage, run):
+        # Construction is collective under MPI; the Pool runs on rank 0.
         hfun = multitile.make_hfun(self.paths, 'parallel', configure=configure)
+        if not multitile.is_manager():
+            self.skipTest('Pool paths run on rank 0')
         with mock.patch('ocsmesh.hfun.collector._task_topo_path', _missing_topo):
             with self.assertRaisesRegex(RuntimeError, stage):
                 run(hfun)
