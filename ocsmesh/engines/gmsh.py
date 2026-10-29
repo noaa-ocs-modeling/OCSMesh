@@ -6,7 +6,9 @@ import uuid
 
 import numpy as np
 import geopandas as gpd
+import shapely
 from shapely.geometry import Polygon, MultiPolygon
+from shapely.validation import make_valid
 
 try:
     import gmsh
@@ -19,6 +21,26 @@ from ocsmesh.internal import MeshData
 from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 
 _logger = logging.getLogger(__name__)
+
+
+def _areal_union(shape: gpd.GeoSeries):
+    """Union of the areal parts of `shape`, made valid first.
+
+    ``make_valid`` and ``union_all`` on resampled or self-touching rings
+    can return a ``GeometryCollection`` that mixes polygons with
+    degenerate lines and points. Gmsh only meshes the polygons.
+    """
+    # Fix invalid geometries before union to prevent GEOSException
+    shape = shape.apply(lambda g: g if g.is_valid else make_valid(g))
+    union = shape.union_all()
+    parts = shapely.get_parts(union)
+    polys = [g for g in parts if isinstance(g, Polygon) and not g.is_empty]
+    if len(polys) < len(parts):
+        _logger.info("Dropped %d non-polygon part(s) of the shape before "
+                     "meshing.", len(parts) - len(polys))
+    if isinstance(union, (Polygon, MultiPolygon)):
+        return union
+    return shapely.union_all(polys)
 
 
 class GmshOptions(BaseMeshOptions):
@@ -78,15 +100,7 @@ class GmshEngine(BaseMeshEngine):
         seed: Optional[MeshData] = None,
     ) -> MeshData:
 
-        # Fix invalid geometries before union to prevent GEOSException
-        try:
-            from shapely.validation import make_valid
-            shape = shape.apply(
-                lambda g: make_valid(g) if not g.is_valid else g
-            )
-        except Exception:
-            pass
-        combined_shape = shape.union_all()
+        combined_shape = _areal_union(shape)
         if combined_shape.is_empty:
             raise ValueError("Input shape is empty.")
 
@@ -96,16 +110,10 @@ class GmshEngine(BaseMeshEngine):
                              "Hfun resolution (Engine-side)...")
                 temp_series = gpd.GeoSeries([combined_shape], crs=shape.crs)
                 resampled_series = utils.resample_geom_by_hfun(temp_series, sizing)
-                # Fix any invalid geometries before union_all to prevent
-                # GEOSException TopologyException on Lustre/HPC runs.
-                try:
-                    from shapely.validation import make_valid
-                    resampled_series = resampled_series.apply(
-                        lambda g: make_valid(g) if not g.is_valid else g
-                    )
-                except Exception:
-                    pass
-                combined_shape = resampled_series.union_all()
+                combined_shape = _areal_union(resampled_series)
+                if combined_shape.is_empty:
+                    raise ValueError(
+                        "Boundary resampling by Hfun produced an empty shape.")
             elif sizing is None:
                 _logger.warning("'adapt' boundary requested but no Hfun provided. "
                                 "Skipping adaptation.")

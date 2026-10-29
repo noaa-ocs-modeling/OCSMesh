@@ -150,6 +150,37 @@ class TestGmsh(unittest.TestCase):
         with self.assertRaises(ValueError):
             engine.generate(gpd.GeoSeries([empty_poly]))
 
+    def test_geometry_collection_meshes_areal_parts(self):
+        """make_valid on a ring with a zero-width spike gives a
+        GeometryCollection (polygon + line); only the polygon is meshed."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        spike = Polygon([(0, 0), (10, 0), (10, 10), (5, 10), (5, 15),
+                         (5, 10), (0, 10)])
+        stray_line = LineString([(20, 20), (30, 30)])
+        for shape in ([spike], [box(0, 0, 10, 10), stray_line]):
+            for bnd in ('fixed', 'exact', 'adapt'):
+                with self.subTest(shape=shape[-1].geom_type, bnd=bnd):
+                    engine = get_mesh_engine(
+                        'gmsh', bnd_representation=bnd, optimize_mesh=False)
+                    sizing = MeshData(
+                        coords=self.sizing_field.coords * 1.5,
+                        values=self.sizing_field.values * 2.0)
+                    mesh = engine.generate(gpd.GeoSeries(shape),
+                                           sizing=sizing)
+                    self.assertGreater(get_num_elements(mesh), 0)
+                    self.assertTrue(np.all(mesh.coords <= 10 + 1e-9))
+
+    def test_only_non_areal_parts_is_empty(self):
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        engine = get_mesh_engine('gmsh')
+        with self.assertRaises(ValueError):
+            engine.generate(gpd.GeoSeries([LineString([(0, 0), (1, 1)])]),
+                            sizing=0.5)
+
 
 class TestTriangle(unittest.TestCase):
     def setUp(self):
