@@ -120,6 +120,9 @@ class _RefinementContourInfoCollector:
 
         self._contours_info[contour_defn] = size_info
 
+    def __len__(self) -> int:
+        return len(self._contours_info)
+
     def __iter__(self) -> Tuple[Contour, dict]:
         """Iterator method for this collection object
 
@@ -315,6 +318,9 @@ class _RefinementShapeInfoCollector:
 
         self._shape_info[shape_defn] = size_info
 
+    def __len__(self) -> int:
+        return len(self._shape_info)
+
     def __iter__(self) -> Tuple[Union[Patch, LineFeature], dict]:
         """Iterator method for this collection object
 
@@ -422,6 +428,9 @@ class _ChannelRefineInfoCollector:
         """
 
         self._ch_info_dict[channel_defn] = size_info
+
+    def __len__(self) -> int:
+        return len(self._ch_info_dict)
 
     def __iter__(self) -> Tuple[Channel, dict]:
         """Iterator method for this collection object
@@ -2396,6 +2405,10 @@ class HfunCollector(BaseHfun):
         _apply_shape_refinements :
         """
 
+        # Every rank holds the same definitions, so all ranks skip together
+        # and no collective dispatch is left waiting.
+        if len(self._contour_info_coll) == 0:
+            return
         if self._can_distribute_refinements():
             _logger.info("Applying contours using PARALLEL method.")
             self._apply_shape_refinements('contours', apply_to)
@@ -2769,6 +2782,10 @@ class HfunCollector(BaseHfun):
         _apply_shape_refinements :
         """
 
+        # Every rank holds the same definitions, so all ranks skip together
+        # and no collective dispatch is left waiting.
+        if len(self._ch_info_coll) == 0:
+            return
         if self._can_distribute_refinements():
             _logger.info("Applying channels using PARALLEL method.")
             self._apply_shape_refinements('channels', apply_to)
@@ -3268,6 +3285,10 @@ class HfunCollector(BaseHfun):
 
 
     def _apply_patch(self, apply_to: Optional[SizeFuncList] = None) -> None:
+        # Every rank holds the same definitions, so all ranks skip together
+        # and no collective dispatch is left waiting.
+        if len(self._refine_patch_info_coll) == 0:
+            return
         if self._can_distribute_refinements():
             _logger.info("Applying patches using PARALLEL method.")
             self._apply_patch_parallel(apply_to)
@@ -3348,6 +3369,10 @@ class HfunCollector(BaseHfun):
                         hfun.add_patch(shape, pool=p, **size_info)
 
     def _apply_linefeatures(self, apply_to=None):
+        # Every rank holds the same definitions, so all ranks skip together
+        # and no collective dispatch is left waiting.
+        if len(self._refine_line_info_coll) == 0:
+            return
         if self._can_distribute_refinements():
             _logger.info("Applying line features using PARALLEL method.")
             self._apply_linefeatures_parallel(apply_to)
