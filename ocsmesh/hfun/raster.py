@@ -269,7 +269,7 @@ class HfunRaster(BaseHfun, Raster):
     def __del__(self):
         super().__del__()
         for _, memfile_path in self._xy_cache.items():
-            pathlib.Path(memfile_path).unlink()
+            pathlib.Path(memfile_path).unlink(missing_ok=True)
 
 
     def meshdata(

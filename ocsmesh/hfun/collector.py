@@ -1308,6 +1308,11 @@ class HfunCollector(BaseHfun):
             self._work_dir = tempfile.mkdtemp(
                 prefix='hfun_collector_',
                 dir=os.environ.get('TMPDIR', tempfile.gettempdir()))
+        # Only rank 0 (manager) deletes _work_dir: all MPI ranks share it,
+        # and rank 0 still reads files workers wrote there. Decided here
+        # because __del__ can run at interpreter shutdown, when importing
+        # ocsmesh.mpi fails.
+        self._owns_work_dir = not _is_mpi_active() or MPIExecutor.is_manager()
         self._creator_pid = os.getpid()
         # meshdata() cache: (key, result). The key holds _state_version,
         # which every add_* call bumps, and the meshdata() kwargs, so a
@@ -1450,13 +1455,9 @@ class HfunCollector(BaseHfun):
         return True
 
     def __del__(self):
-        # CRITICAL: only rank 0 (manager) deletes _work_dir.
-        # All MPI ranks share the same _work_dir via bcast. If worker
-        # ranks delete it they destroy files rank 0 still needs to read.
-        from ocsmesh.mpi import MPIExecutor, _is_mpi_active
-        if _is_mpi_active() and not MPIExecutor.is_manager():
-            return
-        if (hasattr(self, '_work_dir')
+        # Attributes may be missing if __init__ failed part way.
+        if (getattr(self, '_owns_work_dir', False)
+                and hasattr(self, '_work_dir')
                 and hasattr(self, '_creator_pid')
                 and os.getpid() == self._creator_pid
                 and os.path.exists(self._work_dir)):
