@@ -200,23 +200,19 @@ class _RefinementContourCollector:
 
             for contour, crs in contour_defn.iter_contours():
                 file_counter = file_counter + 1
-                feather_path = out_dir / f"contour_{pid}_{file_counter}.feather"
-                crs_path = out_dir / f"crs_{pid}_{file_counter}.json"
-                gpd.GeoDataFrame(
-                    { 'geometry': [contour],
-                      'expansion_rate': size_info['expansion_rate'],
-                      'target_size': size_info['target_size'],
-                    },
-                    crs=crs).to_feather(feather_path)
-                gc.collect()
-                with open(crs_path, 'w') as fp:
-                    fp.write(crs.to_json())
-                self._container.append((feather_path, crs_path))
+                self._container.append(_write_shape_file(
+                    contour, crs, size_info,
+                    out_dir / f"contour_{pid}_{file_counter}.feather",
+                    out_dir / f"crs_{pid}_{file_counter}.json"))
 
 
     @property
     def files(self) -> List[Tuple[Path, Path]]:
         return list(self._container)
+
+    def set_files(self, files: List[Tuple[Path, Path]]) -> None:
+        """Use shape files detected elsewhere (e.g. by workers)."""
+        self._container[:] = files
 
 
     def __iter__(self) -> gpd.GeoDataFrame:
@@ -507,22 +503,18 @@ class _ChannelRefineCollector:
 
             for channels, crs in channel_defn.iter_channels():
                 file_counter = file_counter + 1
-                feather_path = out_dir / f"channels_{pid}_{file_counter}.feather"
-                crs_path = out_dir / f"crs_{pid}_{file_counter}.json"
-                gpd.GeoDataFrame(
-                    { 'geometry': [channels],
-                      'expansion_rate': size_info['expansion_rate'],
-                      'target_size': size_info['target_size'],
-                    },
-                    crs=crs).to_feather(feather_path)
-                gc.collect()
-                with open(crs_path, 'w') as fp:
-                    fp.write(crs.to_json())
-                self._container.append((feather_path, crs_path))
+                self._container.append(_write_shape_file(
+                    channels, crs, size_info,
+                    out_dir / f"channels_{pid}_{file_counter}.feather",
+                    out_dir / f"crs_{pid}_{file_counter}.json"))
 
     @property
     def files(self) -> List[Tuple[Path, Path]]:
         return list(self._container)
+
+    def set_files(self, files: List[Tuple[Path, Path]]) -> None:
+        """Use shape files detected elsewhere (e.g. by workers)."""
+        self._container[:] = files
 
     def __iter__(self):
         """Iterator method for this collection object
@@ -750,6 +742,54 @@ def _replay_shapes_task_worker(task: dict, method_name: str, shape_kwarg: str):
                 })
 
     return _refine_on_rebuilt_hfun(task, apply)
+
+
+def _write_shape_file(shape, crs, size_info, feather_path, crs_path):
+    """Write one detected shape and its CRS; returns the two paths."""
+
+    gpd.GeoDataFrame(
+        {'geometry': [shape],
+         'expansion_rate': size_info['expansion_rate'],
+         'target_size': size_info['target_size'],
+        },
+        crs=crs).to_feather(feather_path)
+    gc.collect()
+    with open(crs_path, 'w') as fp:
+        fp.write(crs.to_json())
+    return feather_path, crs_path
+
+
+def _detect_shapes_task_worker(task: dict):
+    """Detect one contour or channel definition on one raster.
+
+    The definition is sourceless; the worker attaches the clipped
+    topography and writes each detected shape the way the collectors'
+    ``calculate`` does, for the coordinator to collect in order.
+    """
+
+    try:
+        raster = Raster(task['topo_path'], chunk_size=task['chunk_size'],
+                        overlap=task['overlap'])
+        defn = deepcopy(task['defn'])
+        defn.add_source(raster)
+        shapes = (defn.iter_contours() if task['op'] == 'contour_detect'
+                  else defn.iter_channels())
+        files = [
+            _write_shape_file(shape, crs, task['size_info'],
+                              f"{task['prefix']}_{k}.feather",
+                              f"{task['prefix']}_{k}.json")
+            for k, (shape, crs) in enumerate(shapes)]
+        return {
+            'status': 'success',
+            'original_index': task['original_index'],
+            'files': files,
+        }
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {
+            'status': 'error',
+            'original_index': task['original_index'],
+            'error': traceback.format_exc(),
+        }
 
 
 def _contours_task_worker(task: dict):
@@ -998,6 +1038,8 @@ def _raise_on_failures(kind: str, results: list) -> None:
 MPIExecutor.register_op('meshdata', _meshdata_task_worker)
 MPIExecutor.register_op('contours', _contours_task_worker)
 MPIExecutor.register_op('channels', _channels_task_worker)
+MPIExecutor.register_op('contour_detect', _detect_shapes_task_worker)
+MPIExecutor.register_op('channel_detect', _detect_shapes_task_worker)
 MPIExecutor.register_op('flow_limiter', _flow_limiter_task_worker)
 MPIExecutor.register_op('const_val', _const_val_task_worker)
 MPIExecutor.register_op('constraints', _constraints_task_worker)
@@ -2267,6 +2309,56 @@ class HfunCollector(BaseHfun):
         'contours': ('_contour_coll', 'add_feature', 'feature'),
         'channels': ('_channels_coll', 'add_patch', 'multipolygon'),
     }
+    # kind: (definition collection, detection op)
+    _SHAPE_DETECTION = {
+        'contours': ('_contour_info_coll', 'contour_detect'),
+        'channels': ('_ch_info_coll', 'channel_detect'),
+    }
+
+    def _detect_shapes(self, kind, raster_hfun_list, shape_dir):
+        """Detect the contours or channels on the rasters, distributed.
+
+        One task per definition and raster; the shape files are returned
+        in the order serial detection (``calculate``) writes them, so
+        the refinements are replayed identically. Collective under MPI:
+        worker ranks pass empty arguments and get an empty list.
+        """
+
+        coll = getattr(self, self._SHAPE_REFINEMENTS[kind][0])
+        info_attr, op = self._SHAPE_DETECTION[kind]
+        info = getattr(self, info_attr)
+        # Definitions given their own sources are detected on those
+        # sources, on the coordinator. Every rank holds the same
+        # definitions, so every rank takes the same branch.
+        if any(defn.has_source for defn, _ in info):
+            if not self._is_coordinator():
+                return []
+            coll.calculate(raster_hfun_list, shape_dir)
+            return coll.files
+
+        tasks = []
+        if self._is_coordinator():
+            for d_idx, (defn, size_info) in enumerate(info):
+                for r_idx, hfun in enumerate(raster_hfun_list):
+                    tasks.append({
+                        'op': op,
+                        'original_index': len(tasks),
+                        'defn': defn,
+                        'size_info': size_info,
+                        'topo_path': _task_topo_path(hfun),
+                        'chunk_size': hfun.raster.chunk_size,
+                        'overlap': hfun.raster.overlap,
+                        'prefix': os.path.join(
+                            shape_dir, f'{kind}_{d_idx}_{r_idx}'),
+                    })
+        results = self._dispatch_refinement_tasks(
+            op, tasks, f'{kind} detection')
+        if results is None:
+            return []  # MPI worker rank
+        files = [f for r in sorted(results, key=lambda r: r['original_index'])
+                 for f in r['files']]
+        coll.set_files(files)
+        return files
 
     def _can_distribute_refinements(self) -> bool:
         """True when contours/channels may go through the task path.
@@ -2481,6 +2573,7 @@ class HfunCollector(BaseHfun):
 
         tasks = []
         serial_targets = []
+        raster_hfun_list = []
         shape_dir = None
         try:
             if is_coordinator:
@@ -2505,10 +2598,11 @@ class HfunCollector(BaseHfun):
                 shape_dir = os.path.join(self._work_dir, kind)
                 os.makedirs(shape_dir, exist_ok=True)
 
-                # Shapes are ONLY extracted from raster sources
-                coll.calculate(raster_hfun_list, shape_dir)
-                shape_file_list = coll.files
+            # Shapes are ONLY extracted from raster sources (collective)
+            shape_file_list = self._detect_shapes(
+                kind, raster_hfun_list, shape_dir)
 
+            if is_coordinator:
                 tasks = [
                     self._raster_task(kind, idx, hfun,
                                       shape_files=shape_file_list)

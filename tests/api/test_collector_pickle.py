@@ -646,31 +646,40 @@ class TestHfunCollectorExecution(unittest.TestCase):
         heterogeneous SLURM allocations where the coordinator and workers
         have different core counts.
         """
+        # The mocked communicator is "rank 0" and broadcasts the real
+        # work dir path (a MagicMock path would be created in the cwd).
+        comm = mock_get_mpi.return_value.COMM_WORLD
+        comm.Get_rank.return_value = 0
+        comm.bcast.side_effect = lambda value, root=0: value
+        # Detection returns no shapes; the refinement tasks are checked.
+        mock_dispatch.side_effect = lambda kind, tasks, label=None: (
+            [] if kind.endswith('_detect') else None)
+
         hfun = Hfun(self.raster_list, nprocs=8)
         # Use add_contour with a level so it correctly populates the
         # _refine_contour_info_coll and triggers _apply_shape_refinements
         hfun.add_contour(level=0.0, target_size=1, expansion_rate=0.1)
 
+        def contour_tasks():
+            calls = [c for c in mock_dispatch.call_args_list
+                     if c.args[0] == 'contours']
+            self.assertEqual(len(calls), 1)
+            tasks = calls[0].args[1]  # (kind, tasks)
+            self.assertTrue(len(tasks) > 0)
+            return tasks
+
         # 1. MPI Mode
         hfun.execution_mode = 'mpi'
         hfun._apply_contours()
-        
-        mock_dispatch.assert_called_once()
-        tasks = mock_dispatch.call_args[0][1] # (kind, tasks)
-        self.assertTrue(len(tasks) > 0)
-        for task in tasks:
+        for task in contour_tasks():
             self.assertEqual(task['worker_nprocs'], -1)
-            
+
         mock_dispatch.reset_mock()
-            
+
         # 2. Parallel mode
         hfun.execution_mode = 'parallel'
         hfun._apply_contours()
-        
-        mock_dispatch.assert_called_once()
-        tasks = mock_dispatch.call_args[0][1]
-        self.assertTrue(len(tasks) > 0)
-        for task in tasks:
+        for task in contour_tasks():
             self.assertEqual(task['worker_nprocs'], 1)
 
 
