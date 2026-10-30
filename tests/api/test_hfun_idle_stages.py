@@ -46,7 +46,7 @@ class TestIdleStagesSkipped(unittest.TestCase):
             if mode == 'serial':
                 expected = []
             else:
-                expected = ['patch']
+                expected = ['const_val', 'patch']
             with self.subTest(mode=mode):
                 self.assertEqual(kinds, expected)
 

@@ -713,7 +713,7 @@ class TestHfunCollectorExecution(unittest.TestCase):
         Verify that add_feature() (line features) produces equivalent
         results in serial vs parallel modes.
 
-        Exercises: _apply_linefeatures() -> _apply_linefeatures_parallel()
+        Exercises: _apply_linefeatures() -> _apply_user_shapes('linefeature')
         """
         nprocs = 2
         line = geometry.LineString([(0.2, 0.5), (0.8, 0.5)])
