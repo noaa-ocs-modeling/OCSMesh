@@ -2426,3 +2426,47 @@ def quads_from_tri(msht: MeshData) -> MeshData:
     finalize_mesh(new_mesh)
 
     return order_mesh(new_mesh)
+
+
+def clip_elevation(
+        mesh,
+        min_elevation: Union[float, None] = None,
+        max_elevation: Union[float, None] = None,
+        ) -> None:
+    """Clamp the node elevations of a mesh, in place.
+
+    Values above `max_elevation` become `max_elevation` and values
+    below `min_elevation` become `min_elevation`; NaN stays NaN. For
+    example ``clip_elevation(mesh, -6000, 10)`` caps depths at 6000 m
+    and land at 10 m above the datum.
+
+    Parameters
+    ----------
+    mesh : Mesh or MeshData
+        Mesh whose values are clipped (its ``meshdata`` for a Mesh).
+    min_elevation : float or None, default=None
+        Lower bound; None leaves the values unbounded below.
+    max_elevation : float or None, default=None
+        Upper bound; None leaves the values unbounded above.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If both bounds are None, or `min_elevation` > `max_elevation`.
+    """
+
+    if min_elevation is None and max_elevation is None:
+        raise ValueError(
+            "Specify min_elevation, max_elevation or both.")
+    if (min_elevation is not None and max_elevation is not None
+            and min_elevation > max_elevation):
+        raise ValueError(
+            f"min_elevation ({min_elevation}) is greater than"
+            f" max_elevation ({max_elevation}).")
+
+    msht = getattr(mesh, 'meshdata', mesh)
+    msht.values = np.clip(msht.values, min_elevation, max_elevation)
