@@ -103,8 +103,8 @@ class HfunInputRaster:
             raise TypeError(f'Argument raster must be of type {Raster}, not '
                             f'type {type(raster)}.')
         obj.__dict__['raster'] = raster
-        obj._chunk_size = raster.chunk_size
-        obj._overlap = raster.overlap
+        obj._chunk_size = raster.chunk_size  # pylint: disable=protected-access
+        obj._overlap = raster.overlap  # pylint: disable=protected-access
 
     def __get__(self, obj, objtype=None) -> Raster:
         return obj.__dict__['raster']

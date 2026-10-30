@@ -11,7 +11,6 @@ without having to worry about the details of merging the output size
 functions defined on each DEM or mesh.
 """
 import os
-import sys
 import shutil
 import gc
 import pickle
@@ -900,14 +899,15 @@ def _load_meshdata_npz(npz_path: str, retries: int = 30,
             f"{retries * delay:.1f}s: {npz_path}")
 
     # The context manager closes the file before it is removed (Windows)
-    with np.load(npz_path, allow_pickle=False) as data:
-        tria = data['tria'].copy() if data['tria'].size > 0 else None
-        quad = data['quad'].copy() if data['quad'].size > 0 else None
-        crs_str = str(data['crs'])
-        meshdata = MeshData(
-            coords=data['coords'].copy(), tria=tria, quad=quad,
-            values=data['values'].copy(),
-            crs=CRS.from_user_input(crs_str) if crs_str else None)
+    with np.load(npz_path, allow_pickle=False) as npz:
+        data = {key: npz[key] for key in npz.files}
+    crs_str = str(data['crs'])
+    meshdata = MeshData(
+        coords=data['coords'],
+        tria=data['tria'] if data['tria'].size > 0 else None,
+        quad=data['quad'] if data['quad'].size > 0 else None,
+        values=data['values'],
+        crs=CRS.from_user_input(crs_str) if crs_str else None)
     try:
         os.remove(npz_path)
     except OSError:
@@ -3152,7 +3152,7 @@ class HfunCollector(BaseHfun):
         """
         footprint = _Footprint.of(hfun, meshdata_hfun)
         lonlat = np.asarray(meshdata_hfun.coords)
-        if not len(lonlat):
+        if lonlat.shape[0] == 0:
             return meshdata_hfun, footprint
         keep = (footprint.covers(lonlat) if isinstance(hfun, HfunRaster)
                 else np.ones(len(lonlat), dtype=bool))
