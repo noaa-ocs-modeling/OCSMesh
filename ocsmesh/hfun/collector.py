@@ -1096,7 +1096,9 @@ class HfunCollector(BaseHfun):
             method: Literal['exact', 'fast'] = 'exact',
             base_as_hfun: bool = True,
             base_shape: Optional[Union[Polygon, MultiPolygon]] = None,
-            base_shape_crs: Union[str, CRS] = 'EPSG:4326'
+            base_shape_crs: Union[str, CRS] = 'EPSG:4326',
+            execution_mode: Optional[
+                Literal['serial', 'parallel', 'mpi']] = None,
             ) -> None:
         """Initialize a collector size function object
 
@@ -1112,16 +1114,27 @@ class HfunCollector(BaseHfun):
         base_as_hfun : bool, default=True
         base_shape: Polygon or MultiPolygon or None, default=None
         base_shape_crs: str or CRS, default='EPSG:4326'
+        execution_mode : {'serial', 'parallel', 'mpi'} or None, default=None
+            How refinements and meshdata are computed (see the
+            ``execution_mode`` property). Under an MPI launcher, 'mpi' or
+            None makes the ranks share one collector (rank 0 holds the
+            size functions; construction is collective), while 'serial'
+            or 'parallel' gives every rank its own independent collector.
         """
 
         # NOTE: Input Hfuns and their Rasters can get modified
 
-         # Add a persistent working directory for this instance's outputs
-        # CRITICAL: all MPI ranks must share the SAME _work_dir path.
-        # tempfile.mkdtemp() creates a DIFFERENT directory on each rank,
-        # so we create it on rank 0 and broadcast the path to workers.
-        from ocsmesh.mpi import MPIExecutor, _is_mpi_active, _get_mpi
-        if _is_mpi_active():
+        # Under an MPI launcher the ranks share this collector unless a
+        # per-rank mode is given: rank 0 owns the size functions, and the
+        # other ranks only run the tasks it sends.
+        self._rank_independent = execution_mode in ('serial', 'parallel')
+        self._shared_ranks = _is_mpi_active() and not self._rank_independent
+
+        # Add a persistent working directory for this instance's outputs
+        # CRITICAL: ranks sharing the collector must share the SAME
+        # _work_dir path. tempfile.mkdtemp() creates a DIFFERENT
+        # directory on each rank, so rank 0 creates it and broadcasts it.
+        if self._shared_ranks:
             _mpi = _get_mpi()
             _comm = _mpi.COMM_WORLD
             if _comm.Get_rank() == 0:
@@ -1142,7 +1155,8 @@ class HfunCollector(BaseHfun):
         # and rank 0 still reads files workers wrote there. Decided here
         # because __del__ can run at interpreter shutdown, when importing
         # ocsmesh.mpi fails.
-        self._owns_work_dir = not _is_mpi_active() or MPIExecutor.is_manager()
+        self._owns_work_dir = (not self._shared_ranks
+                               or MPIExecutor.is_manager())
         self._creator_pid = os.getpid()
         # meshdata() cache: (key, result). The key holds _state_version,
         # which every add_* call bumps, and the meshdata() kwargs, so a
@@ -1196,18 +1210,11 @@ class HfunCollector(BaseHfun):
         #
         # TODO: CRS considerations
 
-        # MPI: only rank 0 clips tiles to avoid N×M temporary-file writes
-        # that can overwhelm shared filesystem metadata servers.
-        #
-        # Workers still build _hfun_list (with unclipped HfunRaster objects)
-        # so that serial/parallel Hfun objects constructed inside an mpiexec
-        # job continue to work correctly on all ranks. The memory used by
-        # this redundant work is freed when execution_mode is set to 'mpi'.
-        #
-        # TODO: A cleaner fix would be to know the execution mode upfront
-        # (e.g. by passing it to __init__) so workers could skip building
-        # _hfun_list entirely instead of building it and dropping it later.
-        is_mpi_worker = _is_mpi_active() and not MPIExecutor.is_manager()
+        # Ranks sharing the collector: only rank 0 builds (and clips) the
+        # raster size functions, which avoids N x M temporary-file writes
+        # on the shared filesystem. Workers rebuild a raster from file
+        # paths inside each task instead.
+        is_mpi_worker = self._shared_ranks and not MPIExecutor.is_manager()
 
         for in_item in in_list:
             # Add supports(ext) to each hfun type?
@@ -1247,6 +1254,9 @@ class HfunCollector(BaseHfun):
                     raise TypeError("Input file extension not supported!")
 
             self._hfun_list.append(hfun) # pylint: disable=E0606
+
+        if execution_mode is not None:
+            self.execution_mode = execution_mode
 
 
     def _clip_to_base(self, raster: Raster) -> bool:
@@ -1390,9 +1400,9 @@ class HfunCollector(BaseHfun):
         return composite_hfun
 
     def _meshdata_pipeline(self, **kwargs) -> MeshData:
-        # Under MPI, only rank 0 runs serial/parallel pipelines.
-        # NOTE: Necessary because of current is_mpi_worker checks in HfuncCollector __init__
-        if _is_mpi_active() and not MPIExecutor.is_manager():
+        # Ranks sharing the collector: only rank 0 holds the rasters, so
+        # only rank 0 runs the serial/parallel pipelines.
+        if self._shared_ranks and not MPIExecutor.is_manager():
             return None
 
         # Just dummy object
@@ -2655,6 +2665,13 @@ class HfunCollector(BaseHfun):
                 "Execution mode must be 'serial', 'parallel', or 'mpi'"
             )
 
+        if (mode == 'mpi' and _is_mpi_active()
+                and getattr(self, '_rank_independent', False)):
+            # Its ranks built separate size function lists and work dirs.
+            raise ValueError(
+                "This collector was created with a per-rank execution mode;"
+                " create it with execution_mode='mpi' (or None) to use MPI.")
+
         if mode == 'mpi':
             if not _is_mpi_env_detected():
                 # Not running under mpiexec/srun — can't use MPI.
@@ -2692,10 +2709,8 @@ class HfunCollector(BaseHfun):
 
         self._execution_mode = mode
 
-        # If _hfun_list was already populated in __init__ (because mode was
-        # not known yet) , clear it on worker ranks — they don't use it.
-        # TODO: A cleaner fix would be to know the execution mode upfront
-        # in __init__ to avoid allocating this redundant memory in the first place.
+        # Worker ranks never use the list in MPI mode (rank 0 sends them
+        # file paths); drop the mesh size functions they still hold.
         if (mode == 'mpi'
                 and _is_mpi_active()
                 and not MPIExecutor.is_manager()):
