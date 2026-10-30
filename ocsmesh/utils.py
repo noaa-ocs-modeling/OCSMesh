@@ -1363,9 +1363,15 @@ def estimate_bounds_utm(bounds, crs="EPSG:4326"):
     if in_crs.is_geographic:
         x0, y0, x1, y1 = bounds
 
-        # Safety: clamp values to valid earth range to prevent crashes on edge cases
-        # or return None if they are obviously projected coordinates masquerading as Geo
+        # Outside the valid range (e.g. 0-360 longitudes, or projected
+        # coordinates labelled geographic) there is no UTM zone; callers
+        # then work in degrees, so say so.
         if y0 < -90 or y1 > 90 or x0 < -180 or x1 > 180:
+            _logger.debug(f"estimate_bounds_utm: bounds {bounds}")
+            warnings.warn(
+                "Geographic bounds outside [-180, 180] x [-90, 90]: no UTM"
+                " CRS is estimated, so distances and sizes are computed in"
+                " degrees.")
             return None
 
         _, _, number, letter = utm.from_latlon(
