@@ -2038,11 +2038,32 @@ def raster_from_numpy(
     mgrid, # Needs to have ij indexing!
     crs=CRS.from_epsg(4326)
 ) -> None:
+    """Write ``data`` to a GeoTIFF on the grid given by ``mgrid``.
+
+    Parameters
+    ----------
+    filename : path-like
+        Output file.
+    data : 2D array, or 3D array with the bands last
+        Values, written as is: rows along y (from the first y value),
+        columns along x. With shape ``(len(y), len(x))`` the pixel
+        centres are exactly the ``mgrid`` points; any other shape fills
+        the same extent with a different resolution.
+    mgrid : sequence of two 2D arrays
+        ``np.mgrid[x0:x1:dx, y0:y1:dy]`` (ij indexing): ``mgrid[0][:, 0]``
+        are the x and ``mgrid[1][0, :]`` the y coordinates. Only the
+        first and last of each set the extent.
+    crs : CRS or anything CRS.from_user_input accepts, default EPSG:4326
+
+    Raises
+    ------
+    ValueError
+        If ``data`` is not 2D or 3D.
+    """
     x = mgrid[0][:, 0]
     y = mgrid[1][0, :]
     res_x = (x[-1] - x[0]) / data.shape[1]
     res_y = (y[-1] - y[0]) / data.shape[0]
-    # TODO: Mistake in transformation if x and y extent are different?
     transform = rio.transform.Affine.translation(
         x[0], y[0]
     ) * rio.transform.Affine.scale(res_x, res_y)

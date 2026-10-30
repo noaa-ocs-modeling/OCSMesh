@@ -127,6 +127,21 @@ class FinalizeMesh(unittest.TestCase):
 
         utils.finalize_mesh(meshdata)
 
+        # Without sieve_area only the largest piece is kept: the small
+        # rectangle is dropped, the main one is untouched (holes, quads)
+        self.assertEqual(len(utils.get_mesh_polygons(meshdata).geoms), 1)
+        self.assertEqual(len(meshdata.coords), len(meshdata1.coords))
+        self.assertEqual(len(meshdata.tria), len(meshdata1.tria))
+        self.assertEqual(len(meshdata.quad), len(meshdata1.quad))
+        self.assertTrue(np.all(np.abs(meshdata.coords) <= 2))
+        # and the result is clean
+        used = np.unique(np.concatenate(
+            [meshdata.tria.ravel(), meshdata.quad.ravel()]))
+        self.assertEqual(len(used), len(meshdata.coords))
+        self.assertFalse(utils.has_pinched_nodes(meshdata))
+        self.assertEqual(
+            len(np.unique(meshdata.coords, axis=0)), len(meshdata.coords))
+
 
     def test_cleanup_duplicate(self):
 
@@ -702,8 +717,34 @@ class CreateRasterFromNumpy(unittest.TestCase):
             del rast
 
     def test_diff_extent_x_n_y(self):
-        # TODO: Test when x and y extent are different
-        pass
+        # 20 x values, 10 y values: data is (len(y), len(x))
+        in_rast_xy = np.mgrid[1:3:0.1, -1:0:0.1]
+        in_rast_z = np.random.random(in_rast_xy[0].T.shape)
+
+        with tempfile.TemporaryDirectory() as tdir:
+            utils.raster_from_numpy(
+                Path(tdir) / 'test_rast.tiff',
+                data=in_rast_z, mgrid=in_rast_xy, crs=4326)
+            rast = Raster(Path(tdir) / 'test_rast.tiff')
+            self.assertEqual(rast.values.shape, (10, 20))
+            self.assertTrue(np.allclose(
+                in_rast_xy.transpose([2, 1, 0]).reshape(-1, 2),
+                rast.get_xy()))
+            self.assertTrue(np.all(in_rast_z == rast.values))
+            del rast
+
+            # other shapes fill the same extent at another resolution
+            utils.raster_from_numpy(
+                Path(tdir) / 'other.tiff',
+                data=np.random.random(in_rast_xy[0].shape),
+                mgrid=in_rast_xy, crs=4326)
+            other = Raster(Path(tdir) / 'other.tiff')
+            self.assertEqual(other.values.shape, (20, 10))
+            xy = other.get_xy()
+            self.assertTrue(np.allclose(
+                [xy[:, 0].min(), xy[:, 0].max(), xy[:, 1].min(), xy[:, 1].max()],
+                [1.0, 2.9, -1.0, -0.1]))
+            del other
 
     
     def test_data_masking(self):
@@ -748,7 +789,7 @@ class CreateRasterFromNumpy(unittest.TestCase):
 
     def test_multiband_raster_data(self):
         nbands = 5
-        in_data = np.ones((3, 4, nbands))
+        in_data = np.ones((4, 3, nbands))   # (len(y), len(x), bands)
         for i in range(nbands):
             in_data[:, :, i] *= i
         in_rast_xy = np.mgrid[-74:-71:1, 40.5:40.9:0.1]
