@@ -22,7 +22,7 @@ import traceback
 from pathlib import Path
 from time import time, sleep
 from multiprocessing import Pool
-from copy import copy, deepcopy
+from copy import deepcopy
 from typing import (
     Union, Sequence, List, Tuple, Iterable, Any, Optional, Callable, Dict)
 try:
@@ -191,9 +191,10 @@ class _RefinementContourCollector:
         self._container.clear()
         for contour_defn, size_info in self._contours_info:
             if not contour_defn.has_source:
-                # Copy so that in case of a 2nd run the no-source
-                # contour still gets all current sources
-                contour_defn = copy(contour_defn)
+                # Attach the sources to a copy: the definition must stay
+                # sourceless so that a later run uses the rasters of that
+                # run. A shallow copy would share (and fill) its list.
+                contour_defn = deepcopy(contour_defn)
                 for source in source_list:
                     contour_defn.add_source(source)
 
@@ -497,9 +498,10 @@ class _ChannelRefineCollector:
         self._container.clear()
         for channel_defn, size_info in self._channels_info:
             if not channel_defn.has_source:
-                # Copy so that in case of a 2nd run the no-source
-                # channel still gets all current sources
-                channel_defn = copy(channel_defn)
+                # Attach the sources to a copy: the definition must stay
+                # sourceless so that a later run uses the rasters of that
+                # run. A shallow copy would share (and fill) its list.
+                channel_defn = deepcopy(channel_defn)
                 for source in source_list:
                     channel_defn.add_source(source)
 
