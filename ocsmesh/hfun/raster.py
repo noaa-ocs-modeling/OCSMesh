@@ -36,6 +36,7 @@ from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.raster import tmpdir as raster_tmpdir
 from ocsmesh.features.constraint import (
     Constraint,
     TopoConstConstraint,
@@ -73,9 +74,7 @@ class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
 
     def __set__(self, obj, raster: Raster) -> None:
-        if not isinstance(raster, Raster):
-            raise TypeError(f'Argument raster must be of type {Raster}, not '
-                            f'type {type(raster)}.')
+        self.bind(obj, raster)
         # init output raster file
         with ExitStack() as stack:
 
@@ -96,6 +95,13 @@ class HfunInputRaster:
                 values[:] = getattr(np.finfo(np.float32), 'max')
                 dst.write(values, window=window)
 
+    @staticmethod
+    def bind(obj, raster: Raster) -> None:
+        """Attach the input raster without writing a size function file."""
+
+        if not isinstance(raster, Raster):
+            raise TypeError(f'Argument raster must be of type {Raster}, not '
+                            f'type {type(raster)}.')
         obj.__dict__['raster'] = raster
         obj._chunk_size = raster.chunk_size
         obj._overlap = raster.overlap
@@ -245,7 +251,6 @@ class HfunRaster(BaseHfun, Raster):
 
         self._xy_cache = {}
         # NOTE: unlike Raster, HfunRaster has no "path" set
-        self._raster = raster
         # TODO: Store max and min as two separate constraints instead
         # of private attributes
         self._hmin = float(hmin) if hmin is not None else hmin
@@ -255,15 +260,19 @@ class HfunRaster(BaseHfun, Raster):
         self._hold_const = False
         self._hold_const_hit = 0
 
-
-        if initial_value is not None:
-            # This is the "Wrap Existing" mode for workers.
-            # The descriptor has already created a blank file for us at self.tmpfile.
-            # We overwrite that blank file with the contents from the previous step.
-            if isinstance(initial_value, (str, pathlib.Path)):
-                shutil.copy2(initial_value, self.tmpfile)
-                # We must re-open the source to reflect the copied content
-                self._src = rasterio.open(self.tmpfile, 'r+')
+        if initial_value is None:
+            # A new size function: every pixel starts at float32 max.
+            self._raster = raster
+        else:
+            # "Wrap existing" mode (workers, and the coordinator taking
+            # their results): start from a copy of the size function file
+            # rather than writing a blank full-resolution raster first.
+            HfunInputRaster.bind(self, raster)
+            tmpfd, tmppath = tempfile.mkstemp(prefix=raster_tmpdir)
+            os.close(tmpfd)
+            shutil.copy2(initial_value, tmppath)
+            self._tmpfile = tmppath
+            self._src = rasterio.open(self.tmpfile, 'r+')
 
 
     def __del__(self):
