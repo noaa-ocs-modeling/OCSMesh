@@ -20,7 +20,7 @@ import warnings
 import tempfile
 import traceback
 from pathlib import Path
-from time import time
+from time import time, sleep
 from multiprocessing import Pool
 from copy import copy, deepcopy
 from typing import (
@@ -760,93 +760,67 @@ def _channels_task_worker(task: dict):
     return _replay_shapes_task_worker(task, 'add_patch', 'multipolygon')
 
 
+def _meshdata_4326(hfun, kwargs: dict) -> MeshData:
+    """``hfun.meshdata(**kwargs)`` as a copy in EPSG:4326."""
+
+    try:
+        meshdata = deepcopy(hfun.meshdata(**kwargs))
+    except TypeError:
+        # HfunMesh.meshdata() takes no kwargs such as stride
+        meshdata = deepcopy(hfun.meshdata())
+    # If no CRS info, we assume EPSG:4326
+    if hasattr(meshdata, "crs"):
+        dst_crs = CRS.from_user_input("EPSG:4326")
+        if meshdata.crs != dst_crs:
+            utils.reproject(meshdata, dst_crs)
+    return meshdata
+
+
 def _meshdata_task_worker(task: dict):
-    """Worker that calls hfun.meshdata() on a single hfun entry.
+    """Compute one entry's meshdata in a worker and save it as ``.npz``.
 
-    Supports two task types:
-    - ``'raster'``: Reconstructs an ``HfunRaster`` from file paths
-      (raster data cannot be pickled directly).
-    - ``'mesh'``: Uses a pre-pickled ``HfunMesh`` object directly
-      (HfunMesh is fully picklable).
-
-    Runs the expensive triangulation/interpolation pipeline inside a
-    worker process and serializes the raw MeshData result to disk as
-    ``.npz``.  Overlap clipping is NOT performed here — that requires
-    sequential bounding-box accumulation and is handled by Stage 2 in
-    the coordinator.
+    ``task['type']`` is ``'raster'`` (the HfunRaster is rebuilt from
+    file paths, raster handles cannot be pickled) or ``'mesh'`` (the
+    pickled HfunMesh is in ``task['hfun_obj']``). Overlaps are resolved
+    later, in priority order, on the coordinator.
     """
 
     original_index = task['original_index']
-    output_path = task['output_path']
-    meshdata_kwargs = task.get('meshdata_kwargs', {})
-    task_type = task.get('type', 'raster')
-
     try:
-        if task_type == 'raster':
-            # Reconstruct HfunRaster in the worker process
-            topo_raster = Raster(task['topo_path'])
+        if task['type'] == 'raster':
             worker_hfun = HfunRaster(
-                raster=topo_raster,
+                raster=Raster(task['topo_path']),
                 hmin=task['hmin'],
                 hmax=task['hmax'],
                 verbosity=0,
-                initial_value=task['hfun_input_path']
-            )
-            meshdata_result = worker_hfun.meshdata(**meshdata_kwargs)
-
-        elif task_type == 'mesh':
-            # HfunMesh is picklable — use the object directly
+                initial_value=task['hfun_input_path'])
+        elif task['type'] == 'mesh':
             worker_hfun = task['hfun_obj']
-            try:
-                meshdata_result = deepcopy(worker_hfun.meshdata(**meshdata_kwargs))
-            except TypeError:
-                # HfunMesh.meshdata() doesn't accept kwargs like stride
-                meshdata_result = deepcopy(worker_hfun.meshdata())
         else:
-            raise ValueError(f"Unknown task type: {task_type}")
+            raise ValueError(f"Unknown task type: {task['type']}")
+        meshdata = _meshdata_4326(worker_hfun, task.get('meshdata_kwargs', {}))
 
-        # Reproject to EPSG:4326 (same as serial path)
-        if hasattr(meshdata_result, "crs"):
-            dst_crs = CRS.from_user_input("EPSG:4326")
-            if meshdata_result.crs != dst_crs:
-                utils.reproject(meshdata_result, dst_crs)
-
-        # Serialize to .npz for fast coordinator pickup
-        tria_data = (meshdata_result.tria
-                     if meshdata_result.tria is not None
-                     else np.array([]))
-        quad_data = (meshdata_result.quad
-                     if meshdata_result.quad is not None
-                     else np.array([]))
-        crs_str = (str(meshdata_result.crs)
-                   if meshdata_result.crs else "")
+        # np.savez appends .npz to output_path
         np.savez(
-            output_path,
-            coords=meshdata_result.coords,
-            tria=tria_data,
-            quad=quad_data,
-            values=meshdata_result.values,
-            crs=np.array(crs_str)
-        )
+            task['output_path'],
+            coords=meshdata.coords,
+            tria=meshdata.tria if meshdata.tria is not None else np.array([]),
+            quad=meshdata.quad if meshdata.quad is not None else np.array([]),
+            values=meshdata.values,
+            crs=np.array(str(meshdata.crs) if meshdata.crs else ""))
 
-        # Force filesystem sync before returning — critical on Lustre/GPFS
-        # where write buffering can cause the coordinator (rank 0) to not
-        # see the file immediately after np.savez returns.
-        actual_path = str(output_path) + '.npz'
+        # Flush before returning: on Lustre/GPFS the coordinator may
+        # otherwise not see the file right after np.savez returns.
+        actual_path = str(task['output_path']) + '.npz'
         try:
             with open(actual_path, 'rb') as _fh:
                 os.fsync(_fh.fileno())
         except OSError:
             pass  # fsync not supported on all filesystems — best effort
-
-        # Verify the file actually exists and has non-zero size
         if not os.path.exists(actual_path) or os.path.getsize(actual_path) == 0:
             raise RuntimeError(
                 f"Worker: npz file missing or empty after savez+fsync: "
-                f"{actual_path} "
-                f"(exists={os.path.exists(actual_path)}, "
-                f"size={os.path.getsize(actual_path) if os.path.exists(actual_path) else -1})"
-            )
+                f"{actual_path}")
 
         return {
             'status': 'success',
@@ -861,6 +835,42 @@ def _meshdata_task_worker(task: dict):
             'error': repr(e),
             'traceback': traceback.format_exc(),
         }
+
+
+def _load_meshdata_npz(npz_path: str, retries: int = 30,
+                       delay: float = 1.0) -> MeshData:
+    """Load (and remove) a ``.npz`` written by ``_meshdata_task_worker``.
+
+    On a shared filesystem the file can show up on the coordinator a
+    little after the worker wrote it, hence the retries.
+    """
+
+    for attempt in range(retries):
+        if os.path.exists(npz_path):
+            break
+        _logger.debug(
+            f"Stage 2: waiting for {npz_path} "
+            f"(attempt {attempt + 1}/{retries})")
+        sleep(delay)
+    else:
+        raise FileNotFoundError(
+            f"Stage 2: worker output not visible after "
+            f"{retries * delay:.1f}s: {npz_path}")
+
+    # The context manager closes the file before it is removed (Windows)
+    with np.load(npz_path, allow_pickle=False) as data:
+        tria = data['tria'].copy() if data['tria'].size > 0 else None
+        quad = data['quad'].copy() if data['quad'].size > 0 else None
+        crs_str = str(data['crs'])
+        meshdata = MeshData(
+            coords=data['coords'].copy(), tria=tria, quad=quad,
+            values=data['values'].copy(),
+            crs=CRS.from_user_input(crs_str) if crs_str else None)
+    try:
+        os.remove(npz_path)
+    except OSError:
+        _logger.debug(f"Could not remove temp file {npz_path}")
+    return meshdata
 
 
 def _task_topo_path(hfun: HfunRaster) -> str:
@@ -2951,7 +2961,10 @@ class HfunCollector(BaseHfun):
         individual input, clip overlaps based on priority, and
         write the results to disk for later combining.
 
-        Dispatches to serial or parallel based on ``execution_mode``.
+        The meshdata of each input (stage 1) is computed in place
+        (serial), in a Pool (parallel) or on the MPI ranks (mpi).
+        Overlaps are then resolved in priority order on the
+        coordinator (stage 2, ``_write_hfun_stage2``).
 
         Parameters
         ----------
@@ -2965,18 +2978,58 @@ class HfunCollector(BaseHfun):
         -------
         list of path-like
             List of individual file path for mesh size function of
-            each input.
+            each input; empty on MPI worker ranks.
         """
-        if self.execution_mode == 'mpi':
-            _logger.info("Calculate & Writing hfun to disk using MPI method.")
-            return self._calculate_and_write_hfun_to_disk_mpi(out_path, **kwargs)
-        if self.execution_mode == 'parallel' and self._nprocs > 1:
-            _logger.info("Calculate & Writing hfun to disk using PARALLEL method.")
-            return self._calculate_and_write_hfun_to_disk_parallel(out_path, **kwargs)
 
-        _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
-        return self._calculate_and_write_hfun_to_disk_serial(out_path, **kwargs)
+        # Last user input item has the highest priority (its nodes
+        # are kept), so process in reverse order
+        hfun_list = self._hfun_list[::-1]
+        if self._base_mesh and self._base_as_hfun:
+            hfun_list = [*hfun_list, self._base_mesh]
 
+        distributed = (self.execution_mode == 'mpi'
+                       or (self.execution_mode == 'parallel'
+                           and self._nprocs > 1))
+        if not distributed:
+            _logger.info("Calculate & Writing hfun to disk using SERIAL method.")
+            return self._write_hfun_stage2(
+                out_path, hfun_list,
+                (_meshdata_4326(hfun, kwargs) for hfun in hfun_list))
+
+        _logger.info(
+            "Calculate & Writing hfun to disk using "
+            f"{self.execution_mode.upper()} method.")
+        # Stage 1: one meshdata task per entry. MPI is collective: all
+        # ranks build and dispatch the same list, workers get None back.
+        pid = os.getpid()
+        tasks = []
+        for loop_idx, hfun in enumerate(hfun_list):
+            task = {
+                'op': 'meshdata',
+                'original_index': loop_idx,
+                # np.savez appends .npz
+                'output_path': os.path.join(
+                    self._work_dir, f"meshdata_stage1_{pid}_{loop_idx}"),
+                'meshdata_kwargs': kwargs,
+            }
+            if isinstance(hfun, HfunRaster):
+                task.update(type='raster', topo_path=_task_topo_path(hfun),
+                            hfun_input_path=hfun.tmpfile,
+                            hmin=hfun._hmin,  # pylint: disable=W0212
+                            hmax=hfun._hmax)  # pylint: disable=W0212
+            else:
+                # HfunMesh and other types are picklable
+                task.update(type='mesh', hfun_obj=deepcopy(hfun))
+            tasks.append(task)
+
+        results = self._dispatch_refinement_tasks('meshdata', tasks)
+        if results is None:
+            return []  # MPI worker rank
+        npz_paths = {r['original_index']: r['output_path'] for r in results}
+        # Loaded one at a time, so only one entry is in memory at once
+        meshdata_list = (_load_meshdata_npz(npz_paths[i])
+                         for i in range(len(hfun_list)))
+        return self._write_hfun_stage2(out_path, hfun_list, meshdata_list)
 
     @staticmethod
     def _resolve_overlaps(meshdata_hfun, hfun, footprints):
@@ -2998,461 +3051,46 @@ class HfunCollector(BaseHfun):
             meshdata_hfun = _keep_nodes(meshdata_hfun, keep)
         return meshdata_hfun, footprint
 
-    def _calculate_and_write_hfun_to_disk_serial(
+    def _write_hfun_stage2(
             self,
             out_path: Union[str, Path],
-            **kwargs
-            ) -> List[Union[str, Path]]:
-        """Serial path for writing hfun to disk.
+            hfun_list: list,
+            meshdata_list: Iterable[MeshData],
+            ) -> List[Path]:
+        """Stage 2: resolve overlaps in priority order and write .2dm.
 
-        This is the original implementation extracted verbatim.
-
-        Parameters
-        ----------
-        out_path : path-like
-            The path of the (temporary) directory to which mesh size
-            functions must be written.
-        **kwargs : dict
-            Arguments to pass to the hfun.meshdata() method (e.g. stride).
-
-        Returns
-        -------
-        list of path-like
-            List of individual file path for mesh size function of
-            each input.
+        ``hfun_list`` is in priority order (highest first) and
+        ``meshdata_list`` yields the matching EPSG:4326 meshdata.
+        Each entry keeps the nodes no higher-priority entry covers,
+        clamped to hmin/hmax.
         """
 
         out_dir = Path(out_path)
         path_list = []
-        file_counter = 0
         pid = os.getpid()
         footprints = []  # higher-priority entries already written
-
-        hfun_list = self._hfun_list[::-1]
-        if self._base_mesh and self._base_as_hfun:
-            hfun_list = [*self._hfun_list[::-1], self._base_mesh]
-
-        # Last user input item has the highest priority (its trias
-        # are not dropped) so process in reverse order
-        for hfun in hfun_list:
-            # TODO: Calling meshdata() on HfunMesh more than once causes
-            # issue right now due to change in crs of internal Mesh
-            try:
-                meshdata_hfun = deepcopy(hfun.meshdata(**kwargs))
-            except TypeError:
-            # If a specific hfun type (like HfunMesh) doesn't support the args,
-            # ignore them
-            # This protects against passing 'stride' to a Mesh-based hfun which
-            # might not need it
-                meshdata_hfun = deepcopy(hfun.meshdata())
-
-            # If no CRS info, we assume EPSG:4326
-            if hasattr(meshdata_hfun, "crs"):
-                dst_crs = CRS.from_user_input("EPSG:4326")
-                if meshdata_hfun.crs != dst_crs:
-                    utils.reproject(meshdata_hfun, dst_crs)
-
+        hmin = self._size_info['hmin']
+        hmax = self._size_info['hmax']
+        for hfun, meshdata_hfun in zip(hfun_list, meshdata_list):
             _logger.info("Resolving overlaps with higher-priority inputs...")
             meshdata_hfun, footprint = self._resolve_overlaps(
                 meshdata_hfun, hfun, footprints)
-
             if len(meshdata_hfun.coords) == 0:
                 _logger.debug("Hfun ignored due to overlap")
                 continue
 
-            # Check meshdata_hfun.value against hmin & hmax
-            hmin = self._size_info['hmin']
-            hmax = self._size_info['hmax']
             if hmin:
                 meshdata_hfun.values[meshdata_hfun.values < hmin] = hmin
             if hmax:
                 meshdata_hfun.values[meshdata_hfun.values > hmax] = hmax
 
-            mesh = Mesh(meshdata_hfun)
             footprints.append(footprint)
-            file_counter = file_counter + 1
-            _logger.info(f'write mesh {file_counter} to file...')
-            file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
-            mesh.write(file_path, format='2dm')
+            file_path = out_dir / f'hfun_{pid}_{len(path_list) + 1}.2dm'
+            _logger.info(f'write mesh {len(path_list) + 1} to file...')
+            Mesh(meshdata_hfun).write(file_path, format='2dm')
             path_list.append(file_path)
             _logger.info('Done writing 2dm file.')
-            del mesh
             gc.collect()
-        return path_list
-
-
-    def _calculate_and_write_hfun_to_disk_parallel(
-            self,
-            out_path: Union[str, Path],
-            **kwargs
-            ) -> List[Union[str, Path]]:
-        """Two-stage parallel path for writing hfun to disk.
-
-        Stage 1 (Parallel): Workers call ``hfun.meshdata()``
-        independently for each hfun entry and serialize results
-        as ``.npz`` files.  All workers run simultaneously — this is
-        where the expensive triangulation/interpolation cost lives.
-        ``HfunRaster`` entries are reconstructed from file paths in
-        the worker; ``HfunMesh`` entries are pickled and sent directly.
-
-        Stage 2 (Sequential): The coordinator loads results in
-        priority order, clips each against accumulated bounding
-        boxes, clamps hmin/hmax, and writes the final ``.2dm``
-        files.  This stage is fast (array operations only).
-
-        Parameters
-        ----------
-        out_path : path-like
-            The path of the (temporary) directory to which mesh size
-            functions must be written.
-        **kwargs : dict
-            Arguments to pass to the hfun.meshdata() method (e.g. stride).
-
-        Returns
-        -------
-        list of path-like
-            List of individual file path for mesh size function of
-            each input.
-        """
-
-        out_dir = Path(out_path)
-        path_list = []
-        file_counter = 0
-        pid = os.getpid()
-        footprints = []  # higher-priority entries already written
-
-        hfun_list = self._hfun_list[::-1]
-        if self._base_mesh and self._base_as_hfun:
-            hfun_list = [*self._hfun_list[::-1], self._base_mesh]
-
-        # ========== STAGE 1: PARALLEL meshdata() ==========
-        tasks = []
-        for loop_idx, hfun in enumerate(hfun_list):
-            # NOTE: np.savez appends .npz automatically; output_path here does not
-            # include the extension. The returned path in the result dict adds it.
-            npz_path = os.path.join(
-                self._work_dir,
-                f"meshdata_stage1_{pid}_{loop_idx}"
-            )
-            if isinstance(hfun, HfunRaster):
-                task = {
-                    'type': 'raster',
-                    'original_index': loop_idx,
-                    'topo_path': _task_topo_path(hfun),
-                    'hfun_input_path': hfun.tmpfile,
-                    'output_path': npz_path,
-                    'hmin': hfun._hmin,
-                    'hmax': hfun._hmax,
-                    'meshdata_kwargs': kwargs
-                }
-            else:
-                # HfunMesh and other types are picklable —
-                # send the object directly to the worker
-                task = {
-                    'type': 'mesh',
-                    'original_index': loop_idx,
-                    'hfun_obj': deepcopy(hfun),
-                    'output_path': npz_path,
-                    'meshdata_kwargs': kwargs
-                }
-            tasks.append(task)
-
-        # Run parallel meshdata for ALL entries
-        stage1_results = {}
-        if tasks:
-            _logger.info(
-                f"Stage 1: Launching {len(tasks)} parallel "
-                f"meshdata() calls with {min(self._nprocs, len(tasks))} workers"
-            )
-            # Cap workers at the number of tasks: spawning more workers than
-            # tasks wastes spawn time and memory with idle processes.
-            n_workers = min(self._nprocs, len(tasks))
-            with Pool(processes=n_workers) as p:
-                results = p.map(_meshdata_task_worker, tasks)
-            _logger.info("Stage 1: All meshdata() calls complete.")
-            _raise_on_failures('meshdata', results)
-
-            for result in results:
-                stage1_results[result['original_index']] = \
-                    result['output_path']
-
-        # ========== STAGE 2: SEQUENTIAL overlap clip + write ==========
-        _logger.info("Stage 2: Sequential overlap clipping and .2dm write")
-        for loop_idx in range(len(hfun_list)):
-            # Load the meshdata from Stage 1 result
-            if loop_idx in stage1_results:
-                npz_path = stage1_results[loop_idx]
-                # Lustre metadata latency: file may not be visible on rank 0
-                # immediately after worker writes it. Retry with backoff.
-                _max_retries = 30
-                _retry_delay = 1.0   # seconds
-                for _attempt in range(_max_retries):
-                    if os.path.exists(npz_path):
-                        break
-                    import time as _time
-                    _logger.debug(
-                        f"Stage 2: waiting for {npz_path} "
-                        f"(attempt {_attempt+1}/{_max_retries})"
-                    )
-                    _time.sleep(_retry_delay)
-                else:
-                    raise FileNotFoundError(
-                        f"Stage 2: worker output not visible after "
-                        f"{_max_retries * _retry_delay:.1f}s: {npz_path}"
-                    )
-                data = np.load(npz_path, allow_pickle=False)
-                coords = data['coords'].copy()
-                tria_raw = data['tria']
-                tria = tria_raw.copy() if tria_raw.size > 0 else None
-                quad_raw = data['quad']
-                quad = quad_raw.copy() if quad_raw.size > 0 else None
-                values = data['values'].copy()
-                crs_str = str(data['crs'])
-                crs = (CRS.from_user_input(crs_str)
-                       if crs_str else None)
-
-                # Necessary for windows : Close the NpzFile handle before deleting
-                data.close()
-                del data
-                meshdata_hfun = MeshData(
-                    coords=coords, tria=tria,
-                    quad=quad, values=values, crs=crs
-                )
-                # Clean up intermediate .npz — data is in memory now
-                try:
-                    os.remove(npz_path)
-                except OSError:
-                    _logger.debug(
-                        f"Could not remove temp file {npz_path}"
-                    )
-            else:
-                # Unreachable while every entry gets a stage 1 task and
-                # failures raise; never drop a size function silently.
-                raise RuntimeError(
-                    f"Stage 2: no meshdata result for entry {loop_idx}")
-
-            _logger.info("Resolving overlaps with higher-priority inputs...")
-            meshdata_hfun, footprint = self._resolve_overlaps(
-                meshdata_hfun, hfun_list[loop_idx], footprints)
-
-            if len(meshdata_hfun.coords) == 0:
-                _logger.debug("Hfun ignored due to overlap")
-                continue
-
-            # Check meshdata_hfun.value against hmin & hmax
-            hmin = self._size_info['hmin']
-            hmax = self._size_info['hmax']
-            if hmin:
-                meshdata_hfun.values[
-                    meshdata_hfun.values < hmin] = hmin
-            if hmax:
-                meshdata_hfun.values[
-                    meshdata_hfun.values > hmax] = hmax
-
-            mesh = Mesh(meshdata_hfun)
-            footprints.append(footprint)
-            file_counter = file_counter + 1
-            _logger.info(f'write mesh {file_counter} to file...')
-            file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
-            mesh.write(file_path, format='2dm')
-            path_list.append(file_path)
-            _logger.info('Done writing 2dm file.')
-            del mesh
-            gc.collect()
-
-        return path_list
-
-     # TODO: refactor this with the parallel method instead of duplicated code.
-    def _calculate_and_write_hfun_to_disk_mpi(
-            self,
-            out_path: Union[str, Path],
-            **kwargs
-            ) -> List[Union[str, Path]]:
-        """MPI path for writing hfun to disk (dynamic send/recv).
-
-        Same two-stage design as the parallel variant, but Stage 1 uses
-        MPIExecutor.run() to dynamically stream tasks to idle
-        workers via point-to-point send/recv. The existing
-        _meshdata_task_worker is reused unchanged.
-
-        Stage 1 (MPI, dynamic): Rank 0 streams meshdata tasks to
-           workers on demand. Each worker reads its input from the
-           shared filesystem and writes a .npz result back.
-
-        Stage 2 (Sequential, Rank 0 only): Load .npz results in
-           priority order, clip overlaps, clamp hmin/hmax, write .2dm.
-
-        Error policy: if ANY task fails, a single aggregated
-        RuntimeError is raised and Stage 2 is skipped; we never
-        silently emit a partial mesh built from only the surviving
-        tiles. Worker shutdown is handled by MPIExecutor.run()'s
-        finally block, not here.
-
-        Shared-filesystem requirement: workers exchange paths to .npz
-        files under self._work_dir. On a multi-node job that directory
-        MUST live on a filesystem visible to every node (e.g.
-        Lustre/GPFS/NFS).
-
-        Parameters
-        ----------
-        out_path : path-like
-            Directory for final .2dm output files.
-        **kwargs : dict
-            Arguments for hfun.meshdata() (e.g. stride).
-
-        Returns
-        -------
-        list of path-like
-            List of .2dm file paths.
-        """
-
-        out_dir = Path(out_path)
-        path_list = []
-        file_counter = 0
-        pid = os.getpid()
-        footprints = []  # higher-priority entries already written
-
-        hfun_list = self._hfun_list[::-1]
-        if self._base_mesh and self._base_as_hfun:
-            hfun_list = [*self._hfun_list[::-1], self._base_mesh]
-
-        # ========== STAGE 1: MPI dynamic meshdata() ==========
-        # Build tasks — same as parallel variant, plus 'op' key so
-        # the worker loop knows which function to call.
-        tasks = []
-        for loop_idx, hfun in enumerate(hfun_list):
-            # NOTE: np.savez appends .npz automatically; output_path here does not
-            # include the extension. The returned path in the result dict adds it.
-            npz_path = os.path.join(
-                self._work_dir,
-                f"meshdata_stage1_{pid}_{loop_idx}"
-            )
-            if isinstance(hfun, HfunRaster):
-                task = {
-                    'op': 'meshdata',
-                    'type': 'raster',
-                    'original_index': loop_idx,
-                    'topo_path': _task_topo_path(hfun),
-                    'hfun_input_path': hfun.tmpfile,
-                    'output_path': npz_path,
-                    'hmin': hfun._hmin,
-                    'hmax': hfun._hmax,
-                    'meshdata_kwargs': kwargs
-                }
-            else:
-                # HfunMesh and other types are picklable —
-                # send the object directly to the worker
-                task = {
-                    'op': 'meshdata',
-                    'type': 'mesh',
-                    'original_index': loop_idx,
-                    'hfun_obj': deepcopy(hfun),
-                    'output_path': npz_path,
-                    'meshdata_kwargs': kwargs
-                }
-            tasks.append(task)
-
-        # ── Collective dispatch via MPIExecutor.run() ──
-        # All ranks reach here with the same task list.
-        # Inside run(): rank 0 dispatches tasks to workers,
-        # workers enter recv loop. Returns results on rank 0,
-        # None on workers.
-        raw_results = MPIExecutor.run(
-            tasks, work_dir=self._work_dir, fail_fast=True
-        )
-
-        # Workers get None from run() — nothing left for them to do.
-        if raw_results is None:
-            return []
-
-        stage1_results = {
-            idx: res['output_path'] for idx, res in raw_results.items()
-        }
-
-        # ========== STAGE 2: SEQUENTIAL overlap clip + write ==========
-        # Identical to the parallel variant.
-        _logger.info("Stage 2: Sequential overlap clipping and .2dm write")
-        for loop_idx in range(len(hfun_list)):
-            if loop_idx in stage1_results:
-                npz_path = stage1_results[loop_idx]
-                # Lustre metadata latency: file may not be visible on rank 0
-                # immediately after worker writes it. Retry with backoff.
-                _max_retries = 30
-                _retry_delay = 1.0   # seconds
-                for _attempt in range(_max_retries):
-                    if os.path.exists(npz_path):
-                        break
-                    import time as _time
-                    _logger.debug(
-                        f"Stage 2: waiting for {npz_path} "
-                        f"(attempt {_attempt+1}/{_max_retries})"
-                    )
-                    _time.sleep(_retry_delay)
-                else:
-                    raise FileNotFoundError(
-                        f"Stage 2: worker output not visible after "
-                        f"{_max_retries * _retry_delay:.1f}s: {npz_path}"
-                    )
-                data = np.load(npz_path, allow_pickle=False)
-                coords = data['coords'].copy()
-                tria_raw = data['tria']
-                tria = tria_raw.copy() if tria_raw.size > 0 else None
-                quad_raw = data['quad']
-                quad = quad_raw.copy() if quad_raw.size > 0 else None
-                values = data['values'].copy()
-                crs_str = str(data['crs'])
-                crs = (CRS.from_user_input(crs_str)
-                       if crs_str else None)
-
-                # Close NpzFile handle before deleting
-                data.close()
-                del data
-                meshdata_hfun = MeshData(
-                    coords=coords, tria=tria,
-                    quad=quad, values=values, crs=crs
-                )
-                # Clean up intermediate .npz — data is in memory now
-                try:
-                    os.remove(npz_path)
-                except OSError:
-                    _logger.debug(
-                        f"Could not remove temp file {npz_path}"
-                    )
-            else:
-                # Unreachable while every entry gets a stage 1 task and
-                # failures raise; never drop a size function silently.
-                raise RuntimeError(
-                    f"Stage 2: no meshdata result for entry {loop_idx}")
-
-            _logger.info("Resolving overlaps with higher-priority inputs...")
-            meshdata_hfun, footprint = self._resolve_overlaps(
-                meshdata_hfun, hfun_list[loop_idx], footprints)
-
-            if len(meshdata_hfun.coords) == 0:
-                _logger.debug("Hfun ignored due to overlap")
-                continue
-
-            # Check meshdata_hfun.value against hmin & hmax
-            hmin = self._size_info['hmin']
-            hmax = self._size_info['hmax']
-            if hmin:
-                meshdata_hfun.values[
-                    meshdata_hfun.values < hmin] = hmin
-            if hmax:
-                meshdata_hfun.values[
-                    meshdata_hfun.values > hmax] = hmax
-
-            mesh = Mesh(meshdata_hfun)
-            footprints.append(footprint)
-            file_counter = file_counter + 1
-            _logger.info(f'write mesh {file_counter} to file...')
-            file_path = out_dir / f'hfun_{pid}_{file_counter}.2dm'
-            mesh.write(file_path, format='2dm')
-            path_list.append(file_path)
-            _logger.info('Done writing 2dm file.')
-            del mesh
-            gc.collect()
-
         return path_list
 
 
