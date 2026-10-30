@@ -1,23 +1,9 @@
-import os
-import tempfile
-import urllib.request
 from pathlib import Path
 
-from rasterio.enums import Resampling
-
-from ocsmesh.raster import Raster
-
-
-# Find a better way!
-tif_url = (
-    'https://chs.coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/ncei19_n40x75_w073x75_2015v1.tif'
-)
-TEST_FILE = os.path.join(tempfile.gettempdir(), 'test_dem.tif')
-if not Path(TEST_FILE).exists():
-    tmpfd, tmppath = tempfile.mkstemp()
-    urllib.request.urlretrieve(tif_url, filename=tmppath)
-    os.close(tmpfd)
-    r = Raster(tmppath)
-    r.resampling_method = Resampling.average
-    r.resample(scaling_factor=0.01)
-    r.save(TEST_FILE)
+# Small public DEM (81 x 81 pixels, New York Harbor, NAD83 / NAVD88) for
+# the tests that need real topography. It is NCEI's 1/9 arc-second
+# Sandy topobathy tile ncei19_n40x75_w073x75_2015v1.tif from
+# https://chs.coast.noaa.gov/htdata/raster2/elevation/NCEI_ninth_Topobathy_2014_8483/northeast_sandy/
+# resampled with Resampling.average and scaling_factor=0.01. It is kept
+# in the repository so the tests need no network access.
+TEST_FILE = str(Path(__file__).resolve().parents[1] / 'data' / 'test_dem.tif')
