@@ -3,12 +3,11 @@ import pathlib
 import tempfile
 from importlib import util
 
-# Check if process was launched under an MPI environment (e.g., mpiexec, srun).
-# If detected, pins numerical library thread pools (OpenMP/MKL/OpenBLAS) to 1 to
-# prevent CPU thrashing and sets multiprocessing start method to 'spawn'.
+# Under an MPI launcher with more than one task (mpiexec -n N, srun with
+# N > 1): pin OpenMP/MKL/OpenBLAS threads to 1 unless already set, and set
+# the multiprocessing start method to 'spawn'. Nothing changes otherwise.
 # NOTE: Must execute before any submodule imports NumPy because BLAS/MKL thread
 # pools are initialized at C-library import time.
-# NOTE: If NOT running under MPI launcher, _configure_mpi_environment is a no-op.
 from .mpi import _configure_mpi_environment
 _configure_mpi_environment()
 

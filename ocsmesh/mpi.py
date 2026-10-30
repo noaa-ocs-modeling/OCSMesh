@@ -20,6 +20,9 @@ bypasses the worker recv loop setup and causes deadlocks.
 
 Users never interact with this module directly. They simply set
 ``hfun.execution_mode = 'mpi'`` and call ``hfun.meshdata()``.
+
+Side effects of ``import ocsmesh`` under an MPI launcher with more than
+one task: see :func:`_configure_mpi_environment`.
 """
 
 import logging
@@ -37,6 +40,8 @@ _logger = logging.getLogger(__name__)
 
 _MPI = None
 _MPI_IMPORT_ATTEMPTED = False
+# Task counts set by launchers. Only a count above 1 means an MPI job:
+# SLURM_NTASKS, for one, is set in every batch job, serial ones too.
 _MPI_ENV_HINTS = (
     'OMPI_COMM_WORLD_SIZE',     # Open MPI
     'PMI_SIZE',                  # MPICH / Cray
@@ -66,12 +71,27 @@ def _get_mpi():
             _MPI = MPI
         except ImportError:
             pass
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            # e.g. MPI_Init failing outside a working launcher (no PMI
+            # server). An abort inside the MPI library cannot be caught.
+            import warnings
+            warnings.warn(
+                f"mpi4py is installed but MPI could not be initialized"
+                f" ({type(err).__name__}: {err}). Running without MPI;"
+                f" launch with mpiexec/srun to use execution_mode='mpi'.",
+                RuntimeWarning)
     return _MPI
 
 
 def _is_mpi_env_detected():
-    """Check if environment variables indicate an MPI launcher (mpiexec, srun, etc.)."""
-    return any(var in os.environ for var in _MPI_ENV_HINTS)
+    """True when a launcher (mpiexec, srun, ...) started more than one task."""
+    for var in _MPI_ENV_HINTS:
+        try:
+            if int(os.environ.get(var, '0')) > 1:
+                return True
+        except ValueError:
+            continue
+    return False
 
 
 def _get_mpi_comm():
@@ -115,14 +135,24 @@ def _is_mpi_active():
 def _configure_mpi_environment():
     """Safety net for MPI environment, thread pinning, and multiprocessing.
 
-    Pins numerical library threads (OpenMP/MKL/OpenBLAS) to 1 to prevent
-    thread oversubscription when multiple MPI ranks run on the same node,
-    and sets the multiprocessing start method to 'spawn' to avoid fork
-    deadlocks with open MPI communicators.
+    Runs at ``import ocsmesh``, and only when a launcher started more
+    than one task (see ``_is_mpi_env_detected``):
+
+    - pins numerical library threads (OpenMP/MKL/OpenBLAS) to 1 unless
+      already set, to prevent thread oversubscription when several
+      ranks share a node;
+    - sets the multiprocessing start method to 'spawn', to avoid fork
+      deadlocks with open MPI communicators.
+
+    Outside an MPI job nothing is changed.
     """
     if _is_mpi_env_detected():
-        for var in _MPI_THREAD_PIN_VARS:
-            os.environ.setdefault(var, '1')
+        pinned = [var for var in _MPI_THREAD_PIN_VARS if var not in os.environ]
+        for var in pinned:
+            os.environ[var] = '1'
+        if pinned:
+            _logger.info(
+                "MPI launcher detected: set %s=1.", "=1, ".join(pinned))
 
         import multiprocessing as mp
         # Use force=True so we override whatever was set by earlier imports
