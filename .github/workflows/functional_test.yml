@@ -121,8 +121,22 @@ jobs:
       run: pip install gmsh triangle
   
     - name: Run Python API tests
+      if: ${{ !(runner.os == 'Linux' && matrix.python-version == '3.12') }}
       shell: bash -el {0}
       run: python -m unittest discover tests
+
+    - name: Run Python API tests with coverage
+      if: runner.os == 'Linux' && matrix.python-version == '3.12'
+      shell: bash -el {0}
+      run: python -m pytest tests/api --cov=ocsmesh --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      if: runner.os == 'Linux' && matrix.python-version == '3.12'
+      uses: codecov/codecov-action@v5
+      with:
+        files: coverage.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
+        fail_ci_if_error: false
 
     - name: Run MPI mode-property tests (non-mpi launcher)
       shell: bash -el {0}
@@ -135,3 +149,21 @@ jobs:
     - name: Run MPI Failure Handling tests (mpiexec -n 2)
       shell: bash -el {0}
       run: FI_PROVIDER=tcp mpiexec -n 2 python -m pytest tests/api/mpi_failures_handling_test.py -v -s
+
+    # Multi-tile tests: serial == parallel == MPI for every refinement type
+    - name: Run multi-tile equivalence tests (mpiexec -n 3)
+      if: runner.os != 'Windows'
+      shell: bash -el {0}
+      run: >
+        FI_PROVIDER=tcp mpiexec -n 3 python -m pytest -p no:cacheprovider
+        tests/api/test_hfun_clipped_equivalence.py
+        tests/api/test_hfun_empty_features.py
+        tests/api/test_hfun_composite_footprint.py
+        tests/api/test_hfun_meshdata_cache.py
+        tests/api/test_hfun_idle_stages.py
+        tests/api/test_hfun_lambda_constraint.py
+        tests/api/test_hfun_execution_mode_arg.py
+        tests/api/test_hfun_feature_sources.py
+        tests/api/test_hfun_distributed_detection.py
+        tests/api/test_parallel_fail_fast.py
+        tests/api/test_mpi_environment.py
