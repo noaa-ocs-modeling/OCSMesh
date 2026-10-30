@@ -165,5 +165,6 @@ jobs:
         tests/api/test_hfun_execution_mode_arg.py
         tests/api/test_hfun_feature_sources.py
         tests/api/test_hfun_distributed_detection.py
+        tests/api/test_hfun_mode_equivalence.py
         tests/api/test_parallel_fail_fast.py
         tests/api/test_mpi_environment.py
