@@ -46,6 +46,11 @@ FI_PROVIDER=tcp mpiexec -n 3 python -m pytest tests/api/test_hfun_clipped_equiva
 FI_PROVIDER=tcp mpiexec -n 2 python -m pytest tests/api/mpi_failures_handling_test.py
 ```
 
+With Open MPI 5 on a machine with fewer cores than ranks, `mpiexec`
+refuses to start ("not enough slots"); allow it with
+`export PRTE_MCA_rmaps_default_mapping_policy=:oversubscribe` (Open MPI
+4: `OMPI_MCA_rmaps_base_oversubscribe=1`). CI sets both.
+
 Under MPI, every rank must reach the same collective calls (creating an
 `HfunCollector`, `meshdata()`, the refinement stages): build objects on
 all ranks and check results on rank 0 only (`multitile.is_manager()`).

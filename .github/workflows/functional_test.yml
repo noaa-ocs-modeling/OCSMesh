@@ -25,6 +25,13 @@ jobs:
     name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
+    # Runners have fewer cores than the MPI tests' ranks; let Open MPI
+    # start more ranks than cores (4.x and 5.x/PRRTE spellings; MPICH and
+    # MS-MPI ignore them).
+    env:
+      OMPI_MCA_rmaps_base_oversubscribe: "1"
+      PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
+
     strategy:
       fail-fast: false
       matrix:
