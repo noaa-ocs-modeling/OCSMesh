@@ -721,7 +721,7 @@ class CreateRasterFromNumpy(unittest.TestCase):
         in_rast_xy = np.mgrid[1:3:0.1, -1:0:0.1]
         in_rast_z = np.random.random(in_rast_xy[0].T.shape)
 
-        with tempfile.TemporaryDirectory() as tdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdir:
             utils.raster_from_numpy(
                 Path(tdir) / 'test_rast.tiff',
                 data=in_rast_z, mgrid=in_rast_xy, crs=4326)

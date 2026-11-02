@@ -27,7 +27,7 @@ class TestFootprintCompositing(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # pylint: disable=consider-using-with
-        cls._tmp = tempfile.TemporaryDirectory()
+        cls._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         tmp = Path(cls._tmp.name)
         cls.low = multitile.write_tile(
             tmp / 'low.tif',

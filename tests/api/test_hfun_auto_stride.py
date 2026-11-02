@@ -37,7 +37,7 @@ class TestAutoStride(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # pylint: disable=consider-using-with
-        cls._tmp = tempfile.TemporaryDirectory()
+        cls._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         tmp = Path(cls._tmp.name)
         cls.utm = _write(tmp / 'utm.tif', 'EPSG:32618', (580000, 4500000), 10.0)
         cls.feet = _write(tmp / 'ft.tif', 'EPSG:2263', (980000, 200000), 10.0)

@@ -28,7 +28,7 @@ class TestNodataIgnored(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # pylint: disable=consider-using-with
-        cls._tmp = tempfile.TemporaryDirectory()
+        cls._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         tmp = Path(cls._tmp.name)
         cls.plain = multitile.write_tile(
             tmp / 'plain.tif', multitile.TileSpec('plain', 0.004, BOUNDS))
@@ -88,7 +88,7 @@ class TestNodataIgnored(unittest.TestCase):
 class TestClipUndeclaredNodata(unittest.TestCase):
 
     def test_outside_is_nodata_not_zero(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             path = multitile.write_tile(
                 Path(tmp) / 'undeclared.tif',
                 multitile.TileSpec('undeclared', 0.004, BOUNDS,

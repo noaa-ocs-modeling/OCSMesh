@@ -22,7 +22,7 @@ class TestInitialValue(unittest.TestCase):
 
     def setUp(self):
         # pylint: disable=consider-using-with
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self.dem = multitile.write_tile(
             Path(self._tmp.name) / 'dem.tif',
             multitile.TileSpec('dem', 0.004, (0.0, 0.0, 0.6, 0.3)))

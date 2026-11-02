@@ -56,7 +56,7 @@ class TestInterpolateNodata(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # pylint: disable=consider-using-with
-        cls._tmp = tempfile.TemporaryDirectory()
+        cls._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         tmp = Path(cls._tmp.name)
         xs = (np.arange(100) + 0.5) * RES
         cls.bg = _write(tmp / 'bg.tif', np.tile(_background(xs), (100, 1)))

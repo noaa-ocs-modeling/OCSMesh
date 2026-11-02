@@ -34,7 +34,7 @@ class TestHfunRasterEmptyInputs(unittest.TestCase):
 
     def setUp(self):
         # pylint: disable=consider-using-with
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         path = Path(self._tmp.name) / 'tile.tif'
         multitile.write_tile(
             path, multitile.TileSpec('tile', 0.002, (0.0, 0.0, 0.1, 0.1)))

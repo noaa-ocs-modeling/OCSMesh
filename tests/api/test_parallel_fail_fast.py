@@ -60,7 +60,7 @@ class TestPoolFailFast(unittest.TestCase):
 
     def test_meshdata(self):
         def run(hfun):
-            with tempfile.TemporaryDirectory() as out_dir:
+            with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as out_dir:
                 hfun._calculate_and_write_hfun_to_disk(out_dir)
         self._assert_raises(None, 'meshdata worker', run)
 
