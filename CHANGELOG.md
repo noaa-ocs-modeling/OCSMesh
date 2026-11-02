@@ -20,6 +20,11 @@ follow [Semantic Versioning](https://semver.org/).
 - `Mesh.interpolate` warns when some nodes get no value from any raster.
 
 ### Fixed
+- `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
+  combine CLIs) now orients every element counterclockwise, so written
+  meshes no longer contain clockwise triangles. `utils.order_mesh` is
+  vectorized and takes `in_place=True`; `ops.combine_mesh` called it
+  and discarded the result.
 - Parallel and MPI workers refined the unclipped DEM when rasters were
   clipped by `base_shape`, so depth-based refinements landed on the
   wrong pixels; results now match serial exactly.

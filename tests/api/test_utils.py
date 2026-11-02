@@ -1060,6 +1060,14 @@ class TestPhysicsCalculations(unittest.TestCase):
         self.assertGreater(c_num[0], 0)
 
 
+def _signed_areas(coords, elems):
+    """Shoelace signed area of each element (positive = CCW)."""
+    x = coords[elems, 0]
+    y = coords[elems, 1]
+    return 0.5 * np.sum(x * np.roll(y, -1, axis=1)
+                        - np.roll(x, -1, axis=1) * y, axis=1)
+
+
 class TestMeshTopologyOps(unittest.TestCase):
     """Tests for skewed elements, ordering, quad conversion, etc."""
 
@@ -1083,6 +1091,48 @@ class TestMeshTopologyOps(unittest.TestCase):
         # Calculate signed area
         area = 0.5 * (p1[0]*(p2[1]-p3[1]) + p2[0]*(p3[1]-p1[1]) + p3[0]*(p1[1]-p2[1]))
         self.assertGreater(area, 0, "Triangle should be ordered CCW (positive area)")
+
+    def test_order_mesh_mixed_orientation(self):
+        # Two CW triangles, one CCW, one degenerate, one CW quad
+        coords = np.array([[0, 0], [1, 0], [0, 1], [1, 1],
+                           [2, 0], [3, 0], [4, 0]], dtype=float)
+        tria = np.array([[0, 2, 1], [1, 2, 3], [1, 3, 2], [4, 5, 6]])
+        quad = np.array([[0, 2, 3, 1]])
+        mesh = MeshData(coords=coords, tria=tria, quad=quad)
+
+        ordered = utils.order_mesh(mesh)
+
+        self.assertIsNot(ordered, mesh)
+        np.testing.assert_array_equal(mesh.tria, tria)  # input unchanged
+        areas = _signed_areas(ordered.coords, ordered.tria)
+        self.assertTrue(np.all(areas[:3] > 0))
+        np.testing.assert_array_equal(ordered.tria[3], [4, 5, 6])
+        self.assertGreater(_signed_areas(ordered.coords, ordered.quad)[0], 0)
+        # same nodes in every element, only the order changes
+        np.testing.assert_array_equal(np.sort(ordered.tria, axis=1),
+                                      np.sort(tria, axis=1))
+
+    def test_order_mesh_in_place(self):
+        coords = np.array([[0, 0], [0, 1], [1, 0]], dtype=float)
+        mesh = MeshData(coords=coords, tria=np.array([[0, 1, 2]]))
+
+        result = utils.order_mesh(mesh, in_place=True)
+
+        self.assertIs(result, mesh)
+        self.assertGreater(_signed_areas(mesh.coords, mesh.tria)[0], 0)
+
+    def test_finalize_mesh_orients_ccw(self):
+        mesh = utils.create_rectangle_mesh(
+            nx=6, ny=6, holes=[], x_extent=(0, 1), y_extent=(0, 1))
+        mesh.tria = mesh.tria[:, [0, 2, 1]]  # every triangle clockwise
+        self.assertTrue(np.all(_signed_areas(mesh.coords, mesh.tria) < 0))
+
+        utils.finalize_mesh(mesh)
+
+        self.assertTrue(np.all(_signed_areas(mesh.coords, mesh.tria) > 0))
+        if mesh.quad.size:
+            self.assertTrue(
+                np.all(_signed_areas(mesh.coords, mesh.quad) > 0))
 
     def test_cleanup_skewed_elements(self):
         # Create a good triangle and a very thin (skewed) triangle

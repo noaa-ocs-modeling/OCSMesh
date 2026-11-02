@@ -416,6 +416,7 @@ def finalize_mesh(mesh, sieve_area=None):
 
     cleanup_isolates(mesh)
     cleanup_duplicates(mesh)
+    order_mesh(mesh, in_place=True)
 
 
 
@@ -2348,44 +2349,52 @@ def cleanup_concave_quads(mesh: MeshData) -> MeshData:
             concave_el.append(l_idx)
     return clip_elements_by_index(mesh, tria=None, quad=concave_el, inverse=False)
 
-def order_mesh(msht: MeshData, crs=None) -> MeshData:
-    '''
-    Order mesh nodes counterclockwise (triangles and quads)
-    based on the coordinates
+def order_mesh(msht: MeshData, crs=None, in_place: bool = False) -> MeshData:
+    """Orient every element counterclockwise.
+
+    Triangles with a negative signed area get their last two nodes
+    swapped; degenerate (zero-area) triangles are left as they are.
+    Quad nodes are sorted by angle around the element centroid, which
+    gives a counterclockwise order for convex quads.
 
     Parameters
     ----------
     msht : MeshData
-        triangular mesh
+        Mesh to orient.
+    crs : optional
+        Unused; kept for backward compatibility.
+    in_place : bool, default=False
+        Modify ``msht`` instead of a copy.
 
     Returns
     -------
     MeshData
-        quadrangular + triangular mesh
-    np.array
-        mesh whose nodes within each element are oriented counterclockwise
+        The oriented mesh (``msht`` itself when ``in_place`` is True).
+    """
+    mesh = msht if in_place else deepcopy(msht)
+    coords = mesh.coords
 
-    Notes
-    -----
-    '''
-    def order_nodes(verts):
-        centroid = np.mean(verts, axis=0)
-        angles = np.arctan2(verts[:,1] - centroid[1], verts[:,0] - centroid[0])
-        return np.argsort(angles)
+    tria = mesh.tria
+    if tria.size > 0:
+        p0, p1, p2 = (coords[tria[:, i]] for i in range(3))
+        signed_area = (
+            (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1])
+            - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1]))
+        clockwise = signed_area < 0
+        if np.any(clockwise):
+            tria = tria.copy()
+            tria[clockwise] = tria[clockwise][:, [0, 2, 1]]
+            mesh.tria = tria
 
-    new_mesh = deepcopy(msht)
-    for etype in ELEM_2D_TYPES:
-        elems = getattr(new_mesh, etype)
-        if elems.size == 0:
-            continue
-        coords = new_mesh.coords
-        ordered_elems = []
-        for el in elems:
-            el_coords = coords[el]
-            order = order_nodes(el_coords)
-            ordered_elems.append(el[order])
-        setattr(new_mesh, etype, np.array(ordered_elems))
-    return new_mesh
+    quad = mesh.quad
+    if quad.size > 0:
+        verts = coords[quad]                       # (n, 4, 2)
+        centroid = verts.mean(axis=1, keepdims=True)
+        angles = np.arctan2(verts[..., 1] - centroid[..., 1],
+                            verts[..., 0] - centroid[..., 0])
+        mesh.quad = np.take_along_axis(quad, np.argsort(angles, axis=1),
+                                       axis=1)
+    return mesh
 
 def quads_from_tri(msht: MeshData) -> MeshData:
     """
