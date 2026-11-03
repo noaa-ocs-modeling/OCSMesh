@@ -23,6 +23,11 @@ follow [Semantic Versioning](https://semver.org/).
   gradient), where the limiter formula is undefined. The default,
   `'hmin'`, gives them the limiter's `hmin` as before; `'keep'` leaves
   their size unchanged.
+- Gmsh engine option `bnd_factor` (default 1.0): with
+  `bnd_representation='adapt'`, the boundary is resampled with edges
+  `bnd_factor` times the size function (e.g. 1.5 gives 4.5 km edges where
+  the size function is 3 km), and Gmsh keeps those edges as they are.
+  Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
 
 ### Fixed
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and

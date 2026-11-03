@@ -1245,6 +1245,37 @@ class TestGeometricResampling(unittest.TestCase):
         n_pts = len(resampled_poly.exterior.coords)
         self.assertTrue(35 < n_pts < 45, f"Expected ~41 points, got {n_pts}")
 
+    def _edge_lengths(self, factor):
+        square = gpd.GeoSeries([box(0, 0, 30, 30)], crs="EPSG:4326")
+        hfun = MeshData(coords=np.array([[-1, -1], [31, -1], [31, 31], [-1, 31]]),
+                        values=np.ones(4), crs="EPSG:4326")
+        ring = utils.resample_geom_by_hfun(
+            square, hfun, factor=factor).iloc[0].exterior
+        coords = np.asarray(ring.coords)
+        # the last edge closes the ring and is shorter
+        return np.linalg.norm(np.diff(coords, axis=0), axis=1)[:-1]
+
+    def test_resample_geom_by_hfun_factor(self):
+        np.testing.assert_allclose(self._edge_lengths(1.0), 1.0)
+        for factor in (0.5, 1.5, 3.0):
+            with self.subTest(factor=factor):
+                lengths = self._edge_lengths(factor)
+                # along straight sides the step is exact; at a corner the
+                # chord is shorter than the step walked along the ring
+                self.assertTrue(np.all(lengths <= factor + 1e-9))
+                self.assertAlmostEqual(float(np.median(lengths)), factor)
+                self.assertAlmostEqual(len(lengths) + 1,
+                                       np.ceil(120 / factor), delta=1)
+
+    def test_resample_geom_by_hfun_bad_factor(self):
+        square = gpd.GeoSeries([box(0, 0, 10, 10)])
+        hfun = MeshData(coords=np.array([[-1, -1], [11, -1], [11, 11]]),
+                        values=np.ones(3))
+        for factor in (0, -1.0, np.nan, np.inf, 'big'):
+            with self.subTest(factor=factor):
+                with self.assertRaises(ValueError):
+                    utils.resample_geom_by_hfun(square, hfun, factor=factor)
+
 class TestClipping(unittest.TestCase):
     def setUp(self):
         self.mesh = utils.create_rectangle_mesh(

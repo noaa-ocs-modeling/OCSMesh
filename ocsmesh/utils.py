@@ -2156,13 +2156,38 @@ def clip_elements_by_index(
     return new_msht
 
 
-def resample_geom_by_hfun(shape_series, hfun_data):
+def check_resample_factor(factor, name='factor'):
+    """Return ``factor`` as a float, or raise if it is not a positive,
+    finite number."""
+    try:
+        value = float(factor)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a positive number, "
+                         f"got {factor!r}") from None
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a positive number, got {factor!r}")
+    return value
+
+
+def resample_geom_by_hfun(shape_series, hfun_data, factor=1.0):
     """
     Resamples polygons in the GeoSeries by 'walking' the boundary
     with step sizes determined by the local Hfun value.
 
     Tiny islands (holes) that collapse below 3 vertices are removed.
+
+    Parameters
+    ----------
+    shape_series : gpd.GeoSeries
+        Polygons to resample.
+    hfun_data : MeshData
+        Size function; the step at each vertex is the value of the
+        nearest size function point.
+    factor : float, default 1.0
+        Multiplies the step: 1.5 gives boundary edges 1.5 times the size
+        function.
     """
+    factor = check_resample_factor(factor)
 
     # Check for CRS mismatch warning
     if shape_series.crs is not None and hfun_data.crs is not None:
@@ -2198,7 +2223,7 @@ def resample_geom_by_hfun(shape_series, hfun_data):
             curr_pt = new_coords[-1]
 
             # Look up target size at this location
-            h = get_local_size(curr_pt[0], curr_pt[1])
+            h = get_local_size(curr_pt[0], curr_pt[1]) * factor
 
             next_dist = curr_dist + h
 

@@ -97,6 +97,59 @@ class TestGmsh(unittest.TestCase):
         with self.assertRaises(ValueError):
             GmshOptions(bnd_representation='bad_option')
 
+        self.assertEqual(opt.bnd_factor, 1.0)
+        self.assertEqual(GmshOptions(bnd_representation='adapt',
+                                     bnd_factor=2).bnd_factor, 2.0)
+        for bad in (0, -1.5, float('nan'), 'x'):
+            with self.subTest(bnd_factor=bad):
+                with self.assertRaises(ValueError):
+                    GmshOptions(bnd_representation='adapt', bnd_factor=bad)
+        # logging is disabled in this module: check the call instead
+        with patch('ocsmesh.engines.gmsh._logger') as logger:
+            GmshOptions(bnd_representation='adapt', bnd_factor=1.5)
+            logger.warning.assert_not_called()
+            GmshOptions(bnd_representation='fixed', bnd_factor=1.5)
+            logger.warning.assert_called_once()
+
+    def _boundary_edges(self, sizing, **options):
+        engine = get_mesh_engine('gmsh', optimize_mesh=False, **options)
+        mesh = engine.generate(gpd.GeoSeries([box(0, 0, 30, 30)]),
+                               sizing=sizing)
+        edges = utils.get_boundary_edges(mesh)
+        return np.linalg.norm(
+            mesh.coords[edges[:, 0]] - mesh.coords[edges[:, 1]], axis=1)
+
+    def test_adapt_bnd_factor(self):
+        """With 'adapt', boundary edges are bnd_factor times the size
+        function (Gmsh must not split them back)."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        x, y = np.meshgrid(np.linspace(-2, 32, 35), np.linspace(-2, 32, 35))
+        sizing = MeshData(coords=np.c_[x.ravel(), y.ravel()],
+                          values=np.ones(x.size))
+        default = self._boundary_edges(sizing, bnd_representation='adapt')
+        np.testing.assert_allclose(
+            default, self._boundary_edges(sizing, bnd_representation='adapt',
+                                          bnd_factor=1.0))
+        self.assertAlmostEqual(float(np.median(default)), 1.0)
+        for factor in (1.5, 3.0):
+            with self.subTest(bnd_factor=factor):
+                lengths = self._boundary_edges(
+                    sizing, bnd_representation='adapt', bnd_factor=factor)
+                self.assertAlmostEqual(float(np.median(lengths)), factor)
+                self.assertLess(len(lengths), len(default) / factor + 2)
+
+    def test_bnd_factor_needs_hfun(self):
+        """A constant sizing is not resampled; bnd_factor changes nothing."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        np.testing.assert_allclose(
+            np.sort(self._boundary_edges(2.0, bnd_representation='adapt')),
+            np.sort(self._boundary_edges(2.0, bnd_representation='adapt',
+                                         bnd_factor=1.5)))
+
     def test_generate_constant_sizing(self):
         if not HAS_GMSH:
             self.skipTest("Gmsh not installed")
