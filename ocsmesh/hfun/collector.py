@@ -348,7 +348,8 @@ class _FlowLimiterInfoCollector:
             hmin: float,
             hmax: float,
             upper_bound: float,
-            lower_bound: float
+            lower_bound: float,
+            flat_areas: str = 'hmin'
             ) -> None:
         """Add subtidal flow limiter refinement spec to the collection.
 
@@ -370,20 +371,23 @@ class _FlowLimiterInfoCollector:
         lower_bound : float
             Elevation lower bound of the area that the limiter
             refinement is applied.
+        flat_areas : {'hmin', 'keep'}
+            Size on flat cells, see
+            `HfunRaster.add_subtidal_flow_limiter`.
 
         Returns
         -------
         None
         """
 
-        srcs = tuple(src_idx) if src_idx is not None else None
         self._flow_lim_info.append(
-                (src_idx, hmin, hmax, upper_bound, lower_bound))
+                (src_idx, hmin, hmax, upper_bound, lower_bound, flat_areas))
 
     def __len__(self) -> int:
         return len(self._flow_lim_info)
 
-    def __iter__(self) -> Tuple[Sequence[int], float, float, float, float]:
+    def __iter__(self) -> Tuple[Sequence[int], float, float, float, float,
+                                str]:
         """Iterator method for this collection object
 
         Yields
@@ -398,10 +402,11 @@ class _FlowLimiterInfoCollector:
             Similar to `add`
         lb : float
             Similar to `add`
+        flat_areas : str
+            Similar to `add`
         """
 
-        for src_idx, hmin, hmax, ub, lb in self._flow_lim_info:
-            yield src_idx, hmin, hmax, ub, lb
+        yield from self._flow_lim_info
 
 
 
@@ -641,7 +646,8 @@ def _flow_limiter_task_worker(task: dict):
                 hmin=params['hmin'],
                 hmax=params['hmax'],
                 lower_bound=params['zmin'],
-                upper_bound=params['zmax'])
+                upper_bound=params['zmax'],
+                flat_areas=params['flat_areas'])
 
     return _refine_on_rebuilt_hfun(task, apply)
 
@@ -1843,7 +1849,8 @@ class HfunCollector(BaseHfun):
             hmax: Optional[float] = None,
             lower_bound: Optional[float] = None,
             upper_bound: Optional[float] = None,
-            source_index: Union[List[int], int, None] = None
+            source_index: Union[List[int], int, None] = None,
+            flat_areas: str = 'hmin'
             ) -> None:
         """Add mesh refinement based on topography.
 
@@ -1868,6 +1875,10 @@ class HfunCollector(BaseHfun):
             The index of raster entries from the input list argument
             of the constructor of collector size function. If `None`
             all input rasters are used.
+        flat_areas : {'hmin', 'keep'}, default='hmin'
+            Size on flat cells (zero topography gradient) inside the
+            bounds: ``'hmin'`` sets them to `hmin`, as in earlier
+            versions; ``'keep'`` leaves their size unchanged.
 
         Returns
         -------
@@ -1877,6 +1888,10 @@ class HfunCollector(BaseHfun):
         --------
         hfun.raster.HfunRaster.add_subtidal_flow_limiter :
         """
+
+        if flat_areas not in ('hmin', 'keep'):
+            raise ValueError(
+                f"flat_areas must be 'hmin' or 'keep', got {flat_areas!r}")
 
         self._invalidate()
 
@@ -1890,7 +1905,8 @@ class HfunCollector(BaseHfun):
             hmin=hmin,
             hmax=hmax,
             upper_bound=upper_bound,
-            lower_bound=lower_bound)
+            lower_bound=lower_bound,
+            flat_areas=flat_areas)
 
 
     def add_constant_value(
@@ -2857,14 +2873,16 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
-            for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+            for (src_idx, hmin, hmax, zmax, zmin,
+                 flat_areas) in self._flow_lim_coll:
                 if src_idx is not None and in_idx not in src_idx:
                     continue
                 if hmin is None:
                     hmin = self._size_info['hmin']
                 if hmax is None:
                     hmax = self._size_info['hmax']
-                hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
+                hfun.add_subtidal_flow_limiter(
+                    hmin, hmax, zmin, zmax, flat_areas=flat_areas)
 
 
     def _apply_flow_limiters_parallel(self) -> None:
@@ -2884,8 +2902,10 @@ class HfunCollector(BaseHfun):
                      'hmax': hmax if hmax is not None
                              else self._size_info.get('hmax'),
                      'zmin': zmin,
-                     'zmax': zmax}
-                    for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll
+                     'zmax': zmax,
+                     'flat_areas': flat_areas}
+                    for (src_idx, hmin, hmax, zmax, zmin,
+                         flat_areas) in self._flow_lim_coll
                     if src_idx is None or raster_idx in src_idx]
 
             tasks = [
@@ -3387,7 +3407,7 @@ class HfunCollector(BaseHfun):
                     if src_idx is None or in_idx in src_idx:
                         ignore = False
                         break
-                for src_idx, _, _, _, _ in self._flow_lim_coll:
+                for src_idx, *_ in self._flow_lim_coll:
                     if src_idx is None or in_idx in src_idx:
                         ignore = False
                         break
@@ -3486,7 +3506,8 @@ class HfunCollector(BaseHfun):
         _apply_flow_limiters :
         """
 
-        for src_idx, hmin, hmax, zmax, zmin in self._flow_lim_coll:
+        for (src_idx, hmin, hmax, zmax, zmin,
+             flat_areas) in self._flow_lim_coll:
             # TODO: Account for source index
             if hmin is None:
                 hmin = self._size_info['hmin']
@@ -3499,7 +3520,8 @@ class HfunCollector(BaseHfun):
             else:
                 zmin = max(zmin, -99990)
 
-            big_hfun.add_subtidal_flow_limiter(hmin, hmax, zmin, zmax)
+            big_hfun.add_subtidal_flow_limiter(
+                hmin, hmax, zmin, zmax, flat_areas=flat_areas)
 
     def _apply_const_val_fast(self, big_hfun):
         """Internal: apply specified constant value refinements.

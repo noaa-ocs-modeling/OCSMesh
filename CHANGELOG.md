@@ -18,6 +18,11 @@ follow [Semantic Versioning](https://semver.org/).
 - `utils.clip_elevation(mesh, min_elevation, max_elevation)` clamps the
   node elevations of a `Mesh` or `MeshData` in place.
 - `Mesh.interpolate` warns when some nodes get no value from any raster.
+- `add_subtidal_flow_limiter(..., flat_areas='hmin' | 'keep')` on
+  `HfunRaster` and `HfunCollector`: size on flat cells (zero topography
+  gradient), where the limiter formula is undefined. The default,
+  `'hmin'`, gives them the limiter's `hmin` as before; `'keep'` leaves
+  their size unchanged.
 
 ### Fixed
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
@@ -37,8 +42,7 @@ follow [Semantic Versioning](https://semver.org/).
   higher-priority tile no longer override valid lower-priority data
   (strips of wrong sizes along tile edges).
 - Constant value, flow limiter and topography constraints used raster
-  nodata as an elevation; the flow limiter also set flat areas to its
-  `hmin`. `Raster.clip` filled the outside of the clip shape with 0
+  nodata as an elevation. `Raster.clip` filled the outside of the clip shape with 0
   (sea level) when the DEM declares no nodata value.
 - `HfunCollector.meshdata()` returned a stale cached result after new
   refinements were added (and an MPI run could hang on a second call).

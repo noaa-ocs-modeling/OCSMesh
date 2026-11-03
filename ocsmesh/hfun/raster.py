@@ -1464,7 +1464,8 @@ class HfunRaster(BaseHfun, Raster):
             hmin: Optional[float] = None,
             hmax: Optional[float] = None,
             lower_bound: Optional[float] = None,
-            upper_bound: Optional[float] = None
+            upper_bound: Optional[float] = None,
+            flat_areas: str = 'hmin'
             ) -> None:
         """Add mesh refinement based on topography.
 
@@ -1485,6 +1486,12 @@ class HfunRaster(BaseHfun, Raster):
         upper_bound : float or None, default=None
             Higher limit of the cut-off elevation for region to apply
             the fixed `value`.
+        flat_areas : {'hmin', 'keep'}, default='hmin'
+            Size on flat cells (zero topography gradient) inside the
+            bounds, where the formula below is undefined. ``'hmin'``
+            sets them to `hmin` (or the size function's ``hmin`` when
+            `hmin` is None), as in earlier versions. ``'keep'`` leaves
+            their size unchanged.
 
         Returns
         -------
@@ -1512,9 +1519,14 @@ class HfunRaster(BaseHfun, Raster):
             h = {1 \\over 3} \\times {{|z|} \\over {\\left\\| \\grad z \\right\\|}}
 
         where :math:`z` is the elevation and :math:`h` is the value of
-        the mesh size. This refinement is not applied wherever the
-        magnitude of the gradient of topography is equal to zero.
+        the mesh size. Where the gradient is zero, `flat_areas` decides
+        the size. Nodata pixels and their neighbours are always left
+        unchanged.
         """
+
+        if flat_areas not in ('hmin', 'keep'):
+            raise ValueError(
+                f"flat_areas must be 'hmin' or 'keep', got {flat_areas!r}")
 
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
@@ -1556,6 +1568,10 @@ class HfunRaster(BaseHfun, Raster):
                 with np.errstate(divide='ignore', invalid='ignore'):
                     hfun_values = np.abs((1./3.)*(topobathy/dh))
                 hfun_values[~np.isfinite(hfun_values)] = np.nan
+                if flat_areas == 'hmin':
+                    flat_size = hmin if hmin is not None else self._hmin
+                    if flat_size is not None:
+                        hfun_values[(dh == 0) & ~nodata] = flat_size
 
                 if hmin is not None:
                     hfun_values[np.where(hfun_values < hmin)] = hmin
