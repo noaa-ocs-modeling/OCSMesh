@@ -55,6 +55,13 @@ Under MPI, every rank must reach the same collective calls (creating an
 `HfunCollector`, `meshdata()`, the refinement stages): build objects on
 all ranks and check results on rank 0 only (`multitile.is_manager()`).
 
+Coverage: the Linux / Python 3.12 CI job runs the API tests with
+`pytest --cov=ocsmesh` and uploads the report to
+[Codecov](https://app.codecov.io/gh/noaa-ocs-modeling/OCSMesh), which
+comments on the pull request. The checks are informational
+(`codecov.yml`) and do not block a merge. Locally:
+`python -m pytest tests/api --cov=ocsmesh --cov-report=term-missing`.
+
 ## Code style
 
 CI runs `pylint --disable=too-many-positional-arguments ocsmesh` with the

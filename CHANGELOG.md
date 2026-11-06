@@ -82,6 +82,8 @@ follow [Semantic Versioning](https://semver.org/).
   1.9x (bounded by the slowest tile's channel detection).
 
 ### Changed
+- CI uploads test coverage to Codecov (`codecov.yml`; informational
+  checks that do not block merges).
 - Internal: one task path for all distributed refinements and one
   writer for the per-tile size function files, shared by the serial,
   parallel and MPI modes.
