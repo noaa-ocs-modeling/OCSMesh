@@ -31,6 +31,7 @@ import numpy.typing as npt
 from pyproj import CRS, Transformer
 from scipy.interpolate import (
         RectBivariateSpline, RegularGridInterpolator)
+from scipy.ndimage import binary_dilation, distance_transform_edt
 from shapely.geometry import (
         LineString, box, Polygon, MultiPolygon, LinearRing)
 from shapely.ops import polygonize, linemerge
@@ -373,8 +374,10 @@ class EuclideanMesh2D(EuclideanMesh):
         values = self.meshdata.values.flatten()
 
         interp_info_map = {}
+        updated = np.zeros(len(values), dtype=bool)
         for (mask, _values), rast in zip(res, raster):
             values[mask] = _values
+            updated |= mask
 
             if info_out_path is not None:
                 vert_cs = None
@@ -422,6 +425,11 @@ class EuclideanMesh2D(EuclideanMesh):
             df_interp_info.sort_index().to_csv(
                 info_out_path, header=False, index=True)
 
+        if not updated.all():
+            warnings.warn(
+                f"{int(np.sum(~updated))} of {len(updated)} mesh nodes have"
+                " no valid raster data around them; their values are"
+                " unchanged.")
 
         self.meshdata.values = values.reshape((values.shape[0], 1))
 
@@ -2271,80 +2279,78 @@ def _mesh_interpolate_worker(
         If specified interpolation `method` is not supported.
     """
 
-    coords = np.array(coords)
+    coords = np.array(coords, dtype=np.float64)
     raster = Raster(raster_path)
-    idxs = []
-    values = []
+    if not raster.crs.equals(coords_crs):
+        transformer = Transformer.from_crs(
+                coords_crs, raster.crs, always_xy=True)
+        # pylint: disable=E0633
+        coords[:, 0], coords[:, 1] = transformer.transform(
+            coords[:, 0], coords[:, 1])
+    if filter_by_shape:
+        shape = raster.get_multipolygon()
+        in_shape = gpd.points_from_xy(
+            coords[:, 0], coords[:, 1]).intersects(shape)
+
+    # Windows overlap: a node takes the value of the last window that
+    # has valid data around it.
+    idxs = np.zeros(len(coords), dtype=bool)
+    values = np.zeros(len(coords))
     for window in raster.iter_windows(chunk_size=chunk_size, overlap=2):
 
-        if not raster.crs.equals(coords_crs):
-            transformer = Transformer.from_crs(
-                    coords_crs, raster.crs, always_xy=True)
-            # pylint: disable=E0633
-            coords[:, 0], coords[:, 1] = transformer.transform(
-                coords[:, 0], coords[:, 1])
         xi = raster.get_x(window)
-        yi = raster.get_y(window)
+        yi = np.ascontiguousarray(np.flip(raster.get_y(window)))
         # Use masked array to ignore missing values from DEM
         zi = raster.get_values(window=window, masked=True, band=band)
+        nodata = np.flipud(np.ma.getmaskarray(zi)).T
+        zi = np.flipud(np.ma.getdata(zi)).T
+        if nodata.all():
+            continue
 
-        if not filter_by_shape:
-            _idxs = np.logical_and(
-                np.logical_and(
-                    np.min(xi) <= coords[:, 0],
-                    np.max(xi) >= coords[:, 0]),
-                np.logical_and(
-                    np.min(yi) <= coords[:, 1],
-                    np.max(yi) >= coords[:, 1]))
-        else:
-            shape = raster.get_multipolygon()
-            gs_pt = gpd.points_from_xy(coords[:, 0], coords[:, 1])
-            _idxs = gs_pt.intersects(shape)
+        _idxs = np.logical_and(
+            np.logical_and(
+                np.min(xi) <= coords[:, 0],
+                np.max(xi) >= coords[:, 0]),
+            np.logical_and(
+                np.min(yi) <= coords[:, 1],
+                np.max(yi) >= coords[:, 1]))
+        if filter_by_shape:
+            _idxs = np.logical_and(_idxs, in_shape)
+        if not _idxs.any():
+            continue
 
-
-        interp_mask = None
-
+        mask_method = method
         if method == 'spline':
-            f = RectBivariateSpline(
-                xi,
-                np.ascontiguousarray(np.flip(yi)),
-                np.flipud(zi).T,
-                kx=3, ky=3, s=0,
-                # bbox=[min(x), max(x), min(y), max(y)]  # ??
-            )
+            if nodata.any():
+                # Fit to nodata filled with the nearest valid value, so
+                # the fill value does not ring through the spline, and
+                # drop nodes whose 4x4 cubic stencil touches nodata.
+                nearest = distance_transform_edt(
+                    nodata, return_distances=False, return_indices=True)
+                zi = zi[tuple(nearest)]
+                nodata = binary_dilation(nodata)
+            mask_method = 'linear'
+            f = RectBivariateSpline(xi, yi, zi, kx=3, ky=3, s=0)
             _values = f.ev(coords[_idxs, 0], coords[_idxs, 1])
 
         elif method in ['nearest', 'linear']:
-            # Inspired by StackOverflow 35807321
-            if np.any(zi.mask):
-                m_interp = RegularGridInterpolator(
-                    (xi, np.ascontiguousarray(np.flip(yi))),
-                    np.flipud(zi.mask).T.astype(bool),
-                    method=method
-                )
-                # Pick nodes NOT "contaminated" by masked values
-                interp_mask = m_interp(coords[_idxs]) > 0
-
-            f = RegularGridInterpolator(
-                (xi, np.ascontiguousarray(np.flip(yi))),
-                np.flipud(zi).T,
-                method=method
-            )
+            f = RegularGridInterpolator((xi, yi), zi, method=method)
             _values = f(coords[_idxs])
 
         else:
             raise ValueError(
                     f"Invalid value method specified <{method}>!")
 
-        if interp_mask is not None:
-            # pylint: disable=invalid-unary-operand-type
+        if nodata.any():
+            # Inspired by StackOverflow 35807321: pick nodes NOT
+            # "contaminated" by masked values
+            m_interp = RegularGridInterpolator(
+                (xi, yi), nodata.astype(float), method=mask_method)
+            valid = m_interp(coords[_idxs]) == 0
+            _idxs[_idxs] = valid
+            _values = _values[valid]
 
-            helper = np.ones_like(_values).astype(bool)
-            helper[interp_mask] = False
-            # _idxs is inverse mask
-            _idxs[_idxs] = helper
-            _values = _values[~interp_mask]
-        idxs.append(_idxs)
-        values.append(_values)
+        idxs[_idxs] = True
+        values[_idxs] = _values
 
-    return (np.hstack(idxs), np.hstack(values))
+    return idxs, values[idxs]

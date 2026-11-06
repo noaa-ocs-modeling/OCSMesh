@@ -75,8 +75,7 @@ def merge_overlapping_meshes(
                                                     )
 
         del carved_mesh,buff_mesh,msht
-    utils.order_mesh(msht_combined)
-    utils.finalize_mesh(msht_combined)
+    utils.finalize_mesh(msht_combined)   # also orients elements CCW
     if dst_crs:
         msht_combined.crs = dst_crs
 

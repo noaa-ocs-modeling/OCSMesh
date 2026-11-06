@@ -1,0 +1,35 @@
+# Codecov settings: https://docs.codecov.com/docs/codecov-yaml
+# Coverage is uploaded by the Linux / Python 3.12 job of
+# .github/workflows/functional_test.yml (pytest --cov=ocsmesh).
+#
+# The status checks report coverage on commits and pull requests but never
+# fail them (informational). To enforce a minimum later, remove
+# `informational: true` and set `target`, e.g. `target: 80%` under `patch`.
+
+codecov:
+  require_ci_to_pass: false   # report even when another CI job fails
+
+coverage:
+  precision: 1
+  round: down
+  range: "50...90"            # colour scale: red below 50%, green above 90%
+  status:
+    project:
+      default:
+        target: auto          # compare with the base commit
+        threshold: 1%         # allow small drops before marking it red
+        informational: true
+    patch:
+      default:
+        target: auto
+        informational: true
+
+comment:
+  layout: "condensed_header, diff, flags, files"
+  behavior: default
+  require_changes: false
+
+ignore:
+  - "tests"
+  - "docs"
+  - "examples"

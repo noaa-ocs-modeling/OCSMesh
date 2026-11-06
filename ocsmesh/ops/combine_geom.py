@@ -4,6 +4,7 @@ from multiprocessing import Pool, Lock
 import os
 import pathlib
 import tempfile
+import time
 import warnings
 from typing import Union, Sequence, Tuple, List
 
@@ -300,15 +301,15 @@ class GeomCombine:
             ) -> MultiPolygon:
 
         # Retry on Lustre: feather file may not be fully visible yet
-        import time as _time
+        # (pyarrow's ArrowInvalid is a ValueError)
         for _attempt in range(10):
             try:
                 multipolygon = MultiPolygon(
                         list(gpd.read_feather(path).geometry))
                 break
-            except Exception as _e:
+            except (OSError, ValueError):
                 if _attempt < 9:
-                    _time.sleep(1.0)
+                    time.sleep(1.0)
                 else:
                     raise
 
@@ -324,14 +325,14 @@ class GeomCombine:
             ) -> gpd.GeoDataFrame:
 
         # Retry on Lustre: feather file may not be fully visible yet
-        import time as _time
+        # (pyarrow's ArrowInvalid is a ValueError)
         for _attempt in range(10):
             try:
                 gdf = gpd.read_feather(path)
                 return gdf
-            except Exception as _e:
+            except (OSError, ValueError):
                 if _attempt < 9:
-                    _time.sleep(1.0)
+                    time.sleep(1.0)
                 else:
                     raise
 

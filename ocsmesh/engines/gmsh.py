@@ -6,7 +6,9 @@ import uuid
 
 import numpy as np
 import geopandas as gpd
+import shapely
 from shapely.geometry import Polygon, MultiPolygon
+from shapely.validation import make_valid
 
 try:
     import gmsh
@@ -21,12 +23,47 @@ from ocsmesh.engines.base import BaseMeshEngine, BaseMeshOptions
 _logger = logging.getLogger(__name__)
 
 
+def _areal_union(shape: gpd.GeoSeries):
+    """Union of the areal parts of `shape`, made valid first.
+
+    ``make_valid`` and ``union_all`` on resampled or self-touching rings
+    can return a ``GeometryCollection`` that mixes polygons with
+    degenerate lines and points. Gmsh only meshes the polygons.
+    """
+    # Fix invalid geometries before union to prevent GEOSException
+    shape = shape.apply(lambda g: g if g.is_valid else make_valid(g))
+    union = shape.union_all()
+    parts = shapely.get_parts(union)
+    polys = [g for g in parts if isinstance(g, Polygon) and not g.is_empty]
+    if len(polys) < len(parts):
+        _logger.info("Dropped %d non-polygon part(s) of the shape before "
+                     "meshing.", len(parts) - len(polys))
+    if isinstance(union, (Polygon, MultiPolygon)):
+        return union
+    return shapely.union_all(polys)
+
+
 class GmshOptions(BaseMeshOptions):
     """
     Wraps options for the Gmsh library.
+
+    Parameters
+    ----------
+    bnd_representation : {'fixed', 'exact', 'adapt'}
+        How the domain boundary is given to Gmsh. ``'adapt'`` resamples
+        it first, with a vertex spacing equal to the size function.
+    optimize_mesh : bool
+        Run Gmsh's mesh optimization.
+    bnd_factor : float
+        Only with ``bnd_representation='adapt'``: the boundary spacing is
+        the size function times this factor, e.g. 1.5 gives 4.5 km edges
+        where the size function is 3 km. Default 1.0.
+    **kwargs
+        Raw Gmsh options (e.g. ``{"Mesh.Algorithm": 5}``).
     """
 
-    def __init__(self, bnd_representation='fixed', optimize_mesh=True, **kwargs):
+    def __init__(self, bnd_representation='fixed', optimize_mesh=True,
+                 bnd_factor=1.0, **kwargs):
         if not _HAS_GMSH:
             raise ImportError("Gmsh library not installed.")
 
@@ -34,8 +71,14 @@ class GmshOptions(BaseMeshOptions):
         if bnd_representation not in valid_reps:
             raise ValueError(f"bnd_representation must be {valid_reps}, "
                              f"got '{bnd_representation}'")
+        bnd_factor = utils.check_resample_factor(bnd_factor, 'bnd_factor')
+        if bnd_factor != 1.0 and bnd_representation != 'adapt':
+            _logger.warning("bnd_factor=%s has no effect with "
+                            "bnd_representation='%s'; it only applies "
+                            "to 'adapt'.", bnd_factor, bnd_representation)
 
         self._bnd_representation = bnd_representation
+        self._bnd_factor = bnd_factor
         self._optimize_mesh = optimize_mesh
 
         self._options = {
@@ -54,6 +97,10 @@ class GmshOptions(BaseMeshOptions):
         return self._bnd_representation
 
     @property
+    def bnd_factor(self):
+        return self._bnd_factor
+
+    @property
     def optimize_mesh(self):
         return self._optimize_mesh
 
@@ -70,6 +117,9 @@ class GmshEngine(BaseMeshEngine):
         super().__init__(options)
         if not _HAS_GMSH:
             raise ImportError("Gmsh library not installed.")
+        # set by generate(): lock the boundary segments after an 'adapt'
+        # resampling with bnd_factor != 1
+        self._lock_resampled = False
 
     def generate(
         self,
@@ -78,34 +128,23 @@ class GmshEngine(BaseMeshEngine):
         seed: Optional[MeshData] = None,
     ) -> MeshData:
 
-        # Fix invalid geometries before union to prevent GEOSException
-        try:
-            from shapely.validation import make_valid
-            shape = shape.apply(
-                lambda g: make_valid(g) if not g.is_valid else g
-            )
-        except Exception:
-            pass
-        combined_shape = shape.union_all()
+        combined_shape = _areal_union(shape)
         if combined_shape.is_empty:
             raise ValueError("Input shape is empty.")
 
+        self._lock_resampled = False
         if self._options.bnd_representation == 'adapt':
             if isinstance(sizing, MeshData):
                 _logger.info("Adapting boundary geometry to match "
                              "Hfun resolution (Engine-side)...")
                 temp_series = gpd.GeoSeries([combined_shape], crs=shape.crs)
-                resampled_series = utils.resample_geom_by_hfun(temp_series, sizing)
-                # Fix any invalid geometries before union_all to prevent
-                # GEOSException TopologyException on Lustre/HPC runs.
-                try:
-                    from shapely.validation import make_valid
-                    resampled_series = resampled_series.apply(
-                        lambda g: make_valid(g) if not g.is_valid else g
-                    )
-                except Exception:
-                    pass
-                combined_shape = resampled_series.union_all()
+                resampled_series = utils.resample_geom_by_hfun(
+                    temp_series, sizing, factor=self._options.bnd_factor)
+                combined_shape = _areal_union(resampled_series)
+                if combined_shape.is_empty:
+                    raise ValueError(
+                        "Boundary resampling by Hfun produced an empty shape.")
+                self._lock_resampled = self._options.bnd_factor != 1.0
             elif sizing is None:
                 _logger.warning("'adapt' boundary requested but no Hfun provided. "
                                 "Skipping adaptation.")
@@ -257,8 +296,12 @@ class GmshEngine(BaseMeshEngine):
         gmsh.model.occ.synchronize()
 
         # Handling Boundary Types
-        if is_exact:
-            _logger.info("Boundary representation is 'exact': Locking edges.")
+        # With 'adapt' and bnd_factor != 1 the resampled segments are locked
+        # too: otherwise Gmsh splits them back to the size function and the
+        # factor has no effect. bnd_factor == 1 keeps the earlier behaviour.
+        if is_exact or self._lock_resampled:
+            _logger.info("Boundary representation is '%s': Locking edges.",
+                         bnd_rep)
             for l_tag in all_line_tags:
                 gmsh.model.mesh.setTransfiniteCurve(l_tag, 2)
 

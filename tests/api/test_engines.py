@@ -97,6 +97,59 @@ class TestGmsh(unittest.TestCase):
         with self.assertRaises(ValueError):
             GmshOptions(bnd_representation='bad_option')
 
+        self.assertEqual(opt.bnd_factor, 1.0)
+        self.assertEqual(GmshOptions(bnd_representation='adapt',
+                                     bnd_factor=2).bnd_factor, 2.0)
+        for bad in (0, -1.5, float('nan'), 'x'):
+            with self.subTest(bnd_factor=bad):
+                with self.assertRaises(ValueError):
+                    GmshOptions(bnd_representation='adapt', bnd_factor=bad)
+        # logging is disabled in this module: check the call instead
+        with patch('ocsmesh.engines.gmsh._logger') as logger:
+            GmshOptions(bnd_representation='adapt', bnd_factor=1.5)
+            logger.warning.assert_not_called()
+            GmshOptions(bnd_representation='fixed', bnd_factor=1.5)
+            logger.warning.assert_called_once()
+
+    def _boundary_edges(self, sizing, **options):
+        engine = get_mesh_engine('gmsh', optimize_mesh=False, **options)
+        mesh = engine.generate(gpd.GeoSeries([box(0, 0, 30, 30)]),
+                               sizing=sizing)
+        edges = utils.get_boundary_edges(mesh)
+        return np.linalg.norm(
+            mesh.coords[edges[:, 0]] - mesh.coords[edges[:, 1]], axis=1)
+
+    def test_adapt_bnd_factor(self):
+        """With 'adapt', boundary edges are bnd_factor times the size
+        function (Gmsh must not split them back)."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        x, y = np.meshgrid(np.linspace(-2, 32, 35), np.linspace(-2, 32, 35))
+        sizing = MeshData(coords=np.c_[x.ravel(), y.ravel()],
+                          values=np.ones(x.size))
+        default = self._boundary_edges(sizing, bnd_representation='adapt')
+        np.testing.assert_allclose(
+            default, self._boundary_edges(sizing, bnd_representation='adapt',
+                                          bnd_factor=1.0))
+        self.assertAlmostEqual(float(np.median(default)), 1.0)
+        for factor in (1.5, 3.0):
+            with self.subTest(bnd_factor=factor):
+                lengths = self._boundary_edges(
+                    sizing, bnd_representation='adapt', bnd_factor=factor)
+                self.assertAlmostEqual(float(np.median(lengths)), factor)
+                self.assertLess(len(lengths), len(default) / factor + 2)
+
+    def test_bnd_factor_needs_hfun(self):
+        """A constant sizing is not resampled; bnd_factor changes nothing."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        np.testing.assert_allclose(
+            np.sort(self._boundary_edges(2.0, bnd_representation='adapt')),
+            np.sort(self._boundary_edges(2.0, bnd_representation='adapt',
+                                         bnd_factor=1.5)))
+
     def test_generate_constant_sizing(self):
         if not HAS_GMSH:
             self.skipTest("Gmsh not installed")
@@ -149,6 +202,37 @@ class TestGmsh(unittest.TestCase):
         empty_poly = Polygon()
         with self.assertRaises(ValueError):
             engine.generate(gpd.GeoSeries([empty_poly]))
+
+    def test_geometry_collection_meshes_areal_parts(self):
+        """make_valid on a ring with a zero-width spike gives a
+        GeometryCollection (polygon + line); only the polygon is meshed."""
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        spike = Polygon([(0, 0), (10, 0), (10, 10), (5, 10), (5, 15),
+                         (5, 10), (0, 10)])
+        stray_line = LineString([(20, 20), (30, 30)])
+        for shape in ([spike], [box(0, 0, 10, 10), stray_line]):
+            for bnd in ('fixed', 'exact', 'adapt'):
+                with self.subTest(shape=shape[-1].geom_type, bnd=bnd):
+                    engine = get_mesh_engine(
+                        'gmsh', bnd_representation=bnd, optimize_mesh=False)
+                    sizing = MeshData(
+                        coords=self.sizing_field.coords * 1.5,
+                        values=self.sizing_field.values * 2.0)
+                    mesh = engine.generate(gpd.GeoSeries(shape),
+                                           sizing=sizing)
+                    self.assertGreater(get_num_elements(mesh), 0)
+                    self.assertTrue(np.all(mesh.coords <= 10 + 1e-9))
+
+    def test_only_non_areal_parts_is_empty(self):
+        if not HAS_GMSH:
+            self.skipTest("Gmsh not installed")
+
+        engine = get_mesh_engine('gmsh')
+        with self.assertRaises(ValueError):
+            engine.generate(gpd.GeoSeries([LineString([(0, 0), (1, 1)])]),
+                            sizing=0.5)
 
 
 class TestTriangle(unittest.TestCase):
