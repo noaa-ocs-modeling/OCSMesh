@@ -82,6 +82,10 @@ follow [Semantic Versioning](https://semver.org/).
   1.9x (bounded by the slowest tile's channel detection).
 
 ### Changed
+- Documentation extra: `sphinx-mdinclude` with `mistune>=3.3.3` replace
+  `m2r2` and `mistune==0.8.4`, which had known vulnerabilities; the
+  release workflow uses `pypa/gh-action-pypi-publish@v1.14.3` (was
+  v1.5.0). Fixes the Dependabot alerts on both.
 - CI uploads test coverage to Codecov (`codecov.yml`; informational
   checks that do not block merges).
 - Internal: one task path for all distributed refinements and one
