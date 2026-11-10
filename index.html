@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCSMesh &mdash; ocsmesh 2.2.0 documentation</title>
+  <title>OCSMesh &mdash; ocsmesh 3.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -44,6 +44,7 @@
               <ul>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -73,19 +74,30 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main"><img alt="lint workflow" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main" /></a>
-<a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main"><img alt="fnc workflow" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main" /></a>
+  <a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml"><img alt="Functional tests" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main" /></a>
+<a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml"><img alt="Pylint" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main" /></a>
+<a class="reference external image-reference" href="https://codecov.io/gh/noaa-ocs-modeling/OCSMesh"><img alt="codecov" src="https://codecov.io/gh/noaa-ocs-modeling/OCSMesh/branch/main/graph/badge.svg" /></a>
+<a class="reference external image-reference" href="https://noaa-ocs-modeling.github.io/OCSMesh/"><img alt="Documentation" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/documentation.yml/badge.svg" /></a>
+<a class="reference external image-reference" href="https://pypi.org/project/ocsmesh/"><img alt="PyPI" src="https://img.shields.io/pypi/v/ocsmesh" /></a>
+<a class="reference external image-reference" href="https://pypi.org/project/ocsmesh/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/ocsmesh" /></a>
+<a class="reference external image-reference" href="LICENSE"><img alt="License: CC0-1.0" src="https://img.shields.io/badge/license-CC0--1.0-blue" /></a>
 <section id="ocsmesh">
 <h1>OCSMesh<a class="headerlink" href="#ocsmesh" title="Permalink to this heading"></a></h1>
 <p>OCSMesh is a Python package for processing DEM data into georeferenced
-unstructured meshes using different meshing engine libraries.</p>
+unstructured meshes using different meshing engine libraries
+(Gmsh, Triangle). It builds the domain geometry and the mesh
+size function from any number of DEM tiles, applies refinements
+(contours, channels, depth bands, flow limiters, patches, line
+features) and constraints, and runs the mesh engine. Size functions can
+be computed serially, on all cores of a node or with MPI across nodes.</p>
+<p>Documentation: <a class="reference external" href="https://noaa-ocs-modeling.github.io/OCSMesh/">https://noaa-ocs-modeling.github.io/OCSMesh/</a></p>
 <section id="installation">
 <h2>Installation<a class="headerlink" href="#installation" title="Permalink to this heading"></a></h2>
 <p>Two ways of installing OCSMesh are described below:</p>
 <section id="using-conda">
 <h3>Using <code class="docutils literal notranslate"><span class="pre">conda</span></code><a class="headerlink" href="#using-conda" title="Permalink to this heading"></a></h3>
 <p>The recommended way to setup the environment for installing OCSMesh is to
-use <cite>``conda`</cite> &lt;<a class="reference external" href="https://docs.conda.io/en/latest/miniconda.html#linux-installers">https://docs.conda.io/en/latest/miniconda.html#linux-installers</a>&gt;`_
+use <span class="raw-html-md"><a href="https://docs.conda.io/en/latest/miniconda.html#linux-installers"><code class="docutils literal"><span class="pre">conda</span></code></a></span>
 with the <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> file provided in the repo to install
 required libraries.</p>
 <p>You need to make sure you’ve installed the mesh engine you’d like to
@@ -111,30 +123,92 @@ use (e.g., Triangle or Gmsh).</p>
 </pre></div>
 </div>
 </section>
+<section id="mpi-optional">
+<h3>MPI (optional)<a class="headerlink" href="#mpi-optional" title="Permalink to this heading"></a></h3>
+<p>MPI execution needs <code class="docutils literal notranslate"><span class="pre">mpi4py</span></code> built against the MPI library of your
+machine. <code class="docutils literal notranslate"><span class="pre">environment.yml</span></code> installs it from conda-forge; on an HPC
+system, prefer the system MPI (e.g. <code class="docutils literal notranslate"><span class="pre">module</span> <span class="pre">load</span></code> the MPI, then
+<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--no-binary</span> <span class="pre">mpi4py</span> <span class="pre">mpi4py</span></code>), or <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">ocsmesh[mpi]</span></code>.</p>
+</section>
 <section id="requirements">
 <h3>Requirements<a class="headerlink" href="#requirements" title="Permalink to this heading"></a></h3>
 <ul class="simple">
-<li><p>3.10 &lt;= Python</p></li>
+<li><p>3.10 &lt;= Python &lt; 3.14</p></li>
 <li><p>CMake</p></li>
 <li><p>C/C++ compilers</p></li>
 </ul>
 </section>
 </section>
+<section id="quick-start">
+<h2>Quick start<a class="headerlink" href="#quick-start" title="Permalink to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ocsmesh</span>
+
+<span class="n">dems</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"tile_1.tif"</span><span class="p">,</span> <span class="s2">"tile_2.tif"</span><span class="p">]</span>       <span class="c1"># later inputs take priority</span>
+<span class="n">domain</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Geom</span><span class="p">(</span><span class="n">dems</span><span class="p">,</span> <span class="n">zmax</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>      <span class="c1"># everything below 10 m</span>
+
+<span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span><span class="n">dems</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">"exact"</span><span class="p">,</span>
+                    <span class="n">nprocs</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">execution_mode</span><span class="o">=</span><span class="s2">"parallel"</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_contour</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">expansion_rate</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_constant_value</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">lower_bound</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">upper_bound</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+<span class="n">mesh</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">MeshDriver</span><span class="p">(</span><span class="n">domain</span><span class="p">,</span> <span class="n">hfun</span><span class="p">,</span> <span class="n">engine_name</span><span class="o">=</span><span class="s2">"gmsh"</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+<span class="n">mesh</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"mesh.2dm"</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"2dm"</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="execution-modes">
+<h2>Execution modes<a class="headerlink" href="#execution-modes" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">execution_mode</span></code></p></th>
+<th class="head"><p>runs on</p></th>
+<th class="head"><p>use it for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;serial&quot;</span></code> (default)</p></td>
+<td><p>this process</p></td>
+<td><p>small domains, debugging</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;parallel&quot;</span></code></p></td>
+<td><p>a pool of <code class="docutils literal notranslate"><span class="pre">nprocs</span></code> processes on one node</p></td>
+<td><p>a workstation or one HPC node</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&quot;mpi&quot;</span></code></p></td>
+<td><p>MPI ranks under <code class="docutils literal notranslate"><span class="pre">mpiexec</span></code>/<code class="docutils literal notranslate"><span class="pre">srun</span></code>, one tile per rank</p></td>
+<td><p>many tiles, several nodes</p></td>
+</tr>
+</tbody>
+</table>
+<p>All modes give the same size function. With MPI every rank runs the
+script and calls <code class="docutils literal notranslate"><span class="pre">hfun.meshdata()</span></code>; the result is returned on rank 0.
+Temporary files go to <code class="docutils literal notranslate"><span class="pre">$TMPDIR</span></code>, which must be on a shared filesystem
+for multi-node runs. See
+<a class="reference external" href="https://noaa-ocs-modeling.github.io/OCSMesh/parallel.html">Parallel and MPI execution</a>
+for details.</p>
+</section>
+<section id="contributing">
+<h2>Contributing<a class="headerlink" href="#contributing" title="Permalink to this heading"></a></h2>
+<p>Bug reports and pull requests are welcome; see
+<a class="reference external" href="CONTRIBUTING.md">CONTRIBUTING.md</a>. Changes are listed in
+<a class="reference external" href="CHANGELOG.md">CHANGELOG.md</a>.</p>
+</section>
 </section>
 <section id="how-to-cite">
 <h1>How to Cite<a class="headerlink" href="#how-to-cite" title="Permalink to this heading"></a></h1>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Title</span> <span class="p">:</span> <span class="n">OCSMesh</span> <span class="ow">and</span> <span class="n">an</span> <span class="n">automated</span> <span class="n">creek</span><span class="o">-</span><span class="n">to</span><span class="o">-</span><span class="n">ocean</span> <span class="n">mesh</span> <span class="n">generation</span> <span class="n">workflow</span>
+<span class="n">Personal</span> <span class="n">Author</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="p">:</span> <span class="n">Cassalho</span><span class="p">,</span> <span class="n">Felicio</span><span class="p">;</span><span class="n">Mani</span><span class="p">,</span> <span class="n">Soroosh</span><span class="p">;</span><span class="n">Moghimi</span><span class="p">,</span> <span class="n">Saeed</span><span class="p">;</span><span class="n">Ye</span><span class="p">,</span> <span class="n">Fei</span><span class="p">;</span><span class="n">Zhang</span><span class="p">,</span> <span class="n">Y</span><span class="o">.</span> <span class="n">Joseph</span><span class="p">;</span>
+<span class="n">Journal</span><span class="p">:</span> <span class="n">Ocean</span> <span class="n">Modelling</span>
+<span class="n">Published</span> <span class="n">Date</span> <span class="p">:</span> <span class="n">August</span> <span class="mi">2026</span>
+<span class="n">DOI</span> <span class="p">:</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">dx</span><span class="o">.</span><span class="n">doi</span><span class="o">.</span><span class="n">org</span><span class="o">/</span><span class="mf">10.1016</span><span class="o">/</span><span class="n">j</span><span class="o">.</span><span class="n">ocemod</span><span class="mf">.2026.102774</span>
+</pre></div>
+</div>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>Title : OCSMesh: a data-driven automated unstructured mesh generation software for coastal ocean modeling
 Personal Author(s) : Mani, Soroosh;Calzada, Jaime R.;Moghimi, Saeed;Zhang, Y. Joseph;Myers, Edward;Pe’eri, Shachak;
 Corporate Authors(s) : Coast Survey Development Laboratory (U.S.)
 Published Date : 2021
 Series : NOAA Technical Memorandum NOS CS ; 47
 DOI : https://doi.org/10.25923/csba-m072
-</pre></div>
-</div>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Title</span> <span class="p">:</span> <span class="n">OCSMesh</span> <span class="ow">and</span> <span class="n">an</span> <span class="n">end</span><span class="o">-</span><span class="n">to</span><span class="o">-</span><span class="n">end</span> <span class="n">workflow</span> <span class="k">for</span> <span class="n">fully</span> <span class="n">automatic</span> <span class="n">mesh</span> <span class="n">generation</span> <span class="k">with</span> <span class="n">application</span> <span class="n">to</span> <span class="n">compound</span> <span class="n">flood</span> <span class="n">studies</span>
-<span class="n">Personal</span> <span class="n">Author</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="p">:</span> <span class="n">Cassalho</span><span class="p">,</span> <span class="n">Felicio</span><span class="p">;</span><span class="n">Mani</span><span class="p">,</span> <span class="n">Soroosh</span><span class="p">;</span><span class="n">Ye</span><span class="p">,</span> <span class="n">Fei</span><span class="p">;</span><span class="n">Zhang</span><span class="p">,</span> <span class="n">Y</span><span class="o">.</span> <span class="n">Joseph</span><span class="p">;</span><span class="n">Moghimi</span><span class="p">,</span> <span class="n">Saeed</span><span class="p">;</span>
-<span class="n">Published</span> <span class="n">Date</span> <span class="p">:</span> <span class="n">Pre</span><span class="o">-</span><span class="nb">print</span><span class="p">(</span><span class="mi">2025</span><span class="p">)</span>
-<span class="n">DOI</span> <span class="p">:</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">dx</span><span class="o">.</span><span class="n">doi</span><span class="o">.</span><span class="n">org</span><span class="o">/</span><span class="mf">10.2139</span><span class="o">/</span><span class="n">ssrn</span><span class="mf">.5226658</span>
 </pre></div>
 </div>
 </section>
@@ -292,6 +366,15 @@ DOI : https://doi.org/10.25923/csba-m072
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#execution-modes">Execution modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#what-is-distributed">What is distributed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#running-with-mpi">Running with MPI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#temporary-files">Temporary files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#environment-set-at-import">Environment set at import</a></li>
+<li class="toctree-l2"><a class="reference internal" href="parallel.html#errors">Errors</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh"><code class="docutils literal notranslate"><span class="pre">Mesh</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.open"><code class="docutils literal notranslate"><span class="pre">Mesh.open()</span></code></a></li>
@@ -437,6 +520,8 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_polygon_channels"><code class="docutils literal notranslate"><span class="pre">get_polygon_channels()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_msh_t"><code class="docutils literal notranslate"><span class="pre">merge_msh_t()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_meshdata"><code class="docutils literal notranslate"><span class="pre">merge_meshdata()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.run_starmap"><code class="docutils literal notranslate"><span class="pre">run_starmap()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.effective_cpu_count"><code class="docutils literal notranslate"><span class="pre">effective_cpu_count()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.add_pool_args"><code class="docutils literal notranslate"><span class="pre">add_pool_args()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.drop_extra_vertex_from_line"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_line()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.drop_extra_vertex_from_polygon"><code class="docutils literal notranslate"><span class="pre">drop_extra_vertex_from_polygon()</span></code></a></li>
@@ -450,12 +535,14 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.raster_from_numpy"><code class="docutils literal notranslate"><span class="pre">raster_from_numpy()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.msht_from_numpy"><code class="docutils literal notranslate"><span class="pre">msht_from_numpy()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.clip_elements_by_index"><code class="docutils literal notranslate"><span class="pre">clip_elements_by_index()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.check_resample_factor"><code class="docutils literal notranslate"><span class="pre">check_resample_factor()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.resample_geom_by_hfun"><code class="docutils literal notranslate"><span class="pre">resample_geom_by_hfun()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.calc_el_angles"><code class="docutils literal notranslate"><span class="pre">calc_el_angles()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_skewed_el"><code class="docutils literal notranslate"><span class="pre">cleanup_skewed_el()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.cleanup_concave_quads"><code class="docutils literal notranslate"><span class="pre">cleanup_concave_quads()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.order_mesh"><code class="docutils literal notranslate"><span class="pre">order_mesh()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.quads_from_tri"><code class="docutils literal notranslate"><span class="pre">quads_from_tri()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.clip_elevation"><code class="docutils literal notranslate"><span class="pre">clip_elevation()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a><ul>

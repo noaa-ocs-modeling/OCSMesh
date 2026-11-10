@@ -1,0 +1,241 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallel and MPI execution &mdash; ocsmesh 3.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Mesh representation" href="ocsmesh.mesh.html" />
+    <link rel="prev" title="Mesh size definition" href="ocsmesh.size_function.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ocsmesh
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Parallel and MPI execution</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#execution-modes">Execution modes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-is-distributed">What is distributed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-with-mpi">Running with MPI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#temporary-files">Temporary files</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#environment-set-at-import">Environment set at import</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#errors">Errors</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ocsmesh</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Parallel and MPI execution</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/parallel.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="parallel-and-mpi-execution">
+<h1>Parallel and MPI execution<a class="headerlink" href="#parallel-and-mpi-execution" title="Permalink to this heading"></a></h1>
+<p>Large size functions are built from many DEM tiles. <code class="docutils literal notranslate"><span class="pre">Hfun</span></code> can
+compute them serially, with a pool of processes on one node, or with
+MPI across nodes. The result is the same in every mode; only the time
+changes.</p>
+<section id="execution-modes">
+<h2>Execution modes<a class="headerlink" href="#execution-modes" title="Permalink to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15.0%" />
+<col style="width: 40.0%" />
+<col style="width: 45.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>mode</p></th>
+<th class="head"><p>how the tiles are processed</p></th>
+<th class="head"><p>use it for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'serial'</span></code> (default)</p></td>
+<td><p>one after the other, in this process</p></td>
+<td><p>small domains, debugging</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">'parallel'</span></code></p></td>
+<td><p>a <code class="docutils literal notranslate"><span class="pre">multiprocessing</span></code> pool of <code class="docutils literal notranslate"><span class="pre">nprocs</span></code> workers on this node</p></td>
+<td><p>a workstation or a single HPC node</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">'mpi'</span></code></p></td>
+<td><p>MPI ranks under <code class="docutils literal notranslate"><span class="pre">mpiexec</span></code>/<code class="docutils literal notranslate"><span class="pre">srun</span></code>: rank 0 coordinates and the
+other ranks process one tile at a time</p></td>
+<td><p>many tiles, more than one node</p></td>
+</tr>
+</tbody>
+</table>
+<p>The mode applies to the <code class="docutils literal notranslate"><span class="pre">exact</span></code> method, where every tile gets its own
+size function. The <code class="docutils literal notranslate"><span class="pre">fast</span></code> method merges the tiles into one raster and
+always runs on one process.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ocsmesh</span>
+
+<span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span>
+    <span class="n">tile_paths</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'exact'</span><span class="p">,</span>
+    <span class="n">base_shape</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span> <span class="n">base_shape_crs</span><span class="o">=</span><span class="s1">'EPSG:4326'</span><span class="p">,</span>
+    <span class="n">nprocs</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">execution_mode</span><span class="o">=</span><span class="s1">'parallel'</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_contour</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">expansion_rate</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_channel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+<span class="n">sizes</span> <span class="o">=</span> <span class="n">hfun</span><span class="o">.</span><span class="n">meshdata</span><span class="p">()</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">execution_mode</span></code> can also be set after construction
+(<code class="docutils literal notranslate"><span class="pre">hfun.execution_mode</span> <span class="pre">=</span> <span class="pre">'mpi'</span></code>).</p>
+</section>
+<section id="what-is-distributed">
+<h2>What is distributed<a class="headerlink" href="#what-is-distributed" title="Permalink to this heading"></a></h2>
+<p>Each stage of the <code class="docutils literal notranslate"><span class="pre">exact</span></code> method runs one task per tile: constant
+values and depth bands, flow limiters, contours and channels (detection
+and refinement), patches, line features, constraints and the final
+per-tile size function. Stages with nothing to apply are skipped. The
+tiles are then combined in priority order on the coordinator: a later
+input wins where tiles overlap, but only where it has valid data.</p>
+<p>A stage is as slow as its slowest tile. For instance, channel detection
+on one large or complex tile can dominate a run; splitting such a tile
+helps more than adding ranks.</p>
+</section>
+<section id="running-with-mpi">
+<h2>Running with MPI<a class="headerlink" href="#running-with-mpi" title="Permalink to this heading"></a></h2>
+<p>Install the extra (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">ocsmesh[mpi]</span></code>) or <code class="docutils literal notranslate"><span class="pre">mpi4py</span></code> from
+conda-forge, built against the MPI of the cluster. Every rank runs the
+same script, so the script must build the <code class="docutils literal notranslate"><span class="pre">Hfun</span></code> (and call
+<code class="docutils literal notranslate"><span class="pre">meshdata()</span></code>) on all ranks; the result is returned on rank 0 and
+<code class="docutils literal notranslate"><span class="pre">None</span></code> on the other ranks:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span><span class="n">tile_paths</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span>
+                    <span class="n">execution_mode</span><span class="o">=</span><span class="s1">'mpi'</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_contour</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">expansion_rate</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+<span class="n">sizes</span> <span class="o">=</span> <span class="n">hfun</span><span class="o">.</span><span class="n">meshdata</span><span class="p">()</span>           <span class="c1"># collective: every rank calls it</span>
+<span class="k">if</span> <span class="n">sizes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>             <span class="c1"># rank 0</span>
+    <span class="n">mesh</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">MeshDriver</span><span class="p">(</span><span class="n">geom</span><span class="p">,</span> <span class="n">hfun</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># one rank per tile plus the coordinator</span>
+srun<span class="w"> </span>--ntasks<span class="o">=</span><span class="m">19</span><span class="w"> </span>--cpus-per-task<span class="o">=</span><span class="m">1</span><span class="w"> </span>python<span class="w"> </span>build_mesh.py
+mpiexec<span class="w"> </span>-n<span class="w"> </span><span class="m">19</span><span class="w"> </span>python<span class="w"> </span>build_mesh.py
+</pre></div>
+</div>
+<p>Ranks beyond the number of tiles plus one stay idle. Without a launcher,
+or with a single rank, <code class="docutils literal notranslate"><span class="pre">'mpi'</span></code> falls back to <code class="docutils literal notranslate"><span class="pre">'parallel'</span></code> with a
+warning.</p>
+<p>To run an independent serial or parallel <code class="docutils literal notranslate"><span class="pre">Hfun</span></code> on every rank (for
+example one domain per rank), pass <code class="docutils literal notranslate"><span class="pre">execution_mode='serial'</span></code> or
+<code class="docutils literal notranslate"><span class="pre">'parallel'</span></code> to the constructor; such a collector makes no collective
+calls.</p>
+</section>
+<section id="temporary-files">
+<h2>Temporary files<a class="headerlink" href="#temporary-files" title="Permalink to this heading"></a></h2>
+<p>Tasks exchange size functions through files under <code class="docutils literal notranslate"><span class="pre">$TMPDIR</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">/tmp</span></code>). For an MPI job on more than one node, <code class="docutils literal notranslate"><span class="pre">TMPDIR</span></code> must be on
+a filesystem that every node can see (Lustre, GPFS, NFS), e.g.:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">TMPDIR</span><span class="o">=</span>/path/on/shared/scratch/<span class="nv">$SLURM_JOB_ID</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$TMPDIR</span><span class="s2">"</span>
+</pre></div>
+</div>
+<p>The directory also needs room for a few copies of the clipped tiles.</p>
+</section>
+<section id="environment-set-at-import">
+<h2>Environment set at import<a class="headerlink" href="#environment-set-at-import" title="Permalink to this heading"></a></h2>
+<p>When a launcher started more than one task, <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">ocsmesh</span></code>:</p>
+<ul class="simple">
+<li><p>sets <code class="docutils literal notranslate"><span class="pre">OMP_NUM_THREADS</span></code>, <code class="docutils literal notranslate"><span class="pre">MKL_NUM_THREADS</span></code> and
+<code class="docutils literal notranslate"><span class="pre">OPENBLAS_NUM_THREADS</span></code> to 1, unless they are already set, so that
+ranks sharing a node do not oversubscribe its cores;</p></li>
+<li><p>sets the <code class="docutils literal notranslate"><span class="pre">multiprocessing</span></code> start method to <code class="docutils literal notranslate"><span class="pre">spawn</span></code>, because
+forking a process that holds an MPI communicator can deadlock.</p></li>
+</ul>
+<p>Nothing is changed in serial jobs, including single-task SLURM jobs.
+Import <code class="docutils literal notranslate"><span class="pre">ocsmesh</span></code> before creating any <code class="docutils literal notranslate"><span class="pre">multiprocessing</span></code> pool.</p>
+</section>
+<section id="errors">
+<h2>Errors<a class="headerlink" href="#errors" title="Permalink to this heading"></a></h2>
+<p>A task that fails stops the run with a <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> listing every
+failed tile and its traceback; no partial size function is returned.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="ocsmesh.size_function.html" class="btn btn-neutral float-left" title="Mesh size definition" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="ocsmesh.mesh.html" class="btn btn-neutral float-right" title="Mesh representation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
