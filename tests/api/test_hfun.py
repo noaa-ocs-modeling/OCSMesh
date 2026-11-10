@@ -11,7 +11,6 @@ from unittest.mock import MagicMock
 import geopandas as gpd
 import numpy as np
 
-from ocsmesh.features.constraint import _default_topo_func
 from shapely import geometry
 from pyproj import CRS
 
@@ -160,23 +159,34 @@ class SizeFunctionCollector(unittest.TestCase):
         
         self.assertTrue(isinstance(hfun_meshdata, ocsmesh.internal.MeshData))
 
-    def test_add_topo_func_constraint_exact(self):
-        # TODO: Improve this test (added for upgrade to shapely2)
+    def _topo_func_sizes(self, method, constrained):
+        # 1000 m everywhere; where deeper than 10 m, no finer than
+        # 50 m per metre of depth (the deepest cells, -100 m: 5000 m)
         hfun_coll = ocsmesh.Hfun(
             [self.rast1, self.rast2, self.mesh1],
-            hmin=10,
-            hmax=200,
-            method='exact'
-        )
-        hfun_coll.add_topo_func_constraint(
-            func=_default_topo_func,
-            upper_bound=-10,
-            value_type='min',
-        )
-
+            hmin=500, hmax=10000, method=method)
+        hfun_coll.add_constant_value(1000.0)
+        if constrained:
+            hfun_coll.add_topo_func_constraint(
+                func=lambda depth: 50.0 * np.abs(depth),
+                upper_bound=-10, value_type='min', rate=None)
         hfun_meshdata = hfun_coll.meshdata()
-        
         self.assertTrue(isinstance(hfun_meshdata, ocsmesh.internal.MeshData))
+        return np.asarray(hfun_meshdata.values).ravel()
+
+    def _check_topo_func_constraint(self, method):
+        plain = self._topo_func_sizes(method, constrained=False)
+        sizes = self._topo_func_sizes(method, constrained=True)
+        self.assertLessEqual(plain.max(), 1000 + 1e-3)
+        # deep water coarsened to 50 * 100 m, the rest left at 1000 m
+        self.assertTrue(np.any(np.abs(sizes - 5000) < 100))
+        self.assertAlmostEqual(np.median(sizes), 1000, delta=1e-3)
+
+    def test_add_topo_func_constraint_exact(self):
+        self._check_topo_func_constraint('exact')
+        # the exact method has no cells outside the DEMs
+        self.assertLessEqual(
+            self._topo_func_sizes('exact', constrained=True).max(), 5000 + 1)
 
     def test_add_contour_exact(self):
         # TODO: Improve this test (added for upgrade to shapely2)
@@ -337,22 +347,9 @@ class SizeFunctionCollector(unittest.TestCase):
         self.assertTrue(isinstance(hfun_meshdata, ocsmesh.internal.MeshData))
 
     def test_add_topo_func_constraint_fast(self):
-        # TODO: Improve this test (added for upgrade to shapely2)
-        hfun_coll = ocsmesh.Hfun(
-            [self.rast1, self.rast2, self.mesh1],
-            hmin=10,
-            hmax=200,
-            method='fast'
-        )
-        hfun_coll.add_topo_func_constraint(
-            func=_default_topo_func,
-            upper_bound=-10,
-            value_type='min',
-        )
-
-        hfun_meshdata = hfun_coll.meshdata()
-        
-        self.assertTrue(isinstance(hfun_meshdata, ocsmesh.internal.MeshData))
+        # NOTE: the fast method fills the area around the DEMs with
+        # -99999 m ("deep ocean"), where this constraint reaches hmax.
+        self._check_topo_func_constraint('fast')
 
     def test_add_contor_fast(self):
         # TODO: Improve this test (added for upgrade to shapely2)

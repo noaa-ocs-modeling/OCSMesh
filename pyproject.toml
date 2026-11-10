@@ -27,13 +27,15 @@ dependencies = [
     "matplotlib>=3.8", "netCDF4", "numba",
     "numpy>=1.21", # introduce npt.NDArray
     "pyarrow", "rtree", "pyproj>=3.0", "rasterio", "scipy",
-    "shapely", "typing_extensions", "utm",
+    "shapely>=2.0", "typing_extensions", "utm",
     ]
 dynamic = ["version"]
 
 [project.urls]
 Documentation = "https://noaa-ocs-modeling.github.io/OCSMesh/"
 Source = "https://github.com/noaa-ocs-modeling/OCSMesh/"
+Issues = "https://github.com/noaa-ocs-modeling/OCSMesh/issues"
+Changelog = "https://github.com/noaa-ocs-modeling/OCSMesh/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ocsmesh = "ocsmesh.__main__:main"
@@ -42,7 +44,8 @@ ocsmesh = "ocsmesh.__main__:main"
 gmsh = ["gmsh"]
 triangle = ["triangle"]
 mpi = ["mpi4py"]
-testing = ['pylint>=2.14','triangle','gmsh','pytest-benchmark']
+all = ["gmsh", "triangle", "mpi4py"]
+testing = ['pylint>=2.14','triangle','gmsh','pytest','pytest-cov','pytest-benchmark']
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',

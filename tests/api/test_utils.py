@@ -127,6 +127,21 @@ class FinalizeMesh(unittest.TestCase):
 
         utils.finalize_mesh(meshdata)
 
+        # Without sieve_area only the largest piece is kept: the small
+        # rectangle is dropped, the main one is untouched (holes, quads)
+        self.assertEqual(len(utils.get_mesh_polygons(meshdata).geoms), 1)
+        self.assertEqual(len(meshdata.coords), len(meshdata1.coords))
+        self.assertEqual(len(meshdata.tria), len(meshdata1.tria))
+        self.assertEqual(len(meshdata.quad), len(meshdata1.quad))
+        self.assertTrue(np.all(np.abs(meshdata.coords) <= 2))
+        # and the result is clean
+        used = np.unique(np.concatenate(
+            [meshdata.tria.ravel(), meshdata.quad.ravel()]))
+        self.assertEqual(len(used), len(meshdata.coords))
+        self.assertFalse(utils.has_pinched_nodes(meshdata))
+        self.assertEqual(
+            len(np.unique(meshdata.coords, axis=0)), len(meshdata.coords))
+
 
     def test_cleanup_duplicate(self):
 
@@ -702,8 +717,34 @@ class CreateRasterFromNumpy(unittest.TestCase):
             del rast
 
     def test_diff_extent_x_n_y(self):
-        # TODO: Test when x and y extent are different
-        pass
+        # 20 x values, 10 y values: data is (len(y), len(x))
+        in_rast_xy = np.mgrid[1:3:0.1, -1:0:0.1]
+        in_rast_z = np.random.random(in_rast_xy[0].T.shape)
+
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdir:
+            utils.raster_from_numpy(
+                Path(tdir) / 'test_rast.tiff',
+                data=in_rast_z, mgrid=in_rast_xy, crs=4326)
+            rast = Raster(Path(tdir) / 'test_rast.tiff')
+            self.assertEqual(rast.values.shape, (10, 20))
+            self.assertTrue(np.allclose(
+                in_rast_xy.transpose([2, 1, 0]).reshape(-1, 2),
+                rast.get_xy()))
+            self.assertTrue(np.all(in_rast_z == rast.values))
+            del rast
+
+            # other shapes fill the same extent at another resolution
+            utils.raster_from_numpy(
+                Path(tdir) / 'other.tiff',
+                data=np.random.random(in_rast_xy[0].shape),
+                mgrid=in_rast_xy, crs=4326)
+            other = Raster(Path(tdir) / 'other.tiff')
+            self.assertEqual(other.values.shape, (20, 10))
+            xy = other.get_xy()
+            self.assertTrue(np.allclose(
+                [xy[:, 0].min(), xy[:, 0].max(), xy[:, 1].min(), xy[:, 1].max()],
+                [1.0, 2.9, -1.0, -0.1]))
+            del other
 
     
     def test_data_masking(self):
@@ -748,7 +789,7 @@ class CreateRasterFromNumpy(unittest.TestCase):
 
     def test_multiband_raster_data(self):
         nbands = 5
-        in_data = np.ones((3, 4, nbands))
+        in_data = np.ones((4, 3, nbands))   # (len(y), len(x), bands)
         for i in range(nbands):
             in_data[:, :, i] *= i
         in_rast_xy = np.mgrid[-74:-71:1, 40.5:40.9:0.1]
@@ -1019,6 +1060,14 @@ class TestPhysicsCalculations(unittest.TestCase):
         self.assertGreater(c_num[0], 0)
 
 
+def _signed_areas(coords, elems):
+    """Shoelace signed area of each element (positive = CCW)."""
+    x = coords[elems, 0]
+    y = coords[elems, 1]
+    return 0.5 * np.sum(x * np.roll(y, -1, axis=1)
+                        - np.roll(x, -1, axis=1) * y, axis=1)
+
+
 class TestMeshTopologyOps(unittest.TestCase):
     """Tests for skewed elements, ordering, quad conversion, etc."""
 
@@ -1042,6 +1091,48 @@ class TestMeshTopologyOps(unittest.TestCase):
         # Calculate signed area
         area = 0.5 * (p1[0]*(p2[1]-p3[1]) + p2[0]*(p3[1]-p1[1]) + p3[0]*(p1[1]-p2[1]))
         self.assertGreater(area, 0, "Triangle should be ordered CCW (positive area)")
+
+    def test_order_mesh_mixed_orientation(self):
+        # Two CW triangles, one CCW, one degenerate, one CW quad
+        coords = np.array([[0, 0], [1, 0], [0, 1], [1, 1],
+                           [2, 0], [3, 0], [4, 0]], dtype=float)
+        tria = np.array([[0, 2, 1], [1, 2, 3], [1, 3, 2], [4, 5, 6]])
+        quad = np.array([[0, 2, 3, 1]])
+        mesh = MeshData(coords=coords, tria=tria, quad=quad)
+
+        ordered = utils.order_mesh(mesh)
+
+        self.assertIsNot(ordered, mesh)
+        np.testing.assert_array_equal(mesh.tria, tria)  # input unchanged
+        areas = _signed_areas(ordered.coords, ordered.tria)
+        self.assertTrue(np.all(areas[:3] > 0))
+        np.testing.assert_array_equal(ordered.tria[3], [4, 5, 6])
+        self.assertGreater(_signed_areas(ordered.coords, ordered.quad)[0], 0)
+        # same nodes in every element, only the order changes
+        np.testing.assert_array_equal(np.sort(ordered.tria, axis=1),
+                                      np.sort(tria, axis=1))
+
+    def test_order_mesh_in_place(self):
+        coords = np.array([[0, 0], [0, 1], [1, 0]], dtype=float)
+        mesh = MeshData(coords=coords, tria=np.array([[0, 1, 2]]))
+
+        result = utils.order_mesh(mesh, in_place=True)
+
+        self.assertIs(result, mesh)
+        self.assertGreater(_signed_areas(mesh.coords, mesh.tria)[0], 0)
+
+    def test_finalize_mesh_orients_ccw(self):
+        mesh = utils.create_rectangle_mesh(
+            nx=6, ny=6, holes=[], x_extent=(0, 1), y_extent=(0, 1))
+        mesh.tria = mesh.tria[:, [0, 2, 1]]  # every triangle clockwise
+        self.assertTrue(np.all(_signed_areas(mesh.coords, mesh.tria) < 0))
+
+        utils.finalize_mesh(mesh)
+
+        self.assertTrue(np.all(_signed_areas(mesh.coords, mesh.tria) > 0))
+        if mesh.quad.size:
+            self.assertTrue(
+                np.all(_signed_areas(mesh.coords, mesh.quad) > 0))
 
     def test_cleanup_skewed_elements(self):
         # Create a good triangle and a very thin (skewed) triangle
@@ -1153,6 +1244,37 @@ class TestGeometricResampling(unittest.TestCase):
         # The algorithm walks, so it might vary slightly depending on interpolation logic
         n_pts = len(resampled_poly.exterior.coords)
         self.assertTrue(35 < n_pts < 45, f"Expected ~41 points, got {n_pts}")
+
+    def _edge_lengths(self, factor):
+        square = gpd.GeoSeries([box(0, 0, 30, 30)], crs="EPSG:4326")
+        hfun = MeshData(coords=np.array([[-1, -1], [31, -1], [31, 31], [-1, 31]]),
+                        values=np.ones(4), crs="EPSG:4326")
+        ring = utils.resample_geom_by_hfun(
+            square, hfun, factor=factor).iloc[0].exterior
+        coords = np.asarray(ring.coords)
+        # the last edge closes the ring and is shorter
+        return np.linalg.norm(np.diff(coords, axis=0), axis=1)[:-1]
+
+    def test_resample_geom_by_hfun_factor(self):
+        np.testing.assert_allclose(self._edge_lengths(1.0), 1.0)
+        for factor in (0.5, 1.5, 3.0):
+            with self.subTest(factor=factor):
+                lengths = self._edge_lengths(factor)
+                # along straight sides the step is exact; at a corner the
+                # chord is shorter than the step walked along the ring
+                self.assertTrue(np.all(lengths <= factor + 1e-9))
+                self.assertAlmostEqual(float(np.median(lengths)), factor)
+                self.assertAlmostEqual(len(lengths) + 1,
+                                       np.ceil(120 / factor), delta=1)
+
+    def test_resample_geom_by_hfun_bad_factor(self):
+        square = gpd.GeoSeries([box(0, 0, 10, 10)])
+        hfun = MeshData(coords=np.array([[-1, -1], [11, -1], [11, 11]]),
+                        values=np.ones(3))
+        for factor in (0, -1.0, np.nan, np.inf, 'big'):
+            with self.subTest(factor=factor):
+                with self.assertRaises(ValueError):
+                    utils.resample_geom_by_hfun(square, hfun, factor=factor)
 
 class TestClipping(unittest.TestCase):
     def setUp(self):

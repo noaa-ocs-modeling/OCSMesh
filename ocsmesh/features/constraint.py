@@ -209,23 +209,13 @@ class TopoFuncConstraint(Constraint):
                 f"'function' must be callable, got {type(function).__name__!r}."
             )
 
-        # Lambda functions are anonymous and cannot be pickled by Python's
-        # pickle module, which is used by both MPI (mpi4py) and
-        # multiprocessing.Pool for task distribution. Passing a lambda will
-        # silently prevent parallel/MPI execution.
-        #
-        # Use a named function defined at module level instead:
+        # Parallel and MPI runs pickle the constraint to send it to the
+        # workers. Lambdas and functions defined inside other functions
+        # cannot be pickled; HfunCollector then applies the constraints on
+        # the coordinator instead. Define the function at module level to
+        # have it distributed:
         #   def my_func(depth): return depth / 2.0
         #   constraint = TopoFuncConstraint(function=my_func, ...)
-        if getattr(function, '__name__', '') == '<lambda>':
-            raise ValueError(
-                "TopoFuncConstraint requires a named function (not a lambda) "
-                "so it can be serialized for parallel and MPI execution.\n"
-                "Define the function at module level:\n"
-                "  def my_func(depth): return depth / 2.0\n"
-                "  constraint = TopoFuncConstraint(function=my_func, ...)"
-            )
-
         self._func = function
 
 
