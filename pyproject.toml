@@ -49,6 +49,6 @@ testing = ['pylint>=2.14','triangle','gmsh','pytest','pytest-cov','pytest-benchm
 documentation = [
     'sphinx < 7.0.0', # due to sphinx_rtd_theme support
     'sphinx-rtd-theme', 'sphinx-argparse',
-    'mistune==0.8.4', 'm2r2', 'numpydoc',
+    'sphinx-mdinclude', 'mistune>=3.3.3', 'numpydoc',
     'triangle', 'gmsh'
 ]
