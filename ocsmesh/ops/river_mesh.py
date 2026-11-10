@@ -25,7 +25,6 @@ from shapely import union_all, make_valid
 
 from ocsmesh import utils
 from ocsmesh.internal import MeshData
-from ocsmesh.utils import ELEM_2D_TYPES
 
 from ocsmesh.ops.combine_mesh import triangulate_polygon_s
 

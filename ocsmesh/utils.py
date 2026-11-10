@@ -2,9 +2,11 @@ from collections import defaultdict
 from itertools import permutations
 from typing import Union, Dict, Sequence, Tuple, List
 from functools import reduce
-from multiprocessing import cpu_count, Pool
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Pool, current_process
 from copy import deepcopy
 import logging
+import os
 import warnings
 
 from matplotlib.path import Path
@@ -414,6 +416,7 @@ def finalize_mesh(mesh, sieve_area=None):
 
     cleanup_isolates(mesh)
     cleanup_duplicates(mesh)
+    order_mesh(mesh, in_place=True)
 
 
 
@@ -1361,9 +1364,15 @@ def estimate_bounds_utm(bounds, crs="EPSG:4326"):
     if in_crs.is_geographic:
         x0, y0, x1, y1 = bounds
 
-        # Safety: clamp values to valid earth range to prevent crashes on edge cases
-        # or return None if they are obviously projected coordinates masquerading as Geo
+        # Outside the valid range (e.g. 0-360 longitudes, or projected
+        # coordinates labelled geographic) there is no UTM zone; callers
+        # then work in degrees, so say so.
         if y0 < -90 or y1 > 90 or x0 < -180 or x1 > 180:
+            _logger.debug(f"estimate_bounds_utm: bounds {bounds}")
+            warnings.warn(
+                "Geographic bounds outside [-180, 180] x [-90, 90]: no UTM"
+                " CRS is estimated, so distances and sizes are computed in"
+                " degrees.")
             return None
 
         _, _, number, letter = utm.from_latlon(
@@ -1523,17 +1532,112 @@ def merge_meshdata(
     return composite_mesh
 
 
+def run_starmap(pool, func, iterable):
+    """Run `func(*args)` for each item, using `pool` when one exists."""
+
+    if pool is None:
+        return [func(*args) for args in iterable]
+    return pool.starmap(func, iterable)
+
+
+class _ThreadPool:
+    """Drop-in replacement for multiprocessing.Pool using threads.
+
+    Provides ``starmap`` and ``_processes`` so that existing code
+    (``run_starmap``, ``add_feature``) works without modification.
+
+    Because threads share the same address space, Shapely geometries
+    and NumPy arrays are passed by reference — **zero pickling**.
+    This is safe when the parallelised functions spend most of their
+    time in C extensions (NumPy, SciPy, GEOS/Shapely 2.x) that
+    release the GIL.
+    """
+
+    def __init__(self, processes: int):
+        self._processes = processes
+        self._executor = ThreadPoolExecutor(max_workers=processes)
+
+    def starmap(self, func, iterable):
+        """Emulate Pool.starmap using ThreadPoolExecutor."""
+        items = list(iterable)
+        futures = [self._executor.submit(func, *args) for args in items]
+        return [f.result() for f in futures]
+
+    # Context-manager support so ``with _ThreadPool(...) as p:`` works.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._executor.shutdown(wait=True)
+
+    def join(self):
+        """No-op — ThreadPoolExecutor.shutdown already joins."""
+
+
+def effective_cpu_count() -> int:
+    """Return the number of CPU cores actually available to this process.
+
+    On Linux (including HPC nodes managed by SLURM/cgroups/taskset),
+    ``os.sched_getaffinity(0)`` returns the *affinity mask* of the current
+    process — i.e. only the cores the scheduler has pinned it to.  This is
+    the correct value to use when sizing a thread or process pool, because
+    the machine's *total* core count (as reported by ``os.cpu_count()``) may
+    be much larger than the allocation given to this MPI rank.
+
+    Example::
+
+        # 4-rank job on a 16-core node: SLURM pins each rank to 4 cores.
+        # os.cpu_count()        → 16  (wrong — would oversubscribe)
+        # effective_cpu_count() →  4  (correct)
+
+    Falls back to ``os.cpu_count()`` on platforms that do not implement
+    ``sched_getaffinity`` (macOS, Windows).
+    """
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        # macOS / Windows: sched_getaffinity is not available.
+        return os.cpu_count() or 1
+
+
 def add_pool_args(func):
-    def wrapper(*args, nprocs=None, pool=None, **kwargs):
+    """Give a function `nprocs=`/`pool=` kwargs and hand it a `pool`.
+
+    Four ways to call the wrapped function:
+
+    - `pool=<Pool>`      -> reuse that pool (no new processes are started)
+    - `nprocs=N`         -> create a pool of N processes just for this call
+    - `nprocs=1`         -> no pool at all, `pool=None` is passed instead
+    - `use_threads=True` -> use a thread pool instead of a process pool,
+                            eliminating pickling overhead (safe when the
+                            work is in GIL-releasing C extensions)
+
+    That last case matters: a `multiprocessing.Pool` worker is a daemon
+    process, and a daemon process is not allowed to start child processes.
+    So code running inside a worker must ask for `nprocs=1` and get `None`
+    back, otherwise Python raises
+    "daemonic processes are not allowed to have children".
+    """
+
+    def wrapper(*args, nprocs=None, pool=None, use_threads=False, **kwargs):
         if pool is not None:
-            rv = func(*args, **kwargs, pool=pool)
-        else:
-            # Check nprocs
-            nprocs = -1 if nprocs is None else nprocs
-            nprocs = cpu_count() if nprocs == -1 else nprocs
-            with Pool(processes=nprocs) as new_pool:
-                rv = func(*args, **kwargs, pool=new_pool)
-            new_pool.join()
+            return func(*args, **kwargs, pool=pool)
+
+        # Check nprocs
+        nprocs = -1 if nprocs is None else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
+
+        if nprocs <= 1 or current_process().daemon:
+            # Sequential: no child process, so this is safe inside a worker.
+            return func(*args, **kwargs, pool=None)
+
+        if use_threads:
+            with _ThreadPool(processes=nprocs) as thread_pool:
+                return func(*args, **kwargs, pool=thread_pool)
+
+        with Pool(processes=nprocs) as new_pool:
+            rv = func(*args, **kwargs, pool=new_pool)
+        new_pool.join()
         return rv
     return wrapper
 
@@ -1935,11 +2039,32 @@ def raster_from_numpy(
     mgrid, # Needs to have ij indexing!
     crs=CRS.from_epsg(4326)
 ) -> None:
+    """Write ``data`` to a GeoTIFF on the grid given by ``mgrid``.
+
+    Parameters
+    ----------
+    filename : path-like
+        Output file.
+    data : 2D array, or 3D array with the bands last
+        Values, written as is: rows along y (from the first y value),
+        columns along x. With shape ``(len(y), len(x))`` the pixel
+        centres are exactly the ``mgrid`` points; any other shape fills
+        the same extent with a different resolution.
+    mgrid : sequence of two 2D arrays
+        ``np.mgrid[x0:x1:dx, y0:y1:dy]`` (ij indexing): ``mgrid[0][:, 0]``
+        are the x and ``mgrid[1][0, :]`` the y coordinates. Only the
+        first and last of each set the extent.
+    crs : CRS or anything CRS.from_user_input accepts, default EPSG:4326
+
+    Raises
+    ------
+    ValueError
+        If ``data`` is not 2D or 3D.
+    """
     x = mgrid[0][:, 0]
     y = mgrid[1][0, :]
     res_x = (x[-1] - x[0]) / data.shape[1]
     res_y = (y[-1] - y[0]) / data.shape[0]
-    # TODO: Mistake in transformation if x and y extent are different?
     transform = rio.transform.Affine.translation(
         x[0], y[0]
     ) * rio.transform.Affine.scale(res_x, res_y)
@@ -2031,13 +2156,38 @@ def clip_elements_by_index(
     return new_msht
 
 
-def resample_geom_by_hfun(shape_series, hfun_data):
+def check_resample_factor(factor, name='factor'):
+    """Return ``factor`` as a float, or raise if it is not a positive,
+    finite number."""
+    try:
+        value = float(factor)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a positive number, "
+                         f"got {factor!r}") from None
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be a positive number, got {factor!r}")
+    return value
+
+
+def resample_geom_by_hfun(shape_series, hfun_data, factor=1.0):
     """
     Resamples polygons in the GeoSeries by 'walking' the boundary
     with step sizes determined by the local Hfun value.
 
     Tiny islands (holes) that collapse below 3 vertices are removed.
+
+    Parameters
+    ----------
+    shape_series : gpd.GeoSeries
+        Polygons to resample.
+    hfun_data : MeshData
+        Size function; the step at each vertex is the value of the
+        nearest size function point.
+    factor : float, default 1.0
+        Multiplies the step: 1.5 gives boundary edges 1.5 times the size
+        function.
     """
+    factor = check_resample_factor(factor)
 
     # Check for CRS mismatch warning
     if shape_series.crs is not None and hfun_data.crs is not None:
@@ -2073,7 +2223,7 @@ def resample_geom_by_hfun(shape_series, hfun_data):
             curr_pt = new_coords[-1]
 
             # Look up target size at this location
-            h = get_local_size(curr_pt[0], curr_pt[1])
+            h = get_local_size(curr_pt[0], curr_pt[1]) * factor
 
             next_dist = curr_dist + h
 
@@ -2224,44 +2374,52 @@ def cleanup_concave_quads(mesh: MeshData) -> MeshData:
             concave_el.append(l_idx)
     return clip_elements_by_index(mesh, tria=None, quad=concave_el, inverse=False)
 
-def order_mesh(msht: MeshData, crs=None) -> MeshData:
-    '''
-    Order mesh nodes counterclockwise (triangles and quads)
-    based on the coordinates
+def order_mesh(msht: MeshData, crs=None, in_place: bool = False) -> MeshData:
+    """Orient every element counterclockwise.
+
+    Triangles with a negative signed area get their last two nodes
+    swapped; degenerate (zero-area) triangles are left as they are.
+    Quad nodes are sorted by angle around the element centroid, which
+    gives a counterclockwise order for convex quads.
 
     Parameters
     ----------
     msht : MeshData
-        triangular mesh
+        Mesh to orient.
+    crs : optional
+        Unused; kept for backward compatibility.
+    in_place : bool, default=False
+        Modify ``msht`` instead of a copy.
 
     Returns
     -------
     MeshData
-        quadrangular + triangular mesh
-    np.array
-        mesh whose nodes within each element are oriented counterclockwise
+        The oriented mesh (``msht`` itself when ``in_place`` is True).
+    """
+    mesh = msht if in_place else deepcopy(msht)
+    coords = mesh.coords
 
-    Notes
-    -----
-    '''
-    def order_nodes(verts):
-        centroid = np.mean(verts, axis=0)
-        angles = np.arctan2(verts[:,1] - centroid[1], verts[:,0] - centroid[0])
-        return np.argsort(angles)
+    tria = mesh.tria
+    if tria.size > 0:
+        p0, p1, p2 = (coords[tria[:, i]] for i in range(3))
+        signed_area = (
+            (p1[:, 0] - p0[:, 0]) * (p2[:, 1] - p0[:, 1])
+            - (p2[:, 0] - p0[:, 0]) * (p1[:, 1] - p0[:, 1]))
+        clockwise = signed_area < 0
+        if np.any(clockwise):
+            tria = tria.copy()
+            tria[clockwise] = tria[clockwise][:, [0, 2, 1]]
+            mesh.tria = tria
 
-    new_mesh = deepcopy(msht)
-    for etype in ELEM_2D_TYPES:
-        elems = getattr(new_mesh, etype)
-        if elems.size == 0:
-            continue
-        coords = new_mesh.coords
-        ordered_elems = []
-        for el in elems:
-            el_coords = coords[el]
-            order = order_nodes(el_coords)
-            ordered_elems.append(el[order])
-        setattr(new_mesh, etype, np.array(ordered_elems))
-    return new_mesh
+    quad = mesh.quad
+    if quad.size > 0:
+        verts = coords[quad]                       # (n, 4, 2)
+        centroid = verts.mean(axis=1, keepdims=True)
+        angles = np.arctan2(verts[..., 1] - centroid[..., 1],
+                            verts[..., 0] - centroid[..., 0])
+        mesh.quad = np.take_along_axis(quad, np.argsort(angles, axis=1),
+                                       axis=1)
+    return mesh
 
 def quads_from_tri(msht: MeshData) -> MeshData:
     """
@@ -2329,3 +2487,47 @@ def quads_from_tri(msht: MeshData) -> MeshData:
     finalize_mesh(new_mesh)
 
     return order_mesh(new_mesh)
+
+
+def clip_elevation(
+        mesh,
+        min_elevation: Union[float, None] = None,
+        max_elevation: Union[float, None] = None,
+        ) -> None:
+    """Clamp the node elevations of a mesh, in place.
+
+    Values above `max_elevation` become `max_elevation` and values
+    below `min_elevation` become `min_elevation`; NaN stays NaN. For
+    example ``clip_elevation(mesh, -6000, 10)`` caps depths at 6000 m
+    and land at 10 m above the datum.
+
+    Parameters
+    ----------
+    mesh : Mesh or MeshData
+        Mesh whose values are clipped (its ``meshdata`` for a Mesh).
+    min_elevation : float or None, default=None
+        Lower bound; None leaves the values unbounded below.
+    max_elevation : float or None, default=None
+        Upper bound; None leaves the values unbounded above.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If both bounds are None, or `min_elevation` > `max_elevation`.
+    """
+
+    if min_elevation is None and max_elevation is None:
+        raise ValueError(
+            "Specify min_elevation, max_elevation or both.")
+    if (min_elevation is not None and max_elevation is not None
+            and min_elevation > max_elevation):
+        raise ValueError(
+            f"min_elevation ({min_elevation}) is greater than"
+            f" max_elevation ({max_elevation}).")
+
+    msht = getattr(mesh, 'meshdata', mesh)
+    msht.values = np.clip(msht.values, min_elevation, max_elevation)

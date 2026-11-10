@@ -7,7 +7,6 @@ extracting & overriding data, plotting, etc.
 import math
 import hashlib
 import logging
-import multiprocessing
 import os
 import pathlib
 import tempfile
@@ -51,11 +50,12 @@ from numba.types import CPointer
 
 from ocsmesh import figures
 from ocsmesh import utils
+from ocsmesh.utils import effective_cpu_count
 
 _logger = logging.getLogger(__name__)
 
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
 
 
@@ -75,6 +75,16 @@ def nbmean(values_ptr, len_values, result, data):
         result[0] = result[0] / n_vals
 
     return 1
+
+
+def _default_nodata(dtype: str) -> Union[int, float]:
+    """Nodata value for a raster that declares none (-99999 if it fits,
+    as in NCEI DEMs, else the smallest value of the type)."""
+    dtype = np.dtype(dtype)
+    if np.issubdtype(dtype, np.floating):
+        return -99999.0
+    info = np.iinfo(dtype)
+    return -99999 if info.min <= -99999 else int(info.min)
 
 
 class RasterPath:
@@ -1117,7 +1127,7 @@ class Raster:
         """
 
         nprocs = -1 if nprocs is None else nprocs
-        nprocs = multiprocessing.cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
         dst_crs = CRS.from_user_input(dst_crs)
         transform, width, height = warp.calculate_default_transform(
             self.src.crs,
@@ -1230,13 +1240,20 @@ class Raster:
 
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
+        # Without a declared nodata value, rasterio fills the pixels
+        # outside the shape with 0, which then reads as valid sea-level
+        # data. Declare one so they are masked like any other nodata.
+        nodata = self.src.nodata
+        if nodata is None:
+            nodata = _default_nodata(self.src.dtypes[0])
         out_image, out_transform = rasterio.mask.mask(
-            self.src, geom.geoms, crop=True)
+            self.src, geom.geoms, crop=True, nodata=nodata)
         meta_update = {
             "driver": "GTiff",
             "height": out_image.shape[1],
             "width": out_image.shape[2],
-            "transform": out_transform
+            "transform": out_transform,
+            "nodata": nodata,
             }
 
         with self.modifying_raster(**meta_update) as dest:

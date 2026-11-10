@@ -1,9 +1,10 @@
 import gc
 import logging
-from multiprocessing import Pool, Lock, cpu_count
+from multiprocessing import Pool, Lock
 import os
 import pathlib
 import tempfile
+import time
 import warnings
 from typing import Union, Sequence, Tuple, List
 
@@ -17,6 +18,7 @@ from shapely.validation import explain_validity
 
 from ocsmesh.raster import Raster
 from ocsmesh.mesh.mesh import Mesh
+from ocsmesh.utils import effective_cpu_count
 
 
 _logger = logging.getLogger(__name__)
@@ -43,7 +45,7 @@ class GeomCombine:
         self._calc_crs = None
         self._base_exterior = None
 
-        nprocs = cpu_count() if nprocs == -1 else nprocs
+        nprocs = effective_cpu_count() if nprocs == -1 else nprocs
         dem_files = [] if dem_files is None else dem_files
 
         self._operation_info = {
@@ -298,8 +300,18 @@ class GeomCombine:
             fix: bool = True
             ) -> MultiPolygon:
 
-        multipolygon = MultiPolygon(
-                list(gpd.read_feather(path).geometry))
+        # Retry on Lustre: feather file may not be fully visible yet
+        # (pyarrow's ArrowInvalid is a ValueError)
+        for _attempt in range(10):
+            try:
+                multipolygon = MultiPolygon(
+                        list(gpd.read_feather(path).geometry))
+                break
+            except (OSError, ValueError):
+                if _attempt < 9:
+                    time.sleep(1.0)
+                else:
+                    raise
 
         if fix:
             multipolygon = self._get_valid_multipolygon(
@@ -312,9 +324,17 @@ class GeomCombine:
             path: Union[str, os.PathLike],
             ) -> gpd.GeoDataFrame:
 
-        gdf = gpd.read_feather(path)
-
-        return gdf
+        # Retry on Lustre: feather file may not be fully visible yet
+        # (pyarrow's ArrowInvalid is a ValueError)
+        for _attempt in range(10):
+            try:
+                gdf = gpd.read_feather(path)
+                return gdf
+            except (OSError, ValueError):
+                if _attempt < 9:
+                    time.sleep(1.0)
+                else:
+                    raise
 
 
     def _process_priority(

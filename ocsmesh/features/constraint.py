@@ -14,6 +14,15 @@ from ocsmesh import utils
 
 ConstraintValueType = Enum("ConstraintValueType", "MIN MAX")
 
+
+def _default_topo_func(i):
+    """Default function for TopoFuncConstraint: returns half the depth.
+
+    Defined at module level (not as a lambda) so it is pickleable by
+    ``pickle`` / ``mpi4py``, enabling MPI and multiprocessing dispatch.
+    """
+    return i / 2.0
+
 class Constraint(ABC):
 
     def __init__(self, value_type: str = 'min', rate: float = 0.1):
@@ -184,7 +193,7 @@ class TopoFuncConstraint(Constraint):
 
     def __init__(
             self,
-            function=lambda i: i / 2.0,
+            function=_default_topo_func,
             upper_bound=np.inf,
             lower_bound=-np.inf,
             value_type: str = 'min',
@@ -195,9 +204,19 @@ class TopoFuncConstraint(Constraint):
         self._lb = lower_bound
         self._ub = upper_bound
 
-        self._func = lambda i: i / 2.0
-        if callable(function):
-            self._func = function
+        if not callable(function):
+            raise TypeError(
+                f"'function' must be callable, got {type(function).__name__!r}."
+            )
+
+        # Parallel and MPI runs pickle the constraint to send it to the
+        # workers. Lambdas and functions defined inside other functions
+        # cannot be pickled; HfunCollector then applies the constraints on
+        # the coordinator instead. Define the function at module level to
+        # have it distributed:
+        #   def my_func(depth): return depth / 2.0
+        #   constraint = TopoFuncConstraint(function=my_func, ...)
+        self._func = function
 
 
     @property

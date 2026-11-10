@@ -1,0 +1,59 @@
+cff-version: 1.2.0
+message: "If you use OCSMesh, please cite it as below."
+title: "OCSMesh"
+abstract: >-
+  Python package for processing DEM data into georeferenced unstructured
+  meshes for coastal ocean modeling.
+type: software
+license: CC0-1.0
+repository-code: "https://github.com/noaa-ocs-modeling/OCSMesh"
+url: "https://noaa-ocs-modeling.github.io/OCSMesh/"
+authors:
+  - family-names: Mani
+    given-names: Soroosh
+  - family-names: Calzada
+    given-names: Jaime R.
+  - family-names: Cassalho
+    given-names: Felicio
+preferred-citation:
+  type: report
+  title: >-
+    OCSMesh: a data-driven automated unstructured mesh generation software
+    for coastal ocean modeling
+  authors:
+    - family-names: Mani
+      given-names: Soroosh
+    - family-names: Calzada
+      given-names: Jaime R.
+    - family-names: Moghimi
+      given-names: Saeed
+    - family-names: Zhang
+      given-names: Y. Joseph
+    - family-names: Myers
+      given-names: Edward
+    - family-names: Pe'eri
+      given-names: Shachak
+  institution:
+    name: "Coast Survey Development Laboratory (U.S.)"
+  collection-title: "NOAA Technical Memorandum NOS CS 47"
+  year: 2021
+  doi: "10.25923/csba-m072"
+references:
+  - type: article
+    title: >-
+      OCSMesh and an end-to-end workflow for fully automatic mesh
+      generation with application to compound flood studies
+    authors:
+      - family-names: Cassalho
+        given-names: Felicio
+      - family-names: Mani
+        given-names: Soroosh
+      - family-names: Ye
+        given-names: Fei
+      - family-names: Zhang
+        given-names: Y. Joseph
+      - family-names: Moghimi
+        given-names: Saeed
+    year: 2025
+    notes: "Pre-print"
+    doi: "10.2139/ssrn.5226658"

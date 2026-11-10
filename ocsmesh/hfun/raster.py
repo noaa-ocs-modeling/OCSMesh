@@ -6,6 +6,7 @@ import gc
 import logging
 import os
 from multiprocessing.pool import Pool
+import math
 import operator
 import pathlib
 import tempfile
@@ -35,10 +36,12 @@ from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.raster import Raster, get_iter_windows
+from ocsmesh.raster import tmpdir as raster_tmpdir
 from ocsmesh.features.constraint import (
     Constraint,
     TopoConstConstraint,
     TopoFuncConstraint,
+    _default_topo_func,
     CourantNumConstraint,
     RegionConstraint,
     apply_constraints_wrap
@@ -51,16 +54,27 @@ warnings.filterwarnings(
 
 _logger = logging.getLogger(__name__)
 
-tmpdir = str(pathlib.Path(tempfile.gettempdir()+'/ocsmesh'))+'/'
+tmpdir = str(pathlib.Path(os.environ.get('TMPDIR', tempfile.gettempdir())+'/ocsmesh'))+'/'
 os.makedirs(tmpdir, exist_ok=True)
+
+# Maximum number of points to pass to the gmsh background sizing field
+# (gmsh.view.addListData) per window.  gmsh interpolates the field
+# spatially so it does not need full-raster density — capping at 1 M
+# points is sufficient for any practical hmin/hmax range and prevents
+# the job from hanging or OOM-killing workers on large tiles such as
+# a global GEBCO background (~114 M points at stride=1).
+# Resolution-based auto-stride (computed in meshdata()) handles fine DEMs
+# like CUDEM 1/9"; this cap handles the orthogonal case where the tile is
+# geographically large rather than fine-resolution.
+# Callers can override per-call via the explicit stride= argument.
+_GMSH_MAX_SIZING_PTS: int = 10_000_000
+
 
 class HfunInputRaster:
     """Descriptor class for holding reference to the input raster"""
 
     def __set__(self, obj, raster: Raster) -> None:
-        if not isinstance(raster, Raster):
-            raise TypeError(f'Argument raster must be of type {Raster}, not '
-                            f'type {type(raster)}.')
+        self.bind(obj, raster)
         # init output raster file
         with ExitStack() as stack:
 
@@ -81,9 +95,16 @@ class HfunInputRaster:
                 values[:] = getattr(np.finfo(np.float32), 'max')
                 dst.write(values, window=window)
 
+    @staticmethod
+    def bind(obj, raster: Raster) -> None:
+        """Attach the input raster without writing a size function file."""
+
+        if not isinstance(raster, Raster):
+            raise TypeError(f'Argument raster must be of type {Raster}, not '
+                            f'type {type(raster)}.')
         obj.__dict__['raster'] = raster
-        obj._chunk_size = raster.chunk_size
-        obj._overlap = raster.overlap
+        obj._chunk_size = raster.chunk_size  # pylint: disable=protected-access
+        obj._overlap = raster.overlap  # pylint: disable=protected-access
 
     def __get__(self, obj, objtype=None) -> Raster:
         return obj.__dict__['raster']
@@ -230,7 +251,6 @@ class HfunRaster(BaseHfun, Raster):
 
         self._xy_cache = {}
         # NOTE: unlike Raster, HfunRaster has no "path" set
-        self._raster = raster
         # TODO: Store max and min as two separate constraints instead
         # of private attributes
         self._hmin = float(hmin) if hmin is not None else hmin
@@ -240,22 +260,33 @@ class HfunRaster(BaseHfun, Raster):
         self._hold_const = False
         self._hold_const_hit = 0
 
-
-        if initial_value is not None:
-            # This is the "Wrap Existing" mode for workers.
-            # The descriptor has already created a blank file for us at self.tmpfile.
-            # We overwrite that blank file with the contents from the previous step.
-            if isinstance(initial_value, (str, pathlib.Path)):
-                shutil.copy2(initial_value, self.tmpfile)
-                # We must re-open the source to reflect the copied content
-                self._src = rasterio.open(self.tmpfile, 'r+')
+        if initial_value is None:
+            # A new size function: every pixel starts at float32 max.
+            self._raster = raster
+        else:
+            # "Wrap existing" mode (workers, and the coordinator taking
+            # their results): start from a copy of the size function file
+            # rather than writing a blank full-resolution raster first.
+            HfunInputRaster.bind(self, raster)
+            tmpfd, tmppath = tempfile.mkstemp(prefix=raster_tmpdir)
+            os.close(tmpfd)
+            shutil.copy2(initial_value, tmppath)
+            self._tmpfile = tmppath
+            self._src = rasterio.open(self.tmpfile, 'r+')
 
 
     def __del__(self):
         super().__del__()
         for _, memfile_path in self._xy_cache.items():
-            pathlib.Path(memfile_path).unlink()
+            pathlib.Path(memfile_path).unlink(missing_ok=True)
 
+
+    def _resolution_m(self) -> float:
+        """Approximate x pixel size in metres."""
+
+        if self.crs.is_geographic:
+            return abs(self.dx) * 111_000
+        return abs(self.dx) * self.crs.axis_info[0].unit_conversion_factor
 
     def meshdata(
             self,
@@ -295,8 +326,47 @@ class HfunRaster(BaseHfun, Raster):
             iter_windows = [window]
 
         _logger.info(f'Configuring engine: {mesh_engine}...')
+        # For gmsh, default the boundary representation to 'adapt' so the
+        # boundary vertices are resampled to match the hfun resolution
+        # (improves background mesh quality). Callers can still override.
+        # TriangleOptions does not accept this kwarg, so gate on engine.
+        if mesh_engine == 'gmsh':
+            mesh_options.setdefault('bnd_representation', 'adapt')
         # Factory handles loading the specific engine module (abstraction safe)
         engine = get_mesh_engine(mesh_engine, **mesh_options)
+
+        # Auto-compute stride when not provided by the caller.
+        #
+        # Why this matters:
+        #   1/9" CUDEM tiles at ~3 m/pixel resolution produce ~65 M points per
+        #   tile window. Passing all of them to gmsh.view.addListData() requires
+        #   building a Python list of ~260 M floats (≈2 GB RAM per worker). With
+        #   15+ workers in a Pool this stalls or OOMs the job entirely.
+        #
+        # The fix: subsample the sizing field so it has roughly 2 sample points
+        # per minimum-element interval. Gmsh interpolates the background field
+        # spatially, so sub-metre precision in the sizing function is wasted —
+        # gmsh only needs enough points to capture the spatial gradient of the
+        # size function (set by hmin and expansion_rate). A stride of
+        #   stride = int(hmin / dem_res_m / 2)
+        # keeps ~2 samples per hmin and is always >= 1.
+        #
+        # For hmin=1000 m and CUDEM 1/9" (≈3 m/px): stride ≈ 166 → ~2,400
+        # points per tile instead of 65 M. For coarser DEMs (e.g. GEBCO 15"
+        # ≈ 460 m/px): stride = 1 (no subsampling needed, field is already small).
+        #
+        # Resolution in metres: for a geographic CRS 1 degree ≈ 111,000 m
+        # (simple and conservative: it ignores the cos(lat) shrink of dx);
+        # for a projected CRS the axis unit (m, ft, ...) is converted.
+        # Callers can always pass an explicit stride= to override.
+        if stride is None and self.hmin is not None:
+            dem_res_m = self._resolution_m()
+            if dem_res_m > 0:
+                stride = max(1, int(self.hmin / dem_res_m / 2))
+                _logger.info(
+                    f"Auto-computed stride={stride} "
+                    f"(hmin={self.hmin} m, dem_res≈{dem_res_m:.1f} m/px)"
+                )
 
         tria_list = []
         coords_list = []
@@ -312,6 +382,33 @@ class HfunRaster(BaseHfun, Raster):
             # --- Stride Logic (Optional Optimization) ---
             # If stride is provided, we read a subset of data to save memory
             step = stride if stride is not None else 1
+
+            # Per-window point-count cap: if the strided field still exceeds
+            # _GMSH_MAX_SIZING_PTS, increase step further. This protects
+            # against geographically large tiles (e.g. a global GEBCO
+            # background) where the resolution-based auto-stride computes
+            # stride=1 (correct — the DEM is coarse) but the tile covers such
+            # a large geographic extent that total points are still ~100 M+.
+            # Only applied when using gmsh (the engine that uses the sizing
+            # field); triangle builds its own triangulation and is unaffected.
+            if mesh_engine == 'gmsh':
+                n_pts_strided = (win.height // step) * (win.width // step)
+                if n_pts_strided > _GMSH_MAX_SIZING_PTS:
+                    step = max(
+                        step,
+                        math.ceil(
+                            math.sqrt(
+                                win.height * win.width / _GMSH_MAX_SIZING_PTS
+                            )
+                        )
+                    )
+                    _logger.info(
+                        f"Window {i_win+1}/{len(iter_windows)}: stride "
+                        f"increased to {step} to cap gmsh sizing field at "
+                        f"≤{_GMSH_MAX_SIZING_PTS:,} pts "
+                        f"(tile {win.width}×{win.height} px, "
+                        f"was {n_pts_strided:,} pts)"
+                    )
 
             # Read window
             start = time()
@@ -537,6 +634,8 @@ class HfunRaster(BaseHfun, Raster):
             for i, window in enumerate(iter_windows):
                 hfun_values = self.get_values(band=1, window=window)
                 rast_values = self.raster.get_values(band=1, window=window)
+                nodata = self._topo_nodata(window)
+                original = hfun_values[nodata]
 
 
                 # Get locations
@@ -556,6 +655,7 @@ class HfunRaster(BaseHfun, Raster):
                 for constraint in constraint_list:
                     hfun_values = constraint.apply(
                             rast_values, hfun_values, locations=xy, crs=utm_crs)
+                hfun_values[nodata] = original
 
                 # Apply global constraints
                 if self.hmin is not None:
@@ -626,7 +726,7 @@ class HfunRaster(BaseHfun, Raster):
     def add_topo_func_constraint(
             self,
             func: Callable[[npt.NDArray[np.float32]], npt.NDArray[np.float32]]
-                = lambda i: i / 2.0,
+                = _default_topo_func,
             upper_bound: float = np.inf,
             lower_bound: float = -np.inf,
             value_type: Literal['min', 'max'] = 'min',
@@ -807,7 +907,7 @@ class HfunRaster(BaseHfun, Raster):
             expansion_rate: Optional[float] = None,
             target_size: Optional[float] = None,
             *, # kwarg-only comes after this
-            pool: Pool,
+            pool: Optional[Pool] = None,
             ) -> None:
         """Add refinement as a region of fixed size with an optional rate
 
@@ -870,6 +970,12 @@ class HfunRaster(BaseHfun, Raster):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
+        # Nothing to refine (e.g. no channels detected on this tile):
+        # leave the size function as it is.
+        if multipolygon.is_empty:
+            _logger.info('add_patch: empty shape, size function unchanged.')
+            return
+
         # For expansion_rate
         if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon.geoms]
@@ -909,6 +1015,10 @@ class HfunRaster(BaseHfun, Raster):
                     # error we assume there's no overlap
                     _logger.debug(
                         'Polygons don\'t intersect with the raster')
+                    # Every window must be written: an unwritten window
+                    # of the new file reads as 0, which clamps to hmin.
+                    dst.write_band(
+                        1, self.get_values(window=window), window=window)
                     continue
                 _logger.info(
                     f'Creating mask from shape took {time()-start}.')
@@ -1019,7 +1129,7 @@ class HfunRaster(BaseHfun, Raster):
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
             *,
-            pool: Pool,
+            pool: Optional[Pool] = None,
             tolerance: Optional[float] = None
             ) -> None:
         """Add refinement for auto detected channels
@@ -1089,7 +1199,7 @@ class HfunRaster(BaseHfun, Raster):
             target_size: Optional[float] = None,
             max_verts: int = 200,
             *, # kwarg-only comes after this
-            pool: Pool,
+            pool: Optional[Pool] = None,
             ) -> None:
         """Add refinement for specified linestring `feature`
 
@@ -1162,6 +1272,8 @@ class HfunRaster(BaseHfun, Raster):
         elif isinstance(feature, MultiLineString):
             feature = list(feature.geoms)
 
+        feature = [line for line in feature if not line.is_empty]
+
         # check target size
         target_size = self.hmin if target_size is None else target_size
         if target_size is None:
@@ -1169,6 +1281,16 @@ class HfunRaster(BaseHfun, Raster):
                              'global hmin has been set.')
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
+
+        # Nothing to refine (e.g. no contour or channel on this tile):
+        # leave the size function as it is.
+        if not feature:
+            _logger.info('add_feature: empty feature, size function unchanged.')
+            return
+
+        # `pool` may be None (sequential). KDTree still needs a worker count.
+        n_workers = 1 if pool is None else pool._processes  # pylint: disable=W0212
+
         with self.modifying_raster(driver='GTiff') as dst:
             iter_windows = list(self.iter_windows())
             tot = len(iter_windows)
@@ -1179,7 +1301,8 @@ class HfunRaster(BaseHfun, Raster):
 
                 _logger.info('Repartitioning features...')
                 start = time()
-                res = pool.starmap(
+                res = utils.run_starmap(
+                    pool,
                     utils.repartition_features,
                     [(linestring, max_verts) for linestring in feature]
                     )
@@ -1200,7 +1323,8 @@ class HfunRaster(BaseHfun, Raster):
                     _logger.info(
                             f"Transform creation took {time() - start2:f}")
                     start2 = time()
-                    win_feature = pool.starmap(
+                    win_feature = utils.run_starmap(
+                        pool,
                         ops.transform,
                         [(transformer.transform, linestring)
                          for linestring in win_feature]
@@ -1208,7 +1332,8 @@ class HfunRaster(BaseHfun, Raster):
                     _logger.info(
                             f"Transform apply took {time() - start2:f}")
 
-                transformed_features = pool.starmap(
+                transformed_features = utils.run_starmap(
+                    pool,
                     utils.transform_linestring,
                     [(linestring, target_size) for linestring in win_feature]
                 )
@@ -1223,6 +1348,19 @@ class HfunRaster(BaseHfun, Raster):
                         for linestring in geom.geoms:
                             points.extend(linestring.coords)
                 _logger.info(f'Point concatenation took {time()-start}.')
+
+                # No feature points intersect this window (e.g. add_channel
+                # detected no channels on this tile). There is nothing to
+                # refine here, so skip the KDTree/query which would otherwise
+                # raise "data must be of shape (n, m)" on an empty array.
+                if len(points) == 0:
+                    _logger.info(
+                        'No feature points in this window; skipping.')
+                    # Every window must be written: an unwritten window
+                    # of the new file reads as 0, which clamps to hmin.
+                    dst.write_band(
+                        1, self.get_values(window=window), window=window)
+                    continue
 
                 _logger.info('Generating KDTree...')
                 start = time()
@@ -1239,12 +1377,12 @@ class HfunRaster(BaseHfun, Raster):
                 if self.hmax:
                     r = (self.hmax - target_size) / (expansion_rate * target_size)
                     near_dists, neighbors = tree.query(
-                        xy, workers=pool._processes, distance_upper_bound=r)
+                        xy, workers=n_workers, distance_upper_bound=r)
                     distances = r * np.ones(len(xy))
                     mask = np.logical_not(np.isinf(near_dists))
                     distances[mask] = near_dists[mask]
                 else:
-                    distances, _ = tree.query(xy, workers=pool._processes)
+                    distances, _ = tree.query(xy, workers=n_workers)
                 _logger.info(f'Querying KDTree took {time()-start}.')
                 values = expansion_rate*target_size*distances + target_size
                 values = values.reshape(window.height, window.width).astype(
@@ -1258,6 +1396,15 @@ class HfunRaster(BaseHfun, Raster):
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
+
+    def _topo_nodata(self, window: rasterio.windows.Window) -> npt.NDArray[bool]:
+        """True where the input topography has no data in ``window``.
+
+        Topography-based refinements must leave these pixels alone:
+        a nodata value (e.g. -99999) is not an elevation.
+        """
+        with rasterio.open(self.raster.tmpfile) as src:
+            return src.read_masks(1, window=window) == 0
 
     def get_xy_memcache(
             self,
@@ -1317,7 +1464,8 @@ class HfunRaster(BaseHfun, Raster):
             hmin: Optional[float] = None,
             hmax: Optional[float] = None,
             lower_bound: Optional[float] = None,
-            upper_bound: Optional[float] = None
+            upper_bound: Optional[float] = None,
+            flat_areas: str = 'hmin'
             ) -> None:
         """Add mesh refinement based on topography.
 
@@ -1338,6 +1486,12 @@ class HfunRaster(BaseHfun, Raster):
         upper_bound : float or None, default=None
             Higher limit of the cut-off elevation for region to apply
             the fixed `value`.
+        flat_areas : {'hmin', 'keep'}, default='hmin'
+            Size on flat cells (zero topography gradient) inside the
+            bounds, where the formula below is undefined. ``'hmin'``
+            sets them to `hmin` (or the size function's ``hmin`` when
+            `hmin` is None), as in earlier versions. ``'keep'`` leaves
+            their size unchanged.
 
         Returns
         -------
@@ -1365,9 +1519,14 @@ class HfunRaster(BaseHfun, Raster):
             h = {1 \\over 3} \\times {{|z|} \\over {\\left\\| \\grad z \\right\\|}}
 
         where :math:`z` is the elevation and :math:`h` is the value of
-        the mesh size. This refinement is not applied wherever the
-        magnitude of the gradient of topography is equal to zero.
+        the mesh size. Where the gradient is zero, `flat_areas` decides
+        the size. Nodata pixels and their neighbours are always left
+        unchanged.
         """
+
+        if flat_areas not in ('hmin', 'keep'):
+            raise ValueError(
+                f"flat_areas must be 'hmin' or 'keep', got {flat_areas!r}")
 
         hmin = float(hmin) if hmin is not None else hmin
         hmax = float(hmax) if hmax is not None else hmax
@@ -1394,15 +1553,25 @@ class HfunRaster(BaseHfun, Raster):
                 else:
                     dx = self.dx
                     dy = self.dy
-                topobathy = self.raster.get_values(band=1, window=window)
+                topobathy = self.raster.get_values(
+                    band=1, window=window).astype(np.float64)
+                # NaN at nodata: the gradient next to a nodata pixel is
+                # then NaN (left unchanged below) instead of a huge slope
+                # towards e.g. -99999 that would force hmin there.
+                nodata = self._topo_nodata(window)
+                topobathy[nodata] = np.nan
                 dx, dy = np.gradient(topobathy, dx, dy)
-                with warnings.catch_warnings():
-                    # in case self._src.values is a masked array
-                    warnings.simplefilter("ignore", category=RuntimeWarning)
-                    dh = np.sqrt(dx**2 + dy**2)
-                dh = np.ma.masked_equal(dh, 0.)
-                hfun_values = np.abs((1./3.)*(topobathy/dh))
-                # values = values.filled(np.max(values))
+                dh = np.sqrt(dx**2 + dy**2)
+                # Flat (dh == 0) and nodata pixels get NaN: no size from the
+                # limiter there. A plain array, not a masked one: assigning
+                # into a masked array unmasks the element.
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    hfun_values = np.abs((1./3.)*(topobathy/dh))
+                hfun_values[~np.isfinite(hfun_values)] = np.nan
+                if flat_areas == 'hmin':
+                    flat_size = hmin if hmin is not None else self._hmin
+                    if flat_size is not None:
+                        hfun_values[(dh == 0) & ~nodata] = flat_size
 
                 if hmin is not None:
                     hfun_values[np.where(hfun_values < hmin)] = hmin
@@ -1420,6 +1589,9 @@ class HfunRaster(BaseHfun, Raster):
                     idxs = np.where(topobathy < lower_bound)
                     hfun_values[idxs] = self.get_values(
                         band=1, window=window)[idxs]
+                unknown = np.isnan(hfun_values)
+                hfun_values[unknown] = self.get_values(
+                    band=1, window=window)[unknown]
 
 
                 # Apply global hmin and hmax
@@ -1490,9 +1662,10 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
                 hfun_values = self.get_values(band=1, window=window)
                 rast_values = self.raster.get_values(band=1, window=window)
-                hfun_values[np.where(np.logical_and(
-                    rast_values > lower_bound,
-                    rast_values < upper_bound))] = value
+                hfun_values[np.where(
+                    (rast_values > lower_bound)
+                    & (rast_values < upper_bound)
+                    & ~self._topo_nodata(window))] = value
                 hfun_values = np.minimum(
                     self.get_values(band=1, window=window),
                     hfun_values.astype(self.dtype(1)))

@@ -48,6 +48,8 @@ class MeshDriver:
             Options to pass to the engine's Option class.
             Common options:
             - bnd_representation (str): 'exact', 'fixed', or 'adapt'.
+            - bnd_factor (float, gmsh): with 'adapt', boundary spacing is
+              the size function times this factor (default 1.0).
         """
 
         self._geom = geom
@@ -104,7 +106,12 @@ class MeshDriver:
         # (Needed for adaptation step and engine generation)
         sizing: Optional[MeshData] = None
         if self._hfun is not None:
-            sizing = copy.deepcopy(self._hfun.meshdata())
+            # Reuse meshdata the user already computed, as long as no
+            # refinement was added since (avoids re-running the dispatch)
+            if hasattr(self._hfun, '_current_meshdata'):
+                sizing = self._hfun._current_meshdata()  # pylint: disable=protected-access
+            else:
+                sizing = copy.deepcopy(self._hfun.meshdata())
 
             # Align Hfun CRS with Calculation CRS
             if calc_crs is None:
