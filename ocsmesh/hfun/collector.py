@@ -43,7 +43,7 @@ from shapely.geometry import (
 import shapely
 from shapely import ops
 from rasterio.transform import from_origin
-from rasterio.warp import reproject, Resampling
+from rasterio.warp import reproject, Resampling, transform_bounds
 import rasterio
 
 from ocsmesh import utils
@@ -949,11 +949,31 @@ class _Footprint:
     def __init__(self, topo_path=None, bbox=None):
         self._topo_path = None if topo_path is None else str(topo_path)
         self._bbox = bbox
+        self._lonlat_bounds = None
+        self._to_raster_crs = None
         if self._topo_path is not None:
             with rasterio.open(self._topo_path) as src:
                 self._crs = src.crs
                 self._transform = src.transform
                 self._shape = (src.height, src.width)
+                bounds = src.bounds
+            # Half a pixel beyond the raster counts as its edge (see
+            # covers), so pad the bounds by a pixel before testing.
+            dx, dy = abs(self._transform.a), abs(self._transform.e)
+            padded = (bounds.left - dx, bounds.bottom - dy,
+                      bounds.right + dx, bounds.top + dy)
+            if CRS.from_user_input(self._crs).equals(CRS.from_epsg(4326)):
+                self._lonlat_bounds = padded
+            else:
+                self._to_raster_crs = Transformer.from_crs(
+                    'EPSG:4326', self._crs, always_xy=True)
+                west, south, east, north = transform_bounds(
+                    self._crs, 'EPSG:4326', *padded, densify_pts=21)
+                # transform_bounds envelopes the densified edges; a
+                # small margin keeps the test conservative.
+                pad_x, pad_y = 1e-3 * (east - west), 1e-3 * (north - south)
+                self._lonlat_bounds = (west - pad_x, south - pad_y,
+                                       east + pad_x, north + pad_y)
 
     @classmethod
     def of(cls, hfun, meshdata_4326: MeshData) -> '_Footprint':
@@ -965,10 +985,23 @@ class _Footprint:
         """Boolean per EPSG:4326 point: is it inside this footprint?"""
         if self._topo_path is None:
             return shapely.intersects_xy(self._bbox, lonlat[:, 0], lonlat[:, 1])
+        result = np.zeros(len(lonlat), dtype=bool)
+        # Cheap rejection first: with many tiles most footprints are
+        # far from a given tile's nodes, and the mask read below opens
+        # the raster file.
+        west, south, east, north = self._lonlat_bounds
+        near = ((lonlat[:, 0] >= west) & (lonlat[:, 0] <= east)
+                & (lonlat[:, 1] >= south) & (lonlat[:, 1] <= north))
+        if not near.any():
+            return result
+        result[near] = self._covers_raster(lonlat[near])
+        return result
+
+    def _covers_raster(self, lonlat: np.ndarray) -> np.ndarray:
+        """``covers`` for points near the raster, from its valid mask."""
         x, y = lonlat[:, 0], lonlat[:, 1]
-        if not CRS.from_user_input(self._crs).equals(CRS.from_epsg(4326)):
-            x, y = Transformer.from_crs(
-                'EPSG:4326', self._crs, always_xy=True).transform(x, y)
+        if self._to_raster_crs is not None:
+            x, y = self._to_raster_crs.transform(x, y)
         inv = ~self._transform
         col, row = inv * (np.asarray(x), np.asarray(y))
         col, row = np.asarray(col), np.asarray(row)
