@@ -26,7 +26,7 @@ from shapely.geometry import (
 )
 from shapely.ops import polygonize, linemerge, unary_union
 # Ensure union_all and make_valid are imported
-from shapely import union_all, make_valid
+from shapely import union_all, make_valid, get_parts
 import geopandas as gpd
 import pandas as pd
 import utm
@@ -1428,11 +1428,13 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
     channels_gdf = gpd.overlay(
             polys_gdf, buffered_gdf, how='difference')
 
-    # Use square - 1/4 circle as cleanup criteria
+    # Use square - 1/4 circle as cleanup criteria. A row can be a
+    # Polygon as well as a MultiPolygon (e.g. one creek left in a small
+    # tile), so iterate over the parts of either.
     channels_gdf = gpd.GeoDataFrame(
            geometry=gpd.GeoSeries(
                [p for i in channels_gdf.geometry
-                   for p in i.geoms
+                   for p in get_parts(i)
                    if p.area > width**2 * (1-np.pi/4)]))
 
 
