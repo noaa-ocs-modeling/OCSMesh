@@ -26,6 +26,8 @@ import numpy as np
 import numpy.typing as npt
 from pyproj import CRS, Transformer
 import rasterio
+import rasterio.warp
+from rasterio.enums import Resampling
 from scipy.spatial import cKDTree
 from shapely import ops
 from shapely.geometry import (
@@ -580,6 +582,75 @@ class HfunRaster(BaseHfun, Raster):
             if self._hold_const_hit > 0:
                 self.apply_added_constraints()
                 self._hold_const_hit = 0
+
+
+    def refine_on(
+            self,
+            topo: Optional[Raster],
+            apply: Callable[['HfunRaster'], None]
+            ) -> None:
+        """Compute refinements on another grid and add them to this one.
+
+        ``apply(hfun)`` calls refinement methods (e.g.
+        `add_subtidal_flow_limiter`) on a size function built over
+        `topo`, usually the same DEM at a finer resolution than this
+        size function's grid. The result is then reduced onto this grid
+        keeping the smallest size of the finer pixels in each cell, and
+        combined with the current sizes by taking the minimum, as any
+        refinement does. Nodata cells of this grid are left unchanged
+        and the added constraints are re-applied.
+
+        Parameters
+        ----------
+        topo : Raster or None
+            DEM to compute the refinements on. If `None` or on the same
+            grid as this size function, ``apply(self)`` is called.
+        apply : callable
+            Called with the size function to refine.
+
+        Returns
+        -------
+        None
+        """
+
+        if topo is None or _same_grid(topo, self.raster):
+            apply(self)
+            return
+
+        fine = HfunRaster(topo, hmin=self._hmin, hmax=self._hmax,
+                          verbosity=self._verbosity)
+        apply(fine)
+
+        # Pixels with no refinement hold float32 max: treat them as
+        # nodata so they never win the minimum.
+        fill = getattr(np.finfo(np.float32), 'max')
+        reduced = np.full((self.src.height, self.src.width), fill,
+                          dtype=np.float32)
+        rasterio.warp.reproject(
+            source=rasterio.band(fine.src, 1),
+            destination=reduced,
+            src_transform=fine.src.transform,
+            src_crs=fine.src.crs,
+            src_nodata=fill,
+            dst_transform=self.src.transform,
+            dst_crs=self.src.crs,
+            dst_nodata=fill,
+            resampling=Resampling.min)
+        del fine
+        gc.collect()
+
+        with self.modifying_raster() as dst:
+            for window in self.iter_windows():
+                current = self.get_values(band=1, window=window)
+                values = np.minimum(
+                    current, reduced[window.toslices()]).astype(
+                        self.dtype(1))
+                nodata = self._topo_nodata(window)
+                values[nodata] = current[nodata]
+                dst.write_band(1, values, window=window)
+
+        if self._constraints:
+            self.apply_added_constraints()
 
 
     def apply_added_constraints(self) -> None:
@@ -1700,6 +1771,13 @@ class HfunRaster(BaseHfun, Raster):
     @verbosity.setter
     def verbosity(self, verbosity: int):
         self._verbosity = verbosity
+
+
+def _same_grid(a: Raster, b: Raster) -> bool:
+    """True when two rasters share their shape and transform."""
+
+    return (a.src.width == b.src.width and a.src.height == b.src.height
+            and a.src.transform.almost_equals(b.src.transform))
 
 
 def transform_point(

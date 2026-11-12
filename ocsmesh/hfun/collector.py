@@ -12,6 +12,7 @@ functions defined on each DEM or mesh.
 """
 import os
 import shutil
+import functools
 import gc
 import pickle
 import logging
@@ -51,6 +52,7 @@ from ocsmesh.utils import effective_cpu_count
 from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.hfun.raster import HfunRaster
+from ocsmesh.hfun import resampling
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
 from ocsmesh.mesh.base import BaseMesh
@@ -166,7 +168,8 @@ class _RefinementContourCollector:
     def calculate(
             self,
             source_list: Iterable[HfunRaster],
-            out_path: Union[Path, str]
+            out_path: Union[Path, str],
+            sources_for: Optional[Callable] = None
             ) -> None:
         """Extract specified contours and store on disk in `out_path`.
 
@@ -177,6 +180,10 @@ class _RefinementContourCollector:
             must be calculated.
         out_path : path-like
             Path for storing calculated contours and their crs data.
+        sources_for : callable or None, default=None
+            ``sources_for(size_info)`` gives the sources of a
+            definition without its own (e.g. resampled DEMs);
+            `source_list` is used if None.
 
         Returns
         -------
@@ -190,11 +197,13 @@ class _RefinementContourCollector:
         self._container.clear()
         for contour_defn, size_info in self._contours_info:
             if not contour_defn.has_source:
+                sources = (source_list if sources_for is None
+                           else sources_for(size_info))
                 # Attach the sources to a copy: the definition must stay
                 # sourceless so that a later run uses the rasters of that
                 # run. A shallow copy would share (and fill) its list.
                 contour_defn = deepcopy(contour_defn)
-                for source in source_list:
+                for source in sources:
                     contour_defn.add_source(source)
 
             for contour, crs in contour_defn.iter_contours():
@@ -239,12 +248,15 @@ class _ConstantValueContourInfoCollector:
 
     def __init__(self) -> None:
         self._contours_info = {}
+        self._resampling = {}
 
     def add(self,
             src_idx: Optional[Sequence[int]],
             contour_defn0: Contour,
             contour_defn1: Contour,
-            value: float
+            value: float,
+            resampling_factor=None,
+            resampling_method: Optional[str] = None
             ) -> None:
         """Add a new fixed-value refinement specification to the spec.
 
@@ -269,6 +281,13 @@ class _ConstantValueContourInfoCollector:
         srcs = tuple(src_idx) if src_idx is not None else None
         self._contours_info[
                 (srcs, contour_defn0, contour_defn1)] = value
+        self._resampling[(srcs, contour_defn0, contour_defn1)] = (
+            resampling_factor, resampling_method)
+
+    def resampling_of(self, defn) -> Tuple:
+        """``(resampling_factor, resampling_method)`` of a rule."""
+
+        return self._resampling.get(defn, (None, None))
 
     def __len__(self) -> int:
         return len(self._contours_info)
@@ -342,6 +361,7 @@ class _FlowLimiterInfoCollector:
 
     def __init__(self) -> None:
         self._flow_lim_info = []
+        self._resampling = []
 
     def add(self,
             src_idx: Optional[Sequence[int]],
@@ -349,7 +369,9 @@ class _FlowLimiterInfoCollector:
             hmax: float,
             upper_bound: float,
             lower_bound: float,
-            flat_areas: str = 'hmin'
+            flat_areas: str = 'hmin',
+            resampling_factor=None,
+            resampling_method: Optional[str] = None
             ) -> None:
         """Add subtidal flow limiter refinement spec to the collection.
 
@@ -382,6 +404,12 @@ class _FlowLimiterInfoCollector:
 
         self._flow_lim_info.append(
                 (src_idx, hmin, hmax, upper_bound, lower_bound, flat_areas))
+        self._resampling.append((resampling_factor, resampling_method))
+
+    def resampling_of(self, i: int) -> Tuple:
+        """``(resampling_factor, resampling_method)`` of the i-th rule."""
+
+        return self._resampling[i]
 
     def __len__(self) -> int:
         return len(self._flow_lim_info)
@@ -474,7 +502,8 @@ class _ChannelRefineCollector:
     def calculate(
             self,
             source_list,
-            out_path
+            out_path,
+            sources_for: Optional[Callable] = None
             ) -> None:
         """Extract specified channels and store on disk in `out_path`.
 
@@ -485,6 +514,10 @@ class _ChannelRefineCollector:
             must be calculated.
         out_path : path-like
             Path for storing calculated channels and their crs data.
+        sources_for : callable or None, default=None
+            ``sources_for(size_info)`` gives the sources of a
+            definition without its own (e.g. resampled DEMs);
+            `source_list` is used if None.
 
         Returns
         -------
@@ -498,11 +531,13 @@ class _ChannelRefineCollector:
         self._container.clear()
         for channel_defn, size_info in self._channels_info:
             if not channel_defn.has_source:
+                sources = (source_list if sources_for is None
+                           else sources_for(size_info))
                 # Attach the sources to a copy: the definition must stay
                 # sourceless so that a later run uses the rasters of that
                 # run. A shallow copy would share (and fill) its list.
                 channel_defn = deepcopy(channel_defn)
-                for source in source_list:
+                for source in sources:
                     channel_defn.add_source(source)
 
             for channels, crs in channel_defn.iter_channels():
@@ -637,32 +672,68 @@ def _refine_on_rebuilt_hfun(task: dict, apply) -> dict:
         }
 
 
+def _spec_key(spec: Optional[dict]) -> Optional[Tuple]:
+    """Hashable key of a ``_topo_spec`` result."""
+
+    if spec is None:
+        return None
+    return (spec['path'], spec['res_m'], spec['method'])
+
+
+def _spec_raster(spec: dict) -> Raster:
+    """The DEM described by a ``_topo_spec`` result, in a worker."""
+
+    raster = Raster(spec['path'])
+    if spec['res_m'] is not None:
+        raster = resampling.resampled_copy(
+            raster, spec['res_m'], spec['method'])
+    return raster
+
+
+def _apply_by_topo(hfun: HfunRaster, rules: list, apply_rules) -> None:
+    """Apply ``rules`` grouped by the DEM they are computed on."""
+
+    groups = {}
+    for rule in rules:
+        spec = rule.get('topo')
+        groups.setdefault(_spec_key(spec), (spec, []))[1].append(rule)
+    for spec, group in groups.values():
+        topo = None if spec is None else _spec_raster(spec)
+        hfun.refine_on(topo, functools.partial(apply_rules, rules=group))
+
+
+def _apply_flow_limiter_rules(hfun: HfunRaster, rules: list) -> None:
+    for params in rules:
+        hfun.add_subtidal_flow_limiter(
+            hmin=params['hmin'],
+            hmax=params['hmax'],
+            lower_bound=params['zmin'],
+            upper_bound=params['zmax'],
+            flat_areas=params['flat_areas'])
+
+
+def _apply_const_val_rules(hfun: HfunRaster, rules: list) -> None:
+    for rule in rules:
+        hfun.add_constant_value(
+            value=rule['value'],
+            lower_bound=rule['lower_bound'],
+            upper_bound=rule['upper_bound'])
+
+
 def _flow_limiter_task_worker(task: dict):
     """Apply the flow limiters in ``task['limiter_params']``."""
 
-    def apply(hfun):
-        for params in task['limiter_params']:
-            hfun.add_subtidal_flow_limiter(
-                hmin=params['hmin'],
-                hmax=params['hmax'],
-                lower_bound=params['zmin'],
-                upper_bound=params['zmax'],
-                flat_areas=params['flat_areas'])
-
-    return _refine_on_rebuilt_hfun(task, apply)
+    return _refine_on_rebuilt_hfun(
+        task, lambda hfun: _apply_by_topo(
+            hfun, task['limiter_params'], _apply_flow_limiter_rules))
 
 
 def _const_val_task_worker(task: dict):
     """Apply the constant values in ``task['const_val_rules']``."""
 
-    def apply(hfun):
-        for rule in task['const_val_rules']:
-            hfun.add_constant_value(
-                value=rule['value'],
-                lower_bound=rule['lower_bound'],
-                upper_bound=rule['upper_bound'])
-
-    return _refine_on_rebuilt_hfun(task, apply)
+    return _refine_on_rebuilt_hfun(
+        task, lambda hfun: _apply_by_topo(
+            hfun, task['const_val_rules'], _apply_const_val_rules))
 
 
 def _constraints_task_worker(task: dict):
@@ -775,6 +846,9 @@ def _detect_shapes_task_worker(task: dict):
     try:
         raster = Raster(task['topo_path'], chunk_size=task['chunk_size'],
                         overlap=task['overlap'])
+        if task.get('resample_m'):
+            raster = resampling.resampled_copy(
+                raster, task['resample_m'], task['resampling_method'])
         defn = deepcopy(task['defn'])
         defn.add_source(raster)
         shapes = (defn.iter_contours() if task['op'] == 'contour_detect'
@@ -1149,6 +1223,8 @@ class HfunCollector(BaseHfun):
             base_shape_crs: Union[str, CRS] = 'EPSG:4326',
             execution_mode: Optional[
                 Literal['serial', 'parallel', 'mpi']] = None,
+            resampling_factor: Optional[float] = None,
+            resampling_method: str = 'average',
             ) -> None:
         """Initialize a collector size function object
 
@@ -1170,6 +1246,22 @@ class HfunCollector(BaseHfun):
             None makes the ranks share one collector (rank 0 holds the
             size functions; construction is collective), while 'serial'
             or 'parallel' gives every rank its own independent collector.
+        resampling_factor : float or None, default=None
+            Pixel size of the grid the sizes are computed on, as a
+            fraction of `hmin`: with ``hmin=50`` a factor of ``0.5``
+            gives 25 m pixels. Each input DEM is resampled once, after
+            it is clipped; DEMs are never resampled to pixels finer
+            than their own. `None` keeps the DEMs' own pixels. Contours,
+            channels, flow limiters and constant values can use another
+            resolution through their own ``resampling_factor`` argument;
+            constraints, patches and line features are computed on this
+            grid. Applies to the 'exact' method and to rasters or file
+            paths in `in_list` (not to size functions passed in).
+        resampling_method : str, default='average'
+            How DEM pixels are combined when resampling, as a
+            `rasterio.enums.Resampling` name, e.g. ``'average'``,
+            ``'min'`` (deepest value, keeps narrow channels connected),
+            ``'max'``, ``'bilinear'``, ``'nearest'``.
         """
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -1221,6 +1313,19 @@ class HfunCollector(BaseHfun):
 
         self._applied = False
         self._size_info = {'hmin': hmin, 'hmax': hmax}
+        self._resampling_factor = resampling.check_factor(
+            resampling_factor, allow_native=False)
+        self._resampling_method = resampling.check_method(resampling_method)
+        if self._resampling_method is None:
+            raise ValueError("resampling_method must not be None")
+        if self._resampling_factor is not None and hmin is None:
+            raise ValueError("resampling_factor needs hmin to be set")
+        # Grid raster file -> the clipped DEM at its own pixels, for
+        # refinements computed at another resolution. Keeping the
+        # Raster objects here also keeps their temporary files alive.
+        self._native_rasters: Dict[str, Raster] = {}
+        # (native file, pixel size, method) -> resampled Raster
+        self._resampled_cache: Dict[Tuple, Raster] = {}
         self._nprocs = nprocs
         self._hfun_list = []
         self._method = method
@@ -1279,7 +1384,8 @@ class HfunCollector(BaseHfun):
                 # the MPI worker functions instead.
                 if is_mpi_worker or not self._clip_to_base(in_item):
                     continue
-                hfun = HfunRaster(in_item, **self._size_info)
+                hfun = HfunRaster(self._grid_raster(in_item),
+                                  **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
                 hfun = HfunMesh(in_item)
@@ -1293,7 +1399,8 @@ class HfunCollector(BaseHfun):
                     raster = Raster(in_item)
                     if not self._clip_to_base(raster):
                         continue
-                    hfun = HfunRaster(raster, **self._size_info)
+                    hfun = HfunRaster(self._grid_raster(raster),
+                                      **self._size_info)
 
                 elif in_item.endswith(
                         ('.14', '.grd', '.gr3', '.msh', '.2dm')):
@@ -1308,6 +1415,92 @@ class HfunCollector(BaseHfun):
         if execution_mode is not None:
             self.execution_mode = execution_mode
 
+
+    def _grid_raster(self, raster: Raster) -> Raster:
+        """The raster the sizes are computed on: ``raster`` resampled to
+        the collector's ``resampling_factor`` (or ``raster`` itself)."""
+
+        res_m = resampling.target_resolution(
+            self._resampling_factor, self._size_info['hmin'])
+        grid = resampling.resampled_copy(
+            raster, res_m, self._resampling_method)
+        self._native_rasters[str(grid.tmpfile)] = raster
+        return grid
+
+    def _native_raster(self, hfun: HfunRaster) -> Raster:
+        """The DEM at its own pixels behind a raster size function."""
+
+        return self._native_rasters.get(
+            str(hfun.raster.tmpfile), hfun.raster)
+
+    def _topo_spec(self, hfun: HfunRaster, factor, method
+                   ) -> Optional[Dict[str, Any]]:
+        """DEM a refinement on ``hfun`` is computed from.
+
+        ``factor`` and ``method`` are the refinement's own
+        ``resampling_factor`` and ``resampling_method``. Returns None
+        when that is the size function's own grid, otherwise
+        ``{'path', 'res_m', 'method'}``: the clipped DEM at its own
+        pixels (``path``) and the pixel size to resample it to
+        (``res_m``, None for none).
+        """
+
+        hmin = self._size_info['hmin']
+        native = self._native_raster(hfun)
+        own_factor = resampling.resolve_factor(
+            factor, self._resampling_factor)
+        own_method = method or self._resampling_method
+
+        def effective(res_m, meth):
+            if resampling.scaling_for(native, res_m) is None:
+                return (None, None)   # the DEM's own pixels
+            return (res_m, meth)
+
+        own = effective(
+            resampling.target_resolution(own_factor, hmin), own_method)
+        grid = effective(
+            resampling.target_resolution(self._resampling_factor, hmin),
+            self._resampling_method)
+        if own == grid:
+            return None
+        return {'path': str(native.tmpfile), 'res_m': own[0],
+                'method': own[1]}
+
+    def _topo_raster(self, hfun: HfunRaster, factor, method
+                     ) -> Optional[Raster]:
+        """``_topo_spec`` as a Raster (cached), or None for the grid."""
+
+        spec = self._topo_spec(hfun, factor, method)
+        if spec is None:
+            return None
+        return self._topo_raster_from_spec(hfun, spec)
+
+    def _topo_raster_from_spec(self, hfun: HfunRaster, spec: dict
+                               ) -> Raster:
+        """Raster of a ``_topo_spec`` result, resampled once and cached."""
+
+        native = self._native_raster(hfun)
+        if spec['res_m'] is None:
+            return native
+        key = (spec['path'], spec['res_m'], spec['method'])
+        if key not in self._resampled_cache:
+            self._resampled_cache[key] = resampling.resampled_copy(
+                native, spec['res_m'], spec['method'])
+        return self._resampled_cache[key]
+
+    def _detection_sources(self, raster_hfun_list):
+        """``sources_for`` of the collectors' ``calculate``: the DEMs a
+        contour or channel definition is detected on."""
+
+        def sources_for(size_info):
+            factor = size_info.get('resampling_factor')
+            method = size_info.get('resampling_method')
+            sources = []
+            for hfun in raster_hfun_list:
+                topo = self._topo_raster(hfun, factor, method)
+                sources.append(hfun if topo is None else topo)
+            return sources
+        return sources_for
 
     def _clip_to_base(self, raster: Raster) -> bool:
         """Clip ``raster`` to the base shape (or base mesh bbox).
@@ -1717,7 +1910,9 @@ class HfunCollector(BaseHfun):
             level: Union[List[float], float, None] = None,
             expansion_rate: float = 0.01,
             target_size: Optional[float] = None,
-            contour_defn: Optional[Contour] = None
+            contour_defn: Optional[Contour] = None,
+            resampling_factor: Union[float, str, None] = None,
+            resampling_method: Optional[str] = None
             ) -> None:
         """Add refinement for auto extracted contours
 
@@ -1741,11 +1936,25 @@ class HfunCollector(BaseHfun):
         contour_defn : Contour or None, default=None
             Contour definition objects which defines contour extraction
             specification from rasters.
+        resampling_factor : float or 'native' or None, default=None
+            Pixel size of the DEM the contours are extracted from, as a
+            fraction of `hmin`. `None` uses the collector's
+            ``resampling_factor`` (the size function grid); ``'native'``
+            the DEM's own pixels. The lines are then applied on the
+            size function grid. Ignored for a `contour_defn` with its
+            own sources.
+        resampling_method : str or None, default=None
+            How DEM pixels are combined for this resampling (e.g.
+            ``'min'`` keeps the deepest value, which keeps creeks
+            connected). `None` uses the collector's method.
 
         Returns
         -------
         None
         """
+
+        resampling_factor = resampling.check_factor(resampling_factor)
+        resampling_method = resampling.check_method(resampling_method)
 
         # Always lazy
         self._invalidate()
@@ -1779,7 +1988,9 @@ class HfunCollector(BaseHfun):
             self._contour_info_coll.add(
                 ctr_dfn,
                 expansion_rate=expansion_rate,
-                target_size=target_size)
+                target_size=target_size,
+                resampling_factor=resampling_factor,
+                resampling_method=resampling_method)
 
     def add_channel(
             self,
@@ -1788,7 +1999,9 @@ class HfunCollector(BaseHfun):
             target_size: float = 200,
             expansion_rate: Optional[float] = None,
             tolerance: Optional[float] = None,
-            channel_defn: Optional[Channel] = None
+            channel_defn: Optional[Channel] = None,
+            resampling_factor: Union[float, str, None] = None,
+            resampling_method: Optional[str] = None
             ) -> None:
         """Add refinement for auto detected channels
 
@@ -1815,11 +2028,24 @@ class HfunCollector(BaseHfun):
         channel_defn : Contour or None
             Channel definition objects which defines channel
             extraction specification from rasters.
+        resampling_factor : float or 'native' or None, default=None
+            Pixel size of the DEM the channels are detected on, as a
+            fraction of `hmin`. `None` uses the collector's
+            ``resampling_factor`` (the size function grid); ``'native'``
+            the DEM's own pixels. The channels are then applied on the
+            size function grid. Ignored for a `channel_defn` with its
+            own sources.
+        resampling_method : str or None, default=None
+            How DEM pixels are combined for this resampling. `None`
+            uses the collector's method.
 
         Returns
         -------
         None
         """
+
+        resampling_factor = resampling.check_factor(resampling_factor)
+        resampling_method = resampling.check_method(resampling_method)
 
         # Always lazy
         self._invalidate()
@@ -1840,7 +2066,9 @@ class HfunCollector(BaseHfun):
         self._ch_info_coll.add(
             channel_defn,
             expansion_rate=expansion_rate,
-            target_size=target_size)
+            target_size=target_size,
+            resampling_factor=resampling_factor,
+            resampling_method=resampling_method)
 
 
     def add_subtidal_flow_limiter(
@@ -1850,7 +2078,9 @@ class HfunCollector(BaseHfun):
             lower_bound: Optional[float] = None,
             upper_bound: Optional[float] = None,
             source_index: Union[List[int], int, None] = None,
-            flat_areas: str = 'hmin'
+            flat_areas: str = 'hmin',
+            resampling_factor: Union[float, str, None] = None,
+            resampling_method: Optional[str] = None
             ) -> None:
         """Add mesh refinement based on topography.
 
@@ -1879,6 +2109,17 @@ class HfunCollector(BaseHfun):
             Size on flat cells (zero topography gradient) inside the
             bounds: ``'hmin'`` sets them to `hmin`, as in earlier
             versions; ``'keep'`` leaves their size unchanged.
+        resampling_factor : float or 'native' or None, default=None
+            Pixel size of the DEM the slopes are computed from, as a
+            fraction of `hmin`. `None` uses the collector's
+            ``resampling_factor`` (the size function grid); ``'native'``
+            the DEM's own pixels. When finer than the grid, the sizes
+            are reduced onto it keeping the smallest size in each cell.
+            Slopes depend strongly on the pixel size, so ``'native'``
+            keeps this refinement as without resampling.
+        resampling_method : str or None, default=None
+            How DEM pixels are combined for this resampling. `None`
+            uses the collector's method.
 
         Returns
         -------
@@ -1888,6 +2129,9 @@ class HfunCollector(BaseHfun):
         --------
         hfun.raster.HfunRaster.add_subtidal_flow_limiter :
         """
+
+        resampling_factor = resampling.check_factor(resampling_factor)
+        resampling_method = resampling.check_method(resampling_method)
 
         if flat_areas not in ('hmin', 'keep'):
             raise ValueError(
@@ -1906,7 +2150,9 @@ class HfunCollector(BaseHfun):
             hmax=hmax,
             upper_bound=upper_bound,
             lower_bound=lower_bound,
-            flat_areas=flat_areas)
+            flat_areas=flat_areas,
+            resampling_factor=resampling_factor,
+            resampling_method=resampling_method)
 
 
     def add_constant_value(
@@ -1914,7 +2160,9 @@ class HfunCollector(BaseHfun):
             value: float,
             lower_bound: Optional[float] = None,
             upper_bound: Optional[float] = None,
-            source_index: Union[List[int], int, None] =None):
+            source_index: Union[List[int], int, None] =None,
+            resampling_factor: Union[float, str, None] = None,
+            resampling_method: Optional[str] = None):
         """Add refinement of fixed value in the region specified by bounds.
 
         Apply fixed value mesh size refinement to the region specified
@@ -1934,11 +2182,23 @@ class HfunCollector(BaseHfun):
             The index of raster entries from the input list argument
             of the constructor of collector size function. If `None`
             all input rasters are used.
+        resampling_factor : float or 'native' or None, default=None
+            Pixel size of the DEM the depths are read from, as a
+            fraction of `hmin`. `None` uses the collector's
+            ``resampling_factor`` (the size function grid); ``'native'``
+            the DEM's own pixels. When finer than the grid, the sizes
+            are reduced onto it keeping the smallest size in each cell.
+        resampling_method : str or None, default=None
+            How DEM pixels are combined for this resampling. `None`
+            uses the collector's method.
 
         Returns
         -------
         None
         """
+
+        resampling_factor = resampling.check_factor(resampling_factor)
+        resampling_method = resampling.check_method(resampling_method)
 
         self._invalidate()
 
@@ -1952,7 +2212,9 @@ class HfunCollector(BaseHfun):
         if source_index is not None and not isinstance(source_index, (tuple, list)):
             source_index = [source_index]
         self._const_val_contour_coll.add(
-            source_index, contour_defn0, contour_defn1, value)
+            source_index, contour_defn0, contour_defn1, value,
+            resampling_factor=resampling_factor,
+            resampling_method=resampling_method)
 
 
     def add_patch(
@@ -2291,7 +2553,9 @@ class HfunCollector(BaseHfun):
         with tempfile.TemporaryDirectory() as temp_path:
             with Pool(processes=self._nprocs) as p:
                 # Contours are ONLY extracted from raster sources
-                self._contour_coll.calculate(raster_hfun_list, temp_path)
+                self._contour_coll.calculate(
+                    raster_hfun_list, temp_path,
+                    sources_for=self._detection_sources(raster_hfun_list))
                 counter = 0
                 for hfun in apply_to:
                     for gdf in self._contour_coll:
@@ -2349,19 +2613,27 @@ class HfunCollector(BaseHfun):
         if any(defn.has_source for defn, _ in info):
             if not self._is_coordinator():
                 return []
-            coll.calculate(raster_hfun_list, shape_dir)
+            coll.calculate(
+                raster_hfun_list, shape_dir,
+                sources_for=self._detection_sources(raster_hfun_list))
             return coll.files
 
         tasks = []
         if self._is_coordinator():
             for d_idx, (defn, size_info) in enumerate(info):
+                factor = size_info.get('resampling_factor')
+                method = size_info.get('resampling_method')
                 for r_idx, hfun in enumerate(raster_hfun_list):
+                    spec = self._topo_spec(hfun, factor, method)
                     tasks.append({
                         'op': op,
                         'original_index': len(tasks),
                         'defn': defn,
                         'size_info': size_info,
-                        'topo_path': _task_topo_path(hfun),
+                        'topo_path': (_task_topo_path(hfun) if spec is None
+                                      else spec['path']),
+                        'resample_m': spec['res_m'] if spec else None,
+                        'resampling_method': spec['method'] if spec else None,
                         'chunk_size': hfun.raster.chunk_size,
                         'overlap': hfun.raster.overlap,
                         'prefix': os.path.join(
@@ -2720,7 +2992,9 @@ class HfunCollector(BaseHfun):
 
         with tempfile.TemporaryDirectory() as temp_path:
             # Channels are ONLY extracted from raster sources
-            self._channels_coll.calculate(raster_hfun_list, temp_path)
+            self._channels_coll.calculate(
+                raster_hfun_list, temp_path,
+                sources_for=self._detection_sources(raster_hfun_list))
             counter = 0
             with Pool(processes=self._nprocs) as p:
                 for hfun in apply_to:
@@ -2873,16 +3147,26 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
-            for (src_idx, hmin, hmax, zmax, zmin,
-                 flat_areas) in self._flow_lim_coll:
+            # Rules computed on the same DEM share one pass over it.
+            groups = {}
+            for i_rule, (src_idx, hmin, hmax, zmax, zmin,
+                         flat_areas) in enumerate(self._flow_lim_coll):
                 if src_idx is not None and in_idx not in src_idx:
                     continue
                 if hmin is None:
                     hmin = self._size_info['hmin']
                 if hmax is None:
                     hmax = self._size_info['hmax']
-                hfun.add_subtidal_flow_limiter(
-                    hmin, hmax, zmin, zmax, flat_areas=flat_areas)
+                spec = self._topo_spec(
+                    hfun, *self._flow_lim_coll.resampling_of(i_rule))
+                groups.setdefault(_spec_key(spec), (spec, []))[1].append(
+                    {'hmin': hmin, 'hmax': hmax, 'zmin': zmin, 'zmax': zmax,
+                     'flat_areas': flat_areas})
+            for spec, rules in groups.values():
+                topo = (None if spec is None else
+                        self._topo_raster_from_spec(hfun, spec))
+                hfun.refine_on(topo, functools.partial(
+                    _apply_flow_limiter_rules, rules=rules))
 
 
     def _apply_flow_limiters_parallel(self) -> None:
@@ -2895,7 +3179,11 @@ class HfunCollector(BaseHfun):
 
         tasks = []
         if self._is_coordinator():
+            raster_hfuns = [
+                h for h in self._hfun_list if isinstance(h, HfunRaster)]
+
             def rules_for(raster_idx):
+                hfun = raster_hfuns[raster_idx]
                 return [
                     {'hmin': hmin if hmin is not None
                              else self._size_info.get('hmin'),
@@ -2903,9 +3191,11 @@ class HfunCollector(BaseHfun):
                              else self._size_info.get('hmax'),
                      'zmin': zmin,
                      'zmax': zmax,
-                     'flat_areas': flat_areas}
-                    for (src_idx, hmin, hmax, zmax, zmin,
-                         flat_areas) in self._flow_lim_coll
+                     'flat_areas': flat_areas,
+                     'topo': self._topo_spec(
+                         hfun, *self._flow_lim_coll.resampling_of(i_rule))}
+                    for i_rule, (src_idx, hmin, hmax, zmax, zmin,
+                                 flat_areas) in enumerate(self._flow_lim_coll)
                     if src_idx is None or raster_idx in src_idx]
 
             tasks = [
@@ -2953,16 +3243,22 @@ class HfunCollector(BaseHfun):
             i for i in self._hfun_list if isinstance(i, HfunRaster)]
 
         for in_idx, hfun in enumerate(raster_hfun_list):
-            for (src_idx, ctr0, ctr1), const_val in self._const_val_contour_coll:
+            groups = {}
+            for defn, const_val in self._const_val_contour_coll:
+                src_idx, ctr0, ctr1 = defn
                 if src_idx is not None and in_idx not in src_idx:
                     continue
-                level0 = None
-                level1 =  None
-                if ctr0 is not None:
-                    level0 = ctr0.level
-                if ctr1 is not None:
-                    level1 = ctr1.level
-                hfun.add_constant_value(const_val, level0, level1)
+                spec = self._topo_spec(
+                    hfun, *self._const_val_contour_coll.resampling_of(defn))
+                groups.setdefault(_spec_key(spec), (spec, []))[1].append(
+                    {'value': const_val,
+                     'lower_bound': ctr0.level if ctr0 is not None else None,
+                     'upper_bound': ctr1.level if ctr1 is not None else None})
+            for spec, rules in groups.values():
+                topo = (None if spec is None else
+                        self._topo_raster_from_spec(hfun, spec))
+                hfun.refine_on(topo, functools.partial(
+                    _apply_const_val_rules, rules=rules))
 
 
     def _apply_const_val_parallel(self):
@@ -2974,14 +3270,19 @@ class HfunCollector(BaseHfun):
 
         tasks = []
         if self._is_coordinator():
+            raster_hfuns = [
+                h for h in self._hfun_list if isinstance(h, HfunRaster)]
+
             def rules_for(raster_idx):
+                hfun = raster_hfuns[raster_idx]
+                coll = self._const_val_contour_coll
                 return [
                     {'value': const_val,
-                     'lower_bound': ctr0.level if ctr0 else None,
-                     'upper_bound': ctr1.level if ctr1 else None}
-                    for (src_idx, ctr0, ctr1), const_val
-                    in self._const_val_contour_coll
-                    if src_idx is None or raster_idx in src_idx]
+                     'lower_bound': defn[1].level if defn[1] else None,
+                     'upper_bound': defn[2].level if defn[2] else None,
+                     'topo': self._topo_spec(hfun, *coll.resampling_of(defn))}
+                    for defn, const_val in coll
+                    if defn[0] is None or raster_idx in defn[0]]
 
             tasks = [
                 self._raster_task('const_val', idx, self._hfun_list[idx],
