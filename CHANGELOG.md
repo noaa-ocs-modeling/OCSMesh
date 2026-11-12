@@ -28,8 +28,21 @@ follow [Semantic Versioning](https://semver.org/).
   `bnd_factor` times the size function (e.g. 1.5 gives 4.5 km edges where
   the size function is 3 km), and Gmsh keeps those edges as they are.
   Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
+- DEM resampling for raster size functions, off by default:
+  `Hfun(..., resampling_factor=None, resampling_method='average')` computes
+  the sizes on pixels of `resampling_factor * hmin` metres (DEMs are never
+  resampled to finer pixels). `add_contour`, `add_channel`,
+  `add_subtidal_flow_limiter` and `add_constant_value` take their own
+  `resampling_factor` (`None` for the collector's, `'native'` for the DEM's
+  own pixels) and `resampling_method`, so e.g. channels can be detected on
+  coarser pixels while flow limiter slopes come from the full DEM.
+  `HfunRaster.refine_on(topo, apply)` computes refinements on another DEM
+  grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
 
 ### Fixed
+- `Raster.resample` raised for any `resampling_method` passed to it; it
+  now takes a `Resampling` member or name, leaves nodata pixels out when
+  combining pixels and keeps the raster's extent.
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
   combine CLIs) now orients every element counterclockwise, so written
   meshes no longer contain clockwise triangles. `utils.order_mesh` is
