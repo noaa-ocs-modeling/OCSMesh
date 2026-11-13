@@ -90,8 +90,10 @@ the right values depend on the DEMs and the refinements:
   are exact but cost most of the original run time;
 * channels: ``resampling_factor=0.125`` on ``add_channel`` found the
   channels of the full DEM with an overlap (intersection over union) of
-  0.97, 7 times faster (``0.25``: 0.94, 21 times faster). ``'min'``
-  detects channels that are not there;
+  0.97 (``0.25``: 0.94). Detection is most of the cost, so a coarse
+  grid comes free: with the collector at ``1.0`` the run was 16 times
+  faster in serial and 18 times faster with MPI, and the mesh had 6%
+  fewer nodes. ``'min'`` detects channels that are not there;
 * flow limiters: not yet. Slopes from a coarse DEM are too gentle (40%
   fewer nodes), and slopes from the native DEM reduced to a coarse grid
   keep the smallest size in each cell, which refines far too much.
