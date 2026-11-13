@@ -55,10 +55,9 @@ a number
     # channels detected on hmin/8 pixels
     hfun.add_channel(level=0, width=2000, target_size=500,
                      resampling_factor=0.125)
-    # slopes from the DEM's own pixels
-    hfun.add_subtidal_flow_limiter(hmin=100, hmax=3000,
-                                   lower_bound=-10, upper_bound=0,
-                                   resampling_factor='native')
+    # depth bands from a 50 m DEM
+    hfun.add_constant_value(value=500, lower_bound=-20, upper_bound=-5,
+                            resampling_factor=1.0)
 
 Detected contours and channels are lines and polygons, so they are
 applied to the size function grid whatever DEM they come from. Flow
@@ -73,18 +72,28 @@ execution mode (see :doc:`parallel`).
 Choosing a factor
 -----------------
 
-Tests on a New Jersey domain (3 m CUDEM, ``hmin=50`` m) give a starting
-point; the right values depend on the DEMs and the refinements:
+Tests on a New Jersey domain (3 m CUDEM, ``hmin=50`` m, serial runs
+compared with the same run without resampling) give a starting point;
+the right values depend on the DEMs and the refinements:
 
-* constant values, region constraints, patches, line features and the
-  Courant constraint barely change up to ``1.0``;
-* depth bands and constraints with a ``rate`` stay within a few percent
-  of the mesh up to ``0.5`` and ``0.25``;
-* contours keep their size function at ``0.5``, but the line itself
-  moves where marshes and creeks are thinner than the pixels: trace it
-  on the native DEM, or with ``resampling_method='min'``;
-* channels: ``0.125`` with ``'average'`` matched the channels found on
-  the full DEM with an overlap (intersection over union) of 0.97 and
-  ran 14 times faster; ``'min'`` detects channels that are not there;
-* flow limiters depend on slopes, which change with the pixel size:
-  use ``'native'``.
+* constant values (depth bands), region constraints, patches, line
+  features, the Courant constraint and ``add_topo_func_constraint``
+  barely change up to ``1.0`` (10 to 100 times faster, mesh nodes
+  within 1%);
+* constraints with a ``rate``: ``0.5`` with ``resampling_method='min'``
+  (130 times faster, nodes within 2%), or ``0.25`` with ``'average'``;
+* constraints without a ``rate`` follow every pixel at the edge of
+  their depth range, so the size function changes at any factor, but
+  the mesh does not (nodes within 2% at ``1.0``);
+* contours: ``0.5`` with ``'min'`` kept the size function and the line
+  within 63 m (95th percentile), 20 times faster; ``'native'`` contours
+  are exact but cost most of the original run time;
+* channels: ``resampling_factor=0.125`` on ``add_channel`` found the
+  channels of the full DEM with an overlap (intersection over union) of
+  0.97, 7 times faster (``0.25``: 0.94, 21 times faster). ``'min'``
+  detects channels that are not there;
+* flow limiters: not yet. Slopes from a coarse DEM are too gentle (40%
+  fewer nodes), and slopes from the native DEM reduced to a coarse grid
+  keep the smallest size in each cell, which refines far too much.
+  Leave the collector without ``resampling_factor`` when using
+  ``add_subtidal_flow_limiter``.
