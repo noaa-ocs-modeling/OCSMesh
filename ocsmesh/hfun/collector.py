@@ -1033,9 +1033,12 @@ class _Footprint:
                 bounds = src.bounds
             # Half a pixel beyond the raster counts as its edge (see
             # covers), so pad the bounds by a pixel before testing.
+            # A raster stored south-up (or east-to-west) gives its
+            # bounds with bottom > top (or left > right).
             dx, dy = abs(self._transform.a), abs(self._transform.e)
-            padded = (bounds.left - dx, bounds.bottom - dy,
-                      bounds.right + dx, bounds.top + dy)
+            west, east = sorted((bounds.left, bounds.right))
+            south, north = sorted((bounds.bottom, bounds.top))
+            padded = (west - dx, south - dy, east + dx, north + dy)
             if CRS.from_user_input(self._crs).equals(CRS.from_epsg(4326)):
                 self._lonlat_bounds = padded
             else:

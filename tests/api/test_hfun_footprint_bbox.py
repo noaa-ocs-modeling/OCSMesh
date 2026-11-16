@@ -15,6 +15,7 @@ from unittest import mock
 import numpy as np
 import rasterio
 from pyproj import Transformer
+from affine import Affine
 from rasterio.transform import from_origin
 
 from ocsmesh.hfun import collector
@@ -62,6 +63,21 @@ class TestFootprintBounds(unittest.TestCase):
             'EPSG:4326', 'EPSG:32618', always_xy=True).transform(-75.0, 40.0)
         path = _write(os.path.join(self.tmpdir, 'utm.tif'), 'EPSG:32618',
                       x0, y1, 2000.0)
+        self._check_same(_Footprint(topo_path=path))
+
+    def test_south_up(self):
+        # Rows from south to north: rasterio gives bottom > top
+        path = os.path.join(self.tmpdir, 'south_up.tif')
+        z = np.ones((20, 20), dtype='float32')
+        z[:3, :] = -99999.0
+        with rasterio.open(path, 'w', driver='GTiff', width=20, height=20,
+                           count=1, dtype='float32', crs='EPSG:4326',
+                           transform=Affine(0.02, 0.0, -75.0,
+                                            0.0, 0.02, 39.6),
+                           nodata=-99999.0) as dst:
+            dst.write(z, 1)
+        with rasterio.open(path) as src:
+            self.assertGreater(src.bounds.bottom, src.bounds.top)
         self._check_same(_Footprint(topo_path=path))
 
     def test_edge_nodes_still_covered(self):
