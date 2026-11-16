@@ -48,6 +48,9 @@ follow [Semantic Versioning](https://semver.org/).
   with the square of the tile count (about 430 s on the coordinator for
   199 tiles). Tiles whose bounds are away from a tile's nodes are now
   skipped without opening their file; the result is unchanged.
+- `utils.get_polygon_channels` (channel detection) raised `AttributeError:
+  'Polygon' object has no attribute 'geoms'` when the detected area was a
+  single polygon, e.g. one creek left in a small tile.
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
   combine CLIs) now orients every element counterclockwise, so written
   meshes no longer contain clockwise triangles. `utils.order_mesh` is
