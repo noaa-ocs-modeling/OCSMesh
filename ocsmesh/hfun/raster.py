@@ -29,6 +29,7 @@ import rasterio
 import rasterio.warp
 from rasterio.enums import Resampling
 from scipy.spatial import cKDTree
+import shapely
 from shapely import ops
 from shapely.geometry import (
     LineString, MultiLineString, GeometryCollection,
@@ -70,6 +71,60 @@ os.makedirs(tmpdir, exist_ok=True)
 # geographically large rather than fine-resolution.
 # Callers can override per-call via the explicit stride= argument.
 _GMSH_MAX_SIZING_PTS: int = 10_000_000
+
+
+def _within_reach(geoms: list, bounds, crs, reach_m: Optional[float]
+                  ) -> list:
+    """The geometries of ``geoms`` that come within ``reach_m`` metres
+    of ``bounds`` (west, south, east, north in ``crs``).
+
+    A refinement that grows from a shape at a rate reaches ``hmax`` at
+    a finite distance; shapes farther than that from every pixel cannot
+    change the sizes, so leaving them out gives the same result.
+    The test is on bounding boxes, so it may keep a far shape but never
+    drops a near one. ``reach_m=None`` keeps everything.
+    """
+
+    if reach_m is None or not geoms:
+        return geoms
+    if not np.isfinite(reach_m):
+        return geoms
+    # 1% and a metre of margin for the local projection used to
+    # measure distances.
+    reach_m = 1.01 * reach_m + 1.0
+    # Rasters stored south-up give their bounds with south > north.
+    west, east = sorted((bounds[0], bounds[2]))
+    south, north = sorted((bounds[1], bounds[3]))
+    if crs is not None and CRS.from_user_input(crs).is_geographic:
+        # A degree of latitude is more than 110 km and a degree of
+        # longitude more than 111 km * cos(lat), so these pads are
+        # conservative.
+        pad_y = reach_m / 110_000.0
+        lat = min(90.0, max(abs(south), abs(north)) + pad_y)
+        if lat >= 89.0:
+            return geoms
+        pad_x = reach_m / (111_000.0 * math.cos(math.radians(lat)))
+    else:
+        pad_x = pad_y = reach_m
+    box = shapely.bounds(np.asarray(geoms, dtype=object))
+    keep = ((box[:, 0] <= east + pad_x) & (box[:, 2] >= west - pad_x)
+            & (box[:, 1] <= north + pad_y) & (box[:, 3] >= south - pad_y))
+    return [g for g, k in zip(geoms, keep) if k]
+
+
+def _reach_m(hmax: Optional[float], target_size: float,
+             expansion_rate: Optional[float]) -> Optional[float]:
+    """Distance (m) at which a size growing from ``target_size`` at
+    ``expansion_rate`` reaches ``hmax``; 0 without a rate, None when
+    unbounded (no ``hmax`` or no growth)."""
+
+    if hmax is None:
+        return None
+    if expansion_rate is None:
+        return 0.0
+    if expansion_rate <= 0:
+        return None
+    return max(0.0, (hmax - target_size) / (expansion_rate * target_size))
 
 
 class HfunInputRaster:
@@ -1047,6 +1102,22 @@ class HfunRaster(BaseHfun, Raster):
             _logger.info('add_patch: empty shape, size function unchanged.')
             return
 
+        # Polygons too far away to change this raster are left out
+        # (their mask is empty and their expansion reaches hmax first).
+        near = _within_reach(
+            list(multipolygon.geoms), tuple(self.src.bounds),
+            self.crs, _reach_m(self.hmax, target_size, expansion_rate))
+        if not near:
+            _logger.info('add_patch: no shape near this raster.')
+            if expansion_rate is not None:
+                # What the expansion of far shapes gives: hmax.
+                with self.modifying_raster(driver='GTiff') as dst:
+                    for window in self.iter_windows():
+                        dst.write_band(
+                            1, self._capped_at_hmax(window), window=window)
+            return
+        multipolygon = MultiPolygon(near)
+
         # For expansion_rate
         if expansion_rate is not None:
             exteriors = [ply.exterior for ply in multipolygon.geoms]
@@ -1372,10 +1443,21 @@ class HfunRaster(BaseHfun, Raster):
 
                 _logger.info('Repartitioning features...')
                 start = time()
+                # Lines too far away to change this window are left
+                # out before the (costly) repartition and reprojection.
+                near = _within_reach(
+                    feature, self.get_window_bounds(window), self.crs,
+                    _reach_m(self.hmax, target_size, expansion_rate))
+                if not near:
+                    # Every line is beyond reach: all distances are
+                    # capped, which gives hmax everywhere.
+                    dst.write_band(
+                        1, self._capped_at_hmax(window), window=window)
+                    continue
                 res = utils.run_starmap(
                     pool,
                     utils.repartition_features,
-                    [(linestring, max_verts) for linestring in feature]
+                    [(linestring, max_verts) for linestring in near]
                     )
                 win_feature = functools.reduce(operator.iconcat, res, [])
                 _logger.info(f'Repartitioning features took {time()-start}.')
@@ -1467,6 +1549,14 @@ class HfunRaster(BaseHfun, Raster):
                 start = time()
                 dst.write_band(1, values, window=window)
                 _logger.info(f'Write array to file took {time()-start}.')
+
+    def _capped_at_hmax(self, window: rasterio.windows.Window
+                        ) -> npt.NDArray:
+        """Window values no larger than hmax (as they are without hmax)."""
+        values = self.get_values(window=window)
+        if self.hmax is None:
+            return values
+        return np.minimum(values, np.asarray(self.hmax, dtype=values.dtype))
 
     def _topo_nodata(self, window: rasterio.windows.Window) -> npt.NDArray[bool]:
         """True where the input topography has no data in ``window``.
