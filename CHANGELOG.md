@@ -38,6 +38,14 @@ follow [Semantic Versioning](https://semver.org/).
   coarser pixels while flow limiter slopes come from the full DEM.
   `HfunRaster.refine_on(topo, apply)` computes refinements on another DEM
   grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
+- Splitting of large rasters for parallel and MPI runs, off by default:
+  `Hfun(..., split_size=None, split_halo=None)` cuts input rasters wider
+  or taller than `split_size` pixels (of the DEM's own resolution) into
+  windows processed as separate tasks. Each window is computed with a
+  halo (derived from the channel width, constraint rates and a few
+  pixels, or `split_halo` metres) and keeps only its core: detected
+  channels and contours are clipped to it, and the composite takes the
+  window's sizes inside it only.
 
 ### Fixed
 - `Raster.resample` raised for any `resampling_method` passed to it; it
@@ -93,6 +101,11 @@ follow [Semantic Versioning](https://semver.org/).
   `None` for geographic bounds outside [-180, 180] x [-90, 90].
 
 ### Performance
+- `HfunRaster.add_feature` and `add_patch` leave out the shapes that
+  cannot reach a raster window (farther than where their expansion
+  reaches `hmax`) before repartitioning and reprojecting them. Every
+  tile used to process the channels and contours of every other tile;
+  the sizes are unchanged.
 - Refinement stages with nothing to apply are skipped (they rebuilt and
   rewrote every tile in parallel and MPI modes).
 - Contour and channel detection run per tile in parallel and MPI modes.
