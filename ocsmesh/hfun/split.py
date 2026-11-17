@@ -321,9 +321,10 @@ def _on_side(part, core: Core, side: str, eps: float):
 def _seam_pairs(parts, owner, cores):
     """Pairs of pieces that are the two sides of one channel cut by a
     core edge: in neighbouring cores and sharing a stretch of their
-    common edge (a tenth of a pixel or more). Pieces that only meet at
-    a corner, or in the same core, are not paired here, as separate
-    parts of one unsplit detection stay apart."""
+    common edge, however short (a channel may cross it through a narrow
+    neck), beyond rounding. Pieces that only meet at a corner, or in
+    the same core, are not paired here, as separate parts of one
+    unsplit detection stay apart."""
     core = cores[0]
     px = min(abs(core.affine.a), abs(core.affine.e))
     eps = 0.01 * px      # clipping puts both sides on one line, up to rounding
@@ -347,7 +348,7 @@ def _seam_pairs(parts, owner, cores):
         contact = sum(max(0.0, min(hi_a, hi_b) - max(lo_a, lo_b))
                       for lo_a, hi_a in along(a, side)
                       for lo_b, hi_b in along(b, opposite[side]))
-        if contact >= 0.1 * px:
+        if contact > eps:
             yield a, b
 
 

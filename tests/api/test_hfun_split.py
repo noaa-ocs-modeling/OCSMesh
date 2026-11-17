@@ -247,7 +247,11 @@ class TestDropSmallChannels(_TileCase):
         sq_left = box(0.046, 0.060, 0.05, 0.064)
         beside = box(0.05, 0.060, 0.054, 0.064)
         corner = box(0.05, 0.064, 0.054, 0.068)
-        for other, joined in ((beside, True), (corner, False)):
+        # Sharing only 1 m of the seam (a twentieth of a pixel), like a
+        # channel with a narrow neck there: still one channel, as unsplit
+        neck = box(0.05, 0.064 - 0.000009, 0.054, 0.068)
+        for other, joined in ((beside, True), (corner, False),
+                              (neck, True)):
             with self.subTest(joined=joined):
                 items = [(MultiPolygon([sq_left]), raster.crs, left, None),
                          (MultiPolygon([other]), raster.crs, right, None)]
