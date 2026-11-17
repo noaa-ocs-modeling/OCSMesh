@@ -198,19 +198,24 @@ def clip_to_core(shape, shape_crs, core: Core):
         core_poly = ops.transform(transformer.transform,
                                   core_poly.segmentize(
                                       max(core_poly.length / 400, 1e-9)))
+    # The kind of shape decides what to keep, taken before the repair
+    # below: make_valid often returns a GeometryCollection (polygons
+    # plus the lines of collapsed spikes).
+    polygonal = isinstance(shape, (Polygon, MultiPolygon))
+    lineal = isinstance(shape, (LineString, MultiLineString))
+    if isinstance(shape, GeometryCollection) and not (polygonal or lineal):
+        return None
     if not shape.is_valid:
-        # Detection with a simplification tolerance can give
-        # self-touching polygons, which GEOS cannot intersect.
+        # Detected channels can have spikes, self-touching rings and
+        # nested holes, which GEOS cannot intersect.
         shape = shapely.make_valid(shape)
     clipped = shape.intersection(core_poly)
-    if isinstance(shape, (Polygon, MultiPolygon)):
+    if polygonal:
         parts = _parts_of_type(clipped, (Polygon,))
         return MultiPolygon(parts) if parts else None
-    if isinstance(shape, (LineString, MultiLineString)):
+    if lineal:
         parts = _parts_of_type(clipped, (LineString,))
         return MultiLineString(parts) if parts else None
-    if isinstance(shape, GeometryCollection):
-        return None
     return None if clipped.is_empty else clipped
 
 

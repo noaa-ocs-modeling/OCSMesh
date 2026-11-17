@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 from scipy.ndimage import binary_dilation
-from shapely.geometry import LineString, MultiPolygon, box
+from shapely.geometry import LineString, MultiPolygon, Polygon, box
 
 from ocsmesh import Raster, utils
 from ocsmesh.hfun import split as hsplit
@@ -127,6 +127,19 @@ class TestCores(_TileCase):
         self.assertAlmostEqual(clipped.length, east - west)
         self.assertIsNone(hsplit.clip_to_core(
             box(5.0, 5.0, 6.0, 6.0), raster.crs, core))
+        # An invalid polygon (with a spike) that make_valid turns into a
+        # GeometryCollection keeps its polygon part
+        spiked = Polygon([(west - 0.01, south + 0.001),
+                          (west + 0.01, south + 0.001),
+                          (west + 0.01, south + 0.002),
+                          (west - 0.01, south + 0.002),
+                          (west - 0.01, south + 0.001),
+                          (west - 0.015, south + 0.0005),
+                          (west - 0.01, south + 0.001)])
+        self.assertFalse(spiked.is_valid)
+        clipped = hsplit.clip_to_core(spiked, raster.crs, core)
+        self.assertIsInstance(clipped, MultiPolygon)
+        self.assertAlmostEqual(clipped.area, 0.01 * 0.001)
 
 
 class TestSplitChannels(_TileCase):
