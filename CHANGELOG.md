@@ -45,7 +45,10 @@ follow [Semantic Versioning](https://semver.org/).
   halo (derived from the channel width, constraint rates and a few
   pixels, or `split_halo` metres) and keeps only its core: detected
   channels and contours are clipped to it, and the composite takes the
-  window's sizes inside it only.
+  window's sizes inside it only. Channel pieces cut by window edges are
+  joined before small channels are dropped
+  (`Raster.get_channels(..., drop_small=True)`,
+  `utils.channel_min_area`).
 
 ### Fixed
 - `Raster.resample` raised for any `resampling_method` passed to it; it

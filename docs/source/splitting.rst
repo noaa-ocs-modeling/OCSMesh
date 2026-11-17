@@ -49,6 +49,14 @@ when not given:
   does at the edges of separate tiles);
 * a few pixels, for contours and slopes.
 
+Channel detection drops channels smaller than ``width`` squared minus
+a quarter circle (0.86 km² for a 2 km width). That is decided on the
+whole channel, not on the window: a creek network cut by a window edge
+can leave pieces below that size whose channel is not. Windows keep
+their small pieces, and once all windows are detected the pieces that
+touch across cores are joined and the cutoff is applied to the joined
+area.
+
 Detected channels and contours, patches and line features are applied
 to every window from the full set of shapes, so their expansion crosses
 the window edges as it does without splitting.

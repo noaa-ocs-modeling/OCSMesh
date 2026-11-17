@@ -29,12 +29,20 @@ TARGET = 100.0
 
 def coast_with_creeks(x, y):
     """Water west of a diagonal coast, land east of it, with creeks
-    (water strips about 450 m wide) running into the land."""
+    (water strips about 450 m wide) running into the land, and a thin
+    lake (70 m by 4.4 km, 0.3 km2) across the middle of the tile.
+
+    The lake is a channel only as a whole: the pieces a window edge cuts
+    it into are smaller than the channel size cutoff (0.21 km2 for a
+    1000 m width), so a window that only sees its own piece drops it.
+    """
     d = (x + 0.5 * y) - 0.06
     z = np.where(d < 0, -10.0, 3.0)
     for yc in (0.015, 0.035, 0.055, 0.075, 0.09):
         z = np.where((np.abs(y - yc - 0.00007) < 0.00113) & (d < 0.04),
                      -2.0, z)
+    lake = (np.abs(y - 0.0645) < 0.0003) & (x > 0.035) & (x < 0.075)
+    z = np.where(lake, -2.0, z)
     return z.astype('float32')
 
 
@@ -148,10 +156,14 @@ class TestSplitChannels(_TileCase):
 
     def test_split_matches_unsplit(self):
         ref = self._reference()
-        split, collector = self._channels(split_size=170)
-        self.assertEqual(len(collector._hfun_list), 9)  # pylint: disable=protected-access
-        self.assertEqual(self._beyond_one_pixel(ref, split), 0)
-        self.assertEqual(self._beyond_one_pixel(split, ref), 0)
+        # 3x3 and 2x2: with 2x2 the lake is cut in two pieces that are
+        # each below the channel size cutoff.
+        for split_size, n_windows in ((170, 9), (250, 4)):
+            with self.subTest(split_size=split_size):
+                split, collector = self._channels(split_size=split_size)
+                self.assertEqual(len(collector._hfun_list), n_windows)  # pylint: disable=protected-access
+                self.assertEqual(self._beyond_one_pixel(ref, split), 0)
+                self.assertEqual(self._beyond_one_pixel(split, ref), 0)
 
     def test_without_halo_seams_look_like_channels(self):
         ref = self._reference()
@@ -159,8 +171,8 @@ class TestSplitChannels(_TileCase):
         self.assertGreater(self._beyond_one_pixel(split, ref), 1000)
 
     def test_parallel_matches_serial(self):
-        serial, _ = self._channels(split_size=170)
-        parallel, _ = self._channels(split_size=170, mode='parallel')
+        serial, _ = self._channels(split_size=250)
+        parallel, _ = self._channels(split_size=250, mode='parallel')
         np.testing.assert_array_equal(serial, parallel)
 
     def test_auto_halo(self):
@@ -179,6 +191,51 @@ class TestSplitChannels(_TileCase):
             warnings.simplefilter('always')
             collector._apply_features()  # pylint: disable=protected-access
         self.assertTrue(any('split_halo' in str(w.message) for w in caught))
+
+
+class TestDropSmallChannels(_TileCase):
+    """Pieces of one channel cut by core edges are joined before the
+    channel size cutoff."""
+
+    def test_pieces_joined_across_cores(self):
+        raster = Raster(str(self.path))
+        cores = hsplit.plan_cores(raster, raster, 250)   # 2x2, seam x=0.05
+        left, right = cores[0], cores[1]
+        width = 1000.0   # cutoff 0.21 km2
+        # A 70 m x 4.4 km strip across the seam (0.3 km2), in two
+        # pieces of 0.17 and 0.14 km2; a 0.1 km2 strip on its own.
+        strip = box(0.035, 0.0642, 0.075, 0.0648)
+        alone = box(0.01, 0.0642, 0.025, 0.0648)
+        items = [
+            (hsplit.clip_to_core(strip, raster.crs, left), raster.crs, left),
+            (hsplit.clip_to_core(strip, raster.crs, right), raster.crs,
+             right),
+            (hsplit.clip_to_core(alone, raster.crs, left), raster.crs, left),
+        ]
+        out = hsplit.drop_small_channels(items, width)
+        self.assertIsNotNone(out[0])
+        self.assertIsNotNone(out[1])
+        self.assertAlmostEqual(out[0].union(out[1]).area, strip.area)
+        self.assertIsNone(out[2])
+        # Each piece on its own is below the cutoff
+        self.assertIsNone(hsplit.drop_small_channels(items[:1], width)[0])
+        # Shapes of unsplit rasters are left alone
+        self.assertIs(hsplit.drop_small_channels(
+            [(alone, raster.crs, None)], width)[0], alone)
+
+    def test_get_channels_keeps_small_on_request(self):
+        raster = Raster(str(self.path))
+        win = hsplit.write_window(raster, (0.0, 0.055, 0.05, 0.075),
+                                  str(self.tmp / 'lake_left.tif'))
+        window = Raster(win)
+        lake = box(0.035, 0.0642, 0.05, 0.0648)
+        kept = window.get_channels(level=0.0, width=1000.0,
+                                   drop_small=False)
+        dropped = window.get_channels(level=0.0, width=1000.0)
+        self.assertGreater(kept.intersection(lake).area,
+                           0.8 * lake.area)
+        self.assertTrue(dropped is None
+                        or dropped.intersection(lake).area == 0)
 
 
 class TestSplitInputIndices(_TileCase):

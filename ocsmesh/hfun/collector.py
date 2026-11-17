@@ -173,6 +173,7 @@ def _calculate_shapes(info, iter_name, prefix, source_list, out_path,
             continue
         sources = (source_list if sources_for is None
                    else sources_for(size_info))
+        detected = []
         for i, source in enumerate(sources):
             # Attach the source to a copy: the definition must stay
             # sourceless so that a later run uses the rasters of that
@@ -180,13 +181,68 @@ def _calculate_shapes(info, iter_name, prefix, source_list, out_path,
             one = deepcopy(defn)
             one.add_source(source)
             core = cores[i] if cores is not None else None
+            _detect_on_window(one, core)
             for shape, crs in getattr(one, iter_name)():
                 if core is not None:
                     shape = hsplit.clip_to_core(shape, crs, core)
                     if shape is None:
                         continue
+                detected.append((shape, crs, core))
+        if isinstance(defn, Channel):
+            shapes = hsplit.drop_small_channels(detected, defn.width)
+        else:
+            shapes = [shape for shape, _, _ in detected]
+        for shape, (_, crs, _) in zip(shapes, detected):
+            if shape is not None:
                 write(shape, crs, size_info)
     return files
+
+
+def _detect_on_window(defn, core) -> None:
+    """Set up a channel definition for detection on a window of a split
+    raster (``core`` not None): its small pieces are kept until the
+    windows are joined (``split.drop_small_channels``)."""
+    if core is not None and isinstance(defn, Channel):
+        defn.drop_small = False
+
+
+def _drop_small_split_channels(entries):
+    """Apply ``split.drop_small_channels`` to shape files written by the
+    detection tasks.
+
+    ``entries`` are ``(files, task)`` in detection order, ``task`` with
+    its ``defn``, ``defn_index``, ``size_info`` and ``core``. Files left
+    empty are deleted; returns the remaining files in order.
+    """
+    by_defn = {}
+    for k, (files, task) in enumerate(entries):
+        if task['core'] is not None and isinstance(task['defn'], Channel):
+            by_defn.setdefault(task['defn_index'], []).append(k)
+    if not by_defn:
+        return [f for files, _ in entries for f in files]
+    kept = {}
+    for ks in by_defn.values():
+        refs, items = [], []
+        for k in ks:
+            files, task = entries[k]
+            for feather_path, crs_path in files:
+                gdf = gpd.read_feather(feather_path)
+                for shape in gdf.geometry:
+                    refs.append((k, feather_path, crs_path))
+                    items.append((shape, gdf.crs, task['core']))
+        width = entries[ks[0]][1]['defn'].width
+        shapes = hsplit.drop_small_channels(items, width)
+        for (k, feather_path, crs_path), shape, item in zip(
+                refs, shapes, items):
+            if shape is None:
+                os.remove(feather_path)
+                os.remove(crs_path)
+                kept[(feather_path, crs_path)] = False
+                continue
+            _write_shape_file(shape, item[1], entries[k][1]['size_info'],
+                              feather_path, crs_path)
+    return [f for files, _ in entries for f in files
+            if kept.get(tuple(f), True)]
 
 
 class _RefinementContourCollector:
@@ -871,9 +927,10 @@ def _detect_shapes_task_worker(task: dict):
                 raster, task['resample_m'], task['resampling_method'])
         defn = deepcopy(task['defn'])
         defn.add_source(raster)
+        core = task.get('core')
+        _detect_on_window(defn, core)
         shapes = (defn.iter_contours() if task['op'] == 'contour_detect'
                   else defn.iter_channels())
-        core = task.get('core')
         if core is not None:
             # A window of a split raster keeps what lies in its core;
             # the halo was only there to give the detection context.
@@ -2913,6 +2970,7 @@ class HfunCollector(BaseHfun):
                         'op': op,
                         'original_index': len(tasks),
                         'defn': defn,
+                        'defn_index': d_idx,
                         'size_info': size_info,
                         'topo_path': (_task_topo_path(hfun) if spec is None
                                       else spec['path']),
@@ -2928,8 +2986,9 @@ class HfunCollector(BaseHfun):
             op, tasks, f'{kind} detection')
         if results is None:
             return []  # MPI worker rank
-        files = [f for r in sorted(results, key=lambda r: r['original_index'])
-                 for f in r['files']]
+        files = _drop_small_split_channels([
+            (r['files'], tasks[r['original_index']])
+            for r in sorted(results, key=lambda r: r['original_index'])])
         coll.set_files(files)
         return files
 

@@ -30,6 +30,7 @@ from shapely.geometry import (
     GeometryCollection, LineString, MultiLineString, MultiPolygon, Polygon,
     box)
 
+from ocsmesh import utils
 from ocsmesh.raster import Raster
 
 
@@ -211,3 +212,90 @@ def clip_to_core(shape, shape_crs, core: Core):
     if isinstance(shape, GeometryCollection):
         return None
     return None if clipped.is_empty else clipped
+
+
+def _area_m2(parts, crs, bounds):
+    """Area of each polygon of ``parts`` (in ``crs``) in square metres,
+    measured in the UTM zone of ``bounds`` when ``crs`` is geographic
+    (as ``Raster.get_channels`` measures them)."""
+    utm = utils.estimate_bounds_utm(bounds, crs)
+    if utm is None:
+        return shapely.area(parts)
+    transformer = Transformer.from_crs(crs, utm, always_xy=True)
+
+    def to_utm(coords):
+        x, y = transformer.transform(coords[:, 0], coords[:, 1])
+        return np.column_stack([x, y])
+
+    return shapely.area(shapely.transform(parts, to_utm))
+
+
+def _components(n: int, pairs) -> np.ndarray:
+    """Connected component (its smallest member) of each of ``n`` items
+    linked by ``pairs``."""
+    parent = np.arange(n)
+
+    def find(k):
+        while parent[k] != k:
+            parent[k] = parent[parent[k]]
+            k = parent[k]
+        return k
+
+    for a, b in pairs:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[max(ra, rb)] = min(ra, rb)
+    return np.array([find(k) for k in range(n)])
+
+
+def drop_small_channels(items, width: float) -> list:
+    """Channels of split rasters with the small pieces dropped.
+
+    ``Raster.get_channels`` drops channel pieces no larger than
+    ``utils.channel_min_area(width)``. A window only sees part of its
+    raster, so a channel that crosses a window edge is cut into pieces
+    that may each be smaller than that while the whole channel is not.
+    Windows therefore detect with ``drop_small=False``; this joins the
+    clipped pieces that touch across the cores of one raster and drops
+    those whose joined area is too small.
+
+    ``items`` are ``(shape, crs, core)``, one per detected shape; shapes
+    with no core (unsplit rasters) are returned unchanged. Returns the
+    shapes in the same order, None where nothing is left.
+    """
+    out = [shape for shape, _, _ in items]
+    groups = {}
+    for i, (shape, _, core) in enumerate(items):
+        if core is not None and shape is not None:
+            key = (core.transform, core.shape, core.crs)
+            groups.setdefault(key, []).append(i)
+    min_area = utils.channel_min_area(width)
+    for idxs in groups.values():
+        crs = CRS.from_user_input(items[idxs[0]][1])
+        parts, owner = [], []
+        for i in idxs:
+            for part in _parts_of_type(items[i][0], (Polygon,)):
+                parts.append(part)
+                owner.append(i)
+        if not parts:
+            continue
+        parts = np.array(parts, dtype=object)
+        owner = np.array(owner)
+        bounds = shapely.total_bounds(parts)
+        area = _area_m2(parts, crs, tuple(bounds))
+
+        # Join the pieces that touch (the pieces of one channel meet
+        # along core edges). Clipping puts both sides on the same line,
+        # up to rounding, so allow a hundredth of a pixel.
+        core = items[idxs[0]][2]
+        eps = 0.01 * min(abs(core.affine.a), abs(core.affine.e))
+        tree = shapely.STRtree(parts)
+        pairs = tree.query(parts, predicate='dwithin', distance=eps)
+        roots = _components(len(parts), zip(*pairs))
+        total = np.bincount(roots, weights=area, minlength=len(parts))
+        keep = total[roots] > min_area
+
+        for i in idxs:
+            kept = list(parts[keep & (owner == i)])
+            out[i] = MultiPolygon(kept) if kept else None
+    return out

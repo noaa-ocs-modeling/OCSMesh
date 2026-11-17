@@ -1,5 +1,10 @@
 class Channel:
 
+    # False on the windows of a split raster: their small pieces may be
+    # parts of larger channels, so they are kept until the pieces of
+    # all windows are joined (see ocsmesh.hfun.split).
+    drop_small = True
+
     def __init__(self, level=0, width=1000, tolerance=50, sources=None):
 
         if sources is None:
@@ -56,11 +61,13 @@ class Channel:
         src_class = type(source).__name__
         if src_class == "Raster":
             channels = source.get_channels(
-                    self._level, self._width, self._tolerance)
+                    self._level, self._width, self._tolerance,
+                    drop_small=self.drop_small)
             crs = source.crs
         elif src_class in ("RasterGeom", "HfunRaster"):
             channels = source.raster.get_channels(
-                    self._level, self._width, self._tolerance)
+                    self._level, self._width, self._tolerance,
+                    drop_small=self.drop_small)
             crs = source.raster.crs
         else:
             raise TypeError("")
