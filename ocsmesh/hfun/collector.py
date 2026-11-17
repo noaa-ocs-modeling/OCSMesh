@@ -183,19 +183,33 @@ def _calculate_shapes(info, iter_name, prefix, source_list, out_path,
             core = cores[i] if cores is not None else None
             _detect_on_window(one, core)
             for shape, crs in getattr(one, iter_name)():
-                if core is not None:
-                    shape = hsplit.clip_to_core(shape, crs, core)
-                    if shape is None:
-                        continue
-                detected.append((shape, crs, core))
+                shape, labels = _clip_detected(one, shape, crs, core)
+                if shape is not None:
+                    detected.append((shape, crs, core, labels))
         if isinstance(defn, Channel):
             shapes = hsplit.drop_small_channels(detected, defn.width)
         else:
-            shapes = [shape for shape, _, _ in detected]
-        for shape, (_, crs, _) in zip(shapes, detected):
+            shapes = [item[0] for item in detected]
+        for shape, (_, crs, _, _) in zip(shapes, detected):
             if shape is not None:
                 write(shape, crs, size_info)
     return files
+
+
+# Shape file column with the piece labels of split channels
+_LABELS = 'piece_labels'
+
+
+def _clip_detected(defn, shape, crs, core):
+    """A detected shape kept in ``core`` (a window of a split raster;
+    None: unsplit, kept whole) and its piece labels (channels only,
+    see ``split.clip_channels_to_core``); the halo was only there to
+    give the detection context."""
+    if core is None:
+        return shape, None
+    if isinstance(defn, Channel):
+        return hsplit.clip_channels_to_core(shape, crs, core)
+    return hsplit.clip_to_core(shape, crs, core), None
 
 
 def _detect_on_window(defn, core) -> None:
@@ -227,9 +241,12 @@ def _drop_small_split_channels(entries):
             files, task = entries[k]
             for feather_path, crs_path in files:
                 gdf = gpd.read_feather(feather_path)
-                for shape in gdf.geometry:
+                labels = (gdf[_LABELS] if _LABELS in gdf.columns
+                          else [None] * len(gdf))
+                for shape, lab in zip(gdf.geometry, labels):
                     refs.append((k, feather_path, crs_path))
-                    items.append((shape, gdf.crs, task['core']))
+                    items.append((shape, gdf.crs, task['core'],
+                                  None if lab is None else np.asarray(lab)))
         width = entries[ks[0]][1]['defn'].width
         shapes = hsplit.drop_small_channels(items, width)
         for (k, feather_path, crs_path), shape, item in zip(
@@ -896,15 +913,21 @@ def _replay_shapes_task_worker(task: dict, method_name: str, shape_kwarg: str):
     return _refine_on_rebuilt_hfun(task, apply)
 
 
-def _write_shape_file(shape, crs, size_info, feather_path, crs_path):
-    """Write one detected shape and its CRS; returns the two paths."""
+def _write_shape_file(shape, crs, size_info, feather_path, crs_path,
+                      labels=None):
+    """Write one detected shape and its CRS; returns the two paths.
 
-    gpd.GeoDataFrame(
-        {'geometry': [shape],
-         'expansion_rate': size_info['expansion_rate'],
-         'target_size': size_info['target_size'],
-        },
-        crs=crs).to_feather(feather_path)
+    ``labels``: for channels of a split raster, the detected polygon
+    each piece comes from (``split.clip_channels_to_core``), kept for
+    ``split.drop_small_channels``.
+    """
+
+    columns = {'geometry': [shape],
+               'expansion_rate': size_info['expansion_rate'],
+               'target_size': size_info['target_size']}
+    if labels is not None:
+        columns[_LABELS] = [[int(v) for v in labels]]
+    gpd.GeoDataFrame(columns, crs=crs).to_feather(feather_path)
     gc.collect()
     with open(crs_path, 'w') as fp:
         fp.write(crs.to_json())
@@ -931,18 +954,14 @@ def _detect_shapes_task_worker(task: dict):
         _detect_on_window(defn, core)
         shapes = (defn.iter_contours() if task['op'] == 'contour_detect'
                   else defn.iter_channels())
-        if core is not None:
-            # A window of a split raster keeps what lies in its core;
-            # the halo was only there to give the detection context.
-            shapes = ((hsplit.clip_to_core(shape, crs, core), crs)
-                      for shape, crs in shapes)
-            shapes = [(shape, crs) for shape, crs in shapes
-                      if shape is not None]
+        clipped = [(*_clip_detected(defn, shape, crs, core), crs)
+                   for shape, crs in shapes]
         files = [
             _write_shape_file(shape, crs, task['size_info'],
                               f"{task['prefix']}_{k}.feather",
-                              f"{task['prefix']}_{k}.json")
-            for k, (shape, crs) in enumerate(shapes)]
+                              f"{task['prefix']}_{k}.json", labels=labels)
+            for k, (shape, labels, crs) in enumerate(
+                c for c in clipped if c[0] is not None)]
         return {
             'status': 'success',
             'original_index': task['original_index'],

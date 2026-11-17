@@ -220,10 +220,12 @@ class TestDropSmallChannels(_TileCase):
         strip = box(0.035, 0.0642, 0.075, 0.0648)
         alone = box(0.01, 0.0642, 0.025, 0.0648)
         items = [
-            (hsplit.clip_to_core(strip, raster.crs, left), raster.crs, left),
+            (*hsplit.clip_channels_to_core(strip, raster.crs, left)[:1],
+             raster.crs, left, None),
             (hsplit.clip_to_core(strip, raster.crs, right), raster.crs,
-             right),
-            (hsplit.clip_to_core(alone, raster.crs, left), raster.crs, left),
+             right, None),
+            (hsplit.clip_to_core(alone, raster.crs, left), raster.crs, left,
+             None),
         ]
         out = hsplit.drop_small_channels(items, width)
         self.assertIsNotNone(out[0])
@@ -234,7 +236,7 @@ class TestDropSmallChannels(_TileCase):
         self.assertIsNone(hsplit.drop_small_channels(items[:1], width)[0])
         # Shapes of unsplit rasters are left alone
         self.assertIs(hsplit.drop_small_channels(
-            [(alone, raster.crs, None)], width)[0], alone)
+            [(alone, raster.crs, None, None)], width)[0], alone)
 
     def test_corner_contact_not_joined(self):
         raster = Raster(str(self.path))
@@ -247,16 +249,33 @@ class TestDropSmallChannels(_TileCase):
         corner = box(0.05, 0.064, 0.054, 0.068)
         for other, joined in ((beside, True), (corner, False)):
             with self.subTest(joined=joined):
-                items = [(MultiPolygon([sq_left]), raster.crs, left),
-                         (MultiPolygon([other]), raster.crs, right)]
+                items = [(MultiPolygon([sq_left]), raster.crs, left, None),
+                         (MultiPolygon([other]), raster.crs, right, None)]
                 out = hsplit.drop_small_channels(items, 1000.0)
                 self.assertEqual(out[0] is not None, joined)
                 self.assertEqual(out[1] is not None, joined)
-        # Two pieces of one core that meet at a corner stay apart too
-        same = [(MultiPolygon([box(0.03, 0.06, 0.034, 0.064),
-                               box(0.034, 0.064, 0.038, 0.068)]),
-                 raster.crs, left)]
-        self.assertIsNone(hsplit.drop_small_channels(same, 1000.0)[0])
+
+    def test_pieces_of_one_detected_polygon_kept_together(self):
+        raster = Raster(str(self.path))
+        left = hsplit.plan_cores(raster, raster, 250)[0]
+        # Two 0.2 km2 squares meeting at a corner: as two detected
+        # polygons they are judged apart (and dropped); as one detected
+        # polygon whose ring touches itself there (invalid, repaired
+        # into the same two squares) they are one channel (kept).
+        separate = MultiPolygon([box(0.03, 0.06, 0.034, 0.064),
+                                 box(0.034, 0.064, 0.038, 0.068)])
+        pinched = Polygon([(0.03, 0.06), (0.034, 0.06), (0.034, 0.064),
+                           (0.038, 0.064), (0.038, 0.068), (0.034, 0.068),
+                           (0.034, 0.064), (0.03, 0.064)])
+        self.assertFalse(pinched.is_valid)
+        for shape, kept in ((separate, False), (pinched, True)):
+            with self.subTest(kept=kept):
+                pieces, labels = hsplit.clip_channels_to_core(
+                    shape, raster.crs, left)
+                self.assertEqual(len(pieces.geoms), 2)
+                out = hsplit.drop_small_channels(
+                    [(pieces, raster.crs, left, labels)], 1000.0)
+                self.assertEqual(out[0] is not None, kept)
 
     def test_get_channels_keeps_small_on_request(self):
         raster = Raster(str(self.path))

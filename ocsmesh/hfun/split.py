@@ -14,6 +14,7 @@ halo the window edges themselves look like channels (narrow strips of
 water cut off by the edge) and rates stop at the edges.
 """
 
+import itertools
 import math
 import os
 from dataclasses import dataclass
@@ -185,11 +186,8 @@ def _parts_of_type(geom, kinds):
     return []
 
 
-def clip_to_core(shape, shape_crs, core: Core):
-    """``shape`` clipped to ``core``, of the same kind (polygons stay
-    polygons, lines stay lines); None when nothing is left."""
-    if shape is None or shape.is_empty:
-        return None
+def _core_poly(core: Core, shape_crs):
+    """The core as a polygon in ``shape_crs``."""
     core_poly = box(*core.bounds())
     crs = CRS.from_user_input(core.crs)
     shape_crs = CRS.from_user_input(shape_crs)
@@ -198,6 +196,44 @@ def clip_to_core(shape, shape_crs, core: Core):
         core_poly = ops.transform(transformer.transform,
                                   core_poly.segmentize(
                                       max(core_poly.length / 400, 1e-9)))
+    return core_poly
+
+
+def clip_channels_to_core(shape, shape_crs, core: Core):
+    """Detected channels clipped to ``core``, polygon by polygon.
+
+    Returns ``(pieces, labels)``: the MultiPolygon of the clipped pieces
+    and, for each of its polygons, the index of the detected polygon it
+    comes from (``drop_small_channels`` keeps the pieces of one detected
+    polygon together); ``(None, None)`` when nothing is left. Each
+    polygon is repaired on its own when invalid: the repair can split
+    one into polygons that only meet at a point.
+    """
+    if shape is None or shape.is_empty:
+        return None, None
+    parts = np.array(_parts_of_type(shape, (Polygon,)), dtype=object)
+    if len(parts) == 0:
+        return None, None
+    invalid = ~shapely.is_valid(parts)
+    if invalid.any():
+        parts[invalid] = shapely.make_valid(parts[invalid])
+    clipped = shapely.intersection(parts, _core_poly(core, shape_crs))
+    pieces, labels = [], []
+    for k, geom in enumerate(clipped):
+        for piece in _parts_of_type(geom, (Polygon,)):
+            pieces.append(piece)
+            labels.append(k)
+    if not pieces:
+        return None, None
+    return MultiPolygon(pieces), np.array(labels)
+
+
+def clip_to_core(shape, shape_crs, core: Core):
+    """``shape`` clipped to ``core``, of the same kind (polygons stay
+    polygons, lines stay lines); None when nothing is left."""
+    if shape is None or shape.is_empty:
+        return None
+    core_poly = _core_poly(core, shape_crs)
     # The kind of shape decides what to keep, taken before the repair
     # below: make_valid often returns a GeometryCollection (polygons
     # plus the lines of collapsed spikes).
@@ -286,8 +322,8 @@ def _seam_pairs(parts, owner, cores):
     """Pairs of pieces that are the two sides of one channel cut by a
     core edge: in neighbouring cores and sharing a stretch of their
     common edge (a tenth of a pixel or more). Pieces that only meet at
-    a corner, or in the same core, stay apart, as the parts of one
-    unsplit detection do."""
+    a corner, or in the same core, are not paired here, as separate
+    parts of one unsplit detection stay apart."""
     core = cores[0]
     px = min(abs(core.affine.a), abs(core.affine.e))
     eps = 0.01 * px      # clipping puts both sides on one line, up to rounding
@@ -327,24 +363,33 @@ def drop_small_channels(items, width: float) -> list:
     cores of one raster (they share a stretch of it) and drops those
     whose joined area is too small.
 
-    ``items`` are ``(shape, crs, core)``, one per detected shape; shapes
-    with no core (unsplit rasters) are returned unchanged. Returns the
-    shapes in the same order, None where nothing is left.
+    ``items`` are ``(shape, crs, core, labels)``, one per detected shape,
+    as ``clip_channels_to_core`` returns them: the polygons of ``shape``
+    with the same label come from one detected polygon and stay
+    together (labels None: each polygon on its own). Shapes with no
+    core (unsplit rasters) are returned unchanged. Returns the shapes in
+    the same order, None where nothing is left.
     """
-    out = [shape for shape, _, _ in items]
+    out = [item[0] for item in items]
     groups = {}
-    for i, (shape, _, core) in enumerate(items):
+    for i, (shape, _, core, _) in enumerate(items):
         if core is not None and shape is not None:
             key = (core.transform, core.shape, core.crs)
             groups.setdefault(key, []).append(i)
     min_area = utils.channel_min_area(width)
     for idxs in groups.values():
         crs = CRS.from_user_input(items[idxs[0]][1])
-        parts, owner = [], []
+        parts, owner, label = [], [], []
         for i in idxs:
-            for part in _parts_of_type(items[i][0], (Polygon,)):
-                parts.append(part)
-                owner.append(i)
+            shape_parts = list(shapely.get_parts(items[i][0]))
+            labels = items[i][3]
+            if labels is None or len(labels) != len(shape_parts):
+                labels = np.arange(len(shape_parts))
+            for part, lab in zip(shape_parts, labels):
+                if isinstance(part, Polygon) and not part.is_empty:
+                    parts.append(part)
+                    owner.append(i)
+                    label.append(int(lab))
         if not parts:
             continue
         parts = np.array(parts, dtype=object)
@@ -353,7 +398,15 @@ def drop_small_channels(items, width: float) -> list:
         area = _area_m2(parts, crs, tuple(bounds))
 
         cores = [items[i][2] for i in owner]
-        roots = _components(len(parts), _seam_pairs(parts, owner, cores))
+        first = {}
+        same_polygon = []
+        for k, key in enumerate(zip(owner, label)):
+            if key in first:
+                same_polygon.append((first[key], k))
+            else:
+                first[key] = k
+        roots = _components(len(parts), itertools.chain(
+            same_polygon, _seam_pairs(parts, owner, cores)))
         total = np.bincount(roots, weights=area, minlength=len(parts))
         keep = total[roots] > min_area
 
