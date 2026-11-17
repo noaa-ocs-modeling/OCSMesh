@@ -236,6 +236,28 @@ class TestDropSmallChannels(_TileCase):
         self.assertIs(hsplit.drop_small_channels(
             [(alone, raster.crs, None)], width)[0], alone)
 
+    def test_corner_contact_not_joined(self):
+        raster = Raster(str(self.path))
+        left, right = hsplit.plan_cores(raster, raster, 250)[:2]
+        # Squares of 0.2 km2 (below the 0.21 km2 cutoff), two together
+        # above it: joined when they share part of the seam x=0.05,
+        # not when they only meet at a corner.
+        sq_left = box(0.046, 0.060, 0.05, 0.064)
+        beside = box(0.05, 0.060, 0.054, 0.064)
+        corner = box(0.05, 0.064, 0.054, 0.068)
+        for other, joined in ((beside, True), (corner, False)):
+            with self.subTest(joined=joined):
+                items = [(MultiPolygon([sq_left]), raster.crs, left),
+                         (MultiPolygon([other]), raster.crs, right)]
+                out = hsplit.drop_small_channels(items, 1000.0)
+                self.assertEqual(out[0] is not None, joined)
+                self.assertEqual(out[1] is not None, joined)
+        # Two pieces of one core that meet at a corner stay apart too
+        same = [(MultiPolygon([box(0.03, 0.06, 0.034, 0.064),
+                               box(0.034, 0.064, 0.038, 0.068)]),
+                 raster.crs, left)]
+        self.assertIsNone(hsplit.drop_small_channels(same, 1000.0)[0])
+
     def test_get_channels_keeps_small_on_request(self):
         raster = Raster(str(self.path))
         win = hsplit.write_window(raster, (0.0, 0.055, 0.05, 0.075),

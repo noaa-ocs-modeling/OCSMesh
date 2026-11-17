@@ -253,6 +253,68 @@ def _components(n: int, pairs) -> np.ndarray:
     return np.array([find(k) for k in range(n)])
 
 
+def _shared_side(a: Core, b: Core, eps: float):
+    """The edge cores ``a`` and ``b`` share: (axis along it, its
+    coordinate, the side of ``a``), or None (not neighbours, or only a
+    corner in common). Axis 0 is x (a south/north edge), 1 is y."""
+    aw, as_, ae, an = a.bounds()
+    bw, bs, be, bn = b.bounds()
+    for coord, side in ((ae, 'E'), (aw, 'W')):
+        other = bw if side == 'E' else be
+        if abs(coord - other) < eps and min(an, bn) - max(as_, bs) > eps:
+            return 1, coord, side
+    for coord, side in ((an, 'N'), (as_, 'S')):
+        other = bs if side == 'N' else bn
+        if abs(coord - other) < eps and min(ae, be) - max(aw, bw) > eps:
+            return 0, coord, side
+    return None
+
+
+def _on_side(part, core: Core, side: str, eps: float):
+    """Extent of ``part`` along one edge of its core: the intervals,
+    along the edge, of the part within ``eps`` of it."""
+    w, s, e, n = core.bounds()
+    rect = {'W': (w - eps, s, w + eps, n), 'E': (e - eps, s, e + eps, n),
+            'S': (w, s - eps, e, s + eps), 'N': (w, n - eps, e, n + eps)}[side]
+    axis = 1 if side in 'WE' else 0
+    strip = shapely.clip_by_rect(part, *rect)
+    return [(p.bounds[axis], p.bounds[axis + 2])
+            for p in shapely.get_parts(strip) if not p.is_empty]
+
+
+def _seam_pairs(parts, owner, cores):
+    """Pairs of pieces that are the two sides of one channel cut by a
+    core edge: in neighbouring cores and sharing a stretch of their
+    common edge (a tenth of a pixel or more). Pieces that only meet at
+    a corner, or in the same core, stay apart, as the parts of one
+    unsplit detection do."""
+    core = cores[0]
+    px = min(abs(core.affine.a), abs(core.affine.e))
+    eps = 0.01 * px      # clipping puts both sides on one line, up to rounding
+    tree = shapely.STRtree(parts)
+    left, right = tree.query(parts, predicate='dwithin', distance=eps)
+    cache = {}
+
+    def along(k, side):
+        if (k, side) not in cache:
+            cache[(k, side)] = _on_side(parts[k], cores[k], side, eps)
+        return cache[(k, side)]
+
+    opposite = {'E': 'W', 'W': 'E', 'N': 'S', 'S': 'N'}
+    for a, b in zip(left, right):
+        if a >= b or owner[a] == owner[b]:
+            continue
+        shared = _shared_side(cores[a], cores[b], eps)
+        if shared is None:
+            continue
+        side = shared[2]
+        contact = sum(max(0.0, min(hi_a, hi_b) - max(lo_a, lo_b))
+                      for lo_a, hi_a in along(a, side)
+                      for lo_b, hi_b in along(b, opposite[side]))
+        if contact >= 0.1 * px:
+            yield a, b
+
+
 def drop_small_channels(items, width: float) -> list:
     """Channels of split rasters with the small pieces dropped.
 
@@ -261,8 +323,9 @@ def drop_small_channels(items, width: float) -> list:
     raster, so a channel that crosses a window edge is cut into pieces
     that may each be smaller than that while the whole channel is not.
     Windows therefore detect with ``drop_small=False``; this joins the
-    clipped pieces that touch across the cores of one raster and drops
-    those whose joined area is too small.
+    clipped pieces that continue each other across the edge between two
+    cores of one raster (they share a stretch of it) and drops those
+    whose joined area is too small.
 
     ``items`` are ``(shape, crs, core)``, one per detected shape; shapes
     with no core (unsplit rasters) are returned unchanged. Returns the
@@ -289,14 +352,8 @@ def drop_small_channels(items, width: float) -> list:
         bounds = shapely.total_bounds(parts)
         area = _area_m2(parts, crs, tuple(bounds))
 
-        # Join the pieces that touch (the pieces of one channel meet
-        # along core edges). Clipping puts both sides on the same line,
-        # up to rounding, so allow a hundredth of a pixel.
-        core = items[idxs[0]][2]
-        eps = 0.01 * min(abs(core.affine.a), abs(core.affine.e))
-        tree = shapely.STRtree(parts)
-        pairs = tree.query(parts, predicate='dwithin', distance=eps)
-        roots = _components(len(parts), zip(*pairs))
+        cores = [items[i][2] for i in owner]
+        roots = _components(len(parts), _seam_pairs(parts, owner, cores))
         total = np.bincount(roots, weights=area, minlength=len(parts))
         keep = total[roots] > min_area
 
