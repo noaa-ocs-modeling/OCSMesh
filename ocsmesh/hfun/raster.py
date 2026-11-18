@@ -680,13 +680,19 @@ class HfunRaster(BaseHfun, Raster):
         # smallest fine size in each cell makes a flow limiter computed
         # on the native DEM far too fine on a coarse grid (NJ: +224% to
         # +367% mesh nodes at 0.5-1.0 x hmin), and slopes from a coarse
-        # DEM are too gentle (-39%), so no resampling setting works for
-        # flow limiters yet and resampling_factor='optimum' does not
-        # cover them. Try the mean, the median or a low percentile of
-        # the fine sizes per cell (or of the slopes before the sizes),
-        # validated against the native run as the other refinements
-        # were; then give flow limiters an entry that works in
-        # resampling.OPTIMUM_REFINEMENTS.
+        # DEM are too gentle, so no resampling setting works for flow
+        # limiters yet and resampling_factor='optimum' does not cover
+        # them. On NJ (serial, flow limiter on the grid itself) a finer
+        # grid does not help: nodes -39% at 1.0, -21% at 0.5, -19% at
+        # 0.25, -46% at 0.125, with 25-43% of the area shifted by more
+        # than 10%. The limiter follows the slopes of the 3 m pixels,
+        # which any resampling smooths, so keep the native slopes and
+        # change the reduction: try the mean, the median or a low
+        # percentile of the fine sizes per cell (or of the slopes before
+        # the sizes). The two failures bracket the native run, so the
+        # answer should lie between them; validate against the native
+        # run as the other refinements were, then give flow limiters an
+        # entry that works in resampling.OPTIMUM_REFINEMENTS.
         # Pixels with no refinement hold float32 max: treat them as
         # nodata so they never win the minimum.
         fill = getattr(np.finfo(np.float32), 'max')
