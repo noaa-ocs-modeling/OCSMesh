@@ -98,18 +98,19 @@ Bug reports and pull requests are welcome; see
 
 ## How to Cite
 ```
+Title : OCSMesh and an automated creek-to-ocean mesh generation workflow
+Personal Author(s) : Cassalho, Felicio;Mani, Soroosh;Moghimi, Saeed;Ye, Fei;Zhang, Y. Joseph;
+Journal: Ocean Modelling
+Published Date : August 2026
+DOI : http://dx.doi.org/10.1016/j.ocemod.2026.102774
+```
+```
 Title : OCSMesh: a data-driven automated unstructured mesh generation software for coastal ocean modeling
 Personal Author(s) : Mani, Soroosh;Calzada, Jaime R.;Moghimi, Saeed;Zhang, Y. Joseph;Myers, Edward;Pe’eri, Shachak;
 Corporate Authors(s) : Coast Survey Development Laboratory (U.S.)
 Published Date : 2021
 Series : NOAA Technical Memorandum NOS CS ; 47
 DOI : https://doi.org/10.25923/csba-m072
-```
-```
-Title : OCSMesh and an end-to-end workflow for fully automatic mesh generation with application to compound flood studies
-Personal Author(s) : Cassalho, Felicio;Mani, Soroosh;Ye, Fei;Zhang, Y. Joseph;Moghimi, Saeed;
-Published Date : Pre-print(2025)
-DOI : http://dx.doi.org/10.2139/ssrn.5226658
 ```
 
 ## Disclaimer

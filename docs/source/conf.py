@@ -70,7 +70,7 @@ extensions = [
     'sphinx.ext.autosummary',
     # The Napoleon extension allows for nicer argument formatting.
 #    'sphinx.ext.napoleon',
-    'm2r2',
+    'sphinx_mdinclude',   # .. mdinclude:: (replaces m2r2, which needed mistune 0.8)
     'numpydoc',
     'sphinxarg.ext',
     'sphinx.ext.githubpages'
