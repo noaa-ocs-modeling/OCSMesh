@@ -15,6 +15,11 @@ refinement is computed from:
 a positive number
     Pixels of ``factor * hmin`` metres. DEMs are never resampled to
     pixels finer than their own.
+``'optimum'``
+    On the collector: the factors found on the New Jersey test domain
+    (``OPTIMUM_GRID`` for the grid, ``OPTIMUM_REFINEMENTS`` for each
+    refinement that does not set its own). A refinement's own factor
+    still wins.
 """
 
 import logging
@@ -29,6 +34,28 @@ from ocsmesh.raster import Raster
 _logger = logging.getLogger(__name__)
 
 NATIVE = 'native'
+OPTIMUM = 'optimum'
+
+# The factors resampling_factor='optimum' uses: the coarsest that kept the
+# size function within the 95% rule on the New Jersey test domain (CUDEM
+# 3 m tiles, hmin=50 m, hmax=3000 m), with hmin/2 as the coarsest grid.
+# (factor, method); method None is the collector's.
+OPTIMUM_GRID = (0.5, 'average')
+OPTIMUM_REFINEMENTS = {
+    # sizes on the grid, channels detected on finer pixels
+    'channel': (0.125, None),
+    # contours on the grid's pixels, keeping the deepest value
+    'contour': (0.5, 'min'),
+    # no resampled slopes kept the limiter's sizes: the DEM's own pixels
+    'flow_limiter': (NATIVE, None),
+    # depth bands on the grid
+    'constant_value': (None, None),
+}
+OPTIMUM_WARNING = (
+    "resampling_factor='optimum' uses the factors found on the New Jersey "
+    "test domain (CUDEM 3 m tiles, hmin=50 m, hmax=3000 m). They may not "
+    "suit other domains, DEMs or hmin/hmax: check the resulting mesh, or "
+    "set the factors yourself.")
 
 Factor = Union[float, str, None]
 
@@ -49,6 +76,18 @@ def check_factor(factor: Factor, name: str = 'resampling_factor',
     if not math.isfinite(value) or value <= 0:
         raise ValueError(f"{name} must be positive, got {factor!r}")
     return value
+
+
+def optimum_defaults(kind: str, factor: Factor,
+                     method: Optional[str]) -> tuple:
+    """``(factor, method)`` of a refinement of ``kind`` (a key of
+    ``OPTIMUM_REFINEMENTS``) under ``resampling_factor='optimum'``: its
+    own when given, the optimum otherwise."""
+
+    if factor is not None:
+        return factor, method
+    opt_factor, opt_method = OPTIMUM_REFINEMENTS[kind]
+    return opt_factor, method if method is not None else opt_method
 
 
 def check_method(method: Union[str, Resampling, None],

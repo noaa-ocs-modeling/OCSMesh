@@ -38,6 +38,12 @@ follow [Semantic Versioning](https://semver.org/).
   coarser pixels while flow limiter slopes come from the full DEM.
   `HfunRaster.refine_on(topo, apply)` computes refinements on another DEM
   grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
+  `resampling_factor='optimum'` uses the factors found on the New Jersey
+  test domain (grid at `0.5`, channels detected at `0.125`, contours at
+  `0.5` with `'min'`, flow limiter slopes on the native DEM) for every
+  refinement that does not set its own, with a warning that other
+  domains may need other factors. Adding a flow limiter to a resampled
+  grid warns that flow limiters do not resample well yet.
 
 ### Fixed
 - `Raster.resample` raised for any `resampling_method` passed to it; it
