@@ -69,6 +69,45 @@ Resampling applies to the ``exact`` method, to DEMs given to the
 collector as rasters or file paths, and works the same in every
 execution mode (see :doc:`parallel`).
 
+The New Jersey factors: ``'optimum'``
+-------------------------------------
+
+``resampling_factor='optimum'`` on the collector uses the factors found
+on the New Jersey test domain (below), with ``hmin / 2`` as the
+coarsest grid:
+
+.. list-table::
+   :header-rows: 1
+
+   * - computed on
+     - factor, method
+   * - the grid (depth bands, constraints, region, patch, features,
+       Courant)
+     - ``0.5``, ``'average'``
+   * - ``add_channel`` detection
+     - ``0.125``
+   * - ``add_contour``
+     - ``0.5``, ``'min'``
+   * - ``add_subtidal_flow_limiter`` slopes
+     - ``'native'``
+   * - ``add_constant_value``
+     - the grid
+
+A refinement's own ``resampling_factor`` or ``resampling_method`` still
+wins, coarser ones included. These values come from one domain (3 m
+CUDEM tiles, ``hmin=50`` m, ``hmax=3000`` m), so the collector warns
+that other domains, DEMs or ``hmin``/``hmax`` may need other factors:
+check the resulting mesh. Flow limiters do not resample well yet with
+any factor (see below).
+
+.. code-block:: python
+
+    hfun = ocsmesh.Hfun(tile_paths, hmin=50, hmax=3000,
+                        resampling_factor='optimum')
+    hfun.add_channel(level=0, width=2000, target_size=500)   # at 0.125
+    hfun.add_contour(level=0, target_size=200,
+                     expansion_rate=0.001)                   # at 0.5, 'min'
+
 Choosing a factor
 -----------------
 

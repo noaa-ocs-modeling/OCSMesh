@@ -1389,7 +1389,7 @@ class HfunCollector(BaseHfun):
             base_shape_crs: Union[str, CRS] = 'EPSG:4326',
             execution_mode: Optional[
                 Literal['serial', 'parallel', 'mpi']] = None,
-            resampling_factor: Optional[float] = None,
+            resampling_factor: Union[float, str, None] = None,
             resampling_method: str = 'average',
             split_size: Optional[int] = None,
             split_halo: Optional[float] = None,
@@ -1414,10 +1414,16 @@ class HfunCollector(BaseHfun):
             None makes the ranks share one collector (rank 0 holds the
             size functions; construction is collective), while 'serial'
             or 'parallel' gives every rank its own independent collector.
-        resampling_factor : float or None, default=None
+        resampling_factor : float or 'optimum' or None, default=None
             Pixel size of the grid the sizes are computed on, as a
             fraction of `hmin`: with ``hmin=50`` a factor of ``0.5``
-            gives 25 m pixels. Each input DEM is resampled once, after
+            gives 25 m pixels. ``'optimum'`` uses the factors found on
+            the New Jersey test domain: ``0.5`` for the grid, and for
+            the refinements that do not set their own, channels detected
+            at ``0.125``, contours at ``0.5`` with ``'min'``, flow
+            limiters on the DEM's own pixels (see
+            `ocsmesh.hfun.resampling.OPTIMUM_REFINEMENTS`); it warns that
+            other domains may need other factors. Each input DEM is resampled once, after
             it is clipped; DEMs are never resampled to pixels finer
             than their own. `None` keeps the DEMs' own pixels. Contours,
             channels, flow limiters and constant values can use another
@@ -1495,6 +1501,13 @@ class HfunCollector(BaseHfun):
 
         self._applied = False
         self._size_info = {'hmin': hmin, 'hmax': hmax}
+        # 'optimum': the New Jersey factors, for the grid and for every
+        # refinement that does not set its own
+        self._optimum = (isinstance(resampling_factor, str)
+                         and resampling_factor == resampling.OPTIMUM)
+        if self._optimum:
+            warnings.warn(resampling.OPTIMUM_WARNING)
+            resampling_factor = resampling.OPTIMUM_GRID[0]
         self._resampling_factor = resampling.check_factor(
             resampling_factor, allow_native=False)
         self._resampling_method = resampling.check_method(resampling_method)
@@ -2153,6 +2166,10 @@ class HfunCollector(BaseHfun):
 
         resampling_factor = resampling.check_factor(resampling_factor)
         resampling_method = resampling.check_method(resampling_method)
+        if self._optimum:
+            resampling_factor, resampling_method = (
+                resampling.optimum_defaults(
+                    'contour', resampling_factor, resampling_method))
 
         # Always lazy
         self._invalidate()
@@ -2244,6 +2261,10 @@ class HfunCollector(BaseHfun):
 
         resampling_factor = resampling.check_factor(resampling_factor)
         resampling_method = resampling.check_method(resampling_method)
+        if self._optimum:
+            resampling_factor, resampling_method = (
+                resampling.optimum_defaults(
+                    'channel', resampling_factor, resampling_method))
 
         # Always lazy
         self._invalidate()
@@ -2330,10 +2351,21 @@ class HfunCollector(BaseHfun):
 
         resampling_factor = resampling.check_factor(resampling_factor)
         resampling_method = resampling.check_method(resampling_method)
+        if self._optimum:
+            resampling_factor, resampling_method = (
+                resampling.optimum_defaults(
+                    'flow_limiter', resampling_factor, resampling_method))
 
         if flat_areas not in ('hmin', 'keep'):
             raise ValueError(
                 f"flat_areas must be 'hmin' or 'keep', got {flat_areas!r}")
+        if self._resampling_factor is not None:
+            warnings.warn(
+                "Flow limiters do not resample well yet: on a coarse "
+                "grid the slopes are too gentle, and slopes from the "
+                "native DEM refine too much once reduced to the grid "
+                "(see the resampling docs). Consider a collector "
+                "without resampling_factor when using flow limiters.")
 
         self._invalidate()
 
@@ -2397,6 +2429,10 @@ class HfunCollector(BaseHfun):
 
         resampling_factor = resampling.check_factor(resampling_factor)
         resampling_method = resampling.check_method(resampling_method)
+        if self._optimum:
+            resampling_factor, resampling_method = (
+                resampling.optimum_defaults(
+                    'constant_value', resampling_factor, resampling_method))
 
         self._invalidate()
 
