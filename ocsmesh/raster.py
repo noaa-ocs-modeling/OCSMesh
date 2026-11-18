@@ -1439,7 +1439,8 @@ class Raster:
             self,
             level: float = 0,
             width: float = 1000, # in meters
-            tolerance: Optional[float] = None
+            tolerance: Optional[float] = None,
+            drop_small: bool = True,
             ) -> Union[Polygon, MultiPolygon]:
         """Calculate narrow width polygons based on specified input
 
@@ -1459,6 +1460,9 @@ class Raster:
             Cut-off used for designating narrow regions.
         tolerance : float or None, default=None
             Tolerance used for simplifying domain polygon.
+        drop_small : bool, default=True
+            Drop narrow regions no larger than
+            ``utils.channel_min_area(width)``.
 
         Returns
         -------
@@ -1476,7 +1480,7 @@ class Raster:
                 self.src.crs, utm_crs, always_xy=True)
             multipoly = ops.transform(transformer.transform, multipoly)
         channels = utils.get_polygon_channels(
-                multipoly, width, simplify=tolerance)
+                multipoly, width, simplify=tolerance, drop_small=drop_small)
         if channels is None:
             return None
 

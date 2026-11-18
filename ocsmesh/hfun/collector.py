@@ -53,6 +53,7 @@ from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.hfun.raster import HfunRaster
 from ocsmesh.hfun import resampling
+from ocsmesh.hfun import split as hsplit
 from ocsmesh.hfun.mesh import HfunMesh
 from ocsmesh.mesh.mesh import Mesh, EuclideanMesh2D
 from ocsmesh.mesh.base import BaseMesh
@@ -820,15 +821,26 @@ def _replay_shapes_task_worker(task: dict, method_name: str, shape_kwarg: str):
     return _refine_on_rebuilt_hfun(task, apply)
 
 
-def _write_shape_file(shape, crs, size_info, feather_path, crs_path):
-    """Write one detected shape and its CRS; returns the two paths."""
+# Shape file column with the piece labels of channels detected on a
+# window of a split raster (see split.clip_channels_to_core)
+_LABELS = 'piece_labels'
 
-    gpd.GeoDataFrame(
-        {'geometry': [shape],
-         'expansion_rate': size_info['expansion_rate'],
-         'target_size': size_info['target_size'],
-        },
-        crs=crs).to_feather(feather_path)
+
+def _write_shape_file(shape, crs, size_info, feather_path, crs_path,
+                      labels=None):
+    """Write one detected shape and its CRS; returns the two paths.
+
+    ``labels``: for channels detected on a window of a split raster, the
+    detected polygon each piece comes from, for
+    ``split.drop_small_channels``.
+    """
+
+    columns = {'geometry': [shape],
+               'expansion_rate': size_info['expansion_rate'],
+               'target_size': size_info['target_size']}
+    if labels is not None:
+        columns[_LABELS] = [[int(v) for v in labels]]
+    gpd.GeoDataFrame(columns, crs=crs).to_feather(feather_path)
     gc.collect()
     with open(crs_path, 'w') as fp:
         fp.write(crs.to_json())
@@ -843,21 +855,50 @@ def _detect_shapes_task_worker(task: dict):
     ``calculate`` does, for the coordinator to collect in order.
     """
 
+    window = task.get('window')
     try:
-        raster = Raster(task['topo_path'], chunk_size=task['chunk_size'],
-                        overlap=task['overlap'])
-        if task.get('resample_m'):
-            raster = resampling.resampled_copy(
-                raster, task['resample_m'], task['resampling_method'])
+        if window is not None:
+            # A window of a split raster: its pixels of the raster's
+            # detection grid, written for this task only
+            raster = Raster(
+                hsplit.write_window(window, task['window_path']),
+                chunk_size=task['chunk_size'], overlap=task['overlap'])
+        else:
+            raster = Raster(task['topo_path'],
+                            chunk_size=task['chunk_size'],
+                            overlap=task['overlap'])
+            if task.get('resample_m'):
+                raster = resampling.resampled_copy(
+                    raster, task['resample_m'], task['resampling_method'])
         defn = deepcopy(task['defn'])
+        is_channel = isinstance(defn, Channel)
+        if window is not None and is_channel:
+            # Small pieces may be parts of larger channels cut by the
+            # window edge: kept until all windows are joined.
+            defn.drop_small = False
         defn.add_source(raster)
-        shapes = (defn.iter_contours() if task['op'] == 'contour_detect'
-                  else defn.iter_channels())
-        files = [
-            _write_shape_file(shape, crs, task['size_info'],
-                              f"{task['prefix']}_{k}.feather",
-                              f"{task['prefix']}_{k}.json")
-            for k, (shape, crs) in enumerate(shapes)]
+        shapes = (defn.iter_channels() if is_channel
+                  else defn.iter_contours())
+        files = []
+        for shape, crs in shapes:
+            labels = None
+            if window is not None:
+                # Only the core is kept; the halo was there to give the
+                # detection context.
+                if is_channel:
+                    shape, labels = hsplit.clip_channels_to_core(
+                        shape, crs, window.core)
+                else:
+                    if task['chunk_size'] is None:
+                        shape = hsplit.to_raster_coords(shape, window)
+                    shape = hsplit.clip_to_core(shape, crs, window.core)
+                if shape is None:
+                    continue
+            k = len(files)
+            files.append(_write_shape_file(
+                shape, crs, task['size_info'],
+                f"{task['prefix']}_{k}.feather",
+                f"{task['prefix']}_{k}.json", labels=labels))
         return {
             'status': 'success',
             'original_index': task['original_index'],
@@ -869,6 +910,95 @@ def _detect_shapes_task_worker(task: dict):
             'original_index': task['original_index'],
             'error': traceback.format_exc(),
         }
+    finally:
+        if window is not None and os.path.exists(task['window_path']):
+            os.remove(task['window_path'])
+
+
+def _join_split_shapes(entries):
+    """The shape files of the detection tasks, with the shapes detected
+    on the windows of a split raster joined as detection on the whole
+    raster would give them.
+
+    ``entries`` are ``(files, task)`` in detection order. Channels: the
+    pieces of channels cut by window edges are joined before the
+    channel size cutoff (``split.drop_small_channels``). Contours: the
+    pieces of each raster's lines are merged back into whole lines, so
+    that they are sampled along their length as unsplit lines are
+    (``add_feature``). Returns the files in order; files left out are
+    deleted.
+    """
+    files = _drop_small_split_channels(entries)
+    groups = {}
+    for k, (_, task) in enumerate(entries):
+        if task.get('window') is not None and task['op'] == 'contour_detect':
+            groups.setdefault(
+                (task['defn_index'], task['raster_index']), []).append(k)
+    if not groups:
+        return files
+    replaced = {}
+    for ks in groups.values():
+        group_files = [f for k in ks for f in entries[k][0]]
+        if not group_files:
+            continue
+        lines, crs = [], None
+        for feather_path, _ in group_files:
+            gdf = gpd.read_feather(feather_path)
+            crs = gdf.crs
+            lines.extend(g for g in gdf.geometry if g is not None)
+        core = entries[ks[0]][1]['window'].core
+        merged = hsplit.merge_line_pieces(
+            lines, 1e-6 * min(abs(core.affine.a), abs(core.affine.e)))
+        first = group_files[0]
+        _write_shape_file(merged, crs, entries[ks[0]][1]['size_info'],
+                          first[0], first[1])
+        for feather_path, crs_path in group_files[1:]:
+            os.remove(feather_path)
+            os.remove(crs_path)
+            replaced[(str(feather_path), str(crs_path))] = None
+    return [f for f in files if (str(f[0]), str(f[1])) not in replaced]
+
+
+def _drop_small_split_channels(entries):
+    """Apply ``split.drop_small_channels`` to the shape files of the
+    channel detection tasks on windows.
+
+    ``entries`` are ``(files, task)`` in detection order. Files left
+    empty are deleted; returns the remaining files in order.
+    """
+    by_defn = {}
+    for k, (_, task) in enumerate(entries):
+        if task.get('window') is not None and isinstance(
+                task['defn'], Channel):
+            by_defn.setdefault(task['defn_index'], []).append(k)
+    if not by_defn:
+        return [f for files, _ in entries for f in files]
+    dropped = set()
+    for ks in by_defn.values():
+        refs, items = [], []
+        for k in ks:
+            files, task = entries[k]
+            for feather_path, crs_path in files:
+                gdf = gpd.read_feather(feather_path)
+                labels = (gdf[_LABELS] if _LABELS in gdf.columns
+                          else [None] * len(gdf))
+                for shape, lab in zip(gdf.geometry, labels):
+                    refs.append((k, feather_path, crs_path))
+                    items.append((shape, gdf.crs, task['window'].core,
+                                  None if lab is None else np.asarray(lab)))
+        width = entries[ks[0]][1]['defn'].width
+        shapes = hsplit.drop_small_channels(items, width)
+        for (k, feather_path, crs_path), shape, item in zip(
+                refs, shapes, items):
+            if shape is None:
+                os.remove(feather_path)
+                os.remove(crs_path)
+                dropped.add((str(feather_path), str(crs_path)))
+                continue
+            _write_shape_file(shape, item[1], entries[k][1]['size_info'],
+                              feather_path, crs_path)
+    return [f for files, _ in entries for f in files
+            if (str(f[0]), str(f[1])) not in dropped]
 
 
 def _contours_task_worker(task: dict):
@@ -1261,6 +1391,8 @@ class HfunCollector(BaseHfun):
                 Literal['serial', 'parallel', 'mpi']] = None,
             resampling_factor: Optional[float] = None,
             resampling_method: str = 'average',
+            split_size: Optional[int] = None,
+            split_halo: Optional[float] = None,
             ) -> None:
         """Initialize a collector size function object
 
@@ -1298,6 +1430,20 @@ class HfunCollector(BaseHfun):
             `rasterio.enums.Resampling` name, e.g. ``'average'``,
             ``'min'`` (deepest value, keeps narrow channels connected),
             ``'max'``, ``'bilinear'``, ``'nearest'``.
+        split_size : int or None, default=None
+            Detect channels and contours on windows of the input DEMs
+            at most `split_size` pixels wide and tall (pixels of each
+            DEM at its own resolution), as separate tasks, instead of
+            one task per DEM. Only the detection is split; each DEM's
+            size function is computed whole. Useful with the 'parallel'
+            and 'mpi' execution modes when a few large DEMs keep a few
+            workers busy. `None` (the default) detects on whole DEMs.
+            Applies to the 'exact' method.
+        split_halo : float or None, default=None
+            Width in metres of the margin each window is detected with
+            around the part it keeps. `None` derives it from the
+            definitions: the channel width (plus its simplification
+            tolerance) and a few pixels.
         """
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -1365,6 +1511,22 @@ class HfunCollector(BaseHfun):
         self._nprocs = nprocs
         self._hfun_list = []
         self._method = method
+        if split_size is not None:
+            if isinstance(split_size, bool) or not isinstance(
+                    split_size, (int, np.integer)) or split_size < 2:
+                raise ValueError(
+                    f"split_size must be an integer of 2 or more, got "
+                    f"{split_size!r}")
+            if method != 'exact':
+                warnings.warn(
+                    "split_size applies to the 'exact' method only; "
+                    "detecting on whole rasters")
+                split_size = None
+        if split_halo is not None and split_halo < 0:
+            raise ValueError(
+                f"split_halo must not be negative, got {split_halo!r}")
+        self._split_size = None if split_size is None else int(split_size)
+        self._split_halo = None if split_halo is None else float(split_halo)
 
         self._base_shape = base_shape
         self._base_shape_crs = CRS.from_user_input(base_shape_crs)
@@ -2589,9 +2751,14 @@ class HfunCollector(BaseHfun):
         with tempfile.TemporaryDirectory() as temp_path:
             with Pool(processes=self._nprocs) as p:
                 # Contours are ONLY extracted from raster sources
-                self._contour_coll.calculate(
-                    raster_hfun_list, temp_path,
-                    sources_for=self._detection_sources(raster_hfun_list))
+                if self._detect_split('contours'):
+                    self._detect_shapes_serial(
+                        'contours', raster_hfun_list, temp_path)
+                else:
+                    self._contour_coll.calculate(
+                        raster_hfun_list, temp_path,
+                        sources_for=self._detection_sources(
+                            raster_hfun_list))
                 counter = 0
                 for hfun in apply_to:
                     for gdf in self._contour_coll:
@@ -2656,33 +2823,120 @@ class HfunCollector(BaseHfun):
 
         tasks = []
         if self._is_coordinator():
-            for d_idx, (defn, size_info) in enumerate(info):
-                factor = size_info.get('resampling_factor')
-                method = size_info.get('resampling_method')
-                for r_idx, hfun in enumerate(raster_hfun_list):
-                    spec = self._topo_spec(hfun, factor, method)
-                    tasks.append({
-                        'op': op,
-                        'original_index': len(tasks),
-                        'defn': defn,
-                        'size_info': size_info,
-                        'topo_path': (_task_topo_path(hfun) if spec is None
-                                      else spec['path']),
-                        'resample_m': spec['res_m'] if spec else None,
-                        'resampling_method': spec['method'] if spec else None,
-                        'chunk_size': hfun.raster.chunk_size,
-                        'overlap': hfun.raster.overlap,
-                        'prefix': os.path.join(
-                            shape_dir, f'{kind}_{d_idx}_{r_idx}'),
-                    })
+            tasks = self._detection_tasks(
+                kind, op, info, raster_hfun_list, shape_dir)
         results = self._dispatch_refinement_tasks(
             op, tasks, f'{kind} detection')
         if results is None:
             return []  # MPI worker rank
-        files = [f for r in sorted(results, key=lambda r: r['original_index'])
-                 for f in r['files']]
+        files = _join_split_shapes([
+            (r['files'], tasks[r['original_index']])
+            for r in sorted(results, key=lambda r: r['original_index'])])
         coll.set_files(files)
         return files
+
+    def _detect_shapes_serial(self, kind, raster_hfun_list, shape_dir):
+        """``_detect_shapes`` in this process, one task after the other:
+        the serial detection of split rasters."""
+
+        coll = getattr(self, self._SHAPE_REFINEMENTS[kind][0])
+        info_attr, op = self._SHAPE_DETECTION[kind]
+        tasks = self._detection_tasks(
+            kind, op, getattr(self, info_attr), raster_hfun_list, shape_dir)
+        entries = []
+        for task in tasks:
+            result = _detect_shapes_task_worker(task)
+            if result['status'] != 'success':
+                raise RuntimeError(
+                    f"{kind} detection failed:\n{result['error']}")
+            entries.append((result['files'], task))
+        coll.set_files(_join_split_shapes(entries))
+
+    def _detect_split(self, kind) -> bool:
+        """True when ``kind`` is detected on windows of split rasters:
+        ``split_size`` is set and no definition has its own sources
+        (those are detected on them as given)."""
+
+        if self._split_size is None:
+            return False
+        info_attr, _ = self._SHAPE_DETECTION[kind]
+        return not any(defn.has_source for defn, _ in getattr(self, info_attr))
+
+    def _detection_tasks(self, kind, op, info, raster_hfun_list, shape_dir):
+        """Detection tasks: one per definition and raster, or with
+        ``split_size`` one per window of the rasters larger than it."""
+
+        tasks = []
+        for d_idx, (defn, size_info) in enumerate(info):
+            factor = size_info.get('resampling_factor')
+            method = size_info.get('resampling_method')
+            for r_idx, hfun in enumerate(raster_hfun_list):
+                spec = self._topo_spec(hfun, factor, method)
+                task = {
+                    'op': op,
+                    'defn': defn,
+                    'defn_index': d_idx,
+                    'raster_index': r_idx,
+                    'size_info': size_info,
+                    'topo_path': (_task_topo_path(hfun) if spec is None
+                                  else spec['path']),
+                    'resample_m': spec['res_m'] if spec else None,
+                    'resampling_method': spec['method'] if spec else None,
+                    'chunk_size': hfun.raster.chunk_size,
+                    'overlap': hfun.raster.overlap,
+                }
+                stem = os.path.join(shape_dir, f'{kind}_{d_idx}_{r_idx}')
+                windows = (self._detection_windows(hfun, spec, defn)
+                           if self._detect_split(kind) else [])
+                if not windows:
+                    tasks.append({**task, 'original_index': len(tasks),
+                                  'prefix': stem})
+                for w_idx, window in enumerate(windows):
+                    tasks.append({**task, 'original_index': len(tasks),
+                                  'window': window,
+                                  'window_path': f'{stem}_{w_idx}.tif',
+                                  'prefix': f'{stem}_{w_idx}'})
+        return tasks
+
+    def _detection_windows(self, hfun, spec, defn) -> list:
+        """Windows a definition is detected on for ``hfun``'s raster, or
+        an empty list when the raster is no larger than ``split_size``.
+
+        The windows are laid out on the raster's detection grid (as
+        ``_topo_spec`` gives it): the size function's grid, the DEM's
+        own pixels, or the DEM resampled the way ``resampled_copy``
+        resamples it whole.
+        """
+
+        native = self._native_raster(hfun)
+        if spec is None:
+            path, grid, method = (_task_topo_path(hfun),
+                                  hsplit.Grid.of(hfun.raster), None)
+        elif spec['res_m'] is None:
+            path, grid, method = spec['path'], hsplit.Grid.of(native), None
+        else:
+            scale = resampling.scaling_for(native, spec['res_m'])
+            path, grid, method = (spec['path'],
+                                  hsplit.Grid.resampled(native, scale),
+                                  spec['method'])
+        cores = hsplit.plan_cores(grid, native, self._split_size)
+        if not cores:
+            return []
+        halo = hsplit.halo_pixels(grid, self._split_halo_m(defn, grid))
+        return [hsplit.Window(path, core, halo, method) for core in cores]
+
+    def _split_halo_m(self, defn, grid) -> float:
+        """Margin in metres around a window's core: ``split_halo``, or
+        the channel width plus its simplification tolerance (a channel
+        is recognised when its whole width is visible) and four pixels
+        (contours and the pixels along the edge)."""
+
+        if self._split_halo is not None:
+            return self._split_halo
+        margin = 4 * max(grid.pixel_size_m())
+        if isinstance(defn, Channel):
+            return defn.width + (defn.tolerance or 0.0) + margin
+        return margin
 
     def _can_distribute_refinements(self) -> bool:
         """True when contours/channels may go through the task path.
@@ -3028,9 +3282,13 @@ class HfunCollector(BaseHfun):
 
         with tempfile.TemporaryDirectory() as temp_path:
             # Channels are ONLY extracted from raster sources
-            self._channels_coll.calculate(
-                raster_hfun_list, temp_path,
-                sources_for=self._detection_sources(raster_hfun_list))
+            if self._detect_split('channels'):
+                self._detect_shapes_serial(
+                    'channels', raster_hfun_list, temp_path)
+            else:
+                self._channels_coll.calculate(
+                    raster_hfun_list, temp_path,
+                    sources_for=self._detection_sources(raster_hfun_list))
             counter = 0
             with Pool(processes=self._nprocs) as p:
                 for hfun in apply_to:

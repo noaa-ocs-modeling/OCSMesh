@@ -1402,7 +1402,20 @@ def estimate_mesh_utm(msh: MeshData):
 
     return None
 
-def get_polygon_channels(polygon, width, simplify=None, join_style=3):
+def channel_min_area(width):
+    """Smallest channel piece ``get_polygon_channels`` keeps: the area
+    of a ``width`` square minus a quarter circle of radius ``width``."""
+    return width**2 * (1 - np.pi/4)
+
+
+def get_polygon_channels(polygon, width, simplify=None, join_style=3,
+                         drop_small=True):
+    """Parts of ``polygon`` narrower than ``width``.
+
+    Pieces no larger than ``channel_min_area(width)`` are dropped, unless
+    ``drop_small`` is False (a window of a split raster, whose pieces
+    are only complete once joined with those of the other windows).
+    """
 
     # Operations are done without any CRS info consideration
 
@@ -1431,11 +1444,12 @@ def get_polygon_channels(polygon, width, simplify=None, join_style=3):
     # Use square - 1/4 circle as cleanup criteria. A row can be a
     # Polygon as well as a MultiPolygon (e.g. one creek left in a small
     # tile), so iterate over the parts of either.
+    min_area = channel_min_area(width) if drop_small else 0
     channels_gdf = gpd.GeoDataFrame(
            geometry=gpd.GeoSeries(
                [p for i in channels_gdf.geometry
                    for p in get_parts(i)
-                   if p.area > width**2 * (1-np.pi/4)]))
+                   if p.area > min_area]))
 
 
     ret_val = channels_gdf.union_all()
