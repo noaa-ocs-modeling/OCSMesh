@@ -53,8 +53,9 @@ follow [Semantic Versioning](https://semver.org/).
   grid with a halo (the channel width and a few pixels, or `split_halo`
   metres) and keep the shapes in their core; channel pieces cut by window
   edges are joined before small channels are dropped, and contour pieces
-  are merged back into lines. `Raster.get_channels(..., drop_small=True)`
-  and `utils.channel_min_area`.
+  are merged back into lines. `split_size='optimum'` uses the size found
+  on the New Jersey test domain (4100), with a warning.
+  `Raster.get_channels(..., drop_small=True)` and `utils.channel_min_area`.
 
 ### Fixed
 - `Raster.resample` raised for any `resampling_method` passed to it; it

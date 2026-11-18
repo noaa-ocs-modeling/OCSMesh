@@ -62,6 +62,17 @@ The shapes of all windows are then put together on the coordinator:
 Choosing ``split_size``
 -----------------------
 
+A raster ``W`` pixels wide is cut into ``ceil(W / split_size)`` equal
+parts along each axis, and the same along y, so no window is larger
+than ``split_size`` and rasters no larger than it are detected whole.
+With tiles of about 8,100 pixels (0.25 degree at 3 m), any value from
+4,050 to 8,099 gives 2 x 2 windows, 2,700 to 4,049 gives 3 x 3.
+
+``split_size='optimum'`` uses the size found on the New Jersey test
+domain, 4100 (2 x 2 windows of its 3 m tiles; channels detected 2.2
+times faster than unsplit with MPI, with the same result), and warns
+that other domains or DEMs may need another value.
+
 Splitting helps when there are fewer rasters than workers, or when one
 raster takes much longer than the others, and only when detection is a
 large part of the run. The halo is detected for every window and then

@@ -1391,7 +1391,7 @@ class HfunCollector(BaseHfun):
                 Literal['serial', 'parallel', 'mpi']] = None,
             resampling_factor: Union[float, str, None] = None,
             resampling_method: str = 'average',
-            split_size: Optional[int] = None,
+            split_size: Union[int, str, None] = None,
             split_halo: Optional[float] = None,
             ) -> None:
         """Initialize a collector size function object
@@ -1436,15 +1436,19 @@ class HfunCollector(BaseHfun):
             `rasterio.enums.Resampling` name, e.g. ``'average'``,
             ``'min'`` (deepest value, keeps narrow channels connected),
             ``'max'``, ``'bilinear'``, ``'nearest'``.
-        split_size : int or None, default=None
+        split_size : int or 'optimum' or None, default=None
             Detect channels and contours on windows of the input DEMs
             at most `split_size` pixels wide and tall (pixels of each
             DEM at its own resolution), as separate tasks, instead of
-            one task per DEM. Only the detection is split; each DEM's
-            size function is computed whole. Useful with the 'parallel'
-            and 'mpi' execution modes when a few large DEMs keep a few
-            workers busy. `None` (the default) detects on whole DEMs.
-            Applies to the 'exact' method.
+            one task per DEM. A DEM `W` pixels wide is cut into
+            ``ceil(W / split_size)`` equal parts along each axis. Only
+            the detection is split; each DEM's size function is
+            computed whole. Useful with the 'parallel' and 'mpi'
+            execution modes when a few large DEMs keep a few workers
+            busy. ``'optimum'`` uses the size found on the New Jersey
+            test domain (``split.OPTIMUM_SPLIT_SIZE``, 4100) and warns
+            that other domains may need another. `None` (the default)
+            detects on whole DEMs. Applies to the 'exact' method.
         split_halo : float or None, default=None
             Width in metres of the margin each window is detected with
             around the part it keeps. `None` derives it from the
@@ -1524,6 +1528,14 @@ class HfunCollector(BaseHfun):
         self._nprocs = nprocs
         self._hfun_list = []
         self._method = method
+        if isinstance(split_size, str) and split_size == hsplit.OPTIMUM:
+            # The window size found on the New Jersey test domain
+            warnings.warn(hsplit.OPTIMUM_WARNING)
+            split_size = hsplit.OPTIMUM_SPLIT_SIZE
+        # TODO: split_size='auto': choose the window size from the input
+        # DEMs and the number of workers (e.g. the largest size that
+        # gives every worker a window), so that users need not know the
+        # DEMs' pixel counts. Not implemented yet.
         if split_size is not None:
             if isinstance(split_size, bool) or not isinstance(
                     split_size, (int, np.integer)) or split_size < 2:

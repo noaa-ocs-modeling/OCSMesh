@@ -43,6 +43,18 @@ from ocsmesh import utils
 from ocsmesh.raster import Raster, _as_resampling
 
 
+OPTIMUM = 'optimum'
+# split_size='optimum': the window size used on the New Jersey test domain
+# (CUDEM tiles of about 8,100 x 8,100 pixels at 3 m, cut 2 x 2), where
+# channel detection matched the unsplit run 2.2 times faster with MPI.
+OPTIMUM_SPLIT_SIZE = 4100
+OPTIMUM_WARNING = (
+    "split_size='optimum' uses the window size found on the New Jersey "
+    "test domain (4100 pixels, CUDEM 3 m tiles of about 8,100 pixels). "
+    "Other domains or DEMs may need another: check the run, or set "
+    "split_size yourself.")
+
+
 @dataclass(frozen=True)
 class Grid:
     """A raster's pixel grid: affine ``transform`` (as a tuple), ``shape``

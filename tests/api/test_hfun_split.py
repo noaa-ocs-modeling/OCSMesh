@@ -326,8 +326,14 @@ class TestSplitDetection(_TileCase):
         given = self._collector(split_size=170, split_halo=500.0)
         self.assertEqual(given._split_halo_m(defn, grid), 500.0)  # pylint: disable=protected-access
 
+    def test_optimum(self):
+        with self.assertWarns(UserWarning) as caught:
+            collector = self._collector(split_size='optimum')
+        self.assertIn('New Jersey', str(caught.warning))
+        self.assertEqual(collector._split_size, 4100)  # pylint: disable=protected-access
+
     def test_arguments(self):
-        for bad in (1, 2.5, True):
+        for bad in (1, 2.5, True, 'auto', 'best'):
             with self.assertRaises(ValueError):
                 self._collector(split_size=bad)
         with self.assertRaises(ValueError):
