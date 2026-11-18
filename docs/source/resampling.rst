@@ -88,8 +88,9 @@ coarsest grid:
      - ``0.125``
    * - ``add_contour``
      - ``0.5``, ``'min'``
-   * - ``add_subtidal_flow_limiter`` slopes
-     - ``'native'``
+   * - ``add_subtidal_flow_limiter``
+     - not covered (slopes on the DEM's own pixels, sizes still on the
+       grid; see below)
    * - ``add_constant_value``
      - the grid
 
@@ -97,8 +98,12 @@ A refinement's own ``resampling_factor`` or ``resampling_method`` still
 wins, coarser ones included. These values come from one domain (3 m
 CUDEM tiles, ``hmin=50`` m, ``hmax=3000`` m), so the collector warns
 that other domains, DEMs or ``hmin``/``hmax`` may need other factors:
-check the resulting mesh. Flow limiters do not resample well yet with
-any factor (see below).
+check the resulting mesh.
+
+``'optimum'`` does not cover flow limiters: no resampling setting kept
+their sizes on New Jersey (see below), and adding one to a resampled
+grid warns. Leave ``resampling_factor`` unset when using
+``add_subtidal_flow_limiter``.
 
 .. code-block:: python
 

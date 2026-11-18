@@ -1252,10 +1252,11 @@ class HfunCollector(BaseHfun):
             gives 25 m pixels. ``'optimum'`` uses the factors found on
             the New Jersey test domain: ``0.5`` for the grid, and for
             the refinements that do not set their own, channels detected
-            at ``0.125``, contours at ``0.5`` with ``'min'``, flow
-            limiters on the DEM's own pixels (see
+            at ``0.125``, contours at ``0.5`` with ``'min'`` (see
             `ocsmesh.hfun.resampling.OPTIMUM_REFINEMENTS`); it warns that
-            other domains may need other factors. Each input DEM is resampled once, after
+            other domains may need other factors. It does not cover flow
+            limiters: no resampling works for them yet, so leave this
+            unset when using `add_subtidal_flow_limiter`. Each input DEM is resampled once, after
             it is clipped; DEMs are never resampled to pixels finer
             than their own. `None` keeps the DEMs' own pixels. Contours,
             channels, flow limiters and constant values can use another
@@ -2163,11 +2164,12 @@ class HfunCollector(BaseHfun):
                 f"flat_areas must be 'hmin' or 'keep', got {flat_areas!r}")
         if self._resampling_factor is not None:
             warnings.warn(
-                "Flow limiters do not resample well yet: on a coarse "
-                "grid the slopes are too gentle, and slopes from the "
-                "native DEM refine too much once reduced to the grid "
-                "(see the resampling docs). Consider a collector "
-                "without resampling_factor when using flow limiters.")
+                "Flow limiters do not resample well yet, with any "
+                "resampling_factor, 'optimum' included: on a coarse grid "
+                "the slopes are too gentle, and slopes from the native DEM "
+                "refine too much once reduced to the grid (see the "
+                "resampling docs). Use a collector without "
+                "resampling_factor when using flow limiters.")
 
         self._invalidate()
 
