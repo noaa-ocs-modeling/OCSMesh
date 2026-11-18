@@ -65,7 +65,9 @@ jobs:
     - name: Export Conda environment
       if: runner.os != 'Windows'
       shell: bash -el {0}
-      run: conda list > environment_py${{ matrix.python-version }}.yml
+      # setup-micromamba provides micromamba, not conda; the conda this
+      # step used came with the runner image, which no longer has it.
+      run: '"$MAMBA_EXE" list -n ocsmesh-env > environment_py${{ matrix.python-version }}.yml'
 
     - name: 'Upload conda environment'
       if: runner.os != 'Windows'
