@@ -40,10 +40,10 @@ follow [Semantic Versioning](https://semver.org/).
   grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
   `resampling_factor='optimum'` uses the factors found on the New Jersey
   test domain (grid at `0.5`, channels detected at `0.125`, contours at
-  `0.5` with `'min'`, flow limiter slopes on the native DEM) for every
-  refinement that does not set its own, with a warning that other
-  domains may need other factors. Adding a flow limiter to a resampled
-  grid warns that flow limiters do not resample well yet.
+  `0.5` with `'min'`) for every refinement that does not set its own,
+  with a warning that other domains may need other factors. It does not
+  cover flow limiters: adding one to a resampled grid warns that flow
+  limiters do not resample well yet.
 - Split channel and contour detection for parallel and MPI runs, off by
   default: `Hfun(..., split_size=None, split_halo=None)` detects on
   windows of the DEMs larger than `split_size` pixels (of the DEM's own

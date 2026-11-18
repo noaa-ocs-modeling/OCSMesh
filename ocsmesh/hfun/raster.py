@@ -676,6 +676,17 @@ class HfunRaster(BaseHfun, Raster):
                           verbosity=self._verbosity)
         apply(fine)
 
+        # TODO: a better reduction for flow limiters. Keeping the
+        # smallest fine size in each cell makes a flow limiter computed
+        # on the native DEM far too fine on a coarse grid (NJ: +224% to
+        # +367% mesh nodes at 0.5-1.0 x hmin), and slopes from a coarse
+        # DEM are too gentle (-39%), so no resampling setting works for
+        # flow limiters yet and resampling_factor='optimum' does not
+        # cover them. Try the mean, the median or a low percentile of
+        # the fine sizes per cell (or of the slopes before the sizes),
+        # validated against the native run as the other refinements
+        # were; then give flow limiters an entry that works in
+        # resampling.OPTIMUM_REFINEMENTS.
         # Pixels with no refinement hold float32 max: treat them as
         # nodata so they never win the minimum.
         fill = getattr(np.finfo(np.float32), 'max')

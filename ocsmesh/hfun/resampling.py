@@ -46,7 +46,10 @@ OPTIMUM_REFINEMENTS = {
     'channel': (0.125, None),
     # contours on the grid's pixels, keeping the deepest value
     'contour': (0.5, 'min'),
-    # no resampled slopes kept the limiter's sizes: the DEM's own pixels
+    # Not covered: no setting kept the limiter's sizes. Slopes on the
+    # DEM's own pixels are the closest, but the sizes still end on the
+    # coarse grid (see the TODO in HfunRaster.refine_on), so adding a
+    # flow limiter to a resampled grid warns.
     'flow_limiter': (NATIVE, None),
     # depth bands on the grid
     'constant_value': (None, None),
@@ -55,7 +58,8 @@ OPTIMUM_WARNING = (
     "resampling_factor='optimum' uses the factors found on the New Jersey "
     "test domain (CUDEM 3 m tiles, hmin=50 m, hmax=3000 m). They may not "
     "suit other domains, DEMs or hmin/hmax: check the resulting mesh, or "
-    "set the factors yourself.")
+    "set the factors yourself. Flow limiters are not covered: leave "
+    "resampling_factor unset when using add_subtidal_flow_limiter.")
 
 Factor = Union[float, str, None]
 

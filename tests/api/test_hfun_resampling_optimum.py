@@ -66,6 +66,7 @@ class TestOptimum(unittest.TestCase):
         with self.assertWarns(UserWarning) as caught:
             collector = self._collector('optimum')
         self.assertIn('New Jersey', str(caught.warning))
+        self.assertIn('Flow limiters are not covered', str(caught.warning))
         # pylint: disable=protected-access
         self.assertEqual(collector._resampling_factor, 0.5)
         self.assertEqual(collector._resampling_method, 'average')
