@@ -1054,6 +1054,22 @@ MPIExecutor.register_op('linefeature', _user_shapes_task_worker)
 
 
 
+def _wrap_lon_to_box_convention(meshdata, reference_shape) -> None:
+    """Wrap geographic mesh longitudes to the convention of a reference shape.
+
+    ``utils.reproject`` (PROJ) returns longitudes in [-180, 180]. Inputs that
+    cross the antimeridian may instead be defined in [0, 360]; clipping such a
+    shape against a [-180, 180] mesh silently drops everything east of 180.
+    If ``reference_shape`` extends beyond 180 degrees, wrap the mesh x
+    coordinates into [0, 360) in place.
+    """
+    if reference_shape is None or meshdata is None:
+        return
+    if reference_shape.bounds[2] > 180.0 and len(meshdata.coords):
+        meshdata.coords = np.column_stack([
+            np.mod(meshdata.coords[:, 0], 360.0), meshdata.coords[:, 1]])
+
+
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
 
@@ -3622,6 +3638,10 @@ class HfunCollector(BaseHfun):
             if big_meshdata.crs is not None:
                 if not epsg4326.equals(big_meshdata.crs):
                     utils.reproject(big_meshdata, epsg4326)
+            # PROJ returns longitudes in [-180, 180]. If the DEM boxes use the
+            # 0-360 convention (domain crossing the dateline), wrap the mesh
+            # to match, otherwise everything east of 180 is clipped away.
+            _wrap_lon_to_box_convention(big_meshdata, big_cut_shape)
 
             big_meshdata = utils.clip_mesh_by_shape(
                 big_meshdata,
@@ -3646,6 +3666,8 @@ class HfunCollector(BaseHfun):
             if hasattr(nondem_meshdata, "crs"):
                 if not epsg4326.equals(nondem_meshdata.crs):
                     utils.reproject(nondem_meshdata, epsg4326)
+                if big_cut_shape:
+                    _wrap_lon_to_box_convention(nondem_meshdata, big_cut_shape)
 
             nondem_shape = utils.get_mesh_polygons(hfun.mesh.meshdata)
             if not epsg4326.equals(hfun.crs):

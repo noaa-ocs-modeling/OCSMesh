@@ -389,6 +389,17 @@ class RegionConstraint(Constraint):
         if points_gdf.crs != self._crs:
             points_gdf = points_gdf.to_crs(self._crs)
 
+        # PROJ returns geographic longitudes in [-180, 180]. If the region is
+        # defined with the 0-360 convention (e.g. it crosses the dateline),
+        # bring the points into the same convention before the spatial join.
+        if (CRS.from_user_input(self._crs).is_geographic
+                and self._region.bounds[2] > 180.0):
+            wrapped_x = np.mod(points_gdf.geometry.x.to_numpy(), 360.0)
+            points_gdf = gpd.GeoDataFrame(
+                geometry=gpd.points_from_xy(
+                    wrapped_x, points_gdf.geometry.y.to_numpy(),
+                    crs=self._crs))
+
         # Create a gdf for the constraint region
         region_gdf = gpd.GeoDataFrame(
             {'geometry': [self._region]}, crs=self._crs
