@@ -163,11 +163,15 @@ class TestGrid(unittest.TestCase):
         multitile.cleanup(cls.stack)
 
     def _hfun(self, **kwargs):
+        # Only rank 0 builds these, so the collector must not be shared
+        # by the MPI ranks: a shared one broadcasts from rank 0 alone and
+        # puts the ranks out of step for the next collective.
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             return Hfun(list(self.stack.paths), hmin=multitile.HMIN,
                         hmax=multitile.HMAX, base_shape=self.stack.aoi,
-                        base_shape_crs='EPSG:4326', **kwargs)
+                        base_shape_crs='EPSG:4326', execution_mode='serial',
+                        **kwargs)
 
     def test_only_finer_tiles_are_resampled(self):
         if not multitile.is_manager():
