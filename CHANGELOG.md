@@ -30,6 +30,9 @@ follow [Semantic Versioning](https://semver.org/).
   Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
 
 ### Fixed
+- `utils.get_polygon_channels` (channel detection) raised `AttributeError:
+  'Polygon' object has no attribute 'geoms'` when the detected area was a
+  single polygon, e.g. one creek left in a small tile.
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
   combine CLIs) now orients every element counterclockwise, so written
   meshes no longer contain clockwise triangles. `utils.order_mesh` is
