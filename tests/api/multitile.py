@@ -192,10 +192,12 @@ def add_depth_bands(hfun) -> None:
 
 def make_hfun(paths: Sequence[str], mode: str, aoi: Optional[Polygon] = None,
               method: str = 'exact', nprocs: Optional[int] = None,
-              configure: Optional[Callable] = None):
+              configure: Optional[Callable] = None,
+              hfun_kwargs: Optional[dict] = None):
     """Collector for ``paths`` in ``mode`` with optional refinements.
 
-    ``nprocs`` defaults to 1 for serial/mpi and 2 for parallel.
+    ``nprocs`` defaults to 1 for serial/mpi and 2 for parallel;
+    ``hfun_kwargs`` are extra collector arguments.
     """
     import warnings
     from ocsmesh import Hfun
@@ -204,6 +206,7 @@ def make_hfun(paths: Sequence[str], mode: str, aoi: Optional[Polygon] = None,
     kwargs = {'hmin': HMIN, 'hmax': HMAX, 'nprocs': nprocs, 'method': method}
     if aoi is not None:
         kwargs.update(base_shape=aoi, base_shape_crs='EPSG:4326')
+    kwargs.update(hfun_kwargs or {})
     hfun = Hfun(list(paths), **kwargs)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
@@ -213,13 +216,15 @@ def make_hfun(paths: Sequence[str], mode: str, aoi: Optional[Polygon] = None,
     return hfun
 
 
-def refined_rasters(paths, mode, aoi=None, configure=None, nprocs=None):
+def refined_rasters(paths, mode, aoi=None, configure=None, nprocs=None,
+                    hfun_kwargs=None):
     """Apply the refinements only (exact method) and return the raster arrays.
 
     Returns a list of 2D arrays (one per raster size function) on rank 0,
     None on MPI worker ranks.
     """
-    hfun = make_hfun(paths, mode, aoi=aoi, configure=configure, nprocs=nprocs)
+    hfun = make_hfun(paths, mode, aoi=aoi, configure=configure, nprocs=nprocs,
+                     hfun_kwargs=hfun_kwargs)
     hfun._apply_features()  # pylint: disable=protected-access
     if not is_manager():
         return None
@@ -229,10 +234,10 @@ def refined_rasters(paths, mode, aoi=None, configure=None, nprocs=None):
 
 
 def meshdata_stats(paths, mode, aoi=None, configure=None, method='exact',
-                   nprocs=None):
+                   nprocs=None, hfun_kwargs=None):
     """Run meshdata() and return summary stats on rank 0 (None on workers)."""
     hfun = make_hfun(paths, mode, aoi=aoi, configure=configure, method=method,
-                     nprocs=nprocs)
+                     nprocs=nprocs, hfun_kwargs=hfun_kwargs)
     md = hfun.meshdata()
     if md is None:
         return None
