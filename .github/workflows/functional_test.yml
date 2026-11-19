@@ -31,6 +31,12 @@ jobs:
     env:
       OMPI_MCA_rmaps_base_oversubscribe: "1"
       PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
+      # conda-forge MPICH has both the UCX and OFI netmods and picks UCX,
+      # which fails at MPI_Init on runners with an RDMA device it cannot
+      # open (ud_verbs/mana_0: Address not valid). Use OFI over TCP (the
+      # steps already set FI_PROVIDER=tcp) and keep UCX off RDMA too.
+      MPIR_CVAR_CH4_NETMOD: "ofi"
+      UCX_TLS: "self,sm,tcp"
 
     strategy:
       fail-fast: false
