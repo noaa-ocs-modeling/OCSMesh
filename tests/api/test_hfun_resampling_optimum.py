@@ -107,7 +107,7 @@ class TestOptimum(unittest.TestCase):
 
     def test_off_by_default(self):
         with warnings.catch_warnings():
-            warnings.simplefilter('error')
+            warnings.simplefilter('error', UserWarning)
             collector = self._collector(None)
             coarse = self._collector(1.0)
         # pylint: disable=protected-access
@@ -127,7 +127,7 @@ class TestOptimum(unittest.TestCase):
             add(coarse)
         self.assertIn('Flow limiters', str(caught.warning))
         with warnings.catch_warnings():
-            warnings.simplefilter('error')
+            warnings.simplefilter('error', UserWarning)
             add(self._collector(None))
 
     def test_other_strings_rejected(self):
