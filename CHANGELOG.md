@@ -28,8 +28,47 @@ follow [Semantic Versioning](https://semver.org/).
   `bnd_factor` times the size function (e.g. 1.5 gives 4.5 km edges where
   the size function is 3 km), and Gmsh keeps those edges as they are.
   Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
+- DEM resampling for raster size functions, off by default:
+  `Hfun(..., resampling_factor=None, resampling_method='average')` computes
+  the sizes on pixels of `resampling_factor * hmin` metres (DEMs are never
+  resampled to finer pixels). `add_contour`, `add_channel`,
+  `add_subtidal_flow_limiter` and `add_constant_value` take their own
+  `resampling_factor` (`None` for the collector's, `'native'` for the DEM's
+  own pixels) and `resampling_method`, so e.g. channels can be detected on
+  coarser pixels while flow limiter slopes come from the full DEM.
+  `HfunRaster.refine_on(topo, apply)` computes refinements on another DEM
+  grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
+  `resampling_factor='optimum'` uses the factors found on the New Jersey
+  test domain (grid at `0.5`, channels detected at `0.125`, contours at
+  `0.5` with `'min'`) for every refinement that does not set its own,
+  with a warning that other domains may need other factors. It does not
+  cover flow limiters: adding one to a resampled grid warns that flow
+  limiters do not resample well yet.
+- Split channel and contour detection for parallel and MPI runs, off by
+  default: `Hfun(..., split_size=None, split_halo=None)` detects on
+  windows of the DEMs larger than `split_size` pixels (of the DEM's own
+  resolution), as separate tasks, so that a few large DEMs no longer keep
+  a few workers busy. Only the detection is split; each DEM's size
+  function is computed whole. Windows are cut from the DEM's detection
+  grid with a halo (the channel width and a few pixels, or `split_halo`
+  metres) and keep the shapes in their core; channel pieces cut by window
+  edges are joined before small channels are dropped, and contour pieces
+  are merged back into lines. `split_size='optimum'` uses the size found
+  on the New Jersey test domain (4100), with a warning.
+  `Raster.get_channels(..., drop_small=True)` and `utils.channel_min_area`.
 
 ### Fixed
+- `Raster.resample` raised for any `resampling_method` passed to it; it
+  now takes a `Resampling` member or name, leaves nodata pixels out when
+  combining pixels and keeps the raster's extent.
+- Compositing the per-tile size functions (`exact` method) read the valid
+  data mask of every higher-priority tile for every tile, so its cost grew
+  with the square of the tile count (about 430 s on the coordinator for
+  199 tiles). Tiles whose bounds are away from a tile's nodes are now
+  skipped without opening their file; the result is unchanged.
+- `utils.get_polygon_channels` (channel detection) raised `AttributeError:
+  'Polygon' object has no attribute 'geoms'` when the detected area was a
+  single polygon, e.g. one creek left in a small tile.
 - `utils.finalize_mesh` (called by `MeshDriver.run`, the remesh and
   combine CLIs) now orients every element counterclockwise, so written
   meshes no longer contain clockwise triangles. `utils.order_mesh` is
@@ -72,6 +111,11 @@ follow [Semantic Versioning](https://semver.org/).
   `None` for geographic bounds outside [-180, 180] x [-90, 90].
 
 ### Performance
+- `HfunRaster.add_feature` and `add_patch` leave out the shapes that
+  cannot reach a raster window (farther than where their expansion
+  reaches `hmax`) before repartitioning and reprojecting them. Every
+  tile used to process the channels and contours of every other tile;
+  the sizes are unchanged.
 - Refinement stages with nothing to apply are skipped (they rebuilt and
   rewrote every tile in parallel and MPI modes).
 - Contour and channel detection run per tile in parallel and MPI modes.
