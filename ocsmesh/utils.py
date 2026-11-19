@@ -1360,6 +1360,13 @@ def project_to_utm(msh: MeshData):
 def estimate_bounds_utm(bounds, crs="EPSG:4326"):
     in_crs = CRS.from_user_input(crs)
 
+    # AK baseline workaround (fix 4): a fixed metric CRS for every
+    # geographic input, from the environment so that spawned workers
+    # get it too. Not for merging.
+    _forced = os.environ.get('OCSMESH_METRIC_CRS')
+    if _forced and in_crs.is_geographic:
+        return CRS.from_user_input(_forced)
+
     # CRITICAL CHECK: Only run UTM logic if the input is Geographic (Lat/Lon)
     if in_crs.is_geographic:
         x0, y0, x1, y1 = bounds
