@@ -856,6 +856,7 @@ def _detect_shapes_task_worker(task: dict):
     """
 
     window = task.get('window')
+    raster = None
     try:
         if window is not None:
             # A window of a split raster: its pixels of the raster's
@@ -911,8 +912,13 @@ def _detect_shapes_task_worker(task: dict):
             'error': traceback.format_exc(),
         }
     finally:
-        if window is not None and os.path.exists(task['window_path']):
-            os.remove(task['window_path'])
+        if window is not None:
+            # Close the window's dataset first: Windows cannot remove a
+            # file that is still open.
+            if raster is not None:
+                raster._src = None  # pylint: disable=protected-access
+            if os.path.exists(task['window_path']):
+                os.remove(task['window_path'])
 
 
 def _join_split_shapes(entries):

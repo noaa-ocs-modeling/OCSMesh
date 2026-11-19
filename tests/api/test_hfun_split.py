@@ -10,10 +10,12 @@ at the edges of detected polygons (they lie on pixel edges, and
 ``add_patch`` marks the pixels they touch).
 """
 
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import rasterio
@@ -307,6 +309,37 @@ class TestSplitDetection(_TileCase):
         split = self._sizes(self._channels(), split_size=170,
                             split_halo=0.0) <= TARGET
         self.assertGreater(_beyond_one_pixel(split, ref), 1000)
+
+    def test_window_files_closed_before_removal(self):
+        # Windows cannot remove an open file: every dataset opened on a
+        # window file must be closed when the worker removes it.
+        opened = []
+        real_open = rasterio.open
+
+        def tracking_open(path, *args, **kwargs):
+            dataset = real_open(path, *args, **kwargs)
+            opened.append(dataset)
+            return dataset
+
+        removed = []
+        real_remove = os.remove
+
+        def checking_remove(path):
+            still_open = [d.name for d in opened if not d.closed
+                          and Path(d.name) == Path(path)]
+            self.assertEqual(still_open, [])
+            removed.append(path)
+            real_remove(path)
+
+        with mock.patch('rasterio.open', tracking_open), \
+                mock.patch('ocsmesh.hfun.collector.os.remove',
+                           checking_remove):
+            for factor in (None, 0.5):
+                self._sizes(self._channels(factor), split_size=170)
+            self._sizes(self._contour, split_size=170)
+        self.assertGreater(len(removed), 0)
+        for path in removed:
+            self.assertFalse(os.path.exists(path))
 
     def test_parallel_matches_serial(self):
         serial = self._sizes(self._channels(), split_size=250)
