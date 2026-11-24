@@ -1,9 +1,9 @@
 [![Functional tests](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main)](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml)
-[![Pylint](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main)](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml)
+[![Pylint](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnoaa-ocs-modeling%2FOCSMesh%2Fbadges%2Fpylint.json)](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml)
 [![codecov](https://codecov.io/gh/noaa-ocs-modeling/OCSMesh/branch/main/graph/badge.svg)](https://codecov.io/gh/noaa-ocs-modeling/OCSMesh)
 [![Documentation](https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/documentation.yml/badge.svg)](https://noaa-ocs-modeling.github.io/OCSMesh/)
 [![PyPI](https://img.shields.io/pypi/v/ocsmesh)](https://pypi.org/project/ocsmesh/)
-[![Python](https://img.shields.io/pypi/pyversions/ocsmesh)](https://pypi.org/project/ocsmesh/)
+[![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fnoaa-ocs-modeling%2FOCSMesh%2Fmain%2Fpyproject.toml)](https://pypi.org/project/ocsmesh/)
 [![License: CC0-1.0](https://img.shields.io/badge/license-CC0--1.0-blue)](LICENSE)
 
 ## OCSMesh
