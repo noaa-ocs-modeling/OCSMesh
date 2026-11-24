@@ -23,6 +23,9 @@ jobs:
   format-check:
 
     runs-on: ubuntu-latest
+    # write: the badge step pushes the "badges" branch (main only)
+    permissions:
+      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -42,4 +45,27 @@ jobs:
     - name: Analysing the code with pylint
       shell: bash -l {0}
       run: |
-        pylint --disable=too-many-positional-arguments ocsmesh
+        set -o pipefail
+        pylint --disable=too-many-positional-arguments ocsmesh | tee pylint.log
+
+    # README badge: on main, write the score as a shields.io endpoint
+    # file to the "badges" branch (one commit, replaced each time).
+    - name: Update Pylint score badge
+      if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        score=$(grep -oP 'rated at \K-?[0-9.]+' pylint.log | tail -1 || true)
+        if [ -z "$score" ]; then echo "no pylint score found"; exit 0; fi
+        color=$(awk -v s="$score" 'BEGIN { print (s >= 9.9) ? "brightgreen" : (s >= 9) ? "green" : (s >= 8) ? "yellow" : "red" }')
+        dir=$(mktemp -d)
+        printf '{"schemaVersion": 1, "label": "pylint", "message": "%s", "color": "%s", "cacheSeconds": 3600}\n' \
+          "$score/10" "$color" > "$dir/pylint.json"
+        cd "$dir"
+        git init -q -b badges
+        git add pylint.json
+        git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Pylint score $score"
+        git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:badges

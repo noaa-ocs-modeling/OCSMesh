@@ -138,6 +138,10 @@ follow [Semantic Versioning](https://semver.org/).
   `m2r2` and `mistune==0.8.4`, which had known vulnerabilities; the
   release workflow uses `pypa/gh-action-pypi-publish@v1.14.3` (was
   v1.5.0). Fixes the Dependabot alerts on both.
+- README badges: the Pylint badge shows the score (written by the
+  Pylint workflow on main to the `badges` branch), and the Python badge
+  reads `requires-python` from `pyproject.toml` (it showed "missing").
+  `pyproject.toml` lists the Python version classifiers.
 - CI uploads test coverage to Codecov (`codecov.yml`; informational
   checks that do not block merges).
 - Internal: one task path for all distributed refinements and one
