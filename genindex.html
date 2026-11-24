@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Index &mdash; ocsmesh 3.0.0 documentation</title>
+  <title>Index &mdash; ocsmesh 3.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -43,6 +43,8 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resampling.html">DEM resampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="splitting.html">Splitting channel and contour detection</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -193,6 +195,8 @@
 </li>
       <li><a href="ocsmesh.utilities.html#ocsmesh.utils.can_velocity_be_approximated_by_linear_wave_theory">can_velocity_be_approximated_by_linear_wave_theory() (in module ocsmesh.utils)</a>
 </li>
+      <li><a href="ocsmesh.utilities.html#ocsmesh.utils.channel_min_area">channel_min_area() (in module ocsmesh.utils)</a>
+</li>
       <li><a href="ocsmesh.utilities.html#ocsmesh.utils.check_resample_factor">check_resample_factor() (in module ocsmesh.utils)</a>
 </li>
       <li><a href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.chunk_size">chunk_size (ocsmesh.hfun.HfunRaster property)</a>
@@ -225,10 +229,10 @@
 </li>
       <li><a href="ocsmesh.utilities.html#ocsmesh.utils.clip_mesh_by_shape">clip_mesh_by_shape() (in module ocsmesh.utils)</a>
 </li>
-      <li><a href="ocsmesh.utilities.html#ocsmesh.utils.clip_mesh_by_vertex">clip_mesh_by_vertex() (in module ocsmesh.utils)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="ocsmesh.utilities.html#ocsmesh.utils.clip_mesh_by_vertex">clip_mesh_by_vertex() (in module ocsmesh.utils)</a>
+</li>
       <li><a href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.close">close() (ocsmesh.hfun.HfunRaster method)</a>
 
       <ul>
@@ -762,6 +766,12 @@
         <li><a href="ocsmesh.utilities.html#ocsmesh.raster.Raster.path">(ocsmesh.raster.Raster property)</a>
 </li>
       </ul></li>
+      <li><a href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.pixel_size_m">pixel_size_m() (ocsmesh.hfun.HfunRaster method)</a>
+
+      <ul>
+        <li><a href="ocsmesh.utilities.html#ocsmesh.raster.Raster.pixel_size_m">(ocsmesh.raster.Raster method)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="ocsmesh.geometry.html#ocsmesh.geom.PolygonGeom.polygon">polygon (ocsmesh.geom.PolygonGeom property)</a>
@@ -812,10 +822,12 @@
         <li><a href="ocsmesh.utilities.html#ocsmesh.raster.Raster.read_masks">(ocsmesh.raster.Raster method)</a>
 </li>
       </ul></li>
-      <li><a href="ocsmesh.utilities.html#ocsmesh.utils.remove_holes">remove_holes() (in module ocsmesh.utils)</a>
+      <li><a href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.refine_on">refine_on() (ocsmesh.hfun.HfunRaster method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="ocsmesh.utilities.html#ocsmesh.utils.remove_holes">remove_holes() (in module ocsmesh.utils)</a>
+</li>
       <li><a href="ocsmesh.utilities.html#ocsmesh.utils.remove_holes_by_relative_size">remove_holes_by_relative_size() (in module ocsmesh.utils)</a>
 </li>
       <li><a href="ocsmesh.utilities.html#ocsmesh.utils.remove_mesh_by_edge">remove_mesh_by_edge() (in module ocsmesh.utils)</a>

@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Utility classes and functions &mdash; ocsmesh 3.0.0 documentation</title>
+  <title>Utility classes and functions &mdash; ocsmesh 3.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -47,6 +47,8 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resampling.html">DEM resampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="splitting.html">Splitting channel and contour detection</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Utility classes and functions</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.raster.Raster"><code class="docutils literal notranslate"><span class="pre">Raster</span></code></a><ul>
@@ -74,6 +76,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.read_masks"><code class="docutils literal notranslate"><span class="pre">Raster.read_masks()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.warp"><code class="docutils literal notranslate"><span class="pre">Raster.warp()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.resample"><code class="docutils literal notranslate"><span class="pre">Raster.resample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.pixel_size_m"><code class="docutils literal notranslate"><span class="pre">Raster.pixel_size_m()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.save"><code class="docutils literal notranslate"><span class="pre">Raster.save()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.clip"><code class="docutils literal notranslate"><span class="pre">Raster.clip()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="#ocsmesh.raster.Raster.adjust"><code class="docutils literal notranslate"><span class="pre">Raster.adjust()</span></code></a></li>
@@ -160,6 +163,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.project_to_utm"><code class="docutils literal notranslate"><span class="pre">project_to_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_bounds_utm"><code class="docutils literal notranslate"><span class="pre">estimate_bounds_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.estimate_mesh_utm"><code class="docutils literal notranslate"><span class="pre">estimate_mesh_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.channel_min_area"><code class="docutils literal notranslate"><span class="pre">channel_min_area()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.get_polygon_channels"><code class="docutils literal notranslate"><span class="pre">get_polygon_channels()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_msh_t"><code class="docutils literal notranslate"><span class="pre">merge_msh_t()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#ocsmesh.utils.merge_meshdata"><code class="docutils literal notranslate"><span class="pre">merge_meshdata()</span></code></a></li>
@@ -351,31 +355,34 @@
 <tr class="row-even"><td><p><strong>resample(scaling_factor, resampling_method=None)</strong></p></td>
 <td><p>Resample raster data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>save(path)</strong></p></td>
+<tr class="row-odd"><td><p><strong>pixel_size_m()</strong></p></td>
+<td><p>Approximate pixel size in metres.</p></td>
+</tr>
+<tr class="row-even"><td><p><strong>save(path)</strong></p></td>
 <td><p>Save-as raster data to the provided path.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>clip(geom)</strong></p></td>
+<tr class="row-odd"><td><p><strong>clip(geom)</strong></p></td>
 <td><p>Clip raster data by provided shape.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>adjust(geom=None, inside_min=-np.inf, outside_max=np.inf, cond=None)</strong></p></td>
+<tr class="row-even"><td><p><strong>adjust(geom=None, inside_min=-np.inf, outside_max=np.inf, cond=None)</strong></p></td>
 <td><p>Modify raster values based on constraints and shape.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>get_contour(level, window)</strong></p></td>
+<tr class="row-odd"><td><p><strong>get_contour(level, window)</strong></p></td>
 <td><p>Calculate contour of specified level on raster data.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_channels(level=0, width=1000, tolerance=None)</strong></p></td>
+<tr class="row-even"><td><p><strong>get_channels(level=0, width=1000, tolerance=None)</strong></p></td>
 <td><p>Calculate narrow areas based on input level and width.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>iter_windows(chunk_size=None, overlap=None)</strong></p></td>
+<tr class="row-odd"><td><p><strong>iter_windows(chunk_size=None, overlap=None)</strong></p></td>
 <td><p>Return raster view windows based on chunk size and overlap.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_window_data(window, masked=True, band=None)</strong></p></td>
+<tr class="row-even"><td><p><strong>get_window_data(window, masked=True, band=None)</strong></p></td>
 <td><p>Return raster values based for the input window.</p></td>
 </tr>
-<tr class="row-even"><td><p><strong>get_window_bounds(window)</strong></p></td>
+<tr class="row-odd"><td><p><strong>get_window_bounds(window)</strong></p></td>
 <td><p>Return window bounds.</p></td>
 </tr>
-<tr class="row-odd"><td><p><strong>get_window_transform(window)</strong></p></td>
+<tr class="row-even"><td><p><strong>get_window_transform(window)</strong></p></td>
 <td><p>Return window transform for the input raster</p></td>
 </tr>
 </tbody>
@@ -491,7 +498,7 @@ Note that no transformation takes place.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.get_bbox" title="ocsmesh.raster.Raster.get_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_bbox</span></code></a>([crs, output_type])</p></td>
 <td><p>Calculate the bounding box of the raster.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.get_channels" title="ocsmesh.raster.Raster.get_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_channels</span></code></a>([level, width, tolerance])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.get_channels" title="ocsmesh.raster.Raster.get_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_channels</span></code></a>([level, width, tolerance, ...])</p></td>
 <td><p>Calculate narrow width polygons based on specified input</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.get_contour" title="ocsmesh.raster.Raster.get_contour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_contour</span></code></a>(level[, window])</p></td>
@@ -536,25 +543,28 @@ Note that no transformation takes place.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.nodataval" title="ocsmesh.raster.Raster.nodataval"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nodataval</span></code></a>(i)</p></td>
 <td><p>Value used for filling no-data points</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.read" title="ocsmesh.raster.Raster.read"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read</span></code></a>(i[, masked])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.pixel_size_m" title="ocsmesh.raster.Raster.pixel_size_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixel_size_m</span></code></a>()</p></td>
+<td><p>Approximate pixel size <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y)</span></code> in metres.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.read" title="ocsmesh.raster.Raster.read"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read</span></code></a>(i[, masked])</p></td>
 <td><p>Read the data from raster opened file</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.read_masks" title="ocsmesh.raster.Raster.read_masks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_masks</span></code></a>([i])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.read_masks" title="ocsmesh.raster.Raster.read_masks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_masks</span></code></a>([i])</p></td>
 <td><p>Read existing masks on the raster data</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.resample" title="ocsmesh.raster.Raster.resample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resample</span></code></a>(scaling_factor[, resampling_method])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.resample" title="ocsmesh.raster.Raster.resample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resample</span></code></a>(scaling_factor[, resampling_method])</p></td>
 <td><p>Resample raster data in-place based on a scaling factor</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.sample" title="ocsmesh.raster.Raster.sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample</span></code></a>(xy, i)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.sample" title="ocsmesh.raster.Raster.sample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sample</span></code></a>(xy, i)</p></td>
 <td><p>Get value of the data in specified positions</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.save" title="ocsmesh.raster.Raster.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(path)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.save" title="ocsmesh.raster.Raster.save"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save</span></code></a>(path)</p></td>
 <td><p>Save-as raster dataset to a new location</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.tags" title="ocsmesh.raster.Raster.tags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tags</span></code></a>([i])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.tags" title="ocsmesh.raster.Raster.tags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tags</span></code></a>([i])</p></td>
 <td><p>Return a dictionary of dataset or band's tags</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.warp" title="ocsmesh.raster.Raster.warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">warp</span></code></a>(dst_crs[, nprocs])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#ocsmesh.raster.Raster.warp" title="ocsmesh.raster.Raster.warp"><code class="xref py py-obj docutils literal notranslate"><span class="pre">warp</span></code></a>(dst_crs[, nprocs])</p></td>
 <td><p>Reproject the raster data to specified <cite>dst_crs</cite> in-place</p></td>
 </tr>
 </tbody>
@@ -1076,15 +1086,19 @@ geo interface protocol (passed to <cite>rasterio.mask.mask</cite>).</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.raster.Raster.resample">
-<span class="sig-name descname"><span class="pre">resample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaling_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampling_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.resample" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">resample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">scaling_factor</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampling_method</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Resampling</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.resample" title="Permalink to this definition"></a></dt>
 <dd><p>Resample raster data in-place based on a scaling factor</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><dl class="simple">
-<dt><strong>scaling_factor</strong><span class="classifier">float</span></dt><dd><p>The scaling factor to use for resampling data</p>
+<dt><strong>scaling_factor</strong><span class="classifier">float</span></dt><dd><p>Ratio of the new to the current number of pixels along each
+axis: 0.5 halves the width and height (pixels twice as
+large). The extent of the raster is kept.</p>
 </dd>
-<dt><strong>resampling_method</strong><span class="classifier">str or None, default=None</span></dt><dd><p>Name of the resampling method passed to
-<cite>rasterio.DatasetReader.read</cite></p>
+<dt><strong>resampling_method</strong><span class="classifier">str or Resampling or None, default=None</span></dt><dd><p>How pixels are combined, as a <cite>rasterio.enums.Resampling</cite>
+member or its name (e.g. <code class="docutils literal notranslate"><span class="pre">'average'</span></code>, <code class="docutils literal notranslate"><span class="pre">'min'</span></code>,
+<code class="docutils literal notranslate"><span class="pre">'max'</span></code>, <code class="docutils literal notranslate"><span class="pre">'bilinear'</span></code>, <code class="docutils literal notranslate"><span class="pre">'nearest'</span></code>). If <cite>None</cite> the
+raster’s <cite>resampling_method</cite> is used.</p>
 </dd>
 </dl>
 </dd>
@@ -1094,6 +1108,18 @@ geo interface protocol (passed to <cite>rasterio.mask.mask</cite>).</p>
 </dl>
 </dd>
 </dl>
+<p class="rubric">Notes</p>
+<p>Nodata pixels are left out when combining pixels, so a new
+pixel is nodata only if all the pixels it covers are.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="ocsmesh.raster.Raster.pixel_size_m">
+<span class="sig-name descname"><span class="pre">pixel_size_m</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.pixel_size_m" title="Permalink to this definition"></a></dt>
+<dd><p>Approximate pixel size <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y)</span></code> in metres.</p>
+<p>For a geographic CRS the size in degrees is converted at the
+raster’s middle latitude; for a projected CRS the axis units
+are converted to metres.</p>
 </dd></dl>
 
 <dl class="py method">
@@ -1188,7 +1214,7 @@ raster data.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="ocsmesh.raster.Raster.get_channels">
-<span class="sig-name descname"><span class="pre">get_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.get_channels" title="Permalink to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tolerance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop_small</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Polygon</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">MultiPolygon</span></span></span><a class="headerlink" href="#ocsmesh.raster.Raster.get_channels" title="Permalink to this definition"></a></dt>
 <dd><p>Calculate narrow width polygons based on specified input</p>
 <p>By using <cite>buffer</cite> functionality this method finds narrow
 regions of the domain. The <cite>level</cite> specifies at which data
@@ -1205,6 +1231,9 @@ region calculation.</p>
 <dt><strong>width</strong><span class="classifier">float, default=1000</span></dt><dd><p>Cut-off used for designating narrow regions.</p>
 </dd>
 <dt><strong>tolerance</strong><span class="classifier">float or None, default=None</span></dt><dd><p>Tolerance used for simplifying domain polygon.</p>
+</dd>
+<dt><strong>drop_small</strong><span class="classifier">bool, default=True</span></dt><dd><p>Drop narrow regions no larger than
+<code class="docutils literal notranslate"><span class="pre">utils.channel_min_area(width)</span></code>.</p>
 </dd>
 </dl>
 </dd>
@@ -1716,9 +1745,20 @@ which are also missed by path.contains_point()</p>
 <dd></dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="ocsmesh.utils.channel_min_area">
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">channel_min_area</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.channel_min_area" title="Permalink to this definition"></a></dt>
+<dd><p>Smallest channel piece <code class="docutils literal notranslate"><span class="pre">get_polygon_channels</span></code> keeps: the area
+of a <code class="docutils literal notranslate"><span class="pre">width</span></code> square minus a quarter circle of radius <code class="docutils literal notranslate"><span class="pre">width</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.get_polygon_channels">
-<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">get_polygon_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simplify</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">join_style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.get_polygon_channels" title="Permalink to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-prename descclassname"><span class="pre">ocsmesh.utils.</span></span><span class="sig-name descname"><span class="pre">get_polygon_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simplify</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">join_style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drop_small</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ocsmesh.utils.get_polygon_channels" title="Permalink to this definition"></a></dt>
+<dd><p>Parts of <code class="docutils literal notranslate"><span class="pre">polygon</span></code> narrower than <code class="docutils literal notranslate"><span class="pre">width</span></code>.</p>
+<p>Pieces no larger than <code class="docutils literal notranslate"><span class="pre">channel_min_area(width)</span></code> are dropped, unless
+<code class="docutils literal notranslate"><span class="pre">drop_small</span></code> is False (a window of a split raster, whose pieces
+are only complete once joined with those of the other windows).</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="ocsmesh.utils.merge_msh_t">

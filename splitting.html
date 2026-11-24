@@ -1,0 +1,194 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Splitting channel and contour detection &mdash; ocsmesh 3.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Mesh representation" href="ocsmesh.mesh.html" />
+    <link rel="prev" title="DEM resampling" href="resampling.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ocsmesh
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resampling.html">DEM resampling</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Splitting channel and contour detection</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#windows-halo-and-core">Windows, halo and core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choosing-split-size">Choosing <code class="docutils literal notranslate"><span class="pre">split_size</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ocsmesh</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Splitting channel and contour detection</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/splitting.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="splitting-channel-and-contour-detection">
+<h1>Splitting channel and contour detection<a class="headerlink" href="#splitting-channel-and-contour-detection" title="Permalink to this heading"></a></h1>
+<p>With <code class="docutils literal notranslate"><span class="pre">execution_mode='parallel'</span></code> or <code class="docutils literal notranslate"><span class="pre">'mpi'</span></code> channels and contours
+are detected one raster per task. Detection is the costly part of these
+refinements on a large DEM, so a raster much larger (or busier) than the
+others keeps one worker busy while the rest wait. <code class="docutils literal notranslate"><span class="pre">split_size</span></code> detects
+on windows of such rasters instead, as separate tasks. It is off by
+default.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ocsmesh</span>
+
+<span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span>
+    <span class="n">tile_paths</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'exact'</span><span class="p">,</span>
+    <span class="n">execution_mode</span><span class="o">=</span><span class="s1">'mpi'</span><span class="p">,</span>
+    <span class="n">split_size</span><span class="o">=</span><span class="mi">4000</span><span class="p">)</span>          <span class="c1"># windows of at most ~4000 x 4000 pixels</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_channel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+                 <span class="n">resampling_factor</span><span class="o">=</span><span class="mf">0.125</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Only the detection is split. The size function of every raster is
+computed whole, from the shapes detected on all its windows, exactly as
+without splitting, so depth bands, flow limiters, constraints and their
+rates, patches and line features are not affected.</p>
+<p><code class="docutils literal notranslate"><span class="pre">split_size</span></code> counts pixels of each DEM at its own resolution, whatever
+resolution the shapes are detected on. Rasters no larger than
+<code class="docutils literal notranslate"><span class="pre">split_size</span></code> are detected whole. Splitting applies to the <code class="docutils literal notranslate"><span class="pre">'exact'</span></code>
+method.</p>
+<section id="windows-halo-and-core">
+<h2>Windows, halo and core<a class="headerlink" href="#windows-halo-and-core" title="Permalink to this heading"></a></h2>
+<p>The windows of a raster are cut from its <em>detection grid</em>: the DEM at
+the resolution the definition is detected on (its own
+<code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code>), laid out for the whole raster. Every window
+pixel is therefore a pixel of the whole raster’s grid; resampling each
+window on its own would shift its pixels.</p>
+<p>Each window is a <em>core</em> plus a <em>halo</em> around it, and only the shapes in
+the core are kept. The cores of a raster tile its grid, so every pixel is
+detected once. The halo gives the core the neighbourhood detection looks
+at: a channel is only recognised when its whole width is visible, and
+without a halo the window edges themselves look like channels (a water
+body cut by an edge leaves narrow strips that the detection keeps). Its
+width, <code class="docutils literal notranslate"><span class="pre">split_halo</span></code> in metres, is the channel width plus its
+simplification <code class="docutils literal notranslate"><span class="pre">tolerance</span></code> and four pixels when not given; contours
+only need the four pixels.</p>
+<p>The shapes of all windows are then put together on the coordinator:</p>
+<ul class="simple">
+<li><p>channel detection drops channels smaller than <code class="docutils literal notranslate"><span class="pre">width</span></code> squared minus
+a quarter circle (0.86 km² for a 2 km width). That is decided on the
+whole channel, not on the window: a creek network cut by a window edge
+can leave pieces below that size whose channel is not. Windows keep
+their small pieces, and the pieces that continue each other across the
+edge between two cores are joined before the cutoff is applied;</p></li>
+<li><p>contour pieces are merged back into whole lines, so that they are
+sampled along their length (<code class="docutils literal notranslate"><span class="pre">add_feature</span></code>) as unsplit lines are.</p></li>
+</ul>
+</section>
+<section id="choosing-split-size">
+<h2>Choosing <code class="docutils literal notranslate"><span class="pre">split_size</span></code><a class="headerlink" href="#choosing-split-size" title="Permalink to this heading"></a></h2>
+<p>A raster <code class="docutils literal notranslate"><span class="pre">W</span></code> pixels wide is cut into <code class="docutils literal notranslate"><span class="pre">ceil(W</span> <span class="pre">/</span> <span class="pre">split_size)</span></code> equal
+parts along each axis, and the same along y, so no window is larger
+than <code class="docutils literal notranslate"><span class="pre">split_size</span></code> and rasters no larger than it are detected whole.
+With tiles of about 8,100 pixels (0.25 degree at 3 m), any value from
+4,050 to 8,099 gives 2 x 2 windows, 2,700 to 4,049 gives 3 x 3.</p>
+<p><code class="docutils literal notranslate"><span class="pre">split_size='optimum'</span></code> uses the size found on the New Jersey test
+domain, 4100 (2 x 2 windows of its 3 m tiles; channels detected 2.2
+times faster than unsplit with MPI, with the same result), and warns
+that other domains or DEMs may need another value.</p>
+<p>Splitting helps when there are fewer rasters than workers, or when one
+raster takes much longer than the others, and only when detection is a
+large part of the run. The halo is detected for every window and then
+thrown away, so a window should be several times wider than its halo:
+with a 2 km channel width and 3 m pixels, 4000 pixel (12 km) cores are
+detected on 16 km windows, 1.8 times the pixels of the core. Smaller
+windows also have more edges, where the pieces of channels have to be
+joined.</p>
+<p>Results match detection on whole rasters up to one pixel along the edges
+of detected channels: their polygons lie on pixel edges, and whether a
+pixel next to one counts as touched can change with rounding.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="resampling.html" class="btn btn-neutral float-left" title="DEM resampling" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="ocsmesh.mesh.html" class="btn btn-neutral float-right" title="Mesh representation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

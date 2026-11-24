@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OCSMesh &mdash; ocsmesh 3.0.0 documentation</title>
+  <title>OCSMesh &mdash; ocsmesh 3.1.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
 
@@ -45,6 +45,8 @@
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
 <li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
+<li class="toctree-l1"><a class="reference internal" href="resampling.html">DEM resampling</a></li>
+<li class="toctree-l1"><a class="reference internal" href="splitting.html">Splitting channel and contour detection</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
@@ -75,11 +77,11 @@
            <div itemprop="articleBody">
              
   <a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml"><img alt="Functional tests" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/functional_test.yml/badge.svg?branch=main" /></a>
-<a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml"><img alt="Pylint" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml/badge.svg?branch=main" /></a>
+<a class="reference external image-reference" href="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/pylint.yml"><img alt="Pylint" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fnoaa-ocs-modeling%2FOCSMesh%2Fbadges%2Fpylint.json" /></a>
 <a class="reference external image-reference" href="https://codecov.io/gh/noaa-ocs-modeling/OCSMesh"><img alt="codecov" src="https://codecov.io/gh/noaa-ocs-modeling/OCSMesh/branch/main/graph/badge.svg" /></a>
 <a class="reference external image-reference" href="https://noaa-ocs-modeling.github.io/OCSMesh/"><img alt="Documentation" src="https://github.com/noaa-ocs-modeling/OCSMesh/actions/workflows/documentation.yml/badge.svg" /></a>
 <a class="reference external image-reference" href="https://pypi.org/project/ocsmesh/"><img alt="PyPI" src="https://img.shields.io/pypi/v/ocsmesh" /></a>
-<a class="reference external image-reference" href="https://pypi.org/project/ocsmesh/"><img alt="Python" src="https://img.shields.io/pypi/pyversions/ocsmesh" /></a>
+<a class="reference external image-reference" href="https://pypi.org/project/ocsmesh/"><img alt="Python" src="https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fnoaa-ocs-modeling%2FOCSMesh%2Fmain%2Fpyproject.toml" /></a>
 <a class="reference external image-reference" href="LICENSE"><img alt="License: CC0-1.0" src="https://img.shields.io/badge/license-CC0--1.0-blue" /></a>
 <section id="ocsmesh">
 <h1>OCSMesh<a class="headerlink" href="#ocsmesh" title="Permalink to this heading"></a></h1>
@@ -269,6 +271,7 @@ DOI : https://doi.org/10.25923/csba-m072
 </li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster"><code class="docutils literal notranslate"><span class="pre">HfunRaster</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.meshdata"><code class="docutils literal notranslate"><span class="pre">HfunRaster.meshdata()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.refine_on"><code class="docutils literal notranslate"><span class="pre">HfunRaster.refine_on()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.apply_added_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_added_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.apply_constraints"><code class="docutils literal notranslate"><span class="pre">HfunRaster.apply_constraints()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.get_xy_memcache"><code class="docutils literal notranslate"><span class="pre">HfunRaster.get_xy_memcache()</span></code></a></li>
@@ -315,6 +318,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.nodataval"><code class="docutils literal notranslate"><span class="pre">HfunRaster.nodataval()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.overlap"><code class="docutils literal notranslate"><span class="pre">HfunRaster.overlap</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.path"><code class="docutils literal notranslate"><span class="pre">HfunRaster.path</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.pixel_size_m"><code class="docutils literal notranslate"><span class="pre">HfunRaster.pixel_size_m()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.read"><code class="docutils literal notranslate"><span class="pre">HfunRaster.read()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.read_masks"><code class="docutils literal notranslate"><span class="pre">HfunRaster.read_masks()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.size_function.html#ocsmesh.hfun.HfunRaster.resample"><code class="docutils literal notranslate"><span class="pre">HfunRaster.resample()</span></code></a></li>
@@ -375,6 +379,18 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="parallel.html#errors">Errors</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="resampling.html">DEM resampling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="resampling.html#size-function-grid">Size function grid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="resampling.html#resolution-per-refinement">Resolution per refinement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="resampling.html#the-new-jersey-factors-optimum">The New Jersey factors: <code class="docutils literal notranslate"><span class="pre">'optimum'</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="resampling.html#choosing-a-factor">Choosing a factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="splitting.html">Splitting channel and contour detection</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="splitting.html#windows-halo-and-core">Windows, halo and core</a></li>
+<li class="toctree-l2"><a class="reference internal" href="splitting.html#choosing-split-size">Choosing <code class="docutils literal notranslate"><span class="pre">split_size</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh"><code class="docutils literal notranslate"><span class="pre">Mesh</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.mesh.html#ocsmesh.mesh.Mesh.open"><code class="docutils literal notranslate"><span class="pre">Mesh.open()</span></code></a></li>
@@ -431,6 +447,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.read_masks"><code class="docutils literal notranslate"><span class="pre">Raster.read_masks()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.warp"><code class="docutils literal notranslate"><span class="pre">Raster.warp()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.resample"><code class="docutils literal notranslate"><span class="pre">Raster.resample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.pixel_size_m"><code class="docutils literal notranslate"><span class="pre">Raster.pixel_size_m()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.save"><code class="docutils literal notranslate"><span class="pre">Raster.save()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.clip"><code class="docutils literal notranslate"><span class="pre">Raster.clip()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.raster.Raster.adjust"><code class="docutils literal notranslate"><span class="pre">Raster.adjust()</span></code></a></li>
@@ -517,6 +534,7 @@ DOI : https://doi.org/10.25923/csba-m072
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.project_to_utm"><code class="docutils literal notranslate"><span class="pre">project_to_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.estimate_bounds_utm"><code class="docutils literal notranslate"><span class="pre">estimate_bounds_utm()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.estimate_mesh_utm"><code class="docutils literal notranslate"><span class="pre">estimate_mesh_utm()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.channel_min_area"><code class="docutils literal notranslate"><span class="pre">channel_min_area()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.get_polygon_channels"><code class="docutils literal notranslate"><span class="pre">get_polygon_channels()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_msh_t"><code class="docutils literal notranslate"><span class="pre">merge_msh_t()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="ocsmesh.utilities.html#ocsmesh.utils.merge_meshdata"><code class="docutils literal notranslate"><span class="pre">merge_meshdata()</span></code></a></li>

@@ -1,0 +1,260 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en">
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.19: https://docutils.sourceforge.io/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DEM resampling &mdash; ocsmesh 3.1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css" />
+
+  
+      <script src="_static/jquery.js"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+      <script src="_static/doctools.js"></script>
+      <script src="_static/sphinx_highlight.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Splitting channel and contour detection" href="splitting.html" />
+    <link rel="prev" title="Parallel and MPI execution" href="parallel.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            ocsmesh
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.geometry.html">Domain definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.size_function.html">Mesh size definition</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parallel.html">Parallel and MPI execution</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">DEM resampling</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#size-function-grid">Size function grid</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#resolution-per-refinement">Resolution per refinement</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-new-jersey-factors-optimum">The New Jersey factors: <code class="docutils literal notranslate"><span class="pre">'optimum'</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choosing-a-factor">Choosing a factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="splitting.html">Splitting channel and contour detection</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.mesh.html">Mesh representation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.utilities.html">Utility classes and functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ocsmesh.command_line.html">Command line interface</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ocsmesh</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">DEM resampling</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/resampling.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="dem-resampling">
+<h1>DEM resampling<a class="headerlink" href="#dem-resampling" title="Permalink to this heading"></a></h1>
+<p>A size function from fine DEMs (e.g. 3 m CUDEM tiles) is computed on
+every DEM pixel, although the mesh is never finer than <code class="docutils literal notranslate"><span class="pre">hmin</span></code>. Most of
+the time then goes into pixels far smaller than any element.
+<code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code> computes the sizes on coarser pixels instead. It
+is off by default, so existing scripts give the same size functions.</p>
+<p>The factor is a fraction of <code class="docutils literal notranslate"><span class="pre">hmin</span></code>: with <code class="docutils literal notranslate"><span class="pre">hmin=50</span></code> m, <code class="docutils literal notranslate"><span class="pre">1.0</span></code> gives
+50 m pixels, <code class="docutils literal notranslate"><span class="pre">0.5</span></code> 25 m and <code class="docutils literal notranslate"><span class="pre">0.25</span></code> 12.5 m. DEMs are never resampled
+to pixels finer than their own, so a factor finer than a tile leaves
+that tile as it is.</p>
+<section id="size-function-grid">
+<h2>Size function grid<a class="headerlink" href="#size-function-grid" title="Permalink to this heading"></a></h2>
+<p>The collector’s factor sets the grid the sizes are computed on. Each
+input DEM is resampled once, after it is clipped to <code class="docutils literal notranslate"><span class="pre">base_shape</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">ocsmesh</span>
+
+<span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span>
+    <span class="n">tile_paths</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s1">'exact'</span><span class="p">,</span>
+    <span class="n">base_shape</span><span class="o">=</span><span class="n">domain</span><span class="p">,</span> <span class="n">base_shape_crs</span><span class="o">=</span><span class="s1">'EPSG:4326'</span><span class="p">,</span>
+    <span class="n">resampling_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>            <span class="c1"># 25 m grid</span>
+    <span class="n">resampling_method</span><span class="o">=</span><span class="s1">'average'</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">resampling_method</span></code> is a <code class="docutils literal notranslate"><span class="pre">rasterio.enums.Resampling</span></code> name:
+<code class="docutils literal notranslate"><span class="pre">'average'</span></code> (default), <code class="docutils literal notranslate"><span class="pre">'min'</span></code> (deepest value: keeps narrow channels
+and creeks connected), <code class="docutils literal notranslate"><span class="pre">'max'</span></code>, <code class="docutils literal notranslate"><span class="pre">'bilinear'</span></code>, <code class="docutils literal notranslate"><span class="pre">'nearest'</span></code>, …
+Nodata pixels are left out when pixels are combined.</p>
+</section>
+<section id="resolution-per-refinement">
+<h2>Resolution per refinement<a class="headerlink" href="#resolution-per-refinement" title="Permalink to this heading"></a></h2>
+<p>Contours, channels, flow limiters and constant values (depth bands)
+take their own <code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code> and <code class="docutils literal notranslate"><span class="pre">resampling_method</span></code>, for the
+DEM they are computed from:</p>
+<dl class="simple">
+<dt><code class="docutils literal notranslate"><span class="pre">None</span></code> (default)</dt><dd><p>the collector’s value, i.e. the size function grid</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">'native'</span></code></dt><dd><p>the DEM’s own pixels</p>
+</dd>
+<dt>a number</dt><dd><p><code class="docutils literal notranslate"><span class="pre">factor</span> <span class="pre">*</span> <span class="pre">hmin</span></code> pixels</p>
+</dd>
+</dl>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># contours traced on the full DEM</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_contour</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">expansion_rate</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+                 <span class="n">resampling_factor</span><span class="o">=</span><span class="s1">'native'</span><span class="p">)</span>
+<span class="c1"># channels detected on hmin/8 pixels</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_channel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+                 <span class="n">resampling_factor</span><span class="o">=</span><span class="mf">0.125</span><span class="p">)</span>
+<span class="c1"># depth bands from a 50 m DEM</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_constant_value</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">lower_bound</span><span class="o">=-</span><span class="mi">20</span><span class="p">,</span> <span class="n">upper_bound</span><span class="o">=-</span><span class="mi">5</span><span class="p">,</span>
+                        <span class="n">resampling_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Detected contours and channels are lines and polygons, so they are
+applied to the size function grid whatever DEM they come from. Flow
+limiters and constant values computed on finer pixels than the grid
+are reduced onto it keeping the smallest size in each cell. Constraints,
+patches and line features are always computed on the grid.</p>
+<p>Resampling applies to the <code class="docutils literal notranslate"><span class="pre">exact</span></code> method, to DEMs given to the
+collector as rasters or file paths, and works the same in every
+execution mode (see <a class="reference internal" href="parallel.html"><span class="doc">Parallel and MPI execution</span></a>).</p>
+</section>
+<section id="the-new-jersey-factors-optimum">
+<h2>The New Jersey factors: <code class="docutils literal notranslate"><span class="pre">'optimum'</span></code><a class="headerlink" href="#the-new-jersey-factors-optimum" title="Permalink to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">resampling_factor='optimum'</span></code> on the collector uses the factors found
+on the New Jersey test domain (below), with <code class="docutils literal notranslate"><span class="pre">hmin</span> <span class="pre">/</span> <span class="pre">2</span></code> as the
+coarsest grid:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>computed on</p></th>
+<th class="head"><p>factor, method</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>the grid (depth bands, constraints, region, patch, features,
+Courant)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code>, <code class="docutils literal notranslate"><span class="pre">'average'</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">add_channel</span></code> detection</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.125</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">add_contour</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">0.5</span></code>, <code class="docutils literal notranslate"><span class="pre">'min'</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code></p></td>
+<td><p>not covered (slopes on the DEM’s own pixels, sizes still on the
+grid; see below)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">add_constant_value</span></code></p></td>
+<td><p>the grid</p></td>
+</tr>
+</tbody>
+</table>
+<p>A refinement’s own <code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code> or <code class="docutils literal notranslate"><span class="pre">resampling_method</span></code> still
+wins, coarser ones included. These values come from one domain (3 m
+CUDEM tiles, <code class="docutils literal notranslate"><span class="pre">hmin=50</span></code> m, <code class="docutils literal notranslate"><span class="pre">hmax=3000</span></code> m), so the collector warns
+that other domains, DEMs or <code class="docutils literal notranslate"><span class="pre">hmin</span></code>/<code class="docutils literal notranslate"><span class="pre">hmax</span></code> may need other factors:
+check the resulting mesh.</p>
+<p><code class="docutils literal notranslate"><span class="pre">'optimum'</span></code> does not cover flow limiters: no resampling setting kept
+their sizes on New Jersey (see below), and adding one to a resampled
+grid warns. Leave <code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code> unset when using
+<code class="docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">hfun</span> <span class="o">=</span> <span class="n">ocsmesh</span><span class="o">.</span><span class="n">Hfun</span><span class="p">(</span><span class="n">tile_paths</span><span class="p">,</span> <span class="n">hmin</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">hmax</span><span class="o">=</span><span class="mi">3000</span><span class="p">,</span>
+                    <span class="n">resampling_factor</span><span class="o">=</span><span class="s1">'optimum'</span><span class="p">)</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_channel</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>   <span class="c1"># at 0.125</span>
+<span class="n">hfun</span><span class="o">.</span><span class="n">add_contour</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">target_size</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+                 <span class="n">expansion_rate</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span>                   <span class="c1"># at 0.5, 'min'</span>
+</pre></div>
+</div>
+</section>
+<section id="choosing-a-factor">
+<h2>Choosing a factor<a class="headerlink" href="#choosing-a-factor" title="Permalink to this heading"></a></h2>
+<p>Tests on a New Jersey domain (3 m CUDEM, <code class="docutils literal notranslate"><span class="pre">hmin=50</span></code> m, serial runs
+compared with the same run without resampling) give a starting point;
+the right values depend on the DEMs and the refinements:</p>
+<ul class="simple">
+<li><p>constant values (depth bands), region constraints, patches, line
+features, the Courant constraint and <code class="docutils literal notranslate"><span class="pre">add_topo_func_constraint</span></code>
+barely change up to <code class="docutils literal notranslate"><span class="pre">1.0</span></code> (10 to 100 times faster, mesh nodes
+within 1%);</p></li>
+<li><p>constraints with a <code class="docutils literal notranslate"><span class="pre">rate</span></code>: <code class="docutils literal notranslate"><span class="pre">0.5</span></code> with <code class="docutils literal notranslate"><span class="pre">resampling_method='min'</span></code>
+(130 times faster, nodes within 2%), or <code class="docutils literal notranslate"><span class="pre">0.25</span></code> with <code class="docutils literal notranslate"><span class="pre">'average'</span></code>;</p></li>
+<li><p>constraints without a <code class="docutils literal notranslate"><span class="pre">rate</span></code> follow every pixel at the edge of
+their depth range, so the size function changes at any factor, but
+the mesh does not (nodes within 2% at <code class="docutils literal notranslate"><span class="pre">1.0</span></code>);</p></li>
+<li><p>contours: <code class="docutils literal notranslate"><span class="pre">0.5</span></code> with <code class="docutils literal notranslate"><span class="pre">'min'</span></code> kept the size function and the line
+within 63 m (95th percentile), 20 times faster; <code class="docutils literal notranslate"><span class="pre">'native'</span></code> contours
+are exact but cost most of the original run time;</p></li>
+<li><p>channels: <code class="docutils literal notranslate"><span class="pre">resampling_factor=0.125</span></code> on <code class="docutils literal notranslate"><span class="pre">add_channel</span></code> found the
+channels of the full DEM with an overlap (intersection over union) of
+0.97 (<code class="docutils literal notranslate"><span class="pre">0.25</span></code>: 0.94). Detection is most of the cost, so a coarse
+grid comes free: with the collector at <code class="docutils literal notranslate"><span class="pre">1.0</span></code> the run was 16 times
+faster in serial and 18 times faster with MPI, and the mesh had 6%
+fewer nodes. <code class="docutils literal notranslate"><span class="pre">'min'</span></code> detects channels that are not there;</p></li>
+<li><p>flow limiters: not yet. Slopes from a coarse DEM are too gentle (40%
+fewer nodes), and slopes from the native DEM reduced to a coarse grid
+keep the smallest size in each cell, which refines far too much.
+Leave the collector without <code class="docutils literal notranslate"><span class="pre">resampling_factor</span></code> when using
+<code class="docutils literal notranslate"><span class="pre">add_subtidal_flow_limiter</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="parallel.html" class="btn btn-neutral float-left" title="Parallel and MPI execution" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="splitting.html" class="btn btn-neutral float-right" title="Splitting channel and contour detection" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Office of Coast Survey (OCS), National Oceanic and Atmospheric Administration (NOAA).</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
