@@ -4,6 +4,7 @@ import tempfile
 import unittest
 import warnings
 import shutil
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -319,6 +320,109 @@ class BoundaryExtraction(unittest.TestCase):
         self.assertEqual(len(bdry.interior()), 0)
 
         self.assertEqual(bdry.open().iloc[0]['index_id'], [1, 2, 3])
+
+
+class WriteOpenBoundaryOrder(unittest.TestCase):
+    """``Mesh.write(format='grd')`` writes the open boundaries largest
+    first unless ``sort_open_boundaries=False``."""
+
+    def setUp(self):
+        # 11 x 6 nodes, x and y coords equal to the indexes, one hole
+        meshdata = utils.create_rectangle_mesh(nx=11, ny=6, holes=[13])
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                'ignore', category=UserWarning, message='Input mesh has no CRS information'
+            )
+            self.mesh = Mesh(meshdata)
+        # values default to 0: every boundary node is dry (land)
+        self.mesh.boundaries.auto_generate()
+        self.tdir = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tdir)
+
+    @staticmethod
+    def _box(x0, y0, x1, y1):
+        return geometry.box(x0 - 0.05, y0 - 0.05, x1 + 0.05, y1 + 0.05)
+
+    def _write(self, **kwargs):
+        path = self.tdir / 'mesh.grd'
+        self.mesh.write(path, format='grd', overwrite=True, **kwargs)
+        return path.read_text().splitlines()
+
+    @staticmethod
+    def _open_sections(lines):
+        """[node id list per open boundary] in file order, and the lines
+        after the open boundary section."""
+        i = next(k for k, l in enumerate(lines) if 'total number of open boundaries' in l)
+        n_open = int(lines[i].split()[0])
+        k, out = i + 2, []
+        for _ in range(n_open):
+            n = int(lines[k].split()[0])
+            out.append([int(v) for v in lines[k + 1:k + 1 + n]])
+            k += n + 1
+        return out, lines[k:]
+
+    def _set_small_then_large(self):
+        # a short one on the left side, then a long one at the bottom
+        self.mesh.boundaries.set_open(self._box(0, 1, 0, 2))
+        self.mesh.boundaries.set_open(self._box(3, 0, 9, 0))
+        small, large = [len(b) for b in self.mesh.boundaries.open()['index_id']]
+        self.assertLess(small, large)
+        return small, large
+
+    def test_default_writes_largest_first(self):
+        small, large = self._set_small_then_large()
+        segs, _ = self._open_sections(self._write())
+        self.assertEqual([len(s) for s in segs], [large, small])
+        # node ids are 1-based; the bottom row is ids 1..11
+        self.assertTrue(set(range(4, 11)) <= set(segs[0]))
+        self.assertTrue(max(segs[0]) <= 11)
+
+    def test_mesh_boundaries_unchanged(self):
+        small, large = self._set_small_then_large()
+        before = deepcopy(self.mesh.boundaries.data)
+        self._write()
+        self.assertEqual(self.mesh.boundaries.data, before)
+        sizes = [len(b) for b in self.mesh.boundaries.open()['index_id']]
+        self.assertEqual(sizes, [small, large])
+
+    def test_no_sort_keeps_order(self):
+        small, large = self._set_small_then_large()
+        segs, _ = self._open_sections(self._write(sort_open_boundaries=False))
+        self.assertEqual([len(s) for s in segs], [small, large])
+
+    def test_land_and_island_sections_unchanged(self):
+        self._set_small_then_large()
+        _, rest_sorted = self._open_sections(self._write())
+        _, rest_plain = self._open_sections(self._write(sort_open_boundaries=False))
+        self.assertEqual(rest_sorted, rest_plain)
+
+    def test_equal_sizes_keep_order(self):
+        # two short ones of the same length (right and left sides), then
+        # a long one at the bottom
+        self.mesh.boundaries.set_open(self._box(10, 1, 10, 2))
+        self.mesh.boundaries.set_open(self._box(0, 3, 0, 4))
+        self.mesh.boundaries.set_open(self._box(3, 0, 9, 0))
+        plain, _ = self._open_sections(self._write(sort_open_boundaries=False))
+        n = [len(s) for s in plain]
+        self.assertTrue(n[0] == n[1] < n[2])
+        segs, _ = self._open_sections(self._write())
+        self.assertEqual(segs, [plain[2], plain[0], plain[1]])
+
+    def test_read_back(self):
+        small, large = self._set_small_then_large()
+        path = self.tdir / 'mesh.grd'
+        self.mesh.write(path, format='grd', overwrite=True)
+        imported = Mesh.open(path)
+        sizes = [len(b['indexes']) for b in imported.boundaries.data[None].values()]
+        self.assertEqual(sizes, [large, small])
+        self.assertEqual(len(imported.boundaries.land()), len(self.mesh.boundaries.land()))
+        self.assertEqual(len(imported.boundaries.interior()), 1)
+
+    def test_no_open_boundaries(self):
+        segs, _ = self._open_sections(self._write())
+        self.assertEqual(segs, [])
 
 
 class RasterInterpolation(unittest.TestCase):

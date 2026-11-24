@@ -114,6 +114,7 @@ class EuclideanMesh(BaseMesh):
             path: Union[str, os.PathLike],
             overwrite: bool = False,
             format : Literal['grd', '2dm', 'msh', 'vtk'] = 'grd', # pylint: disable=W0622
+            sort_open_boundaries: bool = True,
             ) -> None:
         """Export the mesh object to the disk
 
@@ -125,6 +126,12 @@ class EuclideanMesh(BaseMesh):
             Whether to overwrite, if a file already exists in `path`
         format : { 'grd', '2dm', 'msh', 'vtk' }
             Format of the export, SMS-2DM or GRD.
+        sort_open_boundaries : bool, default=True
+            GRD only: write the open boundaries from the largest to the
+            smallest (number of nodes), as SCHISM expects. Boundaries
+            of the same size keep their order. The boundaries of the
+            mesh object are not changed. False writes them in the order
+            of ``mesh.boundaries``.
 
         Returns
         -------
@@ -143,7 +150,14 @@ class EuclideanMesh(BaseMesh):
         if format == 'grd':
             grd_dict = utils.meshdata_to_grd(self.meshdata)
             if self._boundaries and self._boundaries.data:
-                grd_dict.update(boundaries=self._boundaries.data)
+                bnds = self._boundaries.data
+                if sort_open_boundaries and bnds.get(None):
+                    # sorted() is stable, so equal sizes keep their order
+                    bnds = dict(bnds)
+                    bnds[None] = dict(enumerate(sorted(
+                        bnds[None].values(),
+                        key=lambda b: len(b['indexes']), reverse=True)))
+                grd_dict.update(boundaries=bnds)
             grd.write(grd_dict, path, overwrite)
 
         elif format == '2dm':

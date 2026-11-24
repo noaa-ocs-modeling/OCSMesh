@@ -126,6 +126,14 @@ follow [Semantic Versioning](https://semver.org/).
   1.9x (bounded by the slowest tile's channel detection).
 
 ### Changed
+- `Mesh.write(format='grd')` writes the open boundaries from the
+  largest to the smallest (number of nodes), as SCHISM expects; before,
+  they were written in the order of `mesh.boundaries`, which after
+  `set_open(..., merge=True)` follows the geometry, not the size.
+  Boundaries of the same size keep their order, and `mesh.boundaries`
+  itself is not changed. `sort_open_boundaries=False` gives the old
+  order. Check the open boundary order of an existing `bctides.in`
+  against the new .gr3.
 - Documentation extra: `sphinx-mdinclude` with `mistune>=3.3.3` replace
   `m2r2` and `mistune==0.8.4`, which had known vulnerabilities; the
   release workflow uses `pypa/gh-action-pypi-publish@v1.14.3` (was
