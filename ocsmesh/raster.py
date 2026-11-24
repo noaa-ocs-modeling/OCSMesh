@@ -222,6 +222,19 @@ class Overlap:
         return obj.__dict__['overlap']
 
 
+def _as_resampling(method: Union[str, Resampling]) -> Resampling:
+    """`Resampling` member from a member or its name."""
+
+    if isinstance(method, Resampling):
+        return method
+    try:
+        return Resampling[str(method)]
+    except KeyError:
+        raise ValueError(
+            f"Unknown resampling method {method!r}; use one of "
+            f"{sorted(Resampling.__members__)}") from None
+
+
 class Raster:
     """Wrapper class for basic raster handling
 
@@ -303,6 +316,8 @@ class Raster:
         Reproject raster data.
     resample(scaling_factor, resampling_method=None)
         Resample raster data.
+    pixel_size_m()
+        Approximate pixel size in metres.
     save(path)
         Save-as raster data to the provided path.
     clip(geom)
@@ -1161,51 +1176,83 @@ class Raster:
 
     def resample(self,
                  scaling_factor: float,
-                 resampling_method: Optional[str] = None
+                 resampling_method: Union[str, Resampling, None] = None
                  ) -> None:
         """Resample raster data in-place based on a scaling factor
 
         Parameters
         ----------
         scaling_factor : float
-            The scaling factor to use for resampling data
-        resampling_method : str or None, default=None
-            Name of the resampling method passed to
-            `rasterio.DatasetReader.read`
+            Ratio of the new to the current number of pixels along each
+            axis: 0.5 halves the width and height (pixels twice as
+            large). The extent of the raster is kept.
+        resampling_method : str or Resampling or None, default=None
+            How pixels are combined, as a `rasterio.enums.Resampling`
+            member or its name (e.g. ``'average'``, ``'min'``,
+            ``'max'``, ``'bilinear'``, ``'nearest'``). If `None` the
+            raster's `resampling_method` is used.
 
         Returns
         -------
         None
+
+        Notes
+        -----
+        Nodata pixels are left out when combining pixels, so a new
+        pixel is nodata only if all the pixels it covers are.
         """
 
-        if resampling_method is None:
-            resampling_method = self.resampling_method
-        else:
-            msg = "resampling_method must be a valid name or None"
-            raise ValueError(msg)
+        resampling_method = _as_resampling(
+            self.resampling_method if resampling_method is None
+            else resampling_method)
+        if scaling_factor <= 0:
+            raise ValueError(
+                f"scaling_factor must be positive, got {scaling_factor}")
 
-        # resample data to target shape
-        width = int(self.src.width * scaling_factor)
-        height = int(self.src.height * scaling_factor)
-        data = self.src.read(
-            out_shape=(
-                self.src.count,
-                height,
-                width
-            ),
-            resampling=resampling_method
-        )
-        transform = self.src.transform * self.src.transform.scale(
-            (self.src.width / data.shape[-1]),
-            (self.src.height / data.shape[-2])
-        )
+        src = self.src
+        width = max(1, int(round(src.width * scaling_factor)))
+        height = max(1, int(round(src.height * scaling_factor)))
+        transform = rasterio.transform.from_bounds(
+            *src.bounds, width, height)
         meta_update = {
             'transform': transform,
             'width': width,
-            'height': height
+            'height': height,
             }
         with self.modifying_raster(**meta_update) as dst:
-            dst.write(data)
+            for i in range(1, src.count + 1):
+                nodata = src.nodatavals[i - 1]
+                data = np.full(
+                    (height, width),
+                    nodata if nodata is not None else 0,
+                    dtype=src.dtypes[i - 1])
+                warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=data,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    src_nodata=nodata,
+                    dst_transform=transform,
+                    dst_crs=src.crs,
+                    dst_nodata=nodata,
+                    resampling=resampling_method)
+                dst.write_band(i, data)
+
+    def pixel_size_m(self) -> Tuple[float, float]:
+        """Approximate pixel size ``(x, y)`` in metres.
+
+        For a geographic CRS the size in degrees is converted at the
+        raster's middle latitude; for a projected CRS the axis units
+        are converted to metres.
+        """
+
+        if self.crs.is_geographic:
+            bounds = self.src.bounds
+            lat = math.radians(0.5 * (bounds.bottom + bounds.top))
+            return (abs(self.dx) * 111_320.0 * math.cos(lat),
+                    abs(self.dy) * 110_540.0)
+        unit = self.crs.axis_info[0].unit_conversion_factor or 1.0
+        return abs(self.dx) * unit, abs(self.dy) * unit
 
     def save(self, path: Union[str, os.PathLike]) -> None:
         """Save-as raster dataset to a new location

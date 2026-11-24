@@ -28,8 +28,27 @@ follow [Semantic Versioning](https://semver.org/).
   `bnd_factor` times the size function (e.g. 1.5 gives 4.5 km edges where
   the size function is 3 km), and Gmsh keeps those edges as they are.
   Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
+- DEM resampling for raster size functions, off by default:
+  `Hfun(..., resampling_factor=None, resampling_method='average')` computes
+  the sizes on pixels of `resampling_factor * hmin` metres (DEMs are never
+  resampled to finer pixels). `add_contour`, `add_channel`,
+  `add_subtidal_flow_limiter` and `add_constant_value` take their own
+  `resampling_factor` (`None` for the collector's, `'native'` for the DEM's
+  own pixels) and `resampling_method`, so e.g. channels can be detected on
+  coarser pixels while flow limiter slopes come from the full DEM.
+  `HfunRaster.refine_on(topo, apply)` computes refinements on another DEM
+  grid and reduces them onto the size function's. `Raster.pixel_size_m()`.
+  `resampling_factor='optimum'` uses the factors found on the New Jersey
+  test domain (grid at `0.5`, channels detected at `0.125`, contours at
+  `0.5` with `'min'`) for every refinement that does not set its own,
+  with a warning that other domains may need other factors. It does not
+  cover flow limiters: adding one to a resampled grid warns that flow
+  limiters do not resample well yet.
 
 ### Fixed
+- `Raster.resample` raised for any `resampling_method` passed to it; it
+  now takes a `Resampling` member or name, leaves nodata pixels out when
+  combining pixels and keeps the raster's extent.
 - `utils.get_polygon_channels` (channel detection) raised `AttributeError:
   'Polygon' object has no attribute 'geoms'` when the detected area was a
   single polygon, e.g. one creek left in a small tile.
