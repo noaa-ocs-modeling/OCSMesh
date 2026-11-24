@@ -54,8 +54,14 @@ jobs:
         environment-name: ocsmesh-env
         post-cleanup: 'none'
         generate-run-shell: false
+        # Windows: conda-forge gmsh has an "llvm" variant (libomp.dll, the
+        # OpenMP runtime the rest of the environment uses) and an "intel"
+        # variant (MSVC's libomp140.x86_64.dll). With the intel one, two
+        # OpenMP runtimes load and the tests abort with OMP Error #15. The
+        # variants have no priority, so pin the llvm one.
         create-args: >-
           python=${{ matrix.python-version }}
+          ${{ runner.os == 'Windows' && 'gmsh=*=*llvm*' || '' }}
 
     - name: Install other dependencies
       shell: bash -l {0}
