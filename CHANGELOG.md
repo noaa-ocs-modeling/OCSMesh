@@ -30,6 +30,9 @@ follow [Semantic Versioning](https://semver.org/).
   Also `utils.resample_geom_by_hfun(..., factor=1.0)`.
 
 ### Fixed
+- `utils.get_polygon_channels` (channel detection) raised `AttributeError:
+  'Polygon' object has no attribute 'geoms'` when the detected area was a
+  single polygon, e.g. one creek left in a small tile.
 - Compositing the per-tile size functions (`exact` method) read the valid
   data mask of every higher-priority tile for every tile, so its cost grew
   with the square of the tile count (about 430 s on the coordinator for
