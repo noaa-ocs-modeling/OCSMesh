@@ -14,7 +14,7 @@ class BaseMesh:
     ----------
     meshdata : MeshData
         Refernece to underlying mesh object.
-    coord : array-like
+    coords : array-like
         Coordinates of mesh nodes.
 
     Methods
@@ -42,7 +42,7 @@ class BaseMesh:
         return self._meshdata
 
     @property
-    def coord(self) -> npt.NDArray[np.float32]:
+    def coords(self) -> npt.NDArray[np.float32]:
         """Read-only property for coordinates of mesh points
 
         Raises
@@ -57,3 +57,13 @@ class BaseMesh:
         """
 
         return self.meshdata.coords
+
+    @property
+    def coord(self) -> npt.NDArray[np.float32]:
+        """Deprecated. Use ``coords`` instead."""
+        warnings.warn(
+            "'coord' is deprecated, use 'coords' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.coords
