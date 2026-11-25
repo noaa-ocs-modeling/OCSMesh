@@ -6,6 +6,7 @@ interpolation give identical results on both, whichever convention the
 shapes and meshes are given in, and for shapes split at 180.
 """
 
+import gc
 import tempfile
 import unittest
 import warnings
@@ -73,6 +74,7 @@ class TestTwinDems(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        gc.collect()
         cls.tmp.cleanup()
 
     def _hfun(self, path):
@@ -192,24 +194,35 @@ class TestShapesSplitAt180(unittest.TestCase):
     """A DEM across 180 (179.9..180.1 in 0-360) and a patch given as two
     pieces either side of 180 in -180..180 longitudes."""
 
+    @classmethod
+    def setUpClass(cls):
+        # Removed in tearDownClass, after the size functions holding the
+        # file open are gone (Windows cannot delete an open file).
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.path = write_dem(Path(cls.tmp.name) / 'across.tif', 179.9)
+
+    @classmethod
+    def tearDownClass(cls):
+        gc.collect()
+        cls.tmp.cleanup()
+
     def test_split_patch(self):
-        with tempfile.TemporaryDirectory() as d:
-            path = write_dem(Path(d) / 'across.tif', 179.9)
-            whole = box(179.95, 55.05, 180.05, 55.1)
-            split = MultiPolygon([box(179.95, 55.05, 180.0, 55.1),
-                                  box(-180.0, 55.05, -179.95, 55.1)])
-            out = []
-            for patch in (whole, split):
-                hfun = HfunRaster(Raster(path), hmin=100, hmax=5000)
-                hfun.add_patch(patch, target_size=200, expansion_rate=0.002)
-                out.append(hfun.get_values(band=1))
-            # Same patch area; outside it, add_feature samples the two
-            # pieces' edges at other points than the whole box's, so the
-            # sizes agree to its sampling resolution (about 1%). The seam
-            # inside the patch is never the nearest edge.
-            np.testing.assert_allclose(out[0], out[1], rtol=2e-2)
-            np.testing.assert_array_equal(out[0] == 200, out[1] == 200)
-            self.assertEqual(out[1].min(), 200)
+        whole = box(179.95, 55.05, 180.05, 55.1)
+        split = MultiPolygon([box(179.95, 55.05, 180.0, 55.1),
+                              box(-180.0, 55.05, -179.95, 55.1)])
+        out = []
+        for patch in (whole, split):
+            hfun = HfunRaster(Raster(self.path), hmin=100, hmax=5000)
+            hfun.add_patch(patch, target_size=200, expansion_rate=0.002)
+            out.append(hfun.get_values(band=1))
+            del hfun
+        # Same patch area; outside it, add_feature samples the two
+        # pieces' edges at other points than the whole box's, so the
+        # sizes agree to its sampling resolution (about 1%). The seam
+        # inside the patch is never the nearest edge.
+        np.testing.assert_allclose(out[0], out[1], rtol=2e-2)
+        np.testing.assert_array_equal(out[0] == 200, out[1] == 200)
+        self.assertEqual(out[1].min(), 200)
 
 
 if __name__ == '__main__':
