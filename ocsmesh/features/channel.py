@@ -5,6 +5,11 @@ class Channel:
     # all windows are joined (see ocsmesh.hfun.split).
     drop_small = True
 
+    # CRS in which width and tolerance are measured; None for the UTM
+    # zone of each source (see ocsmesh.geodesy). Set by the collectors
+    # when they are given an explicit metric_crs.
+    metric_crs = None
+
     def __init__(self, level=0, width=1000, tolerance=50, sources=None):
 
         if sources is None:
@@ -66,12 +71,14 @@ class Channel:
         if src_class == "Raster":
             channels = source.get_channels(
                     self._level, self._width, self._tolerance,
-                    drop_small=self.drop_small)
+                    drop_small=self.drop_small,
+                    metric_crs=self.metric_crs)
             crs = source.crs
         elif src_class in ("RasterGeom", "HfunRaster"):
             channels = source.raster.get_channels(
                     self._level, self._width, self._tolerance,
-                    drop_small=self.drop_small)
+                    drop_small=self.drop_small,
+                    metric_crs=self.metric_crs)
             crs = source.raster.crs
         else:
             raise TypeError("")

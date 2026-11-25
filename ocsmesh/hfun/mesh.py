@@ -24,7 +24,7 @@ from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
 from ocsmesh.crs import CRS as CRSDescriptor
 from ocsmesh import Mesh
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.features.constraint import (
     Constraint,
     RegionConstraint,
@@ -82,7 +82,8 @@ class HfunMesh(BaseHfun):
 
     _crs = CRSDescriptor()
 
-    def __init__(self, mesh: Mesh) -> None:
+    def __init__(self, mesh: Mesh,
+                 metric_crs: Union[str, CRS, None] = 'auto') -> None:
         """Initialize a mesh based size function object
 
         Parameters
@@ -92,6 +93,10 @@ class HfunMesh(BaseHfun):
             sizes of the mesh to be generated. Note the underlying
             mesh is not copied, it is overriden by methods in the
             object of this type.
+        metric_crs : 'auto', 'utm' or CRS, default='auto'
+            Where sizes and distances are measured (see
+            ``ocsmesh.geodesy``): an explicit CRS, else the UTM zone of
+            the mesh.
 
         Notes
         -----
@@ -111,9 +116,27 @@ class HfunMesh(BaseHfun):
 
         self._mesh = mesh
         self._crs = mesh.crs
+        self._metric_crs = geodesy.check_metric_crs(metric_crs)
         self._constraints = []
         self._hold_const = False
         self._hold_const_hit = 0
+
+    @property
+    def metric_crs(self):
+        """'auto', 'utm' or the CRS where sizes are measured."""
+        return getattr(self, '_metric_crs', geodesy.AUTO)
+
+    def _mesh_metric_crs(self, msh=None):
+        """Metric CRS of the mesh (None when it is in it already):
+        the explicit ``metric_crs``, else the mesh's UTM zone."""
+        msh = self.mesh.meshdata if msh is None else msh
+        crs_explicit = geodesy.explicit(self.metric_crs)
+        if crs_explicit is None:
+            return utils.estimate_mesh_utm(msh)
+        if self.crs is not None and CRS.from_user_input(
+                self.crs).equals(crs_explicit):
+            return None
+        return crs_explicit
 
     def meshdata(self) -> MeshData:
         """Return the size function specified on the underlying mesh
@@ -139,7 +162,7 @@ class HfunMesh(BaseHfun):
         copied in the contructor.
         """
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
+        utm_crs = self._mesh_metric_crs()
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)
@@ -183,7 +206,7 @@ class HfunMesh(BaseHfun):
         coord = hfun_msh.coords
 
         transformer = None
-        utm_crs = utils.estimate_mesh_utm(hfun_msh)
+        utm_crs = self._mesh_metric_crs(hfun_msh)
         if utm_crs is not None:
             _logger.info('Projecting to utm...')
 
@@ -390,7 +413,7 @@ class HfunMesh(BaseHfun):
         if target_size <= 0:
             raise ValueError("Argument target_size must be greater than zero.")
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
+        utm_crs = self._mesh_metric_crs()
 
         # `pool` may be None (sequential). KDTree still needs a worker count.
         n_workers = 1 if pool is None else pool._processes  # pylint: disable=W0212
@@ -536,7 +559,7 @@ class HfunMesh(BaseHfun):
         hfun_values = self.mesh.meshdata.values.copy()
         xy = self.mesh.meshdata.coords.copy()
 
-        utm_crs = utils.estimate_mesh_utm(self.mesh.meshdata)
+        utm_crs = self._mesh_metric_crs()
         if utm_crs is not None:
             transformer = Transformer.from_crs(
                 self.crs, utm_crs, always_xy=True)

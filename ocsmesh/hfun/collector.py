@@ -47,7 +47,7 @@ from rasterio.transform import from_origin
 from rasterio.warp import reproject, Resampling, transform_bounds
 import rasterio
 
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.utils import effective_cpu_count
 from ocsmesh.internal import MeshData
 from ocsmesh.hfun.base import BaseHfun
@@ -657,7 +657,8 @@ def _refine_on_rebuilt_hfun(task: dict, apply) -> dict:
             hmin=task['global_hmin'],
             hmax=task['global_hmax'],
             verbosity=0,
-            initial_value=task['hfun_input_path'])
+            initial_value=task['hfun_input_path'],
+            metric_crs=task.get('metric_crs', geodesy.AUTO))
         apply(worker_hfun)
         worker_hfun.save(task['output_path'])
         return {
@@ -992,8 +993,9 @@ def _drop_small_split_channels(entries):
                     refs.append((k, feather_path, crs_path))
                     items.append((shape, gdf.crs, task['window'].core,
                                   None if lab is None else np.asarray(lab)))
-        width = entries[ks[0]][1]['defn'].width
-        shapes = hsplit.drop_small_channels(items, width)
+        defn = entries[ks[0]][1]['defn']
+        shapes = hsplit.drop_small_channels(
+            items, defn.width, metric_crs=defn.metric_crs)
         for (k, feather_path, crs_path), shape, item in zip(
                 refs, shapes, items):
             if shape is None:
@@ -1050,7 +1052,8 @@ def _meshdata_task_worker(task: dict):
                 hmin=task['hmin'],
                 hmax=task['hmax'],
                 verbosity=0,
-                initial_value=task['hfun_input_path'])
+                initial_value=task['hfun_input_path'],
+                metric_crs=task.get('metric_crs', geodesy.AUTO))
         elif task['type'] == 'mesh':
             worker_hfun = task['hfun_obj']
         else:
@@ -1160,6 +1163,10 @@ class _Footprint:
         self._topo_path = None if topo_path is None else str(topo_path)
         self._bbox = bbox
         self._lonlat_bounds = None
+        # EPSG:4326 rasters: points are wrapped to this longitude range
+        # start, so a raster in 0-360 longitudes (east of 180) matches
+        # the -180..180 longitudes PROJ gives back
+        self._lon_min = None
         self._to_raster_crs = None
         if self._topo_path is not None:
             with rasterio.open(self._topo_path) as src:
@@ -1177,6 +1184,7 @@ class _Footprint:
             padded = (west - dx, south - dy, east + dx, north + dy)
             if CRS.from_user_input(self._crs).equals(CRS.from_epsg(4326)):
                 self._lonlat_bounds = padded
+                self._lon_min = (padded[0] + padded[2]) / 2.0 - 180.0
             else:
                 self._to_raster_crs = Transformer.from_crs(
                     'EPSG:4326', self._crs, always_xy=True)
@@ -1199,6 +1207,9 @@ class _Footprint:
         if self._topo_path is None:
             return shapely.intersects_xy(self._bbox, lonlat[:, 0], lonlat[:, 1])
         result = np.zeros(len(lonlat), dtype=bool)
+        if self._lon_min is not None:
+            lonlat = np.column_stack([
+                geodesy.wrap_lon(lonlat[:, 0], self._lon_min), lonlat[:, 1]])
         # Cheap rejection first: with many tiles most footprints are
         # far from a given tile's nodes, and the mask read below opens
         # the raster file.
@@ -1300,6 +1311,29 @@ MPIExecutor.register_op('linefeature', _user_shapes_task_worker)
 
 
 
+def _wrap_lon_to_shape(meshdata, shape) -> None:
+    """Put the longitudes of ``meshdata`` (EPSG:4326) in 0-360 when
+    ``shape`` reaches east of 180, in place.
+
+    PROJ returns longitudes in -180..180; clipping such a mesh with a
+    shape in 0-360 longitudes would drop everything east of 180.
+    """
+    if shape is None or meshdata is None or len(meshdata.coords) == 0:
+        return
+    if shape.bounds[2] > 180.0:
+        meshdata.coords = np.column_stack([
+            geodesy.wrap_lon(meshdata.coords[:, 0], 0.0),
+            meshdata.coords[:, 1]])
+
+
+def _picklable_crs(metric_crs):
+    """``metric_crs`` for a task: a CRS as WKT (picklable everywhere),
+    'auto'/'utm'/None as they are."""
+    if isinstance(metric_crs, CRS):
+        return metric_crs.to_wkt()
+    return metric_crs
+
+
 class HfunCollector(BaseHfun):
     """Define size function based on multiple inputs of different types
 
@@ -1399,6 +1433,7 @@ class HfunCollector(BaseHfun):
             resampling_method: str = 'average',
             split_size: Union[int, str, None] = None,
             split_halo: Optional[float] = None,
+            metric_crs: Union[str, CRS, None] = 'auto',
             ) -> None:
         """Initialize a collector size function object
 
@@ -1461,6 +1496,14 @@ class HfunCollector(BaseHfun):
             around the part it keeps. `None` derives it from the
             definitions: the channel width (plus its simplification
             tolerance) and a few pixels.
+        metric_crs : 'auto', 'utm' or CRS, default='auto'
+            Where sizes and distances are measured (see
+            ``ocsmesh.geodesy``). 'auto': the composite size function
+            is projected to UTM when UTM's worst size error over the
+            domain is at most 0.5%, else to the conformal projection
+            fitted to the domain with the smallest error; refinements
+            use the UTM zone of each window. 'utm': UTM throughout. A
+            CRS (e.g. 'EPSG:3338'): that CRS for everything.
         """
 
         # NOTE: Input Hfuns and their Rasters can get modified
@@ -1512,6 +1555,7 @@ class HfunCollector(BaseHfun):
 
         self._applied = False
         self._size_info = {'hmin': hmin, 'hmax': hmax}
+        self._metric_crs = geodesy.check_metric_crs(metric_crs)
         # 'optimum': the New Jersey factors, for the grid and for every
         # refinement that does not set its own
         self._optimum = (isinstance(resampling_factor, str)
@@ -1568,7 +1612,8 @@ class HfunCollector(BaseHfun):
         # exception
         self._base_mesh = None
         if base_mesh:
-            self._base_mesh = HfunMesh(base_mesh)
+            self._base_mesh = HfunMesh(base_mesh,
+                                       metric_crs=self._metric_crs)
             if self._base_as_hfun:
                 self._base_mesh.size_from_mesh()
 
@@ -1615,10 +1660,11 @@ class HfunCollector(BaseHfun):
                 if is_mpi_worker or not self._clip_to_base(in_item):
                     continue
                 hfun = HfunRaster(self._grid_raster(in_item),
+                                  metric_crs=self._metric_crs,
                                   **self._size_info)
 
             elif isinstance(in_item, EuclideanMesh2D):
-                hfun = HfunMesh(in_item)
+                hfun = HfunMesh(in_item, metric_crs=self._metric_crs)
 
             elif isinstance(in_item, (str, Path)):
                 in_item = str(in_item)
@@ -1630,12 +1676,13 @@ class HfunCollector(BaseHfun):
                     if not self._clip_to_base(raster):
                         continue
                     hfun = HfunRaster(self._grid_raster(raster),
+                                      metric_crs=self._metric_crs,
                                       **self._size_info)
 
                 elif in_item.endswith(
                         ('.14', '.grd', '.gr3', '.msh', '.2dm')):
                     mesh = Mesh.open(in_item)
-                    hfun = HfunMesh(mesh)
+                    hfun = HfunMesh(mesh, metric_crs=self._metric_crs)
 
                 else:
                     raise TypeError("Input file extension not supported!")
@@ -2300,6 +2347,10 @@ class HfunCollector(BaseHfun):
             raise TypeError(
                 f"Channel definition must be of type {Channel} not"
                 f" {type(channel_defn)}!")
+
+        if channel_defn.metric_crs is None:
+            channel_defn.metric_crs = _picklable_crs(
+                geodesy.explicit(self._metric_crs))
 
         self._ch_info_coll.add(
             channel_defn,
@@ -3072,6 +3123,7 @@ class HfunCollector(BaseHfun):
                 self._work_dir, f'{op}_result_{idx}.tif'),
             'global_hmin': hfun._hmin,  # pylint: disable=W0212
             'global_hmax': hfun._hmax,  # pylint: disable=W0212
+            'metric_crs': _picklable_crs(hfun.metric_crs),
             # MPI ranks size their own thread pool from their affinity
             'worker_nprocs': -1 if self.execution_mode == 'mpi' else 1,
             **payload,
@@ -3161,7 +3213,8 @@ class HfunCollector(BaseHfun):
                 hmin=original_hfun.hmin,
                 hmax=original_hfun.hmax,
                 verbosity=original_hfun.verbosity,
-                initial_value=result['output_path']
+                initial_value=result['output_path'],
+                metric_crs=original_hfun.metric_crs,
             )
 
     def _apply_shape_refinements(
@@ -3798,7 +3851,8 @@ class HfunCollector(BaseHfun):
                 task.update(type='raster', topo_path=_task_topo_path(hfun),
                             hfun_input_path=hfun.tmpfile,
                             hmin=hfun._hmin,  # pylint: disable=W0212
-                            hmax=hfun._hmax)  # pylint: disable=W0212
+                            hmax=hfun._hmax,  # pylint: disable=W0212
+                            metric_crs=_picklable_crs(hfun.metric_crs))
             else:
                 # HfunMesh and other types are picklable
                 task.update(type='mesh', hfun_obj=deepcopy(hfun))
@@ -3927,13 +3981,37 @@ class HfunCollector(BaseHfun):
         )
 
         # NOTE: In the end we need to return in a CRS that
-        # uses meters as units. UTM based on the center of
-        # the bounding box of the hfun is used
+        # uses meters as units (see ``metric_crs``).
         # Up until now all calculation was in EPSG:4326
-        utils.project_to_utm(composite_hfun)
+        utils.project_to_metric(composite_hfun, self._metric_crs)
 
         return composite_hfun
 
+
+    @property
+    def metric_crs(self):
+        """'auto', 'utm' or the CRS where sizes are measured."""
+        return self._metric_crs
+
+    def _domain_metric_crs(self, all_bounds):
+        """Metric CRS of the domain covered by ``all_bounds`` (rows of
+        EPSG:4326 bounds), chosen from points on each box."""
+
+        crs_explicit = geodesy.explicit(self._metric_crs)
+        if crs_explicit is not None:
+            return crs_explicit
+        lon, lat = [], []
+        for bx0, by0, bx1, by1 in all_bounds:
+            gx, gy = np.meshgrid(np.linspace(bx0, bx1, 21),
+                                 np.linspace(by0, by1, 21))
+            lon.append(gx.ravel())
+            lat.append(gy.ravel())
+        lon, lat = np.concatenate(lon), np.concatenate(lat)
+        x0, x1 = geodesy.lon_arc(lon)
+        utm_crs = geodesy.estimate_bounds_utm(
+            (x0, lat.min(), x1, lat.max()), 'EPSG:4326')
+        return geodesy.pick_metric_crs(
+            lon, lat, self._metric_crs, utm_crs=utm_crs)
 
     def _create_big_raster(self, out_path: Union[str, Path]) -> Raster:
         """Internal: create a large raster covering all input rasters.
@@ -3974,9 +4052,7 @@ class HfunCollector(BaseHfun):
         x0, y0 = np.min(all_bounds[:, [0, 1]], axis=0)
         x1, y1 = np.max(all_bounds[:, [2, 3]], axis=0)
 
-        utm_crs = utils.estimate_bounds_utm(
-                (x0, y0, x1, y1), "EPSG:4326")
-        assert utm_crs is not None
+        utm_crs = self._domain_metric_crs(all_bounds)
         transformer = Transformer.from_crs(
                 'EPSG:4326', utm_crs, always_xy=True)
 
@@ -4273,6 +4349,9 @@ class HfunCollector(BaseHfun):
             if big_meshdata.crs is not None:
                 if not epsg4326.equals(big_meshdata.crs):
                     utils.reproject(big_meshdata, epsg4326)
+            # PROJ gives -180..180 longitudes back; DEMs in 0-360
+            # (east of 180) need the mesh in their convention.
+            _wrap_lon_to_shape(big_meshdata, big_cut_shape)
 
             big_meshdata = utils.clip_mesh_by_shape(
                 big_meshdata,
@@ -4297,6 +4376,7 @@ class HfunCollector(BaseHfun):
             if hasattr(nondem_meshdata, "crs"):
                 if not epsg4326.equals(nondem_meshdata.crs):
                     utils.reproject(nondem_meshdata, epsg4326)
+                _wrap_lon_to_shape(nondem_meshdata, big_cut_shape)
 
             nondem_shape = utils.get_mesh_polygons(hfun.mesh.meshdata)
             if not epsg4326.equals(hfun.crs):
@@ -4354,6 +4434,6 @@ class HfunCollector(BaseHfun):
         if hmax:
             composite_hfun.values[composite_hfun.values > hmax] = hmax
 
-        utils.project_to_utm(composite_hfun)
+        utils.project_to_metric(composite_hfun, self._metric_crs)
 
         return composite_hfun

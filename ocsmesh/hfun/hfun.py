@@ -54,7 +54,8 @@ class Hfun:
             return HfunRaster(hfun, **kwargs)
 
         elif isinstance(hfun, EuclideanMesh2D):
-            return HfunMesh(hfun)
+            return HfunMesh(hfun, **{
+                k: v for k, v in kwargs.items() if k == 'metric_crs'})
 
         elif isinstance(hfun, (list, tuple)):
             return HfunCollector(hfun, **kwargs)

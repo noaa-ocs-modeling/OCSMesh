@@ -49,7 +49,7 @@ from ocsmesh.features.constraint import (
     RegionConstraint,
     apply_constraints_wrap
 )
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 
 # supress feather warning
 warnings.filterwarnings(
@@ -277,7 +277,8 @@ class HfunRaster(BaseHfun, Raster):
                  hmin: Optional[float] = None,
                  hmax: Optional[float] = None,
                  verbosity: int = 0,
-                 initial_value: Optional[str] = None
+                 initial_value: Optional[str] = None,
+                 metric_crs: Union[str, CRS, None] = 'auto',
                  ) -> None:
         """Initialize a raster based size function object
 
@@ -298,6 +299,13 @@ class HfunRaster(BaseHfun, Raster):
             constraint applications are not capped off.
         verbosity : int, default=0
             The verbosity of the outputs.
+        initial_value : str or None, default=None
+            Path of a size function raster to start from (used by the
+            collectors' workers) instead of a new size function.
+        metric_crs : 'auto', 'utm' or CRS, default='auto'
+            Where sizes and distances are measured (see
+            ``ocsmesh.geodesy``). With 'auto' and 'utm', each window
+            uses its own UTM zone; an explicit CRS is used everywhere.
 
         Notes
         -----
@@ -313,6 +321,7 @@ class HfunRaster(BaseHfun, Raster):
         self._hmin = float(hmin) if hmin is not None else hmin
         self._hmax = float(hmax) if hmax is not None else hmax
         self._verbosity = int(verbosity)
+        self._metric_crs = geodesy.check_metric_crs(metric_crs)
         self._constraints = []
         self._hold_const = False
         self._hold_const_hit = 0
@@ -331,6 +340,33 @@ class HfunRaster(BaseHfun, Raster):
             self._tmpfile = tmppath
             self._src = rasterio.open(self.tmpfile, 'r+')
 
+
+    @property
+    def metric_crs(self):
+        """'auto', 'utm' or the CRS where sizes are measured."""
+        return self._metric_crs
+
+    def _local_metric_crs(self, bounds):
+        """Metric CRS of a window: the explicit ``metric_crs``, else the
+        window's UTM zone (None when the raster is metric already)."""
+        return geodesy.local_metric_crs(bounds, self.crs, self._metric_crs)
+
+    def _raster_metric_crs(self, coords):
+        """Metric CRS of the whole raster, chosen from ``coords`` (in
+        the raster's CRS); None when the raster is metric already and
+        no CRS is given explicitly."""
+        crs_explicit = geodesy.explicit(self._metric_crs)
+        if crs_explicit is not None:
+            return crs_explicit
+        if not self.crs.is_geographic:
+            return None
+        utm_crs = geodesy.estimate_bounds_utm(
+            self.get_bbox().bounds, self.crs)
+        if len(coords) == 0:
+            return utm_crs
+        return geodesy.pick_metric_crs(
+            coords[:, 0], coords[:, 1], self._metric_crs,
+            utm_crs=utm_crs, geo_crs=self.crs)
 
     def __del__(self):
         super().__del__()
@@ -434,7 +470,7 @@ class HfunRaster(BaseHfun, Raster):
             _logger.debug(f"Processing window {i_win+1}/{len(iter_windows)}")
 
             x0, y0, x1, y1 = self.get_window_bounds(win)
-            win_utm_crs = utils.estimate_bounds_utm((x0, y0, x1, y1), self.crs)
+            win_utm_crs = self._local_metric_crs((x0, y0, x1, y1))
 
             # --- Stride Logic (Optional Optimization) ---
             # If stride is provided, we read a subset of data to save memory
@@ -609,10 +645,10 @@ class HfunRaster(BaseHfun, Raster):
 
         output_values = np.concatenate(values_list)
 
-        # Final UTM projection check
+        # Final projection to the metric CRS of the whole raster
         output_crs = self.crs
-        utm_crs = utils.estimate_bounds_utm(self.get_bbox().bounds, self.crs)
-        if utm_crs is not None:
+        utm_crs = self._raster_metric_crs(output_coords)
+        if utm_crs is not None and not utm_crs.equals(self.crs):
             transformer = Transformer.from_crs(self.crs, utm_crs, always_xy=True)
             output_coords = np.vstack(
                 transformer.transform(output_coords[:, 0], output_coords[:, 1])
@@ -673,7 +709,8 @@ class HfunRaster(BaseHfun, Raster):
             return
 
         fine = HfunRaster(topo, hmin=self._hmin, hmax=self._hmax,
-                          verbosity=self._verbosity)
+                          verbosity=self._verbosity,
+                          metric_crs=self._metric_crs)
         apply(fine)
 
         # TODO: a better reduction for flow limiters. Keeping the
@@ -782,8 +819,8 @@ class HfunRaster(BaseHfun, Raster):
 
 
                 # Get locations
-                utm_crs = utils.estimate_bounds_utm(
-                        self.get_window_bounds(window), self.crs)
+                utm_crs = self._local_metric_crs(
+                        self.get_window_bounds(window))
 
                 if utm_crs is not None:
                     xy = self.get_xy_memcache(window, utm_crs)
@@ -1339,7 +1376,8 @@ class HfunRaster(BaseHfun, Raster):
         """
 
         channels = self.raster.get_channels(
-                level=level, width=width, tolerance=tolerance)
+                level=level, width=width, tolerance=tolerance,
+                metric_crs=geodesy.explicit(self._metric_crs))
 
         if channels is None:
             return
@@ -1455,8 +1493,8 @@ class HfunRaster(BaseHfun, Raster):
             tot = len(iter_windows)
             for i, window in enumerate(iter_windows):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
-                utm_crs = utils.estimate_bounds_utm(
-                        self.get_window_bounds(window), self.crs)
+                utm_crs = self._local_metric_crs(
+                        self.get_window_bounds(window))
 
                 _logger.info('Repartitioning features...')
                 start = time()
@@ -1719,8 +1757,7 @@ class HfunRaster(BaseHfun, Raster):
                 _logger.debug(f'Processing window {i+1}/{tot}.')
 
                 x0, y0, x1, y1 = self.get_window_bounds(window)
-                utm_crs = utils.estimate_bounds_utm(
-                        (x0, y0, x1, y1), self.crs)
+                utm_crs = self._local_metric_crs((x0, y0, x1, y1))
                 if utm_crs is not None:
                     transformer = Transformer.from_crs(
                             self.crs, utm_crs, always_xy=True)

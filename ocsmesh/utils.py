@@ -29,9 +29,9 @@ from shapely.ops import polygonize, linemerge, unary_union
 from shapely import union_all, make_valid, get_parts
 import geopandas as gpd
 import pandas as pd
-import utm
 
 from ocsmesh.internal import MeshData
+from ocsmesh import geodesy
 
 ELEM_2D_TYPES = ['tria', 'quad']
 _logger = logging.getLogger(__name__)
@@ -1357,46 +1357,51 @@ def project_to_utm(msh: MeshData):
     msh.crs = utm_crs
 
 
+def mesh_metric_crs(msh: MeshData, metric_crs='auto'):
+    """The metric CRS for the whole of ``msh`` (see
+    ``ocsmesh.geodesy``), or None when ``msh`` has no CRS or is in a
+    metric CRS already and ``metric_crs`` is not an explicit CRS."""
+
+    crs_explicit = geodesy.explicit(metric_crs)
+    if crs_explicit is not None:
+        return crs_explicit
+    if getattr(msh, 'crs', None) is None or not msh.crs.is_geographic:
+        return None
+    coords = msh.coords
+    return geodesy.pick_metric_crs(
+        coords[:, 0], coords[:, 1], metric_crs,
+        utm_crs=estimate_mesh_utm(msh), geo_crs=msh.crs)
+
+
+def project_to_metric(msh: MeshData, metric_crs='auto'):
+    """Reproject ``msh`` in place to its metric CRS (see
+    ``mesh_metric_crs``); ``metric_crs='utm'`` is ``project_to_utm``."""
+
+    target = mesh_metric_crs(msh, metric_crs)
+    if target is None or (msh.crs is not None and msh.crs.equals(target)):
+        return
+    reproject(msh, target)
+
+
 def estimate_bounds_utm(bounds, crs="EPSG:4326"):
-    in_crs = CRS.from_user_input(crs)
+    """UTM CRS at the centre of ``bounds``, None for a metric ``crs``.
 
-    # CRITICAL CHECK: Only run UTM logic if the input is Geographic (Lat/Lon)
-    if in_crs.is_geographic:
-        x0, y0, x1, y1 = bounds
-
-        # Outside the valid range (e.g. 0-360 longitudes, or projected
-        # coordinates labelled geographic) there is no UTM zone; callers
-        # then work in degrees, so say so.
-        if y0 < -90 or y1 > 90 or x0 < -180 or x1 > 180:
-            _logger.debug(f"estimate_bounds_utm: bounds {bounds}")
-            warnings.warn(
-                "Geographic bounds outside [-180, 180] x [-90, 90]: no UTM"
-                " CRS is estimated, so distances and sizes are computed in"
-                " degrees.")
-            return None
-
-        _, _, number, letter = utm.from_latlon(
-                (y0 + y1)/2, (x0 + x1)/2)
-        # PyProj 3.2.1 throws error if letter is provided
-        utm_crs = CRS(
-                proj='utm',
-                zone=f'{number}',
-                south=(y0 + y1)/2 < 0,
-                ellps={
-                    'GRS 1980': 'GRS80',
-                    'WGS 84': 'WGS84'
-                    }[in_crs.ellipsoid.name]
-            )
-        return utm_crs
-    return None
+    See ``ocsmesh.geodesy.estimate_bounds_utm``: longitudes may be in
+    0-360, and bounds that cannot be geographic raise ``ValueError``.
+    """
+    return geodesy.estimate_bounds_utm(bounds, crs)
 
 
 def estimate_mesh_utm(msh: MeshData):
-    if hasattr(msh, 'crs'):
+    if hasattr(msh, 'crs') and msh.crs is not None:
         coords = msh.coords
         x0, y0, x1, y1 = (
             np.min(coords[:, 0]), np.min(coords[:, 1]),
             np.max(coords[:, 0]), np.max(coords[:, 1]))
+        if CRS.from_user_input(msh.crs).is_geographic and x1 - x0 > 180:
+            # A mesh crossing 180° in -180..180 longitudes: its centre
+            # is on the shortest arc holding its nodes
+            x0, x1 = geodesy.lon_arc(coords[:, 0])
         utm_crs = estimate_bounds_utm((x0, y0, x1, y1), msh.crs)
         return utm_crs
 
