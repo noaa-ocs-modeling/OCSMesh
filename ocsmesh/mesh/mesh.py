@@ -37,7 +37,7 @@ from shapely.geometry import (
 from shapely.ops import polygonize, linemerge
 
 
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.utils import effective_cpu_count
 from ocsmesh.internal import MeshData
 from ocsmesh.raster import Raster
@@ -284,6 +284,11 @@ class EuclideanMesh2D(EuclideanMesh):
         output_type = 'polygon' if output_type is None else output_type
         xmin, xmax = np.min(self.coord[:, 0]), np.max(self.coord[:, 0])
         ymin, ymax = np.min(self.coord[:, 1]), np.max(self.coord[:, 1])
+        if (self.crs is not None and self.crs.is_geographic
+                and xmax - xmin > 180):
+            # Nodes on both sides of 180 in -180..180 longitudes: the
+            # mesh is the shortest arc holding them, not the globe
+            xmin, xmax = geodesy.lon_arc(self.coord[:, 0])
         crs = self.crs if crs is None else crs
         if crs is not None:
             if not self.crs.equals(crs):
@@ -292,6 +297,9 @@ class EuclideanMesh2D(EuclideanMesh):
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
+                if CRS.from_user_input(crs).is_geographic and xmax < xmin:
+                    # PROJ wrapped the east edge (across 180)
+                    xmax += 360.0
         if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
@@ -2301,6 +2309,11 @@ def _mesh_interpolate_worker(
         # pylint: disable=E0633
         coords[:, 0], coords[:, 1] = transformer.transform(
             coords[:, 0], coords[:, 1])
+    if raster.crs.is_geographic:
+        # Nodes in the other longitude convention (e.g. a -180..180
+        # mesh on a 0-360 raster) are looked up on the raster's side
+        coords[:, 0] = geodesy.wrap_lon_near(
+            coords[:, 0], geodesy.bounds_lon_center(raster.src.bounds))
     if filter_by_shape:
         shape = raster.get_multipolygon()
         in_shape = gpd.points_from_xy(

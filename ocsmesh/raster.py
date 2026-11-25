@@ -691,6 +691,10 @@ class Raster:
                 # pylint: disable=E0633
                 (xmin, xmax), (ymin, ymax) = transformer.transform(
                     (xmin, xmax), (ymin, ymax))
+                if CRS.from_user_input(crs).is_geographic and xmax < xmin:
+                    # PROJ wrapped the east edge (a raster across, or
+                    # east of, 180): keep the box on the raster's side
+                    xmax += 360.0
         if output_type == 'polygon': # pylint: disable=R1705
             return box(xmin, ymin, xmax, ymax)
         elif output_type == 'bbox':
@@ -1286,8 +1290,17 @@ class Raster:
         None
         """
 
+        if self.crs is not None and self.crs.is_geographic:
+            # A shape in the other longitude convention (or split at
+            # 180) is shifted to the copy that meets the raster
+            geom = geodesy.align_geometry(
+                geom, geodesy.bounds_lon_center(self.src.bounds))
         if isinstance(geom, Polygon):
             geom = MultiPolygon([geom])
+        elif not isinstance(geom, MultiPolygon):
+            geom = MultiPolygon([
+                g for g in shapely.get_parts(geom)
+                if isinstance(g, Polygon)])
         # Without a declared nodata value, rasterio fills the pixels
         # outside the shape with 0, which then reads as valid sea-level
         # data. Declare one so they are masked like any other nodata.

@@ -34,6 +34,7 @@ import logging
 from typing import Optional, Tuple, Union
 
 import numpy as np
+import shapely
 from pyproj import CRS, Proj
 import utm
 
@@ -310,3 +311,77 @@ def local_metric_crs(bounds, crs, metric_crs: MetricCRS = None
     if crs_explicit is not None:
         return crs_explicit
     return estimate_bounds_utm(bounds, crs)
+
+
+# ---------------------------------------------------------------------
+# Longitude conventions: shapes and points against rasters
+# ---------------------------------------------------------------------
+#
+# Inputs may use -180..180 or 0-360 longitudes, and PROJ returns
+# -180..180 from any transformation to geographic coordinates. Before a
+# geographic comparison (clip, mask, within, reach) one side is shifted
+# by a multiple of 360 to the copy nearest the other.
+
+
+def wrap_lon_near(lon, ref_lon: float):
+    """Longitudes shifted by multiples of 360 into ``ref_lon ± 180``.
+
+    Longitudes already there are returned exactly as they are (no
+    floating point change), so points on a shape's edge stay on it.
+    """
+
+    lon = np.asarray(lon, dtype=float)
+    return lon + 360.0 * np.round((ref_lon - lon) / 360.0)
+
+
+def _shift_x(geom, dx: float):
+    if dx == 0.0:
+        return geom
+    return shapely.transform(geom, lambda xy: xy + np.array([dx, 0.0]))
+
+
+def align_lon(geoms, ref_lon: float) -> list:
+    """Each geometry of ``geoms`` shifted by a multiple of 360 so that
+    the centre of its bounds is within ``ref_lon ± 180`` (the copy
+    nearest ``ref_lon``). Empty geometries are returned as they are."""
+
+    geoms = list(geoms)
+    if not geoms:
+        return geoms
+    bounds = shapely.bounds(np.asarray(geoms, dtype=object))
+    cx = (bounds[:, 0] + bounds[:, 2]) / 2.0
+    ok = np.isfinite(cx)
+    shift = np.zeros(len(geoms))
+    shift[ok] = np.round(
+        (wrap_lon_near(cx[ok], ref_lon) - cx[ok]) / 360.0) * 360.0
+    return [_shift_x(g, float(s)) for g, s in zip(geoms, shift)]
+
+
+def align_geometry(geom, ref_lon: float):
+    """``geom`` with each of its parts shifted by a multiple of 360 to
+    the copy nearest ``ref_lon`` (see ``align_lon``): a shape given
+    in either convention, or split at 180, meets a raster in its own."""
+
+    if geom is None or geom.is_empty:
+        return geom
+    parts = list(shapely.get_parts(geom))
+    aligned = align_lon(parts, ref_lon)
+    if all(a is p for a, p in zip(aligned, parts)):
+        return geom
+    if len(aligned) == 1:
+        return aligned[0]
+    kinds = {g.geom_type for g in aligned}
+    multi = {'Polygon': shapely.MultiPolygon,
+             'LineString': shapely.MultiLineString,
+             'Point': shapely.MultiPoint}.get(
+                 kinds.pop() if len(kinds) == 1 else None,
+                 shapely.GeometryCollection)
+    return multi(aligned)
+
+
+def bounds_lon_center(bounds) -> float:
+    """Longitude at the centre of ``bounds`` (west, south, east, north;
+    rasters stored east-to-west give west > east)."""
+
+    west, east = sorted((float(bounds[0]), float(bounds[2])))
+    return (west + east) / 2.0

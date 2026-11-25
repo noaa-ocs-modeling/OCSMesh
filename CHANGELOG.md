@@ -68,6 +68,16 @@ follow [Semantic Versioning](https://semver.org/).
   `Raster.get_channels(..., drop_small=True)` and `utils.channel_min_area`.
 
 ### Fixed
+- Inputs in different longitude conventions (-180..180 and 0-360), or
+  shapes split at 180°, now meet each other: before each geographic
+  comparison one side is shifted by a multiple of 360 to the copy
+  nearest the other. Region constraints in 0-360 apply east of 180;
+  patches and features in either convention (or across 180) refine a
+  raster in the other; `base_shape` clips rasters in the other
+  convention instead of skipping them; `Mesh.interpolate` finds raster
+  values for nodes in the other convention; `Raster.get_bbox` and
+  `Mesh.get_bbox` keep boxes across 180 on the right side instead of
+  spanning the globe.
 - Rasters and shapes east of 180° (0-360 longitudes) got no UTM CRS,
   so feature distances, flow limiter slopes, channel widths and areas,
   and constraint rates were computed in degrees with sizes in metres
