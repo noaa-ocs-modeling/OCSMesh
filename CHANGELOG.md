@@ -7,6 +7,16 @@ follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `metric_crs='auto' | 'utm' | <CRS>` on `Hfun`/`HfunCollector`,
+  `HfunRaster`, `HfunMesh`, `MeshDriver` and `Geom.geoseries`: where
+  sizes and distances are measured (`ocsmesh.geodesy`). With `'auto'`
+  (the default) the domain-wide steps (composite size function,
+  meshing) use UTM when its worst size error over the domain is at most
+  0.5%, and otherwise the conformal projection fitted to the domain with
+  the smallest error (transverse Mercator, Lambert conformal conic or
+  stereographic): e.g. Alaska 5.0% -> 0.9%, US Atlantic coast 7.0% ->
+  2.6%. Refinements keep the UTM zone of each window. An explicit CRS
+  (e.g. `'EPSG:3338'`) is used for every step, in the workers too.
 - Distributed size function computation: `Hfun(..., execution_mode=...)`
   (or the `execution_mode` property) with `'serial'`, `'parallel'`
   (multiprocessing Pool, `nprocs` workers) and `'mpi'` (one rank per
@@ -58,6 +68,18 @@ follow [Semantic Versioning](https://semver.org/).
   `Raster.get_channels(..., drop_small=True)` and `utils.channel_min_area`.
 
 ### Fixed
+- Rasters and shapes east of 180° (0-360 longitudes) got no UTM CRS,
+  so feature distances, flow limiter slopes, channel widths and areas,
+  and constraint rates were computed in degrees with sizes in metres
+  (e.g. every channel dropped, or the whole sea taken as channel), and
+  the `fast` method failed. `utils.estimate_bounds_utm` now accepts
+  0-360 longitudes and picks the zone on the shortest arc (a mesh
+  across 180° in -180..180 longitudes no longer gets the zone at 0°),
+  and raises instead of returning `None` for bounds that cannot be
+  geographic or span more than 180°, so nothing falls back to degrees.
+  The `exact` composite keeps the nodes of 0-360 rasters, the `fast`
+  composite keeps their part east of 180, and detected channels stay
+  in their raster's longitude convention.
 - `Raster.resample` raised for any `resampling_method` passed to it; it
   now takes a `Resampling` member or name, leaves nodata pixels out when
   combining pixels and keeps the raster's extent.
@@ -126,6 +148,13 @@ follow [Semantic Versioning](https://semver.org/).
   1.9x (bounded by the slowest tile's channel detection).
 
 ### Changed
+- The size function of a wide domain (where UTM's worst size error
+  is over 0.5%, e.g. the Gulf of Mexico or the US Atlantic coast) is
+  projected to a conformal projection fitted to the domain instead of
+  one UTM zone, and `MeshDriver` meshes such domains in it, so their
+  meshes change (sizes are closer to the requested ones).
+  `metric_crs='utm'` gives the previous projection. Small domains are
+  unchanged.
 - `Mesh.write(format='grd')` writes the open boundaries from the
   largest to the smallest (number of nodes), as SCHISM expects; before,
   they were written in the order of `mesh.boundaries`, which after

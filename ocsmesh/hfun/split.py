@@ -39,7 +39,7 @@ from shapely.geometry import (
     GeometryCollection, LineString, MultiLineString, MultiPolygon, Polygon,
     box)
 
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.raster import Raster, _as_resampling
 
 
@@ -377,11 +377,12 @@ def clip_to_core(shape, shape_crs, core: Core):
     return None if clipped.is_empty else clipped
 
 
-def _area_m2(parts, crs, bounds):
+def _area_m2(parts, crs, bounds, metric_crs=None):
     """Area of each polygon of ``parts`` (in ``crs``) in square metres,
-    measured in the UTM zone of ``bounds`` when ``crs`` is geographic
-    (as ``Raster.get_channels`` measures them)."""
-    utm = utils.estimate_bounds_utm(bounds, crs)
+    measured in ``metric_crs`` when it is a CRS, else in the UTM zone of
+    ``bounds`` when ``crs`` is geographic (as ``Raster.get_channels``
+    measures them)."""
+    utm = geodesy.local_metric_crs(bounds, crs, metric_crs)
     if utm is None:
         return shapely.area(parts)
     transformer = Transformer.from_crs(crs, utm, always_xy=True)
@@ -474,7 +475,7 @@ def _seam_pairs(parts, owner, cores):
             yield a, b
 
 
-def drop_small_channels(items, width: float) -> list:
+def drop_small_channels(items, width: float, metric_crs=None) -> list:
     """Channels of split rasters with the small pieces dropped.
 
     ``Raster.get_channels`` drops channel pieces no larger than
@@ -491,7 +492,9 @@ def drop_small_channels(items, width: float) -> list:
     with the same label come from one detected polygon and stay
     together (labels None: each polygon on its own). Shapes with no
     core (unsplit rasters) are returned unchanged. Returns the shapes in
-    the same order, None where nothing is left.
+    the same order, None where nothing is left. Areas are measured in
+    ``metric_crs`` when it is a CRS, else in the UTM zone of each
+    raster's pieces.
     """
     out = [item[0] for item in items]
     groups = {}
@@ -518,7 +521,7 @@ def drop_small_channels(items, width: float) -> list:
         parts = np.array(parts, dtype=object)
         owner = np.array(owner)
         bounds = shapely.total_bounds(parts)
-        area = _area_m2(parts, crs, tuple(bounds))
+        area = _area_m2(parts, crs, tuple(bounds), metric_crs)
 
         cores = [items[i][2] for i in owner]
         first = {}

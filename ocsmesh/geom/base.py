@@ -6,10 +6,30 @@ from typing import Any, Union
 
 import geopandas as gpd
 from pyproj import CRS
+import shapely
 from shapely.geometry import MultiPolygon
 
 from ocsmesh.crs import CRS as CRSDescriptor
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
+
+
+def geoseries_metric_crs(gs: gpd.GeoSeries, metric_crs='auto'):
+    """Metric CRS of the shapes of ``gs`` (see ``ocsmesh.geodesy``):
+    an explicit ``metric_crs``, else chosen from their vertices when
+    ``gs`` is geographic; None when ``gs`` has no CRS or is metric."""
+
+    crs_explicit = geodesy.explicit(metric_crs)
+    if crs_explicit is not None:
+        return crs_explicit
+    if gs.crs is None or not gs.crs.is_geographic or gs.is_empty.all():
+        return None
+    xy = shapely.get_coordinates(gs.values)
+    x0, y0, x1, y1 = gs.total_bounds
+    if x1 - x0 > 180:
+        x0, x1 = geodesy.lon_arc(xy[:, 0])
+    utm_crs = utils.estimate_bounds_utm((x0, y0, x1, y1), gs.crs)
+    return geodesy.pick_metric_crs(
+        xy[:, 0], xy[:, 1], metric_crs, utm_crs=utm_crs, geo_crs=gs.crs)
 
 
 class BaseGeom(ABC):
@@ -59,11 +79,19 @@ class BaseGeom(ABC):
         )
 
 
-    def geoseries(self, **kwargs: Any) -> gpd.GeoSeries:
+    def geoseries(self, metric_crs: Union[str, CRS, None] = 'auto',
+                  **kwargs: Any) -> gpd.GeoSeries:
+        """The geometry as a GeoSeries in its metric CRS.
+
+        ``metric_crs`` ('auto', 'utm' or a CRS, see
+        ``ocsmesh.geodesy``) is chosen from the polygon vertices when
+        the geometry is geographic; other keyword arguments go to
+        ``get_multipolygon``.
+        """
         gs = gpd.GeoSeries(self.get_multipolygon(**kwargs), crs=self.crs)
-        utm_crs = utils.estimate_bounds_utm(gs.total_bounds, gs.crs)
-        if utm_crs is not None:
-            gs = gs.to_crs(utm_crs)
+        target = geoseries_metric_crs(gs, metric_crs)
+        if target is not None and not target.equals(gs.crs):
+            gs = gs.to_crs(target)
 
         return gs
 

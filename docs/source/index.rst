@@ -7,6 +7,7 @@
    parallel
    resampling
    splitting
+   metric_crs
    ocsmesh.mesh
    ocsmesh.utilities
    ocsmesh.command_line

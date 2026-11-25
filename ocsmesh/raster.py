@@ -41,6 +41,7 @@ from rasterio.transform import array_bounds
 from rasterio import windows
 from scipy.ndimage import gaussian_filter, generic_filter
 from scipy import LowLevelCallable
+import shapely
 from shapely import ops
 from shapely.geometry import (
     Polygon, MultiPolygon, LineString, MultiLineString, box)
@@ -49,7 +50,7 @@ from numba.types import intc, intp, float64, voidptr
 from numba.types import CPointer
 
 from ocsmesh import figures
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.utils import effective_cpu_count
 
 _logger = logging.getLogger(__name__)
@@ -1441,6 +1442,7 @@ class Raster:
             width: float = 1000, # in meters
             tolerance: Optional[float] = None,
             drop_small: bool = True,
+            metric_crs: Union[str, CRS, None] = None,
             ) -> Union[Polygon, MultiPolygon]:
         """Calculate narrow width polygons based on specified input
 
@@ -1463,6 +1465,9 @@ class Raster:
         drop_small : bool, default=True
             Drop narrow regions no larger than
             ``utils.channel_min_area(width)``.
+        metric_crs : CRS or None, default=None
+            CRS in which ``width`` and ``tolerance`` are measured;
+            None (or 'auto'/'utm') for the UTM zone of the raster.
 
         Returns
         -------
@@ -1472,8 +1477,8 @@ class Raster:
 
         multipoly = self.get_multipolygon(zmax=level)
 
-        utm_crs = utils.estimate_bounds_utm(
-            self.get_bbox().bounds, self.crs)
+        utm_crs = geodesy.local_metric_crs(
+            self.get_bbox().bounds, self.crs, metric_crs)
 
         if utm_crs is not None:
             transformer = Transformer.from_crs(
@@ -1488,6 +1493,14 @@ class Raster:
             transformer = Transformer.from_crs(
                 utm_crs, self.src.crs, always_xy=True)
             channels = ops.transform(transformer.transform, channels)
+            if self.crs.is_geographic:
+                # PROJ gives -180..180 back: channels of a raster in
+                # 0-360 longitudes go back to the raster's convention
+                west, _, east, _ = self.get_bbox().bounds
+                lon_min = (west + east) / 2.0 - 180.0
+                channels = shapely.transform(
+                    channels, lambda xy: np.column_stack(
+                        [geodesy.wrap_lon(xy[:, 0], lon_min), xy[:, 1]]))
 
         return channels
 

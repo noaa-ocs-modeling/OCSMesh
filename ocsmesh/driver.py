@@ -4,11 +4,11 @@ from typing import Union, Optional
 
 from pyproj import CRS
 
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 from ocsmesh.internal import MeshData
 from ocsmesh.engines.factory import get_mesh_engine
 from ocsmesh.hfun.base import BaseHfun
-from ocsmesh.geom.base import BaseGeom
+from ocsmesh.geom.base import BaseGeom, geoseries_metric_crs
 from ocsmesh.mesh import Mesh
 
 
@@ -26,6 +26,7 @@ class MeshDriver:
         init_mesh: Optional[Union[Mesh, MeshData]] = None,
         crs: Union[str, CRS] = None,
         engine_name: str = 'gmsh',
+        metric_crs: Union[str, CRS, None] = None,
         **engine_kwargs
     ):
         """
@@ -44,6 +45,10 @@ class MeshDriver:
             If None, defaults to EPSG:4326.
         engine_name : str
             Name of the engine ('triangle', 'gmsh').
+        metric_crs : 'auto', 'utm', CRS or None, default=None
+            CRS in which a geographic domain is meshed (see
+            ``ocsmesh.geodesy``). None takes the size function's
+            ``metric_crs`` ('auto' when it has none).
         **engine_kwargs : dict
             Options to pass to the engine's Option class.
             Common options:
@@ -72,6 +77,10 @@ class MeshDriver:
             else:
                 raise TypeError("init_mesh must be MeshData or have 'meshdata' prop")
 
+        if metric_crs is None:
+            metric_crs = getattr(hfun, 'metric_crs', None)
+        self._metric_crs = geodesy.check_metric_crs(metric_crs)
+
         self._engine = get_mesh_engine(engine_name, **engine_kwargs)
 
 
@@ -79,7 +88,7 @@ class MeshDriver:
         """
         Run a mesh generation job.
         """
-        shape = self._geom.geoseries()
+        shape = self._geom.geoseries(metric_crs=self._metric_crs)
         calc_crs = shape.crs
 
         # Track if we auto-projected from Geographic so we can revert later
@@ -92,7 +101,7 @@ class MeshDriver:
         # to correctly interpret Hfun values vs Edge lengths.
         if is_input_geographic:
             _logger.info("Input is Geographic. Projecting to UTM for processing...")
-            calc_crs = utils.estimate_bounds_utm(shape.total_bounds, shape.crs)
+            calc_crs = geoseries_metric_crs(shape, self._metric_crs)
             shape = shape.to_crs(calc_crs)
             _logger.info(f"Calculations will be performed in: {calc_crs}")
         elif calc_crs is None:
