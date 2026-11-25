@@ -10,7 +10,7 @@ from scipy import constants
 from shapely.geometry import Polygon, MultiPolygon
 from pyproj import CRS
 
-from ocsmesh import utils
+from ocsmesh import utils, geodesy
 
 ConstraintValueType = Enum("ConstraintValueType", "MIN MAX")
 
@@ -388,6 +388,15 @@ class RegionConstraint(Constraint):
         )
         if points_gdf.crs != self._crs:
             points_gdf = points_gdf.to_crs(self._crs)
+        if CRS.from_user_input(self._crs).is_geographic:
+            # Points in the other longitude convention than the region
+            # (PROJ gives -180..180; the region may be in 0-360) are
+            # shifted to the region's side
+            x = geodesy.wrap_lon_near(
+                points_gdf.geometry.x.to_numpy(),
+                geodesy.bounds_lon_center(self._region.bounds))
+            points_gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy(
+                x, points_gdf.geometry.y.to_numpy(), crs=points_gdf.crs))
 
         # Create a gdf for the constraint region
         region_gdf = gpd.GeoDataFrame(

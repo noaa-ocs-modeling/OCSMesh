@@ -83,11 +83,19 @@ def _within_reach(geoms: list, bounds, crs, reach_m: Optional[float]
     change the sizes, so leaving them out gives the same result.
     The test is on bounding boxes, so it may keep a far shape but never
     drops a near one. ``reach_m=None`` keeps everything.
+
+    In a geographic ``crs`` the geometries are first shifted by
+    multiples of 360 to the copy nearest ``bounds`` (shapes in the other
+    longitude convention, or across 180), and the kept ones are
+    returned shifted.
     """
 
-    if reach_m is None or not geoms:
+    if not geoms:
         return geoms
-    if not np.isfinite(reach_m):
+    geographic = crs is not None and CRS.from_user_input(crs).is_geographic
+    if geographic:
+        geoms = geodesy.align_lon(geoms, geodesy.bounds_lon_center(bounds))
+    if reach_m is None or not np.isfinite(reach_m):
         return geoms
     # 1% and a metre of margin for the local projection used to
     # measure distances.
@@ -95,7 +103,7 @@ def _within_reach(geoms: list, bounds, crs, reach_m: Optional[float]
     # Rasters stored south-up give their bounds with south > north.
     west, east = sorted((bounds[0], bounds[2]))
     south, north = sorted((bounds[1], bounds[3]))
-    if crs is not None and CRS.from_user_input(crs).is_geographic:
+    if geographic:
         # A degree of latitude is more than 110 km and a degree of
         # longitude more than 111 km * cos(lat), so these pads are
         # conservative.
